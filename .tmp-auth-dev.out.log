@@ -1,0 +1,26 @@
+
+> zootopia-club-next@0.1.0 dev
+> npm run dev --workspace @zootopia/web
+
+
+> @zootopia/web@0.1.0 dev
+> next dev --turbopack
+
+▲ Next.js 16.2.2 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.156.0.6:3000
+✓ Ready in 553ms
+Creating turbopack project { dir: 'C:\\zootopia-club-next\\apps\\web', testMode: true }
+- Experiments (use with caution):
+  ✓ externalDir
+
+ GET /api/auth/me 200 in 269ms (next.js: 194ms, application-code: 75ms)
+ GET /login 200 in 3.1s (next.js: 281ms, proxy.ts: 388ms, application-code: 2.4s)
+ GET /login 200 in 170ms (next.js: 6ms, proxy.ts: 7ms, application-code: 157ms)
+ GET /login 200 in 94ms (next.js: 4ms, proxy.ts: 6ms, application-code: 83ms)
+ GET /api/auth/me 200 in 10ms (next.js: 3ms, application-code: 7ms)
+ GET /login 200 in 105ms (next.js: 4ms, proxy.ts: 6ms, application-code: 95ms)
+ GET /login 200 in 163ms (next.js: 3ms, proxy.ts: 4ms, application-code: 156ms)
+ GET /login 200 in 92ms (next.js: 4ms, proxy.ts: 4ms, application-code: 84ms)
+ GET /login 200 in 334ms (next.js: 6ms, proxy.ts: 7ms, application-code: 321ms)
+ GET /login 200 in 129ms (next.js: 4ms, proxy.ts: 4ms, application-code: 121ms)

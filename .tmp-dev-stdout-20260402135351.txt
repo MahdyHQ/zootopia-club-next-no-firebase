@@ -1,0 +1,8 @@
+
+> zootopia-club-next@0.1.0 dev
+> npm run dev --workspace @zootopia/web
+
+
+> @zootopia/web@0.1.0 dev
+> next dev --turbopack
+

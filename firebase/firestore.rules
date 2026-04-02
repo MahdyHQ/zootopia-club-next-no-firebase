@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Current production security model:
+    // - These rules are deployed from the root firebase.json configuration to the
+    //   named Firestore database `zootopia-club-next-database`.
+    // - Browser clients do not read or write application data directly.
+    // - Same-origin App Router Route Handlers plus the Firebase Admin SDK own all
+    //   real Firestore reads and writes for auth-linked user records, profile
+    //   completion state, uploads, AI generations, and admin activity.
+    // - Auth/session checks, claims-first admin authorization, and mandatory
+    //   profile-completion enforcement all live in server code, not in client
+    //   Firestore Rules.
+    //
+    // Important: Firebase Admin SDK access bypasses Firestore Rules by design.
+    // These deny-all rules therefore protect only browser/client SDK access.
+    match /users/{uid} {
+      allow read, write: if false;
+    }
+
+    match /documents/{documentId} {
+      allow read, write: if false;
+    }
+
+    match /assessmentGenerations/{generationId} {
+      allow read, write: if false;
+    }
+
+    match /infographicGenerations/{generationId} {
+      allow read, write: if false;
+    }
+
+    match /adminActivityLogs/{logId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "emails": [
+    "alahlyeagle@gmail.com",
+    "elmahdy@admin.com",
+    "alahlyeagle13@gmail.com"
+  ],
+  "explicitUsernameLookup": {
+    "elmahdy": "elmahdy@admin.com",
+    "alahlyeagle": "alahlyeagle@gmail.com"
+  }
+}

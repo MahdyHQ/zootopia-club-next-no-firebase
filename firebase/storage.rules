@@ -1,0 +1,16 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Server-authoritative phase:
+    // browser clients do not access binary uploads directly.
+    // Route Handlers and Firebase Admin SDK write files under:
+    // documents/{ownerUid}/{documentId}/{fileName}
+    match /documents/{ownerUid}/{documentId}/{fileName} {
+      allow read, write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

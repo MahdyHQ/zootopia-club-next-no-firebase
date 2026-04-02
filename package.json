@@ -1,0 +1,40 @@
+{
+  "name": "zootopia-club-next",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @zootopia/web",
+    "dev:web": "npm run dev --workspace @zootopia/web",
+    "build": "npm run build --workspaces --if-present",
+    "firebase:deploy": "npx -y firebase-tools@latest deploy --only apphosting,firestore,storage",
+    "firebase:app:deploy": "npx -y firebase-tools@latest deploy --only apphosting:zootopia-club-next-backend",
+    "firebase:admin:bootstrap-env": "node ./scripts/firebase/bootstrap-admin-env.mjs",
+    "firebase:admin:set-claims": "node ./scripts/firebase/set-admin-claims.mjs",
+    "firebase:admin:set-passwords": "node ./scripts/firebase/set-admin-passwords.mjs",
+    "firebase:rules:deploy": "npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes,storage",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "start": "npm run start --workspace @zootopia/web"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "framer-motion": "12.38.0",
+    "lucide-react": "^1.7.0"
+  }
+}

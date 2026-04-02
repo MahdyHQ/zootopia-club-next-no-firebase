@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "files": [],
+  "exclude": [
+    "node_modules",
+    "apps/**/.next",
+    "apps/**/out",
+    "apps/**/build"
+  ]
+}

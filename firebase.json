@@ -1,0 +1,23 @@
+{
+  "firestore": [
+    {
+      "database": "zootopia-club-next-database",
+      "rules": "firebase/firestore.rules",
+      "indexes": "firebase/firestore.indexes.json"
+    }
+  ],
+  "storage": {
+    "rules": "firebase/storage.rules"
+  },
+  "apphosting": {
+    "backendId": "zootopia-club-next-backend",
+    "rootDir": "./apps/web",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "functions"
+    ]
+  }
+}
