@@ -14,6 +14,8 @@ export interface DocumentRecord {
   status: DocumentStatus;
   markdown: string | null;
   extractionEngine: "datalab-convert";
+  isActive?: boolean;
+  supersededAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,6 +1,12 @@
 import { isProfileCompletionRequired } from "@/lib/return-to";
-import { apiError, apiSuccess } from "@/lib/server/api";
+import { apiError } from "@/lib/server/api";
+import {
+  buildAssessmentDocxExport,
+  buildAssessmentExportFileBase,
+} from "@/lib/server/assessment-exporter";
+import { buildAssessmentPreview } from "@/lib/server/assessment-preview";
 import { getAssessmentGenerationForViewer } from "@/lib/server/repository";
+import { getRequestUiContext } from "@/lib/server/request-context";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
@@ -38,5 +44,20 @@ export async function GET(
     );
   }
 
-  return apiSuccess(generation);
+  const uiContext = await getRequestUiContext();
+  const preview = buildAssessmentPreview({
+    generation,
+    locale: uiContext.locale,
+    messages: uiContext.messages,
+  });
+  const fileBase = buildAssessmentExportFileBase(preview);
+  const buffer = await buildAssessmentDocxExport(preview);
+
+  return new Response(new Uint8Array(buffer), {
+    headers: {
+      "content-type":
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "content-disposition": `attachment; filename="${fileBase}.docx"`,
+    },
+  });
 }

@@ -1,5 +1,5 @@
 Zootopia Club Next Master Ledger
-Last refreshed: 2026-04-02
+Last refreshed: 2026-04-03
 
 Project Identity
 - Name: Zootopia Club Next
@@ -16,9 +16,18 @@ Current Truth Snapshot
 - `apps/web/app/api/**/route.ts` is the only live backend surface today; there is no separate active root `server.ts` or root `src/*` application tree.
 - The actual architecture guide lives at `Guide-Files/Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md`; the repo-root copy referenced in some prompts and older notes is not present.
 - The App Hosting build path now depends on `apps/web/apphosting.yaml`, `apps/web/package-lock.json`, `apps/web/next.config.ts`, and `apps/web/scripts/normalize-standalone.mjs` as stable architecture files, not one-off deployment fixes.
+- The active Firebase App Hosting backend is `zootopia-club-next-backend` at `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`, and it is wired to Firebase web app `1:38079185268:web:adcd16b5e94d3d8c52ec21`; older Firebase web apps/backends still exist in the project but are not the current repo deployment target.
+- `apps/web/next.config.ts` now backfills the browser `NEXT_PUBLIC_FIREBASE_*` contract from App Hosting's build-only `FIREBASE_WEBAPP_CONFIG` when explicit public env vars are absent, so the existing client auth bootstrap works on App Hosting without duplicating public Firebase config in `apps/web/apphosting.yaml`.
 - The current font/runtime presentation stack uses Plus Jakarta Sans, Alexandria, Amiri, and JetBrains Mono through `apps/web/app/layout.tsx`; older IBM Plex notes remain historical change-log context only.
 - Browser Firestore access and browser Storage access are intentionally deny-all.
 - Same-origin App Router Route Handlers plus the Firebase Admin SDK are the real server-authoritative data path.
+- `/upload` is the only tool page that renders the full `apps/web/components/upload/upload-workspace.tsx` document-intake surface.
+- `/assessment` and `/infographic` now consume shared document continuity through page-specific selectors plus a compact shared document handoff card, not by embedding the full upload UI.
+- uploaded `documents` now preserve active-link semantics per owner through `isActive` / `supersededAt`, and the Assessment page preselects the owner’s active linked document instead of making the user relink it manually every time.
+- `/assessment` now supports server-normalized mode selection (`question_generation` or `exam_generation`) plus question-type selection and 100%-total percentage distribution inside the existing Assessment request `options` shape, and it now stores owner-scoped result metadata including `status`, `expiresAt`, `previewRoute`, `resultRoute`, and preview/export-friendly summary fields.
+- Assessment generation now prefers the original linked PDF file for Gemini models when Storage still has the binary, then falls back safely to extracted text context for unsupported file/model combinations instead of redesigning the upload pipeline.
+- Assessment results now have two dedicated pages, `/assessment/preview/[id]` and `/assessment/results/[id]`, plus owner-scoped result/export endpoints under `/api/assessment/results/[id]` and `/api/assessment/export/*/[id]`.
+- Assessment retention is now a lazy 3-day window enforced from normalized metadata; expired results are filtered out of history and return `ASSESSMENT_EXPIRED` from the result/export APIs instead of leaking stale output.
 - Regular user login and admin login are intentionally separate.
 - Admin authority is claims-first: allowlisted email plus Firebase custom claim `admin: true`.
 - Mandatory non-admin profile completion is enforced server-side before access to the main user workspace.
@@ -86,6 +95,7 @@ Dependency And Runtime Baseline
   - React DOM `19.2.4`
   - Firebase Web SDK `^12.11.0`
   - Firebase Admin SDK `^13.5.0`
+  - DOCX export layer: `docx` `^9.5.1`
   - UI utility layer: `@radix-ui/react-slot`, `class-variance-authority`, `clsx`, `tailwind-merge`
   - motion layer: `framer-motion` `12.38.0` plus package-level `motion` `^12.38.0`
   - icon layer: `lucide-react` `1.7.0`
@@ -101,6 +111,7 @@ Current Visual Identity And UI System
 - `apps/web/app/(protected)/layout.tsx` applies `apps/web/public/my-app-background.png` behind the protected workspace only, with layered gradient and blur overlays; public auth routes keep their own background treatment.
 - A local shared UI primitive layer now exists in `apps/web/components/ui/button.tsx`, `apps/web/components/ui/input.tsx`, and `apps/web/lib/utils.ts`.
 - The current UX direction is intentionally more visual and less text-heavy than earlier passes, with stronger CTA hierarchy, route-specific accent colors, and glassmorphic card treatments across Home, Upload, Assessment, Infographic, Settings, and Admin.
+- Current page-focus rule: the protected shell is shared, but each major tool page owns only its own page-scale UI. Shared document continuity appears as compact support UI only and no longer duplicates the upload page inside Assessment or Infographic.
 - Older IBM Plex-era notes remain historically accurate for earlier redesign phases in the change log, but they no longer describe the current live typography stack.
 
 Important Folders And Files
@@ -120,6 +131,8 @@ Important Folders And Files
   - `(protected)/(completed)/page.tsx`
   - `(protected)/(completed)/upload/page.tsx`
   - `(protected)/(completed)/assessment/page.tsx`
+  - `(protected)/(completed)/assessment/preview/[id]/page.tsx`
+  - `(protected)/(completed)/assessment/results/[id]/page.tsx`
   - `(protected)/(completed)/infographic/page.tsx`
   - `(protected)/admin/layout.tsx`
   - `(protected)/admin/page.tsx`
@@ -137,6 +150,8 @@ Important Folders And Files
   - `return-to.ts`
   - `preferences.ts`
   - `messages.ts`
+  - `assessment-preview-model.ts`
+  - `assessment-routes.ts`
   - `utils.ts`
   - `firebase/client.ts`
   - `server/firebase-admin.ts`
@@ -144,6 +159,12 @@ Important Folders And Files
   - `server/admin-auth.ts`
   - `server/repository.ts`
   - `server/document-runtime.ts`
+  - `server/assessment-linked-document.ts`
+  - `server/assessment-records.ts`
+  - `server/assessment-retention.ts`
+  - `server/assessment-preview.ts`
+  - `server/assessment-exporter.ts`
+  - `server/assessment-print-renderer.ts`
   - `server/datalab-convert.ts`
   - `server/runtime.ts`
   - `server/ai/execution.ts`
@@ -153,6 +174,12 @@ Important Folders And Files
   - `auth/admin-login-panel.tsx`
   - `auth/public-auth-shell.tsx`
   - `auth/sign-out-button.tsx`
+  - `document/document-context-card.tsx`
+  - `assessment/assessment-export-actions.tsx`
+  - `assessment/assessment-preview-shell.tsx`
+  - `assessment/assessment-preview-theme-toggle.tsx`
+  - `assessment/assessment-result-viewer.tsx`
+  - `layout/protected-shell.tsx`
   - `layout/shell-nav.tsx`
   - `settings/profile-settings-form.tsx`
   - `upload/upload-workspace.tsx`
@@ -191,10 +218,33 @@ Route Map
   - `/`
   - `/upload`
   - `/assessment`
+  - `/assessment/preview/[id]`
+  - `/assessment/results/[id]`
   - `/infographic`
 - Admin routes
   - `/admin`
   - `/admin/users`
+
+Route Ownership Clarification
+- `/upload`
+  - owns the full upload and document-preparation surface through `apps/web/app/(protected)/(completed)/upload/page.tsx`
+  - is the only route that renders `apps/web/components/upload/upload-workspace.tsx`
+- `/assessment`
+  - owns assessment generation, active linked-document selection, latest-result rendering, assessment history, preview opening, and saved-result opening through `apps/web/app/(protected)/(completed)/assessment/page.tsx` and `apps/web/components/assessment/assessment-studio.tsx`
+  - preview/result ownership is split cleanly across `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx`, `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`, and the shared viewer/export components under `apps/web/components/assessment/*`
+  - does not render the full upload workspace
+- `/infographic`
+  - owns infographic generation, linked-document selection, preview, and infographic history through `apps/web/app/(protected)/(completed)/infographic/page.tsx` and `apps/web/components/infographic/infographic-studio.tsx`
+  - does not render the full upload workspace
+- Protected shell
+  - shared layout only through `apps/web/app/(protected)/layout.tsx`, `apps/web/components/layout/protected-shell.tsx`, and `apps/web/components/layout/shell-nav.tsx`
+  - does not decide tool-page content ownership
+
+Shared State Versus Shared Page UI
+- Shared document state remains intentional and server-loaded through `listDocumentsForUser(...)` on the route page, then passed into tool studios as `initialDocuments`.
+- Shared linked-document continuity remains intentional through `documentId`, owner-scoped repository lookups, and compact page-specific UI.
+- Shared page-scale UI is intentionally constrained: only `/upload` renders `apps/web/components/upload/upload-workspace.tsx`.
+- `apps/web/components/document/document-context-card.tsx` is a compact shared support component, not a second upload page.
 
 API Map
 - Core/runtime
@@ -210,6 +260,12 @@ API Map
   - `POST /api/uploads`
   - `POST /api/assessment`
   - `GET /api/assessment/[id]`
+  - `GET /api/assessment/linked-document`
+  - `GET /api/assessment/results/[id]`
+  - `GET /api/assessment/export/json/[id]`
+  - `GET /api/assessment/export/markdown/[id]`
+  - `GET /api/assessment/export/docx/[id]`
+  - `GET /api/assessment/export/pdf/[id]`
   - `POST /api/infographic`
   - `GET /api/infographic/[id]`
   - `PATCH /api/users/me/profile`
@@ -225,8 +281,13 @@ Backend Runtime And Service Ownership
 - Server-only responsibility split
   - `apps/web/app/api/**/route.ts`: request parsing, auth gating, response shaping
   - `apps/web/lib/server/session.ts`: session verification and route/API guards
-  - `apps/web/lib/server/repository.ts`: Firestore-backed persistence with a local in-memory fallback when Firebase Admin runtime is unavailable
-  - `apps/web/lib/server/document-runtime.ts`: upload validation, conversion orchestration, and Storage persistence attempts
+  - `apps/web/lib/server/repository.ts`: Firestore-backed persistence with a local in-memory fallback when Firebase Admin runtime is unavailable, including active-document normalization plus assessment result lifecycle normalization
+  - `apps/web/lib/server/document-runtime.ts`: upload validation, conversion orchestration, Storage persistence attempts, and linked-binary reloads for direct-file Assessment generation
+  - `apps/web/lib/server/assessment-linked-document.ts`: Assessment-only linked-document resolution that prefers direct PDF input when the selected provider supports it
+  - `apps/web/lib/server/assessment-retention.ts`: 3-day Assessment expiry window and route/lifecycle helpers
+  - `apps/web/lib/server/assessment-preview.ts`: normalized bilingual Assessment preview/result model generation
+  - `apps/web/lib/server/assessment-exporter.ts`: JSON, Markdown, and DOCX artifact generation from one normalized preview model
+  - `apps/web/lib/server/assessment-print-renderer.ts`: print-first HTML export surface used by the lightweight PDF route
   - `apps/web/lib/server/datalab-convert.ts`: external Datalab conversion adapter with local fallback behavior
   - `apps/web/lib/server/runtime.ts`: runtime capability flags returned by inspection endpoints
   - `apps/web/lib/server/firebase-admin.ts`: managed-credentials or service-account Admin bootstrap
@@ -340,6 +401,7 @@ Firebase Integration
     - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
     - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
     - `NEXT_PUBLIC_FIREBASE_APP_ID`
+  - on Firebase App Hosting, `apps/web/next.config.ts` now mirrors the backend-linked build-only `FIREBASE_WEBAPP_CONFIG` into those six public env keys before Next compiles the client bundle
   - keeps client auth persistence in-memory only during login bootstrap
 
 AI, Model, And Provider Orchestration
@@ -353,10 +415,11 @@ AI, Model, And Provider Orchestration
   - `apps/web/lib/server/ai/prompt-orchestrator.ts` assembles prompt context for assessment and infographic generation
   - `apps/web/app/api/assessment/route.ts` and `apps/web/app/api/infographic/route.ts` attach optional document context from stored document markdown before generation
 - Current generation reality
-  - `apps/web/lib/server/ai/execution.ts` currently provides server-side fallback generation logic, not a fully wired external LLM inference path
-  - assessment generation currently returns structured placeholder questions
-  - infographic generation currently returns SVG fallback output
-  - the only verified external fetch in the current content pipeline is the Datalab conversion call inside `apps/web/lib/server/datalab-convert.ts` when Datalab env vars are configured
+  - assessment generation is now provider-aware and server-side only:
+    - Google Gemini assessment models run through the Google runtime path
+    - `qwen3.5-flash` runs through the Alibaba DashScope OpenAI-compatible runtime and must use the US (Virginia) endpoint
+  - infographic generation still returns SVG fallback output while external provider-backed infographic execution remains deferred
+  - Datalab conversion inside `apps/web/lib/server/datalab-convert.ts` remains the verified external fetch in the document intake pipeline when Datalab env vars are configured
 
 Firestore, Storage, Rules, And Indexes Strategy
 - Firestore Rules
@@ -410,11 +473,12 @@ Environment Strategy
   - root `.env.local` is the canonical local env file for both root Firebase scripts and `apps/web`
   - `apps/web/next.config.ts` reloads the root env through `@next/env` so the live Next.js app sees the same Firebase settings as the workspace scripts
   - `.env.example` currently includes project-specific public Firebase identifiers while keeping server-only credentials blank; it is a real contract file, not a generic neutral placeholder
+  - `.env.example` now matches the active App Hosting backend-linked Firebase web app id `1:38079185268:web:adcd16b5e94d3d8c52ec21`
   - repo-root `.env` is not part of the verified current repo
   - `cloudrun.env` is not part of the verified current repo; only `docs/legacy-reference/cloudrun.reference.env` survives as historical reference
   - `serviceAccountKeyNext.json` is local bootstrap material only and is not a runtime source of truth
   - `apps/web` does not rely on a separate app-local `.env.local`; the root `.env.local` is the intended shared local source
-  - App Hosting user env vars and secrets are not declared in `apps/web/apphosting.yaml` today, so operational secret management remains external to source control
+  - App Hosting user env vars and secrets are not declared in `apps/web/apphosting.yaml` today; public Firebase browser config is instead backfilled at build time from App Hosting's auto-populated `FIREBASE_WEBAPP_CONFIG`, while server-only secret management still remains external to source control
   - The owner-requested shared admin password must never be stored in `.env` files, Firestore, Storage rules, Storage metadata, client code, or public config
 
 Deployment Strategy
@@ -431,10 +495,12 @@ Deployment Strategy
   - Local resilience note: when Firebase Admin runtime is unavailable, the repository layer can fall back to an in-memory store for development continuity; this is not a production source of truth
 - Firebase App Hosting
   - Status: active and only canonical web deployment target
+  - Active backend verified on 2026-04-03: `zootopia-club-next-backend` at `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`
   - Frontend: Next.js pages, layouts, static assets, and public auth surfaces from `apps/web`
   - Backend: the same App Router Route Handlers under `apps/web/app/api/**/route.ts`, deployed in the App Hosting runtime
   - Path behavior: same-origin frontend and backend; client code continues to use relative `/api/*` calls with `credentials: "same-origin"`
   - Auth/session behavior: the same host-scoped session cookie and server-authoritative redirect logic as local development
+  - Firebase Auth authorized domains currently include `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`
   - Env/deployment assumptions: root `firebase.json`, app-local `apps/web/apphosting.yaml`, app-local `apps/web/package-lock.json`, standalone output from `apps/web/next.config.ts`, and bundle normalization in `apps/web/scripts/normalize-standalone.mjs`
   - Root npm scripts expose `firebase:deploy` and `firebase:app:deploy` as the canonical deploy commands
 - Firebase Hosting + Cloud Run
@@ -498,6 +564,7 @@ Current Feature Set
 - Dark-glass upload-first workspace with drag/drop CTA, recent-upload preview, and import-from-link stub UI
 - Datalab-backed conversion when configured, with local fallback extraction
 - Assessment generation flow
+- Assessment question counts now use `10..100` in steps of `10`, Assessment requests now carry exactly one mode (`question_generation` by default or `exam_generation`), and the same requests can also carry selected question types plus a 100%-total percentage distribution that flows through shared validation, prompt orchestration, execution fallback normalization, and saved-record normalization.
 - Infographic generation flow
 - Model/provider selection through the shared AI catalog and same-origin server orchestration
 - Admin overview and user role/status management
@@ -760,6 +827,28 @@ Change Log
     - `apps/web/app/globals.css`
   - Verification: Root `npm run lint`, `npm run typecheck`, and `npm run build` all passed on 2026-04-02 after the auth fix. Live runtime checking against the existing dev server showed `/api/auth/me` reporting `runtimeFlags.firebaseAdmin: true`, and a fresh Playwright snapshot of `/login` showed the Google CTA rendered as a clickable pointer target with the new idle status copy instead of a passive dead-looking state. A full live OAuth completion test was not finished inside this environment because the sandbox/dev-server/browser setup still prevents a safe end-to-end Google popup callback run.
 
+- 2026-04-03 16:53:37 | Firebase App Hosting Auth Env Audit And Build-Time Public Config Backfill
+  - Root cause: The live App Hosting `/login` and `/admin/login` pages were still rendering the "Required web sign-in configuration is still missing in this environment." banner because `apps/web/lib/firebase/client.ts` correctly requires all six `NEXT_PUBLIC_FIREBASE_*` values, but the deployed App Hosting build was relying on App Hosting's backend-linked `FIREBASE_WEBAPP_CONFIG` instead of explicit `NEXT_PUBLIC_*` variables. `apps/web/next.config.ts` previously loaded only the root `.env.local`, so the deployed client bundle froze those public values as missing even though the App Hosting backend itself was healthy.
+  - Verified live facts:
+    - `firebase-tools` `apphosting:backends:get` confirmed the active backend is `zootopia-club-next-backend` and it is wired to Firebase web app `1:38079185268:web:adcd16b5e94d3d8c52ec21`
+    - `firebase-tools` `apps:sdkconfig` confirmed that the active backend-linked web app uses the same project id, API key, auth domain, storage bucket, and messaging sender id already present in local env; only `.env.example` still had the older app id `1:38079185268:web:2c40b99c8c9f942252ec21`
+    - live `GET /api/auth/me` and `GET /api/health` on `https://zootopia-club-next-backend--zootopia2026.us-central1.hosted.app` both reported `runtimeFlags.firebaseAdmin: true`, proving Firebase Admin is available on App Hosting without explicit checked-in server credentials
+    - live `POST /api/auth/admin/resolve-identifier` successfully resolved `elmahdy` to `elmahdy@admin.com`, confirming `ZOOTOPIA_ADMIN_EMAILS` parsing / fallback plus username alias resolution are not what caused the admin-unavailable banner
+    - direct Firebase Auth project-config inspection confirmed `authorizedDomains` includes `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`
+    - live `/login` and `/admin/login` HTML still showed the blocking missing-config banners before this repo-side fix, so the problem was real on the current rollout and not just a stale local report
+  - What was changed:
+    - updated `apps/web/next.config.ts` so App Hosting's build-only `FIREBASE_WEBAPP_CONFIG` backfills the existing `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, and `NEXT_PUBLIC_FIREBASE_APP_ID` contract when explicit public env vars are absent
+    - updated `.env.example` so `NEXT_PUBLIC_FIREBASE_APP_ID` matches the active backend-linked Firebase web app `1:38079185268:web:adcd16b5e94d3d8c52ec21`
+  - What was preserved:
+    - the same `apps/web` runtime ownership, same-origin Route Handler backend, separate regular/admin login surfaces, Firebase Admin server authority, and existing client `isFirebaseWebConfigured()` guard path
+    - local `.env.local` precedence remains intact; App Hosting fallback only fills missing public values and does not override explicit local env
+    - `apps/web/apphosting.yaml` still does not need duplicated checked-in public Firebase env entries for this path to work
+  - Verification:
+    - root `npm run lint` passed
+    - root `npm run typecheck` exited successfully, but `next typegen` still printed the known Windows `EPERM` warning against `apps/web/.next/types/routes.d.ts`
+    - root `npm run build` passed with the full route tree including `/login`, `/admin/login`, and both auth bootstrap routes
+    - the currently deployed App Hosting URL still shows the old missing-config banners until a fresh App Hosting rollout picks up this repo change; the code-side root cause is fixed locally, but the live deployment is not yet updated
+
 - 2026-04-02 | Canonical Firebase Deployment Model Simplification
   - What was done: Removed the root `hosting` block from `firebase.json`, kept the `apphosting`, `firestore`, and `storage` blocks intact, added explicit root deploy scripts for App Hosting and shared Firebase resources in `package.json`, and updated top-level documentation to declare Firebase App Hosting as the single canonical web deployment path for the Next.js 16 app.
   - Classic-versus-App-Hosting audit result: The conflicting classic Hosting path was being invoked by the root `hosting` block in `firebase.json`, which caused plain `firebase deploy` to include the Firebase Hosting framework-preview integration for the same `apps/web` app. The supported App Hosting path is invoked by the root `apphosting` block in `firebase.json` together with `apps/web/apphosting.yaml`.
@@ -812,3 +901,15 @@ Change Log
 2026-04-02 22:34:06 - Added a root `.gitattributes` to pin source files to LF line endings at the repository level so Windows `core.autocrlf=true` does not keep warning on Next.js and TypeScript source files during `git add`.
 
 2026-04-02 22:34:06 - Added `.git-acl-backup-*/` to root `.gitignore` so the temporary Git metadata backup folder created during Windows ACL repair does not get picked up by `git add .`.
+
+2026-04-03 00:55:57 - Hardened the Assessment domain without changing its external product scope. Upgraded the shared Assessment request/generation contract to a normalized nested `options` shape with language, meta, and source-document support; added server-side request validation and backward-compatible payload normalization; strengthened the Assessment route so linked documents must exist, belong to the user, be ready, and have extracted markdown before generation; replaced the old generic prompt assembly with an Assessment-specific prompt path; normalized persisted Assessment records on save/readback for legacy compatibility; upgraded the fallback generation output with localized EN/AR questions, rationale, tags, and richer metadata; refreshed the Assessment studio UI to use the hardened contract with explicit request state, localized errors, linked-document readiness, saved-result selection/readback, and more reliable result rendering/history cards; added the missing EN/AR message catalog keys for Assessment states and document statuses; and updated `@zootopia/web` typechecking to use the official Next.js `next typegen` flow before `tsc --noEmit` in line with the local Next 16 docs.
+
+2026-04-03 03:08:44 - Added Assessment-specific model selection without changing the live `apps/web` same-origin architecture. Extended the shared model catalog so Assessment now exposes exactly five first-class models (`gemini-3.1-flash-lite-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `qwen3.5-flash`) while preserving the older infographic-scoped model entries for backward compatibility; added tool-scoped canonicalization so legacy Assessment ids normalize safely to the new catalog; tightened Assessment request validation so the server enforces the same allowed model list the UI shows; upgraded the Assessment studio to present a compact premium inline selector with translated EN/AR metadata chips and a truthful default of Gemini 3.1 Flash-Lite; wired the selected model through the Assessment request payload into the live route handler; split server execution into explicit per-model branches so the four Gemini models route through the Google runtime and `qwen3.5-flash` routes through the Alibaba DashScope OpenAI-compatible runtime; locked the Qwen compatible-mode base URL to the US (Virginia) endpoint via server-only env handling in `provider-runtime.ts`; refreshed the Assessment prompt contract so providers are asked for normalized JSON output; and added graceful provider-specific errors for unsupported models, missing provider configuration, misconfigured DashScope base URL, execution failures, and invalid model responses. Verification in this phase: root `npm run lint` passed, root `npm run build` passed with the full route tree including `/assessment`, and root `npm run typecheck` completed successfully but still prints a Windows-only `next typegen` `EPERM` warning against `.next/types/routes.d.ts` after finishing. Also repaired stale/corrupted `.next/dev/types` artifacts during verification because they were causing false route-type failures unrelated to the new Assessment model work.
+
+2026-04-03 14:17:58 - Clarified tool-page responsibility without changing the live `apps/web` same-origin runtime or the shared document data path. Root cause of the overlap: both `apps/web/components/assessment/assessment-studio.tsx` and `apps/web/components/infographic/infographic-studio.tsx` were importing and rendering the full page-scale `apps/web/components/upload/upload-workspace.tsx`, which made `/assessment` and `/infographic` feel like merged Upload + tool pages even though the route map itself was already clean. What was changed: removed the embedded upload workspace from both studios, added `apps/web/components/document/document-context-card.tsx` as a compact shared handoff component for latest/selected document awareness plus a direct `/upload` CTA, and updated EN/AR message catalogs with translated document-handoff labels. What was preserved: route paths, protected shell ownership, same-origin Route Handlers under `apps/web/app/api/**/route.ts`, server-side `listDocumentsForUser(...)` loading, `documentId` continuity, linked-document request contracts, saved assessment/infographic history, and the premium protected-shell visual language. Route-ownership result after this pass: `/upload` is now the only route that renders `UploadWorkspace`; `/assessment` owns assessment generation only; `/infographic` owns infographic generation only; shared document state remains shared as data, not duplicated as full page UI. Changed files in this pass: `apps/web/components/document/document-context-card.tsx`, `apps/web/components/assessment/assessment-studio.tsx`, `apps/web/components/infographic/infographic-studio.tsx`, `apps/web/messages/en.json`, `apps/web/messages/ar.json`, and `zootopia-club-next-ledger.txt`. Verification: root `npm run lint` passed, root `npm run typecheck` passed cleanly, and root `npm run build` passed with the full route tree including `/upload`, `/assessment`, and `/infographic`. Manual code verification confirmed `UploadWorkspace` is now mounted only from `apps/web/app/(protected)/(completed)/upload/page.tsx`. Runtime/browser verification in this environment could only confirm unauthenticated redirect behavior for protected routes because no valid signed-in session was available, so authenticated post-login visual checks of the protected pages remain pending and are not a regression introduced by this change.
+
+2026-04-03 15:21:48 - Refined the main Assessment configuration panel without changing the live `apps/web` same-origin runtime, route ownership, or backend authority boundaries. What was changed: upgraded `apps/web/components/assessment/assessment-studio.tsx` into a denser premium assessment-setup card with a darker violet-gold layered surface, stronger button depth, more polished textarea/select treatment, Lucide-based iconography, responsive card padding, wrapped type chips, and cleaner compact headings with the long helper copy removed from inside the card; added a question-type selector for `mcq`, `true_false`, `essay`, `fill_blanks`, `short_answer`, `matching`, and `multiple_response`; added a compact distribution section with percentage rows, automatic balancing of the last row, per-type computed question-count badges, and client-side prevention of broken totals; replaced the old count options with `10..100` in steps of `10`; carried the new additive Assessment options through `packages/shared-types/src/assessment.ts`, `packages/shared-utils/src/validation.ts`, `apps/web/lib/server/ai/prompt-orchestrator.ts`, `apps/web/lib/server/ai/execution.ts`, and `apps/web/lib/server/assessment-records.ts` so the server now validates question types/distribution, prompts providers with the requested mix, preserves the normalized options on save/readback, and tags generated questions with an additive optional `type` when available; refreshed the latest-result question cards so multi-line MCQ/matching/fill-blank text renders correctly with optional type badges; and tightened the `/assessment` page hero to use safer responsive spacing and no LTR-only icon margin. What was preserved: the `/assessment` page route, the two-column studio layout, the shared document handoff model, same-origin `POST /api/assessment` + `GET /api/assessment/[id]`, linked-document readiness checks, model routing, repository persistence, and text-first Assessment result rendering. Old-project review for this pass: inspected `C:\zootopia_club_ai_platform\src\utils\quizPresentation.ts` for quiz/RTL presentation cues and reused no code directly. Changed files in this pass: `apps/web/components/assessment/assessment-studio.tsx`, `apps/web/app/globals.css`, `apps/web/app/(protected)/(completed)/assessment/page.tsx`, `packages/shared-types/src/assessment.ts`, `packages/shared-utils/src/validation.ts`, `apps/web/lib/server/ai/prompt-orchestrator.ts`, `apps/web/lib/server/ai/execution.ts`, `apps/web/lib/server/assessment-records.ts`, `apps/web/messages/en.json`, `apps/web/messages/ar.json`, and `zootopia-club-next-ledger.txt`. Verification in this pass: root `npm run lint` passed cleanly; root `npm run build` passed with `/assessment` and both Assessment API routes in the final route tree; root `npm run typecheck` completed successfully but still printed the previously known Windows-only `next typegen` `EPERM` warning against `apps/web/.next/types/routes.d.ts`; code-level responsive verification confirmed the updated Assessment panel still keeps the existing single-column-below-`xl` and two-column-at-`xl` structure, uses `p-5 sm:p-6 lg:p-8` card padding, wraps question-type chips, stacks distribution rows on narrow screens, keeps the submit button full-width, and uses `break-words`/`whitespace-pre-wrap` where long filenames or multi-line question text could otherwise clip; authenticated browser-side visual verification of `/assessment` in dark mode, light mode, English, Arabic, and multiple breakpoints remains blocked in this environment by the lack of a valid signed-in session for the protected route and is therefore still pending rather than a regression introduced by this change.
+
+2026-04-03 15:44:36 - Added a compact Assessment mode selector without changing the live `apps/web` same-origin runtime, route ownership, or linked-document/model-selection flow. Root cause: after the earlier Assessment hardening and premium-card pass, the current shared Assessment request contract already carried additive `options` for count, difficulty, language, question types, and distribution, but there was still no explicit mode field anywhere in the shared types, validator, prompt builder, or saved-record normalizer, so the UI could not safely choose between question-oriented and exam-oriented generation. What was changed: extended `packages/shared-types/src/assessment.ts` with additive `AssessmentMode` support (`question_generation` and `exam_generation`) inside `AssessmentRequestOptions` plus backward-compatible input aliases and field-error typing; extended `packages/shared-utils/src/validation.ts` so Assessment requests now normalize a default mode of `question_generation`, reject unsupported values safely, and keep the existing additive nested `options` shape intact; updated `apps/web/lib/server/ai/prompt-orchestrator.ts` so the server-authored assessment prompt now includes the selected generation mode and mode-specific authoring instructions; updated `apps/web/lib/server/assessment-records.ts` so saved Assessment records preserve or backfill mode safely during normalization and the fallback summary text now reflects practice-vs-exam wording; updated `apps/web/lib/server/ai/execution.ts` so generation passes the selected mode through to prompt orchestration and summary construction; updated `apps/web/components/assessment/assessment-studio.tsx` so the premium config card now includes a compact two-option mode selector inside the existing form using the current chip styling, defaulting to `Question Generation`, keeping the layout responsive with a one-column mobile / two-column small-screen arrangement, and sending the selected mode inside the existing request payload; and added the short EN/AR labels in `apps/web/messages/en.json` and `apps/web/messages/ar.json`. What was preserved: the `/assessment` page route, `POST /api/assessment` and `GET /api/assessment/[id]`, same-origin backend authority, existing model selector behavior, existing linked-document selection/readiness checks, the premium card structure, question-type/distribution controls, and the current Assessment page ownership inside `apps/web`. Old-project review for this pass: inspected `C:\zootopia_club_ai_platform\src\features\assessment-tool\components\AssessmentStudio.tsx` for prior assessment-goal/exam wording cues and reused no code directly. Changed files in this pass: `packages/shared-types/src/assessment.ts`, `packages/shared-utils/src/validation.ts`, `apps/web/lib/server/ai/prompt-orchestrator.ts`, `apps/web/lib/server/assessment-records.ts`, `apps/web/lib/server/ai/execution.ts`, `apps/web/components/assessment/assessment-studio.tsx`, `apps/web/messages/en.json`, `apps/web/messages/ar.json`, and `zootopia-club-next-ledger.txt`. Verification in this pass: root `npm run lint` passed cleanly; root `npm run typecheck` passed cleanly across all workspaces and, in this run, `next typegen` completed successfully without the earlier Windows `EPERM` warning; root `npm run build` passed with `/assessment`, `/api/assessment`, and `/api/assessment/[id]` in the final route tree; code-level verification confirmed the selector stays inside the existing premium card, defaults to `question_generation`, uses short EN/AR labels, and keeps the current responsive chip-based layout without changing unrelated tool surfaces. Browser-side authenticated visual verification of `/assessment` remains pending in this environment because no valid signed-in session was available for the protected route.
+
+2026-04-03 18:42:11 - Implemented the Assessment direct-file/runtime/result-viewer/export architecture in the live `apps/web` runtime without moving ownership to `apps/api` or rebuilding Upload from scratch. Root cause of the missing feature set: the repo already had owner-scoped upload, extracted-context assessment generation, and saved assessment history, but it still treated linked documents as markdown-only inputs, had no active linked-document concept, had no dedicated preview/result pages, had no retention-aware result metadata, and had no export surface beyond reading the saved JSON-like record back inside `/assessment`. What was changed: extended `packages/shared-types/src/document.ts` with additive `isActive` / `supersededAt` metadata and extended `packages/shared-types/src/assessment.ts` with additive lifecycle/result-view metadata (`status`, `expiresAt`, `previewRoute`, `resultRoute`, richer `meta`, and `inputMode`) while preserving backward compatibility through `apps/web/lib/server/assessment-records.ts`; upgraded `apps/web/lib/server/repository.ts` so document saves now maintain one active linked document per owner, assessments normalize/store retention-aware routes and lifecycle data, expired assessment records are filtered out of history, and viewer access can distinguish expired results safely; upgraded `apps/web/lib/server/document-runtime.ts` so the existing upload flow still runs Datalab extraction for current infographic compatibility but now also exposes stored binary reloads for Assessment direct-file generation; added `apps/web/lib/server/assessment-linked-document.ts`, `apps/web/lib/server/assessment-retention.ts`, `apps/web/lib/assessment-preview-model.ts`, `apps/web/lib/assessment-routes.ts`, `apps/web/lib/server/assessment-preview.ts`, `apps/web/lib/server/assessment-exporter.ts`, and `apps/web/lib/server/assessment-print-renderer.ts` so Assessment now has explicit ownership for linked-document resolution, retention, normalized preview/result shaping, DOCX/Markdown/JSON export, and a print-first PDF lane; upgraded `apps/web/lib/server/ai/provider-runtime.ts`, `apps/web/lib/server/ai/prompt-orchestrator.ts`, and `apps/web/lib/server/ai/execution.ts` so Gemini models can consume the original linked PDF directly from Storage when supported, while unsupported file/model combinations still fall back safely to extracted text context instead of breaking the existing upload architecture; added owner-scoped Assessment result/export routes under `apps/web/app/api/assessment/linked-document/route.ts`, `apps/web/app/api/assessment/results/[id]/route.ts`, `apps/web/app/api/assessment/export/json/[id]/route.ts`, `apps/web/app/api/assessment/export/markdown/[id]/route.ts`, `apps/web/app/api/assessment/export/docx/[id]/route.ts`, and `apps/web/app/api/assessment/export/pdf/[id]/route.ts`; added dedicated protected pages at `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx` and `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`; added the shared viewer/export components `apps/web/components/assessment/assessment-preview-shell.tsx`, `apps/web/components/assessment/assessment-result-viewer.tsx`, `apps/web/components/assessment/assessment-export-actions.tsx`, and `apps/web/components/assessment/assessment-preview-theme-toggle.tsx`; updated `apps/web/app/(protected)/(completed)/assessment/page.tsx` plus `apps/web/components/assessment/assessment-studio.tsx` so the page now preselects the owner’s active linked document, no longer falsely blocks ready documents just because the client only knows about markdown availability, and exposes direct links into the new preview/result pages after generation and from the latest-result card; updated EN/AR message catalogs with the new result/export/retention strings; and added the single new runtime dependency `docx@9.5.1` for real Word export. What was preserved: `apps/web` remains the only live runtime; the same-origin App Router Route Handler architecture remains authoritative; Upload still owns the only full upload workspace; the current infographic flow still gets extracted markdown from Upload; auth/session boundaries and profile-completion gates remain server-enforced; document/result ownership stays owner-scoped; and no provider secrets or privileged model logic moved into the browser. Intentional tradeoff in this pass: PDF export is currently a print-first same-origin HTML route (`/api/assessment/export/pdf/[id]`) that opens a branded print surface and lets the browser Save as PDF, because that is the smallest safe path in this repo without introducing a heavy headless-browser runtime or PDF rendering stack inside App Hosting; JSON, Markdown, and DOCX exports are real direct downloads. Old-project review for this pass: audited `C:\zootopia_club_ai_platform\src\ai\services\promptOrchestrator.ts`, `C:\zootopia_club_ai_platform\src\ai\services\aiExecutor.ts`, `C:\zootopia_club_ai_platform\src\ai\orchestration\toolPromptConfig.ts`, `C:\zootopia_club_ai_platform\src\utils\exporters.ts`, and the `src\components\status\*` result-preview components for selective inspiration only, with no blind code copy. Changed files in this pass: `packages/shared-types/src/document.ts`, `packages/shared-types/src/assessment.ts`, `apps/web/lib/server/assessment-records.ts`, `apps/web/lib/server/repository.ts`, `apps/web/lib/server/document-runtime.ts`, `apps/web/lib/server/assessment-linked-document.ts`, `apps/web/lib/server/assessment-retention.ts`, `apps/web/lib/assessment-preview-model.ts`, `apps/web/lib/assessment-routes.ts`, `apps/web/lib/server/assessment-preview.ts`, `apps/web/lib/server/assessment-exporter.ts`, `apps/web/lib/server/assessment-print-renderer.ts`, `apps/web/lib/server/ai/provider-runtime.ts`, `apps/web/lib/server/ai/prompt-orchestrator.ts`, `apps/web/lib/server/ai/execution.ts`, `apps/web/app/api/assessment/route.ts`, `apps/web/app/api/assessment/[id]/route.ts`, `apps/web/app/api/assessment/linked-document/route.ts`, `apps/web/app/api/assessment/results/[id]/route.ts`, `apps/web/app/api/assessment/export/json/[id]/route.ts`, `apps/web/app/api/assessment/export/markdown/[id]/route.ts`, `apps/web/app/api/assessment/export/docx/[id]/route.ts`, `apps/web/app/api/assessment/export/pdf/[id]/route.ts`, `apps/web/app/(protected)/(completed)/assessment/page.tsx`, `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx`, `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`, `apps/web/components/assessment/assessment-studio.tsx`, `apps/web/components/assessment/assessment-preview-shell.tsx`, `apps/web/components/assessment/assessment-result-viewer.tsx`, `apps/web/components/assessment/assessment-export-actions.tsx`, `apps/web/components/assessment/assessment-preview-theme-toggle.tsx`, `apps/web/messages/en.json`, `apps/web/messages/ar.json`, `apps/web/package.json`, `package-lock.json`, and `zootopia-club-next-ledger.txt`. Verification in this pass: `npm run lint --workspace @zootopia/web` passed; `npm run typecheck --workspace @zootopia/web` passed and still printed the known Windows-only `next typegen` `EPERM` warning against `apps/web/.next/types/routes.d.ts` after route generation; `npm run build --workspace @zootopia/web` passed with the final route tree including `/assessment/preview/[id]`, `/assessment/results/[id]`, `/api/assessment/results/[id]`, and all four Assessment export routes. Browser-side authenticated end-to-end verification of the protected Assessment flow remains pending in this environment because no valid signed-in session was available for the protected routes, so runtime verification here is code-level plus build-time rather than live signed-in UI confirmation.

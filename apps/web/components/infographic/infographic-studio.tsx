@@ -12,7 +12,7 @@ import { useMemo, useState } from "react";
 
 import type { AppMessages } from "@/lib/messages";
 
-import { UploadWorkspace } from "@/components/upload/upload-workspace";
+import { DocumentContextCard } from "@/components/document/document-context-card";
 
 type InfographicStudioProps = {
   messages: AppMessages;
@@ -27,7 +27,6 @@ export function InfographicStudio({
   initialDocuments,
   initialGenerations,
 }: InfographicStudioProps) {
-  const [documents, setDocuments] = useState(initialDocuments);
   const [generations, setGenerations] = useState(initialGenerations);
   const [request, setRequest] = useState<InfographicRequest>({
     topic: "",
@@ -38,7 +37,10 @@ export function InfographicStudio({
   const [error, setError] = useState<string | null>(null);
 
   const latestGeneration = generations[0] ?? null;
-  const documentOptions = useMemo(() => documents.slice(0, 20), [documents]);
+  const documentOptions = useMemo(() => initialDocuments.slice(0, 20), [initialDocuments]);
+  const selectedDocument =
+    documentOptions.find((document) => document.id === request.documentId) ?? null;
+  const latestDocument = documentOptions[0] ?? null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -291,19 +293,11 @@ export function InfographicStudio({
         </section>
       </div>
 
-      {/* Upload Integration */}
-      <UploadWorkspace
+      <DocumentContextCard
         messages={messages}
-        initialDocuments={documents}
-        onDocumentCreated={(document) => {
-          setDocuments((current) => [document, ...current]);
-          setRequest((current) => ({
-            ...current,
-            documentId: document.id,
-          }));
-        }}
-        title={messages.uploadWorkspaceTitle}
-        description={messages.uploadHint}
+        tone="infographic"
+        selectedDocument={selectedDocument}
+        latestDocument={latestDocument}
       />
 
       {/* Infographic History */}

@@ -1,6 +1,9 @@
 import { isProfileCompletionRequired } from "@/lib/return-to";
-import { apiError, apiSuccess } from "@/lib/server/api";
+import { apiError } from "@/lib/server/api";
+import { buildAssessmentPreview } from "@/lib/server/assessment-preview";
+import { buildAssessmentPrintHtml } from "@/lib/server/assessment-print-renderer";
 import { getAssessmentGenerationForViewer } from "@/lib/server/repository";
+import { getRequestUiContext } from "@/lib/server/request-context";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
@@ -38,5 +41,16 @@ export async function GET(
     );
   }
 
-  return apiSuccess(generation);
+  const uiContext = await getRequestUiContext();
+  const preview = buildAssessmentPreview({
+    generation,
+    locale: uiContext.locale,
+    messages: uiContext.messages,
+  });
+
+  return new Response(buildAssessmentPrintHtml(preview), {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+    },
+  });
 }

@@ -294,6 +294,178 @@ html[dir="rtl"] .page-title {
   }
 }
 
+.assessment-premium-panel {
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(139, 92, 246, 0.18), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(242, 198, 106, 0.1), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.88));
+  box-shadow:
+    0 26px 70px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+.assessment-premium-panel::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: calc(2rem - 1px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.assessment-premium-field {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.68));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 12px 26px rgba(15, 23, 42, 0.06);
+}
+
+.assessment-premium-field:focus {
+  border-color: rgba(139, 92, 246, 0.32);
+  box-shadow:
+    0 0 0 4px rgba(139, 92, 246, 0.12),
+    0 18px 32px rgba(76, 29, 149, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.assessment-premium-button {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 48%, #0f766e 100%);
+  box-shadow:
+    0 18px 38px rgba(76, 29, 149, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease;
+}
+
+.assessment-premium-button:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 24px 44px rgba(76, 29, 149, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.assessment-premium-button:disabled {
+  transform: none;
+  filter: saturate(0.78);
+  opacity: 0.66;
+  box-shadow:
+    0 12px 24px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.assessment-premium-button:disabled:hover {
+  transform: none;
+  box-shadow:
+    0 12px 24px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.assessment-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  background: rgba(255, 255, 255, 0.54);
+  padding: 0.7rem 0.95rem;
+  color: var(--foreground-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.assessment-type-chip:hover {
+  border-color: rgba(139, 92, 246, 0.28);
+  color: var(--foreground);
+}
+
+.assessment-type-chip--selected {
+  border-color: rgba(139, 92, 246, 0.16);
+  background: linear-gradient(135deg, rgba(109, 40, 217, 0.95), rgba(124, 58, 237, 0.92));
+  color: #fff;
+  box-shadow:
+    0 16px 30px rgba(76, 29, 149, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+:root[data-theme="dark"] .assessment-premium-panel {
+  border-color: rgba(167, 139, 250, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(139, 92, 246, 0.24), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(242, 198, 106, 0.08), transparent 44%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.96));
+  box-shadow:
+    0 32px 80px rgba(2, 6, 23, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -24px 40px rgba(2, 6, 23, 0.32);
+}
+
+:root[data-theme="dark"] .assessment-premium-panel::before {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme="dark"] .assessment-premium-field {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(2, 6, 23, 0.78));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 32px rgba(2, 6, 23, 0.22);
+}
+
+:root[data-theme="dark"] .assessment-premium-field:focus {
+  border-color: rgba(167, 139, 250, 0.34);
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(15, 23, 42, 0.9));
+}
+
+:root[data-theme="dark"] .assessment-type-chip {
+  border-color: rgba(167, 139, 250, 0.12);
+  background: rgba(15, 23, 42, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .assessment-premium-panel {
+    border-color: rgba(167, 139, 250, 0.18);
+    background:
+      radial-gradient(circle at top right, rgba(139, 92, 246, 0.24), transparent 34%),
+      radial-gradient(circle at bottom left, rgba(242, 198, 106, 0.08), transparent 44%),
+      linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.96));
+    box-shadow:
+      0 32px 80px rgba(2, 6, 23, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 -24px 40px rgba(2, 6, 23, 0.32);
+  }
+
+  :root[data-theme="system"] .assessment-premium-panel::before {
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+
+  :root[data-theme="system"] .assessment-premium-field {
+    border-color: rgba(148, 163, 184, 0.22);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(2, 6, 23, 0.78));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 16px 32px rgba(2, 6, 23, 0.22);
+  }
+
+  :root[data-theme="system"] .assessment-premium-field:focus {
+    border-color: rgba(167, 139, 250, 0.34);
+    background: linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(15, 23, 42, 0.9));
+  }
+
+  :root[data-theme="system"] .assessment-type-chip {
+    border-color: rgba(167, 139, 250, 0.12);
+    background: rgba(15, 23, 42, 0.72);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+}
+
 /* Base loading spinner utility */
 .loading-spinner {
   width: 1.25em;

@@ -18,11 +18,13 @@ import {
   hasAdminAccessFromClaims,
   isAllowlistedAdminEmail,
 } from "@/lib/server/admin-auth";
+import { normalizeAssessmentGenerationRecord } from "@/lib/server/assessment-records";
 import {
   getFirebaseAdminAuth,
   getFirebaseAdminFirestore,
   hasFirebaseAdminRuntime,
 } from "@/lib/server/firebase-admin";
+import { getAssessmentStatus } from "@/lib/server/assessment-retention";
 
 type AdminLogEntry = {
   id: string;
@@ -67,6 +69,93 @@ function canViewOwnerOwnedRecord(
   viewer: Pick<SessionUser, "uid" | "role">,
 ) {
   return viewer.role === "admin" || viewer.uid === ownerUid;
+}
+
+function normalizeDocumentRecord(
+  record: DocumentRecord,
+  fallbackActiveId: string | null,
+): DocumentRecord {
+  const isActive = record.isActive === true || record.id === fallbackActiveId;
+
+  return {
+    ...record,
+    isActive,
+    supersededAt: isActive ? null : record.supersededAt ?? null,
+  };
+}
+
+function normalizeDocumentRecordList(records: DocumentRecord[]) {
+  const fallbackActiveId =
+    records.find((record) => record.isActive === true)?.id ??
+    records.find((record) => !record.supersededAt)?.id ??
+    records[0]?.id ??
+    null;
+
+  return records.map((record) => normalizeDocumentRecord(record, fallbackActiveId));
+}
+
+async function persistDocumentRecord(record: DocumentRecord) {
+  if (shouldUseFirestore()) {
+    await getFirebaseAdminFirestore()
+      .collection("documents")
+      .doc(record.id)
+      .set(record, { merge: true });
+  } else {
+    getMemoryStore().documents.set(record.id, record);
+  }
+}
+
+async function markPreviousDocumentsInactive(input: {
+  ownerUid: string;
+  activeDocumentId: string;
+  supersededAt: string;
+}) {
+  if (shouldUseFirestore()) {
+    const snapshot = await getFirebaseAdminFirestore()
+      .collection("documents")
+      .where("ownerUid", "==", input.ownerUid)
+      .orderBy("createdAt", "desc")
+      .limit(30)
+      .get();
+
+    await Promise.all(
+      snapshot.docs.map(async (documentSnapshot) => {
+        if (documentSnapshot.id === input.activeDocumentId) {
+          return;
+        }
+
+        const existing = documentSnapshot.data() as DocumentRecord;
+        if (existing.isActive === false && existing.supersededAt) {
+          return;
+        }
+
+        await documentSnapshot.ref.set(
+          {
+            isActive: false,
+            supersededAt: existing.supersededAt ?? input.supersededAt,
+            updatedAt: input.supersededAt,
+          } satisfies Partial<DocumentRecord>,
+          { merge: true },
+        );
+      }),
+    );
+
+    return;
+  }
+
+  const store = getMemoryStore();
+  for (const [documentId, existing] of store.documents.entries()) {
+    if (existing.ownerUid !== input.ownerUid || documentId === input.activeDocumentId) {
+      continue;
+    }
+
+    store.documents.set(documentId, {
+      ...existing,
+      isActive: false,
+      supersededAt: existing.supersededAt ?? input.supersededAt,
+      updatedAt: input.supersededAt,
+    });
+  }
 }
 
 function resolveProfileState(input: {
@@ -325,16 +414,23 @@ export async function appendAdminLog(input: Omit<AdminLogEntry, "id" | "createdA
 }
 
 export async function saveDocument(record: DocumentRecord) {
-  if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
-      .collection("documents")
-      .doc(record.id)
-      .set(record, { merge: true });
-  } else {
-    getMemoryStore().documents.set(record.id, record);
+  const nextRecord: DocumentRecord = {
+    ...record,
+    isActive: record.isActive !== false,
+    supersededAt: record.isActive === false ? record.supersededAt ?? record.updatedAt : null,
+  };
+
+  await persistDocumentRecord(nextRecord);
+
+  if (nextRecord.isActive) {
+    await markPreviousDocumentsInactive({
+      ownerUid: nextRecord.ownerUid,
+      activeDocumentId: nextRecord.id,
+      supersededAt: nextRecord.updatedAt,
+    });
   }
 
-  return record;
+  return nextRecord;
 }
 
 export async function listDocumentsForUser(ownerUid: string, limit = 20) {
@@ -346,13 +442,17 @@ export async function listDocumentsForUser(ownerUid: string, limit = 20) {
       .limit(limit)
       .get();
 
-    return snapshot.docs.map((doc) => doc.data() as DocumentRecord);
+    return normalizeDocumentRecordList(
+      snapshot.docs.map((doc) => doc.data() as DocumentRecord),
+    );
   }
 
-  return [...getMemoryStore().documents.values()]
-    .filter((record) => record.ownerUid === ownerUid)
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .slice(0, limit);
+  return normalizeDocumentRecordList(
+    [...getMemoryStore().documents.values()]
+      .filter((record) => record.ownerUid === ownerUid)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, limit),
+  );
 }
 
 export async function getDocumentById(id: string) {
@@ -362,10 +462,27 @@ export async function getDocumentById(id: string) {
       .doc(id)
       .get();
 
-    return snapshot.exists ? (snapshot.data() as DocumentRecord) : null;
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    const document = snapshot.data() as DocumentRecord;
+    const fallbackDocuments = await listDocumentsForUser(document.ownerUid, 10);
+    const fallbackActiveId =
+      fallbackDocuments.find((record) => record.isActive)?.id ?? null;
+
+    return normalizeDocumentRecord(document, fallbackActiveId);
   }
 
-  return getMemoryStore().documents.get(id) ?? null;
+  const record = getMemoryStore().documents.get(id);
+  if (!record) {
+    return null;
+  }
+
+  const fallbackDocuments = await listDocumentsForUser(record.ownerUid, 10);
+  const fallbackActiveId = fallbackDocuments.find((document) => document.isActive)?.id ?? null;
+
+  return normalizeDocumentRecord(record, fallbackActiveId);
 }
 
 export async function getDocumentByIdForOwner(id: string, ownerUid: string) {
@@ -377,17 +494,24 @@ export async function getDocumentByIdForOwner(id: string, ownerUid: string) {
   return document;
 }
 
+export async function getActiveDocumentForOwner(ownerUid: string) {
+  const documents = await listDocumentsForUser(ownerUid, 20);
+  return documents.find((document) => document.isActive) ?? documents[0] ?? null;
+}
+
 export async function saveAssessmentGeneration(record: AssessmentGeneration) {
+  const normalizedRecord = normalizeAssessmentGenerationRecord(record);
+
   if (shouldUseFirestore()) {
     await getFirebaseAdminFirestore()
       .collection("assessmentGenerations")
-      .doc(record.id)
-      .set(record, { merge: true });
+      .doc(normalizedRecord.id)
+      .set(normalizedRecord, { merge: true });
   } else {
-    getMemoryStore().assessments.set(record.id, record);
+    getMemoryStore().assessments.set(normalizedRecord.id, normalizedRecord);
   }
 
-  return record;
+  return normalizedRecord;
 }
 
 export async function listAssessmentGenerationsForUser(ownerUid: string, limit = 20) {
@@ -399,13 +523,17 @@ export async function listAssessmentGenerationsForUser(ownerUid: string, limit =
       .limit(limit)
       .get();
 
-    return snapshot.docs.map((doc) => doc.data() as AssessmentGeneration);
+    return snapshot.docs
+      .map((doc) => normalizeAssessmentGenerationRecord(doc.data() as AssessmentGeneration))
+      .filter((record) => record.status !== "expired");
   }
 
   return [...getMemoryStore().assessments.values()]
     .filter((record) => record.ownerUid === ownerUid)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .slice(0, limit);
+    .slice(0, limit)
+    .map((record) => normalizeAssessmentGenerationRecord(record))
+    .filter((record) => record.status !== "expired");
 }
 
 export async function getAssessmentGenerationById(id: string) {
@@ -415,18 +543,29 @@ export async function getAssessmentGenerationById(id: string) {
       .doc(id)
       .get();
 
-    return snapshot.exists ? (snapshot.data() as AssessmentGeneration) : null;
+    return snapshot.exists
+      ? normalizeAssessmentGenerationRecord(snapshot.data() as AssessmentGeneration)
+      : null;
   }
 
-  return getMemoryStore().assessments.get(id) ?? null;
+  const record = getMemoryStore().assessments.get(id);
+  return record ? normalizeAssessmentGenerationRecord(record) : null;
 }
 
 export async function getAssessmentGenerationForViewer(
   id: string,
   viewer: Pick<SessionUser, "uid" | "role">,
+  options: {
+    includeExpired?: boolean;
+  } = {},
 ) {
   const generation = await getAssessmentGenerationById(id);
   if (!generation || !canViewOwnerOwnedRecord(generation.ownerUid, viewer)) {
+    return null;
+  }
+
+  const lifecycle = getAssessmentStatus(generation);
+  if (!options.includeExpired && lifecycle.status === "expired") {
     return null;
   }
 

@@ -1,4 +1,12 @@
 import type {
+  AssessmentDifficulty,
+  AssessmentMode,
+  AssessmentQuestionType,
+  AssessmentQuestionTypeDistribution,
+  AssessmentRequest,
+  AssessmentRequestFieldErrors,
+  AssessmentRequestInput,
+  Locale,
   RequiredUserProfile,
   UpdateUserProfileInput,
   UserProfileFieldErrors,
@@ -27,8 +35,46 @@ type ProfileValidationFailure = {
   message: string;
 };
 
+type AssessmentValidationSuccess = ValidationSuccess<AssessmentRequest>;
+
+type AssessmentValidationFailure = {
+  ok: false;
+  fieldErrors: AssessmentRequestFieldErrors;
+  message: string;
+};
+
+type AssessmentValidationOptions = {
+  defaultModelId?: string;
+  normalizeModelId?: (modelId: string) => string;
+  isModelSupported?: (modelId: string) => boolean;
+};
+
 const NAME_PART_PATTERN = /^[\p{Script=Arabic}\p{Script=Latin}'-]+$/u;
 const NAME_LETTERS_ONLY_PATTERN = /^[\p{Script=Arabic}\p{Script=Latin}]+$/u;
+const ASSESSMENT_MIN_QUESTION_COUNT = 10;
+const ASSESSMENT_MAX_QUESTION_COUNT = 100;
+const ASSESSMENT_QUESTION_COUNT_STEP = 10;
+const SUPPORTED_ASSESSMENT_DIFFICULTIES: AssessmentDifficulty[] = [
+  "easy",
+  "medium",
+  "hard",
+];
+const SUPPORTED_ASSESSMENT_LANGUAGES: Locale[] = ["en", "ar"];
+const DEFAULT_ASSESSMENT_MODE: AssessmentMode = "question_generation";
+const SUPPORTED_ASSESSMENT_MODES: AssessmentMode[] = [
+  "question_generation",
+  "exam_generation",
+];
+const DEFAULT_ASSESSMENT_QUESTION_TYPE: AssessmentQuestionType = "mcq";
+const SUPPORTED_ASSESSMENT_QUESTION_TYPES: AssessmentQuestionType[] = [
+  "mcq",
+  "true_false",
+  "essay",
+  "fill_blanks",
+  "short_answer",
+  "matching",
+  "multiple_response",
+];
 
 export function assertNonEmptyString(value: string, message: string) {
   if (!value.trim()) {
@@ -38,6 +84,11 @@ export function assertNonEmptyString(value: string, message: string) {
 
 export function normalizeWhitespace(value: string) {
   return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+export function normalizeOptionalString(value: string | null | undefined) {
+  const normalized = normalizeWhitespace(String(value || ""));
+  return normalized || undefined;
 }
 
 export function normalizeFullName(value: string) {
@@ -204,5 +255,219 @@ export function evaluateProfileCompletion(input: {
     cohortYear: universityCodeResult.ok
       ? universityCodeResult.value.cohortYear
       : null,
+  };
+}
+
+function resolveAssessmentQuestionCount(input: AssessmentRequestInput) {
+  const rawValue = input.options?.questionCount ?? input.questionCount;
+  if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
+    return NaN;
+  }
+
+  return Math.trunc(rawValue);
+}
+
+function resolveAssessmentMode(input: AssessmentRequestInput): AssessmentMode {
+  const value = input.options?.mode ?? input.mode;
+  return SUPPORTED_ASSESSMENT_MODES.includes(value as AssessmentMode)
+    ? (value as AssessmentMode)
+    : DEFAULT_ASSESSMENT_MODE;
+}
+
+function hasInvalidAssessmentMode(input: AssessmentRequestInput) {
+  const rawValue = input.options?.mode ?? input.mode;
+  return (
+    rawValue !== undefined &&
+    rawValue !== null &&
+    !SUPPORTED_ASSESSMENT_MODES.includes(rawValue as AssessmentMode)
+  );
+}
+
+function resolveAssessmentDifficulty(
+  input: AssessmentRequestInput,
+): AssessmentDifficulty | undefined {
+  const value = input.options?.difficulty ?? input.difficulty;
+  return SUPPORTED_ASSESSMENT_DIFFICULTIES.includes(value as AssessmentDifficulty)
+    ? (value as AssessmentDifficulty)
+    : undefined;
+}
+
+function resolveAssessmentLanguage(input: AssessmentRequestInput): Locale | undefined {
+  const value = input.options?.language ?? input.language;
+  return SUPPORTED_ASSESSMENT_LANGUAGES.includes(value as Locale)
+    ? (value as Locale)
+    : undefined;
+}
+
+function resolveAssessmentQuestionTypes(
+  input: AssessmentRequestInput,
+): AssessmentQuestionType[] {
+  const rawValue = input.options?.questionTypes ?? input.questionTypes;
+  if (!Array.isArray(rawValue)) {
+    return [DEFAULT_ASSESSMENT_QUESTION_TYPE];
+  }
+
+  const normalized = rawValue.filter((value, index, values) => {
+    if (!SUPPORTED_ASSESSMENT_QUESTION_TYPES.includes(value as AssessmentQuestionType)) {
+      return false;
+    }
+
+    return values.indexOf(value) === index;
+  }) as AssessmentQuestionType[];
+
+  return normalized.length > 0 ? normalized : [DEFAULT_ASSESSMENT_QUESTION_TYPE];
+}
+
+function buildBalancedQuestionTypeDistribution(
+  questionTypes: AssessmentQuestionType[],
+): AssessmentQuestionTypeDistribution[] {
+  const base = Math.floor(100 / questionTypes.length);
+  let remainder = 100 - base * questionTypes.length;
+
+  return questionTypes.map((type) => {
+    const percentage = base + (remainder > 0 ? 1 : 0);
+    remainder = Math.max(0, remainder - 1);
+
+    return {
+      type,
+      percentage,
+    };
+  });
+}
+
+function resolveAssessmentQuestionTypeDistribution(
+  input: AssessmentRequestInput,
+  questionTypes: AssessmentQuestionType[],
+) {
+  const rawValue =
+    input.options?.questionTypeDistribution ?? input.questionTypeDistribution;
+  if (!Array.isArray(rawValue) || rawValue.length === 0) {
+    return buildBalancedQuestionTypeDistribution(questionTypes);
+  }
+
+  const distribution = questionTypes.map((type) => {
+    const entry = rawValue.find((item) => item?.type === type);
+    return {
+      type,
+      percentage:
+        typeof entry?.percentage === "number" && Number.isFinite(entry.percentage)
+          ? Math.trunc(entry.percentage)
+          : NaN,
+    } satisfies AssessmentQuestionTypeDistribution;
+  });
+
+  return distribution;
+}
+
+export function validateAssessmentRequest(
+  input: AssessmentRequestInput,
+  options: AssessmentValidationOptions = {},
+): AssessmentValidationSuccess | AssessmentValidationFailure {
+  const prompt = normalizeWhitespace(String(input.prompt || ""));
+  const documentId = normalizeOptionalString(input.documentId);
+  const rawModelId = normalizeWhitespace(
+    String(input.modelId || options.defaultModelId || ""),
+  );
+  const modelId = normalizeWhitespace(
+    options.normalizeModelId ? options.normalizeModelId(rawModelId) : rawModelId,
+  );
+  const mode = resolveAssessmentMode(input);
+  const questionCount = resolveAssessmentQuestionCount(input);
+  const difficulty = resolveAssessmentDifficulty(input);
+  const language = resolveAssessmentLanguage(input);
+  const questionTypes = resolveAssessmentQuestionTypes(input);
+  const questionTypeDistribution = resolveAssessmentQuestionTypeDistribution(
+    input,
+    questionTypes,
+  );
+  const fieldErrors: AssessmentRequestFieldErrors = {};
+
+  if (!prompt) {
+    fieldErrors.prompt = "Assessment prompt is required.";
+  } else if (prompt.length > 2000) {
+    fieldErrors.prompt = "Assessment prompt must stay under 2000 characters.";
+  }
+
+  if (!modelId) {
+    fieldErrors.modelId = "Model selection is required.";
+  } else if (options.isModelSupported && !options.isModelSupported(modelId)) {
+    fieldErrors.modelId = "Select one of the supported assessment models.";
+  }
+
+  if (hasInvalidAssessmentMode(input)) {
+    fieldErrors.mode = "Assessment mode must be question generation or exam generation.";
+  }
+
+  if (!Number.isInteger(questionCount)) {
+    fieldErrors.questionCount = "Question count must be a whole number.";
+  } else if (
+    questionCount < ASSESSMENT_MIN_QUESTION_COUNT ||
+    questionCount > ASSESSMENT_MAX_QUESTION_COUNT
+  ) {
+    fieldErrors.questionCount = `Question count must stay between ${ASSESSMENT_MIN_QUESTION_COUNT} and ${ASSESSMENT_MAX_QUESTION_COUNT}.`;
+  } else if (questionCount % ASSESSMENT_QUESTION_COUNT_STEP !== 0) {
+    fieldErrors.questionCount = `Question count must use ${ASSESSMENT_QUESTION_COUNT_STEP}-question steps.`;
+  }
+
+  if (!difficulty) {
+    fieldErrors.difficulty = "Difficulty must be easy, medium, or hard.";
+  }
+
+  if (!language) {
+    fieldErrors.language = "Assessment language must be English or Arabic.";
+  }
+
+  if (questionTypes.length === 0) {
+    fieldErrors.questionTypes = "Select at least one question type.";
+  }
+
+  if (questionTypeDistribution.length !== questionTypes.length) {
+    fieldErrors.questionTypeDistribution = "Question type distribution is incomplete.";
+  } else {
+    const hasInvalidPercentages = questionTypeDistribution.some(
+      (entry) =>
+        !Number.isInteger(entry.percentage) ||
+        entry.percentage < 0 ||
+        entry.percentage > 100,
+    );
+
+    if (hasInvalidPercentages) {
+      fieldErrors.questionTypeDistribution =
+        "Question type percentages must be whole numbers between 0 and 100.";
+    } else {
+      const distributionTotal = questionTypeDistribution.reduce(
+        (total, entry) => total + entry.percentage,
+        0,
+      );
+
+      if (distributionTotal !== 100) {
+        fieldErrors.questionTypeDistribution = "Question type percentages must total 100.";
+      }
+    }
+  }
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return {
+      ok: false,
+      fieldErrors,
+      message: "Assessment request needs a valid prompt, language, and settings.",
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      documentId,
+      prompt,
+      modelId,
+      options: {
+        mode,
+        questionCount,
+        difficulty: difficulty || "medium",
+        language: language || "en",
+        questionTypes,
+        questionTypeDistribution,
+      },
+    },
   };
 }

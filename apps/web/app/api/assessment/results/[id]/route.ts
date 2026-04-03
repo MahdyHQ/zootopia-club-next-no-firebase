@@ -1,6 +1,8 @@
 import { isProfileCompletionRequired } from "@/lib/return-to";
 import { apiError, apiSuccess } from "@/lib/server/api";
+import { buildAssessmentPreview } from "@/lib/server/assessment-preview";
 import { getAssessmentGenerationForViewer } from "@/lib/server/repository";
+import { getRequestUiContext } from "@/lib/server/request-context";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
@@ -38,5 +40,12 @@ export async function GET(
     );
   }
 
-  return apiSuccess(generation);
+  const uiContext = await getRequestUiContext();
+  return apiSuccess(
+    buildAssessmentPreview({
+      generation,
+      locale: uiContext.locale,
+      messages: uiContext.messages,
+    }),
+  );
 }

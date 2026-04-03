@@ -37,6 +37,23 @@ async function tryPersistBinaryToStorage(input: {
   }
 }
 
+export async function loadDocumentBinaryFromStorage(record: Pick<
+  DocumentRecord,
+  "storagePath" | "ownerUid" | "id"
+>) {
+  if (!record.storagePath || !hasFirebaseAdminRuntime()) {
+    return null;
+  }
+
+  try {
+    const bucket = getFirebaseAdminStorageBucket();
+    const [buffer] = await bucket.file(record.storagePath).download();
+    return buffer;
+  } catch {
+    return null;
+  }
+}
+
 export async function createDocumentRecord(input: {
   ownerUid: string;
   fileName: string;
@@ -85,6 +102,8 @@ export async function createDocumentRecord(input: {
       status: "ready",
       markdown: conversion.markdown,
       extractionEngine: "datalab-convert",
+      isActive: true,
+      supersededAt: null,
       createdAt,
       updatedAt: createdAt,
     },
