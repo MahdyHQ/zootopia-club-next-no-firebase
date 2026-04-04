@@ -1,26 +1,45 @@
 "use client";
 
-import type { ApiResult, UserDocument, UserRole, UserStatus } from "@zootopia/shared-types";
+import type {
+  ApiResult,
+  Locale,
+  UserDocument,
+  UserRole,
+  UserStatus,
+} from "@zootopia/shared-types";
 import { useState } from "react";
-import { Shield, ShieldAlert, ShieldCheck, UserX, UserCheck, AlertCircle, LoaderCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  AlertCircle,
+  LoaderCircle,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  UserCheck,
+  UserX,
+} from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import type { AppMessages } from "@/lib/messages";
 
 type UsersTableProps = {
   messages: AppMessages;
+  locale: Locale;
   initialUsers: UserDocument[];
   currentUserId: string;
 };
 
 export function UsersTable({
   messages,
+  locale,
   initialUsers,
   currentUserId,
 }: UsersTableProps) {
   const [users, setUsers] = useState(initialUsers);
   const [error, setError] = useState<string | null>(null);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const dateFormatter = new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-US", {
+    dateStyle: "medium",
+  });
 
   async function patchUser(
     uid: string,
@@ -65,13 +84,13 @@ export function UsersTable({
 
       <div className="overflow-hidden rounded-[2rem] border border-border bg-background-elevated shadow-sm backdrop-blur-md">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-start text-sm">
             <thead className="border-b border-border bg-background-strong/50 uppercase tracking-wider text-foreground-muted">
               <tr>
-                <th className="px-6 py-5 font-semibold whitespace-nowrap">{messages.tableUser}</th>
-                <th className="px-6 py-5 font-semibold whitespace-nowrap">{messages.tableRole}</th>
-                <th className="px-6 py-5 font-semibold whitespace-nowrap">{messages.tableStatus}</th>
-                <th className="px-6 py-5 font-semibold text-right whitespace-nowrap">{messages.adminActionsTitle}</th>
+                <th className="whitespace-nowrap px-6 py-5 font-semibold">{messages.tableUser}</th>
+                <th className="whitespace-nowrap px-6 py-5 font-semibold">{messages.tableRole}</th>
+                <th className="whitespace-nowrap px-6 py-5 font-semibold">{messages.tableStatus}</th>
+                <th className="whitespace-nowrap px-6 py-5 text-end font-semibold">{messages.adminActionsTitle}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -92,22 +111,58 @@ export function UsersTable({
                   const pending = busyUserId === user.uid;
                   const isAdmin = user.role === "admin";
                   const isActive = user.status === "active";
-                  const userInitial = (user.fullName || user.displayName || user.email || user.uid || "U").charAt(0).toUpperCase();
+                  const userInitial = (user.fullName || user.displayName || user.email || user.uid || "U")
+                    .charAt(0)
+                    .toUpperCase();
+                  const joinedLabel = dateFormatter.format(new Date(user.createdAt));
+                  const universityCode = user.universityCode || "—";
+                  const roleActionLabel = isAdmin
+                    ? messages.adminDemoteAction
+                    : messages.adminPromoteAction;
+                  const statusActionLabel = isActive
+                    ? messages.adminBlockAction
+                    : messages.adminUnblockAction;
 
                   return (
                     <tr key={user.uid} className="transition-colors hover:bg-background-strong/40">
                       <td className="px-6 py-5">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-start gap-4">
                           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent/10 font-[family-name:var(--font-display)] text-lg font-bold text-accent shadow-sm">
                             {userInitial}
                           </div>
-                          <div>
-                            <p className="font-semibold text-foreground">
-                              {user.fullName || user.displayName || user.email || user.uid}
-                            </p>
-                            <p className="text-[0.8rem] text-foreground-muted font-mono mt-1 opacity-80">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-foreground">
+                                {user.fullName || user.displayName || user.email || user.uid}
+                              </p>
+                              {locked ? (
+                                <span className="inline-flex items-center rounded-full bg-accent/10 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-wider text-accent-strong">
+                                  {messages.adminCurrentUserBadge}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 font-mono text-[0.8rem] text-foreground-muted opacity-80">
                               {user.email || user.uid}
                             </p>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[0.72rem] font-medium text-foreground-muted">
+                              <span className="rounded-full border border-border bg-background-strong/60 px-2.5 py-1">
+                                {messages.adminUserCodeLabel}: {universityCode}
+                              </span>
+                              <span className="rounded-full border border-border bg-background-strong/60 px-2.5 py-1">
+                                {messages.adminUserJoinedLabel}: {joinedLabel}
+                              </span>
+                              <span
+                                className={`rounded-full border px-2.5 py-1 ${
+                                  user.profileCompleted
+                                    ? "border-accent/25 bg-accent/10 text-accent-strong"
+                                    : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                }`}
+                              >
+                                {user.profileCompleted
+                                  ? messages.adminUserProfileComplete
+                                  : messages.adminUserProfileIncomplete}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -115,11 +170,15 @@ export function UsersTable({
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
                             isAdmin
-                              ? "bg-gold/15 text-[#b48d3c]" 
+                              ? "bg-gold/15 text-[#b48d3c]"
                               : "bg-foreground/5 text-foreground-muted"
                           }`}
                         >
-                          {isAdmin ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+                          {isAdmin ? (
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                          ) : (
+                            <ShieldAlert className="h-3.5 w-3.5" />
+                          )}
                           {isAdmin ? messages.roleAdmin : messages.roleUser}
                         </span>
                       </td>
@@ -145,12 +204,18 @@ export function UsersTable({
                                 role: isAdmin ? "user" : "admin",
                               })
                             }
-                            className="min-w-[120px] bg-background-strong shadow-sm"
+                            className="min-w-[140px] bg-background-strong shadow-sm"
                           >
-                            {pending ? <LoaderCircle className="h-4 w-4 animate-spin shrink-0" /> : isAdmin ? <ShieldAlert className="h-4 w-4 shrink-0 text-foreground-muted" /> : <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />}
-                            <span>{messages.adminRoleAction}</span>
+                            {pending ? (
+                              <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" />
+                            ) : isAdmin ? (
+                              <ShieldAlert className="h-4 w-4 shrink-0 text-foreground-muted" />
+                            ) : (
+                              <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
+                            )}
+                            <span>{roleActionLabel}</span>
                           </Button>
-                          
+
                           <Button
                             variant={isActive ? "outline" : "default"}
                             size="sm"
@@ -160,10 +225,16 @@ export function UsersTable({
                                 status: isActive ? "suspended" : "active",
                               })
                             }
-                            className={`min-w-[130px] shadow-sm ${isActive ? "border-danger/30 text-danger hover:bg-danger hover:text-white" : ""}`}
+                            className={`min-w-[150px] shadow-sm ${isActive ? "border-danger/30 text-danger hover:bg-danger hover:text-white" : ""}`}
                           >
-                            {pending ? <LoaderCircle className="h-4 w-4 animate-spin shrink-0" /> : isActive ? <UserX className="h-4 w-4 shrink-0" /> : <UserCheck className="h-4 w-4 shrink-0" />}
-                            <span>{messages.adminStatusAction}</span>
+                            {pending ? (
+                              <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" />
+                            ) : isActive ? (
+                              <UserX className="h-4 w-4 shrink-0" />
+                            ) : (
+                              <UserCheck className="h-4 w-4 shrink-0" />
+                            )}
+                            <span>{statusActionLabel}</span>
                           </Button>
                         </div>
                       </td>

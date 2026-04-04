@@ -13,6 +13,7 @@ export default async function UploadPage() {
     getRequestUiContext(),
   ]);
   const documents = await listDocumentsForUser(user.uid);
+  const canAccessInfographic = user.role === "admin";
 
   return (
     <div className="space-y-12 pb-8 min-w-0">
@@ -33,6 +34,7 @@ export default async function UploadPage() {
             <UploadWorkspace
               messages={uiContext.messages}
               initialDocuments={documents}
+              canAccessInfographic={canAccessInfographic}
             />
           </div>
         </div>
@@ -60,15 +62,30 @@ export default async function UploadPage() {
             </h3>
           </Link>
 
-          <Link href={APP_ROUTES.infographic} className="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/5 backdrop-blur-sm p-6 transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-amber-500/10 hover:border-amber-500/30">
-            <div className="absolute top-0 right-0 p-6 opacity-0 translate-x-4 transition-all group-hover:opacity-100 group-hover:translate-x-0">
-              <ArrowRight className="h-5 w-5 text-amber-400" />
-            </div>
-            <PieChart className="h-8 w-8 text-amber-400 mb-4" />
-            <h3 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-white group-hover:text-amber-400 transition-colors truncate">
-              {uiContext.messages.infographicTitle}
-            </h3>
-          </Link>
+          {canAccessInfographic ? (
+            <Link href={APP_ROUTES.infographic} className="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/5 backdrop-blur-sm p-6 transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-amber-500/10 hover:border-amber-500/30">
+              <div className="absolute top-0 right-0 p-6 opacity-0 translate-x-4 transition-all group-hover:opacity-100 group-hover:translate-x-0">
+                <ArrowRight className="h-5 w-5 text-amber-400" />
+              </div>
+              <PieChart className="h-8 w-8 text-amber-400 mb-4" />
+              <h3 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-white group-hover:text-amber-400 transition-colors truncate">
+                {uiContext.messages.infographicTitle}
+              </h3>
+            </Link>
+          ) : (
+            <article className="relative overflow-hidden rounded-3xl border border-amber-500/10 bg-white/[0.04] p-6 backdrop-blur-sm">
+              <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">
+                {uiContext.messages.comingSoonLabel}
+              </span>
+              <PieChart className="mt-4 h-8 w-8 text-amber-400/90 mb-4" />
+              <h3 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-white truncate">
+                {uiContext.messages.infographicTitle}
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-zinc-300">
+                {uiContext.messages.infographicLockedBody}
+              </p>
+            </article>
+          )}
 
           <Link href={APP_ROUTES.home} className="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/5 backdrop-blur-sm p-6 transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-emerald-500/10 hover:border-emerald-500/30">
             <div className="absolute top-0 right-0 p-6 opacity-0 translate-x-4 transition-all group-hover:opacity-100 group-hover:translate-x-0">

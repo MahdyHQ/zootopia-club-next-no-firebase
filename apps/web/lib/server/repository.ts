@@ -12,25 +12,38 @@ import type {
   UserStatus,
 } from "@zootopia/shared-types";
 import { evaluateProfileCompletion, toIsoTimestamp } from "@zootopia/shared-utils";
+import type { UserRecord } from "firebase-admin/auth";
 import { randomUUID } from "node:crypto";
 
 import {
   hasAdminAccessFromClaims,
   isAllowlistedAdminEmail,
 } from "@/lib/server/admin-auth";
+import { deleteAssessmentArtifact } from "@/lib/server/assessment-artifact-storage";
 import { normalizeAssessmentGenerationRecord } from "@/lib/server/assessment-records";
+import { deleteDocumentBinaryFromStorage } from "@/lib/server/document-runtime";
 import {
   getFirebaseAdminAuth,
   getFirebaseAdminFirestore,
   hasFirebaseAdminRuntime,
 } from "@/lib/server/firebase-admin";
-import { getAssessmentStatus } from "@/lib/server/assessment-retention";
+import {
+  getAssessmentStatus,
+  getRetentionExpiryTimestamp,
+} from "@/lib/server/assessment-retention";
 
 type AdminLogEntry = {
   id: string;
   actorUid: string;
+  actorRole?: UserRole;
   action: string;
   targetUid?: string;
+  ownerUid?: string;
+  ownerRole?: UserRole;
+  resourceType?: string;
+  resourceId?: string;
+  route?: string;
+  metadata?: Record<string, string | number | boolean | null>;
   createdAt: string;
 };
 
@@ -64,6 +77,11 @@ function shouldUseFirestore() {
   return hasFirebaseAdminRuntime();
 }
 
+function toSafeIsoTimestamp(value: string | null | undefined, fallback: string) {
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  return Number.isNaN(parsed) ? fallback : new Date(parsed).toISOString();
+}
+
 function canViewOwnerOwnedRecord(
   ownerUid: string,
   viewer: Pick<SessionUser, "uid" | "role">,
@@ -76,11 +94,14 @@ function normalizeDocumentRecord(
   fallbackActiveId: string | null,
 ): DocumentRecord {
   const isActive = record.isActive === true || record.id === fallbackActiveId;
+  const expiresAt = record.expiresAt ?? getRetentionExpiryTimestamp(record.createdAt);
 
   return {
     ...record,
+    ownerRole: record.ownerRole ?? "user",
     isActive,
     supersededAt: isActive ? null : record.supersededAt ?? null,
+    expiresAt,
   };
 }
 
@@ -92,6 +113,63 @@ function normalizeDocumentRecordList(records: DocumentRecord[]) {
     null;
 
   return records.map((record) => normalizeDocumentRecord(record, fallbackActiveId));
+}
+
+function isDocumentExpired(record: Pick<DocumentRecord, "createdAt" | "expiresAt">) {
+  return Date.now() >= Date.parse(record.expiresAt ?? getRetentionExpiryTimestamp(record.createdAt));
+}
+
+async function purgeExpiredDocumentRecord(record: DocumentRecord) {
+  await deleteDocumentBinaryFromStorage(record);
+
+  if (shouldUseFirestore()) {
+    await getFirebaseAdminFirestore().collection("documents").doc(record.id).delete();
+  } else {
+    getMemoryStore().documents.delete(record.id);
+  }
+
+  await appendAdminLog({
+    actorUid: "system",
+    ownerUid: record.ownerUid,
+    ownerRole: record.ownerRole,
+    action: "document-expired-cleanup",
+    resourceType: "document",
+    resourceId: record.id,
+    metadata: {
+      fileName: record.fileName,
+    },
+  });
+}
+
+async function purgeExpiredAssessmentArtifacts(
+  record: Pick<AssessmentGeneration, "ownerUid" | "artifacts">,
+) {
+  const artifacts = Object.values(record.artifacts ?? {});
+  await Promise.all(
+    artifacts.map((artifact) => deleteAssessmentArtifact(artifact, record.ownerUid)),
+  );
+}
+
+async function purgeExpiredAssessmentGenerationRecord(record: AssessmentGeneration) {
+  await purgeExpiredAssessmentArtifacts(record);
+
+  if (shouldUseFirestore()) {
+    await getFirebaseAdminFirestore()
+      .collection("assessmentGenerations")
+      .doc(record.id)
+      .delete();
+  } else {
+    getMemoryStore().assessments.delete(record.id);
+  }
+
+  await appendAdminLog({
+    actorUid: "system",
+    ownerUid: record.ownerUid,
+    ownerRole: record.ownerRole,
+    action: "assessment-expired-cleanup",
+    resourceType: "assessment",
+    resourceId: record.id,
+  });
 }
 
 async function persistDocumentRecord(record: DocumentRecord) {
@@ -182,6 +260,68 @@ function resolveProfileState(input: {
   };
 }
 
+function buildUserDocumentFromAuthRecord(
+  authUser: UserRecord,
+  existing: UserDocument | null,
+) {
+  const now = toIsoTimestamp(new Date());
+  const role = getRoleFromAuthClaims({
+    email: authUser.email ?? existing?.email ?? null,
+    admin: authUser.customClaims?.admin,
+  });
+  const createdAt = existing?.createdAt ?? toSafeIsoTimestamp(authUser.metadata.creationTime, now);
+  const updatedAt =
+    existing?.updatedAt ??
+    toSafeIsoTimestamp(
+      authUser.metadata.lastRefreshTime ??
+        authUser.metadata.lastSignInTime ??
+        authUser.metadata.creationTime,
+      createdAt,
+    );
+  const profileState = resolveProfileState({
+    role,
+    fullName: existing?.fullName ?? null,
+    universityCode: existing?.universityCode ?? null,
+    profileCompletedAt: existing?.profileCompletedAt,
+    now,
+  });
+
+  return {
+    uid: authUser.uid,
+    email: authUser.email ?? existing?.email ?? null,
+    displayName: authUser.displayName ?? existing?.displayName ?? null,
+    photoURL: authUser.photoURL ?? existing?.photoURL ?? null,
+    fullName: profileState.fullName,
+    universityCode: profileState.universityCode,
+    profileCompleted: profileState.profileCompleted,
+    profileCompletedAt: profileState.profileCompletedAt,
+    role,
+    status:
+      existing?.status === "suspended" || authUser.disabled
+        ? ("suspended" as const)
+        : ("active" as const),
+    preferences: existing?.preferences ?? {
+      theme: "system",
+      language: "en",
+    },
+    createdAt,
+    updatedAt,
+  } satisfies UserDocument;
+}
+
+async function listAllFirebaseAuthUsers() {
+  const users: UserRecord[] = [];
+  let nextPageToken: string | undefined;
+
+  do {
+    const page = await getFirebaseAdminAuth().listUsers(1000, nextPageToken);
+    users.push(...page.users);
+    nextPageToken = page.pageToken;
+  } while (nextPageToken);
+
+  return users;
+}
+
 export function getRoleFromAuthClaims(claims: {
   role?: unknown;
   admin?: unknown;
@@ -207,7 +347,28 @@ export async function getUserByUid(uid: string) {
       .get();
 
     if (!snapshot.exists) {
-      return null;
+      try {
+        // Admin user management must be able to act on real Firebase Auth accounts even before
+        // those accounts have hydrated a Firestore user document through a normal sign-in flow.
+        const authUser = await getFirebaseAdminAuth().getUser(uid);
+        const hydratedUser = buildUserDocumentFromAuthRecord(authUser, null);
+        await getFirebaseAdminFirestore()
+          .collection("users")
+          .doc(uid)
+          .set(hydratedUser, { merge: true });
+        return hydratedUser;
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error &&
+          "code" in error &&
+          error.code === "auth/user-not-found"
+        ) {
+          return null;
+        }
+
+        throw error;
+      }
     }
 
     return snapshot.data() as UserDocument;
@@ -267,13 +428,29 @@ export async function upsertUserFromAuth(input: {
 
 export async function listUsers() {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
-      .collection("users")
-      .orderBy("createdAt", "desc")
-      .limit(100)
-      .get();
+    const [snapshot, authUsers] = await Promise.all([
+      getFirebaseAdminFirestore().collection("users").get(),
+      listAllFirebaseAuthUsers(),
+    ]);
+    const usersByUid = new Map<string, UserDocument>();
 
-    return snapshot.docs.map((doc) => doc.data() as UserDocument);
+    for (const doc of snapshot.docs) {
+      const user = doc.data() as UserDocument;
+      usersByUid.set(user.uid, user);
+    }
+
+    // Admin visibility belongs to the full account inventory. Do not reintroduce a Firestore-only
+    // or 100-user-limited view here, or blocking/auditing will silently miss real platform accounts.
+    for (const authUser of authUsers) {
+      usersByUid.set(
+        authUser.uid,
+        buildUserDocumentFromAuthRecord(authUser, usersByUid.get(authUser.uid) ?? null),
+      );
+    }
+
+    return [...usersByUid.values()].sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    );
   }
 
   return [...getMemoryStore().users.values()].sort((left, right) =>
@@ -345,11 +522,16 @@ export async function setUserStatus(uid: string, status: UserStatus) {
   };
 
   if (shouldUseFirestore()) {
+    // Blocking stays server-authoritative here: we mirror the workspace status into Firebase Auth
+    // itself and revoke refresh tokens so an old session cannot keep bypassing the admin decision.
+    await getFirebaseAdminAuth().updateUser(uid, {
+      disabled: status === "suspended",
+    });
+    await getFirebaseAdminAuth().revokeRefreshTokens(uid);
     await getFirebaseAdminFirestore()
       .collection("users")
       .doc(uid)
       .set(nextUser, { merge: true });
-    await getFirebaseAdminAuth().revokeRefreshTokens(uid);
   } else {
     getMemoryStore().users.set(uid, nextUser);
   }
@@ -403,21 +585,44 @@ export async function appendAdminLog(input: Omit<AdminLogEntry, "id" | "createdA
     ...input,
   };
 
-  if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
-      .collection("adminActivityLogs")
-      .doc(entry.id)
-      .set(entry);
-  } else {
-    getMemoryStore().adminLogs.unshift(entry);
+  try {
+    if (shouldUseFirestore()) {
+      await getFirebaseAdminFirestore()
+        .collection("adminActivityLogs")
+        .doc(entry.id)
+        .set(entry);
+    } else {
+      getMemoryStore().adminLogs.unshift(entry);
+    }
+  } catch {
+    // Audit logging should stay observable but never break the primary auth/storage/export path.
   }
+}
+
+export async function listAdminActivityLogs(limit = 40) {
+  if (shouldUseFirestore()) {
+    const snapshot = await getFirebaseAdminFirestore()
+      .collection("adminActivityLogs")
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .get();
+
+    return snapshot.docs.map((doc) => doc.data() as AdminLogEntry);
+  }
+
+  return getMemoryStore().adminLogs
+    .slice()
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, limit);
 }
 
 export async function saveDocument(record: DocumentRecord) {
   const nextRecord: DocumentRecord = {
     ...record,
+    ownerRole: record.ownerRole ?? "user",
     isActive: record.isActive !== false,
     supersededAt: record.isActive === false ? record.supersededAt ?? record.updatedAt : null,
+    expiresAt: record.expiresAt ?? getRetentionExpiryTimestamp(record.createdAt),
   };
 
   await persistDocumentRecord(nextRecord);
@@ -442,17 +647,41 @@ export async function listDocumentsForUser(ownerUid: string, limit = 20) {
       .limit(limit)
       .get();
 
-    return normalizeDocumentRecordList(
+    const documents = normalizeDocumentRecordList(
       snapshot.docs.map((doc) => doc.data() as DocumentRecord),
     );
+    const activeDocuments: DocumentRecord[] = [];
+
+    for (const document of documents) {
+      if (isDocumentExpired(document)) {
+        await purgeExpiredDocumentRecord(document);
+        continue;
+      }
+
+      activeDocuments.push(document);
+    }
+
+    return activeDocuments;
   }
 
-  return normalizeDocumentRecordList(
+  const documents = normalizeDocumentRecordList(
     [...getMemoryStore().documents.values()]
       .filter((record) => record.ownerUid === ownerUid)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit),
   );
+
+  const activeDocuments: DocumentRecord[] = [];
+  for (const document of documents) {
+    if (isDocumentExpired(document)) {
+      await purgeExpiredDocumentRecord(document);
+      continue;
+    }
+
+    activeDocuments.push(document);
+  }
+
+  return activeDocuments;
 }
 
 export async function getDocumentById(id: string) {
@@ -471,7 +700,13 @@ export async function getDocumentById(id: string) {
     const fallbackActiveId =
       fallbackDocuments.find((record) => record.isActive)?.id ?? null;
 
-    return normalizeDocumentRecord(document, fallbackActiveId);
+    const normalizedDocument = normalizeDocumentRecord(document, fallbackActiveId);
+    if (isDocumentExpired(normalizedDocument)) {
+      await purgeExpiredDocumentRecord(normalizedDocument);
+      return null;
+    }
+
+    return normalizedDocument;
   }
 
   const record = getMemoryStore().documents.get(id);
@@ -482,7 +717,13 @@ export async function getDocumentById(id: string) {
   const fallbackDocuments = await listDocumentsForUser(record.ownerUid, 10);
   const fallbackActiveId = fallbackDocuments.find((document) => document.isActive)?.id ?? null;
 
-  return normalizeDocumentRecord(record, fallbackActiveId);
+  const normalizedDocument = normalizeDocumentRecord(record, fallbackActiveId);
+  if (isDocumentExpired(normalizedDocument)) {
+    await purgeExpiredDocumentRecord(normalizedDocument);
+    return null;
+  }
+
+  return normalizedDocument;
 }
 
 export async function getDocumentByIdForOwner(id: string, ownerUid: string) {
@@ -497,6 +738,77 @@ export async function getDocumentByIdForOwner(id: string, ownerUid: string) {
 export async function getActiveDocumentForOwner(ownerUid: string) {
   const documents = await listDocumentsForUser(ownerUid, 20);
   return documents.find((document) => document.isActive) ?? documents[0] ?? null;
+}
+
+async function promoteMostRecentDocumentActive(ownerUid: string) {
+  const promotedAt = toIsoTimestamp(new Date());
+
+  if (shouldUseFirestore()) {
+    const snapshot = await getFirebaseAdminFirestore()
+      .collection("documents")
+      .where("ownerUid", "==", ownerUid)
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+
+    const nextDocument = snapshot.docs[0];
+    if (!nextDocument) {
+      return null;
+    }
+
+    await nextDocument.ref.set(
+      {
+        isActive: true,
+        supersededAt: null,
+        updatedAt: promotedAt,
+      } satisfies Partial<DocumentRecord>,
+      { merge: true },
+    );
+
+    return nextDocument.data() as DocumentRecord;
+  }
+
+  const store = getMemoryStore();
+  const nextDocument = [...store.documents.values()]
+    .filter((document) => document.ownerUid === ownerUid)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+
+  if (!nextDocument) {
+    return null;
+  }
+
+  store.documents.set(nextDocument.id, {
+    ...nextDocument,
+    isActive: true,
+    supersededAt: null,
+    updatedAt: promotedAt,
+  });
+
+  return nextDocument;
+}
+
+export async function deleteDocumentForOwner(documentId: string, ownerUid: string) {
+  const record = await getDocumentByIdForOwner(documentId, ownerUid);
+  if (!record) {
+    return null;
+  }
+
+  if (shouldUseFirestore()) {
+    await getFirebaseAdminFirestore()
+      .collection("documents")
+      .doc(documentId)
+      .delete();
+  } else {
+    getMemoryStore().documents.delete(documentId);
+  }
+
+  /* Removing the active upload should leave the workspace with one stable active source when older documents still exist.
+     Future agents should preserve this promotion step so Upload and Assessment keep the current active-document contract. */
+  if (record.isActive) {
+    await promoteMostRecentDocumentActive(ownerUid);
+  }
+
+  return record;
 }
 
 export async function saveAssessmentGeneration(record: AssessmentGeneration) {
@@ -523,17 +835,40 @@ export async function listAssessmentGenerationsForUser(ownerUid: string, limit =
       .limit(limit)
       .get();
 
-    return snapshot.docs
-      .map((doc) => normalizeAssessmentGenerationRecord(doc.data() as AssessmentGeneration))
-      .filter((record) => record.status !== "expired");
+    const generations = snapshot.docs.map((doc) =>
+      normalizeAssessmentGenerationRecord(doc.data() as AssessmentGeneration),
+    );
+    const activeGenerations: AssessmentGeneration[] = [];
+
+    for (const generation of generations) {
+      if (generation.status === "expired") {
+        await purgeExpiredAssessmentGenerationRecord(generation);
+        continue;
+      }
+
+      activeGenerations.push(generation);
+    }
+
+    return activeGenerations;
   }
 
-  return [...getMemoryStore().assessments.values()]
+  const generations = [...getMemoryStore().assessments.values()]
     .filter((record) => record.ownerUid === ownerUid)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .slice(0, limit)
-    .map((record) => normalizeAssessmentGenerationRecord(record))
-    .filter((record) => record.status !== "expired");
+    .map((record) => normalizeAssessmentGenerationRecord(record));
+
+  const activeGenerations: AssessmentGeneration[] = [];
+  for (const generation of generations) {
+    if (generation.status === "expired") {
+      await purgeExpiredAssessmentGenerationRecord(generation);
+      continue;
+    }
+
+    activeGenerations.push(generation);
+  }
+
+  return activeGenerations;
 }
 
 export async function getAssessmentGenerationById(id: string) {
@@ -566,7 +901,66 @@ export async function getAssessmentGenerationForViewer(
 
   const lifecycle = getAssessmentStatus(generation);
   if (!options.includeExpired && lifecycle.status === "expired") {
+    await purgeExpiredAssessmentGenerationRecord(generation);
     return null;
+  }
+
+  if (lifecycle.status === "expired") {
+    await purgeExpiredAssessmentGenerationRecord(generation);
+  }
+
+  return generation;
+}
+
+export async function getAssessmentGenerationForOwner(
+  id: string,
+  ownerUid: string,
+  options: {
+    includeExpired?: boolean;
+  } = {},
+) {
+  /* Regular preview/result/export/history routes must stay owner-only even when admins exist.
+     Keep admin observation on separate code paths so platform oversight never piggybacks on
+     the normal user artifact surfaces. */
+  const generation = await getAssessmentGenerationById(id);
+  if (!generation || generation.ownerUid !== ownerUid) {
+    return null;
+  }
+
+  const lifecycle = getAssessmentStatus(generation);
+  if (!options.includeExpired && lifecycle.status === "expired") {
+    await purgeExpiredAssessmentGenerationRecord(generation);
+    return null;
+  }
+
+  if (lifecycle.status === "expired") {
+    await purgeExpiredAssessmentGenerationRecord(generation);
+  }
+
+  return generation;
+}
+
+export async function getAssessmentGenerationForAdminObservation(
+  id: string,
+  options: {
+    includeExpired?: boolean;
+  } = {},
+) {
+  // This explicit admin lane exists so admin-safe observability can be implemented without
+  // reopening the user-facing preview/result/export routes to cross-owner access.
+  const generation = await getAssessmentGenerationById(id);
+  if (!generation) {
+    return null;
+  }
+
+  const lifecycle = getAssessmentStatus(generation);
+  if (!options.includeExpired && lifecycle.status === "expired") {
+    await purgeExpiredAssessmentGenerationRecord(generation);
+    return null;
+  }
+
+  if (lifecycle.status === "expired") {
+    await purgeExpiredAssessmentGenerationRecord(generation);
   }
 
   return generation;
@@ -651,8 +1045,10 @@ async function countCollection(collectionName: string) {
   }
 }
 
-export async function getAdminOverviewData(): Promise<AdminOverview> {
-  const users = await listUsers();
+export async function getAdminOverviewData(
+  preloadedUsers?: UserDocument[],
+): Promise<AdminOverview> {
+  const users = preloadedUsers ?? await listUsers();
 
   return {
     totalUsers: users.length,

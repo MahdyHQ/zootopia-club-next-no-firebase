@@ -1,6 +1,9 @@
 import { isProfileCompletionRequired } from "@/lib/return-to";
 import { apiError, apiSuccess } from "@/lib/server/api";
-import { getAssessmentGenerationForViewer } from "@/lib/server/repository";
+import {
+  appendAdminLog,
+  getAssessmentGenerationForOwner,
+} from "@/lib/server/repository";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
@@ -22,7 +25,7 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const generation = await getAssessmentGenerationForViewer(id, user, {
+  const generation = await getAssessmentGenerationForOwner(id, user.uid, {
     includeExpired: true,
   });
 
@@ -37,6 +40,17 @@ export async function GET(
       410,
     );
   }
+
+  await appendAdminLog({
+    actorUid: user.uid,
+    actorRole: user.role,
+    ownerUid: user.uid,
+    ownerRole: user.role,
+    action: "assessment-readback-opened",
+    resourceType: "assessment",
+    resourceId: generation.id,
+    route: "/api/assessment/[id]",
+  });
 
   return apiSuccess(generation);
 }

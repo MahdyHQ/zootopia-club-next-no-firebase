@@ -2,8 +2,13 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 import Link from "next/link";
 
 import { AssessmentPreviewShell } from "@/components/assessment/assessment-preview-shell";
+import { resolveAssessmentFileThemeMode } from "@/lib/assessment-file-branding";
 import { buildAssessmentPreview } from "@/lib/server/assessment-preview";
-import { getAssessmentGenerationForViewer } from "@/lib/server/repository";
+import { buildAssessmentFileQrDataUrl } from "@/lib/server/assessment-file-qr";
+import {
+  appendAdminLog,
+  getAssessmentGenerationForOwner,
+} from "@/lib/server/repository";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { requireCompletedUser } from "@/lib/server/session";
 
@@ -28,13 +33,16 @@ function renderUnavailableCard(input: {
 
 export default async function AssessmentResultPage(props: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ theme?: string }>;
 }) {
-  const [{ id }, user, uiContext] = await Promise.all([
+  const [{ id }, searchParams, user, uiContext, qrCodeDataUrl] = await Promise.all([
     props.params,
+    props.searchParams,
     requireCompletedUser(APP_ROUTES.assessment),
     getRequestUiContext(),
+    buildAssessmentFileQrDataUrl(),
   ]);
-  const generation = await getAssessmentGenerationForViewer(id, user, {
+  const generation = await getAssessmentGenerationForOwner(id, user.uid, {
     includeExpired: true,
   });
 
@@ -54,6 +62,17 @@ export default async function AssessmentResultPage(props: {
     });
   }
 
+  await appendAdminLog({
+    actorUid: user.uid,
+    actorRole: user.role,
+    ownerUid: user.uid,
+    ownerRole: user.role,
+    action: "assessment-result-opened",
+    resourceType: "assessment",
+    resourceId: generation.id,
+    route: "/assessment/results/[id]",
+  });
+
   return (
     <div className="space-y-6">
       <AssessmentPreviewShell
@@ -63,7 +82,11 @@ export default async function AssessmentResultPage(props: {
           locale: uiContext.locale,
           messages: uiContext.messages,
         })}
-        initialThemeMode={uiContext.themeMode === "light" ? "light" : "dark"}
+        initialThemeMode={resolveAssessmentFileThemeMode(
+          searchParams.theme,
+          uiContext.themeMode === "light" ? "light" : "dark",
+        )}
+        qrCodeDataUrl={qrCodeDataUrl}
         view="result"
       />
     </div>

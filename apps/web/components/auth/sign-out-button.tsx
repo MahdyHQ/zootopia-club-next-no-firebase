@@ -3,6 +3,7 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useState, useTransition } from "react";
 
 import { getFirebaseClientAuth, isFirebaseWebConfigured } from "@/lib/firebase/client";
@@ -10,15 +11,22 @@ import { getFirebaseClientAuth, isFirebaseWebConfigured } from "@/lib/firebase/c
 type SignOutButtonProps = {
   label: string;
   redirectTo?: string;
+  icon?: ReactNode;
+  title?: string;
+  variant?: "default" | "icon";
 };
 
 export function SignOutButton({
   label,
   redirectTo = APP_ROUTES.login,
+  icon,
+  title,
+  variant = "default",
 }: SignOutButtonProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const iconVariant = variant === "icon";
 
   async function handleSignOut() {
     setError(null);
@@ -48,11 +56,17 @@ export function SignOutButton({
         type="button"
         onClick={handleSignOut}
         disabled={isPending}
-        className="ghost-button w-full justify-center border border-border"
+        aria-label={title ?? label}
+        title={title ?? label}
+        className={
+          iconVariant
+            ? "inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-transparent text-red-400/80 hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-400"
+            : "ghost-button w-full justify-center border border-border"
+        }
       >
-        {label}
+        {iconVariant ? icon ?? label : label}
       </button>
-      {error ? <p className="text-xs text-danger">{error}</p> : null}
+      {!iconVariant && error ? <p className="text-xs text-danger">{error}</p> : null}
     </div>
   );
 }

@@ -10,6 +10,8 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ uid: string }> },
 ) {
+  // Role changes stay server-authoritative here so admin-only privilege controls never depend on
+  // hidden client UI state or become reachable from regular user routes.
   const admin = await getAdminSessionUser();
   if (!admin) {
     return apiError("FORBIDDEN", "Admin access is required.", 403);

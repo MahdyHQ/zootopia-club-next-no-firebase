@@ -22,8 +22,12 @@ export function getAssessmentRetentionWindowMs() {
   return ASSESSMENT_RETENTION_WINDOW_MS;
 }
 
-export function getAssessmentExpiryTimestamp(createdAt: string) {
+export function getRetentionExpiryTimestamp(createdAt: string) {
   return new Date(toTimestamp(createdAt) + ASSESSMENT_RETENTION_WINDOW_MS).toISOString();
+}
+
+export function getAssessmentExpiryTimestamp(createdAt: string) {
+  return getRetentionExpiryTimestamp(createdAt);
 }
 
 export function getAssessmentStatus(input: {

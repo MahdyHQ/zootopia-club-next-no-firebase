@@ -15,9 +15,22 @@ export interface AssessmentPreviewQuestionItem {
   index: number;
   typeLabel: string | null;
   question: string;
+  stem: string;
+  choiceLines: string[];
+  supplementalLines: string[];
   answer: string;
   rationale: string | null;
   tags: string[];
+}
+
+export interface AssessmentPreviewFileSurface {
+  platformName: string;
+  platformTagline: string;
+  logoAssetUrl: string;
+  qrTargetUrl: string;
+  footerText: string;
+  backgroundLightUrl: string;
+  backgroundDarkUrl: string;
 }
 
 export interface AssessmentPreviewExportRoutes {
@@ -48,6 +61,7 @@ export interface NormalizedAssessmentPreview {
   expiresAtLabel: string;
   metadata: AssessmentPreviewMetadataItem[];
   questions: AssessmentPreviewQuestionItem[];
+  fileSurface: AssessmentPreviewFileSurface;
   plainTextExport: string;
   markdownExport: string;
   previewRoute: string;

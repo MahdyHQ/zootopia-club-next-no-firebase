@@ -1,5 +1,5 @@
 Zootopia Club Next Master Ledger
-Last refreshed: 2026-04-03 19:55:29
+Last refreshed: 2026-04-04 01:07:55
 
 Project Identity
 - Name: Zootopia Club Next
@@ -24,13 +24,32 @@ Current Truth Snapshot
 - `/upload` is the only tool page that renders the full `apps/web/components/upload/upload-workspace.tsx` document-intake surface.
 - `/assessment` and `/infographic` now consume shared document continuity through page-specific selectors plus a compact shared document handoff card, not by embedding the full upload UI.
 - uploaded `documents` now preserve active-link semantics per owner through `isActive` / `supersededAt`, and the Assessment page preselects the owner’s active linked document instead of making the user relink it manually every time.
+- Upload normalization now runs through `apps/web/lib/server/document-markdown.ts`, which creates the truthful local markdown snapshot used by the current direct-file runtime; Datalab Convert is no longer part of the active product path or runtime capability surface.
 - `/assessment` now supports server-normalized mode selection (`question_generation` or `exam_generation`) plus question-type selection and 100%-total percentage distribution inside the existing Assessment request `options` shape, and it now stores owner-scoped result metadata including `status`, `expiresAt`, `previewRoute`, `resultRoute`, and preview/export-friendly summary fields.
 - Assessment generation now prefers the original linked PDF file for Gemini models when Storage still has the binary, then falls back safely to extracted text context for unsupported file/model combinations instead of redesigning the upload pipeline.
 - Assessment results now have two dedicated pages, `/assessment/preview/[id]` and `/assessment/results/[id]`, plus owner-scoped result/export endpoints under `/api/assessment/results/[id]` and `/api/assessment/export/*/[id]`.
+- Assessment preview/result pages and the user-facing result/export APIs now resolve records through explicit owner-only repository helpers; admins no longer piggyback on the normal user artifact surfaces for cross-owner inspection.
+- Assessment preview/result pages and the print/PDF export lane now share a file-surface composition helper that keeps the first-page-only logo/brand rail, the compact `https://linktr.ee/ebnabdallah` QR card, and the light/dark file-background asset mapping explicit instead of scattering that logic across separate renderers.
 - `/assessment` now uses a single-column configuration studio with Assessment-scoped custom dropdown panels, history-driven preview/result quick actions, and an optional steering prompt that can be left blank when a linked document is selected.
-- Assessment retention is now a lazy 3-day window enforced from normalized metadata; expired results are filtered out of history and return `ASSESSMENT_EXPIRED` from the result/export APIs instead of leaking stale output.
+- Assessment generations now persist a canonical owner-scoped result artifact in Storage, and JSON/Markdown/DOCX/print-HTML export artifacts are now cached under owner-scoped Storage paths when generated through the server routes.
+- The protected shell now places the Zootopia mark in the sidebar header, groups locale plus theme controls together in the sidebar utility rail, mounts a floating scroll-to-top control against the real protected scroll container, keeps the Arabic attribution seal in the page scroll flow instead of a persistent footer bar, and layers in a subtle timed bubble effect through the protected background only.
+- The protected header now also carries a compact donation CTA plus a visual-only balance placeholder chip, and that balance UI is intentionally presentation-only until a real server-authoritative credits model exists.
+- `/upload` now keeps a visible active-document continuation card with a direct Assessment CTA and a safe owner-scoped active-file removal path through `DELETE /api/uploads?documentId=...`.
+- `/api/uploads/[id]` now provides an owner-validated server download path for uploaded source files so History and other protected surfaces can retrieve the original binary without exposing Storage directly.
+- Infographic is now intentionally UI-locked for non-admin users across protected nav and tool entry cards; admins retain the real Infographic studio, while non-admin users see a polished coming-soon surface on `/infographic`.
+- Public informational routes now exist at `/about`, `/contact`, and `/donation`, and they share a dedicated public-site layout instead of borrowing the protected workspace shell or the login-page composition.
+- `/donation` now presents trust-first bilingual support messaging that explicitly covers recurring operating costs, the 2022/2023 legacy angle, continuity risk if monthly costs are not covered, and direct personal WhatsApp contact at `+201124511183`.
+- `/api/contact` now provides a small server-only public contact relay that sends through Gmail SMTP runtime env vars, keeps `CONTACT_FORM_TO` off the client, and applies a silent honeypot guard instead of broad anti-spam infrastructure.
+- Assessment preview/result pages, Markdown/DOCX exports, and the print/PDF export surface all still derive their Arabic attribution line from the shared protected signature source, while the premium QR/header/background treatment is intentionally scoped to the page-like preview/result/PDF surfaces.
+- Assessment question normalization now preserves meaningful line breaks so multiline provider output can render as a question stem with vertically stacked answer choices in preview/result/PDF/DOCX surfaces instead of collapsing onto one line.
+- Detached preview/result pages and the print/PDF export route now carry the active light/dark file theme through explicit `?theme=` query params so they can consistently reuse `apps/web/public/light-file-background.png` and `apps/web/public/dark-file-background.png`.
+- `/history` now exists as a dedicated owner-scoped protected route that aggregates retained uploads plus generated assessments/exports from the existing repository layer instead of inventing a second backend.
+- Assessment and document retention now share one 3-day lifecycle contract with lazy cleanup: expired uploads, assessment records, canonical result files, and persisted export artifacts are removed on server read/list access instead of only being hidden in UI state.
 - Regular user login and admin login are intentionally separate.
 - Admin authority is claims-first: allowlisted email plus Firebase custom claim `admin: true`.
+- The admin dashboard now includes a server-rendered recent platform activity feed sourced from `adminActivityLogs`, and the app now records login/session, upload, assessment, export, download, and cleanup activity there for admin-safe observability.
+- `/admin` and `/admin/users` now merge the full Firebase Auth account inventory with stored Firestore user metadata, so admin user visibility is no longer capped at 100 hydrated user documents or limited only to accounts that already completed a normal bootstrap flow.
+- Admin block/unblock now updates both the persistent `users.status` field and Firebase Auth's `disabled` flag, then revokes refresh tokens so suspension is enforced by backend/session authority even against already-issued sessions.
 - Mandatory non-admin profile completion is enforced server-side before access to the main user workspace.
 - Root `.env.local` is the canonical local environment source; repo-root `.env`, `cloudrun.env`, `netlify.toml`, `Dockerfile`, `cloudbuild.yaml`, `deployment/runtime-manifest.json`, and `tests/*` are not active current-repo paths.
 
@@ -97,6 +116,7 @@ Dependency And Runtime Baseline
   - Firebase Web SDK `^12.11.0`
   - Firebase Admin SDK `^13.5.0`
   - DOCX export layer: `docx` `^9.5.1`
+  - QR generation for branded file surfaces: `qrcode` `^1.5.4`
   - UI utility layer: `@radix-ui/react-slot`, `class-variance-authority`, `clsx`, `tailwind-merge`
   - motion layer: `framer-motion` `12.38.0` plus package-level `motion` `^12.38.0`
   - icon layer: `lucide-react` `1.7.0`
@@ -109,10 +129,16 @@ Current Visual Identity And UI System
 - `apps/web/app/globals.css` now defines the current emerald-and-gold premium scientific visual system, including glass surfaces, hover states, motion tokens, auth-state styling, and shared background/elevation utilities for both light and dark themes.
 - `apps/web/app/layout.tsx` now mounts `apps/web/components/ui/vital-background.tsx`, which provides the animated global glow/noise background layer behind the entire app shell.
 - The current font stack is loaded through `next/font` using Plus Jakarta Sans, Alexandria, Amiri, and JetBrains Mono.
-- `apps/web/app/(protected)/layout.tsx` now mounts `apps/web/components/layout/protected-workspace-background.tsx`, which keeps `apps/web/public/my-app-background.png` scoped to protected routes only and layers subtle dimming, animated grid/orb/beam ambience, and texture without touching public auth backgrounds.
+- `apps/web/app/(protected)/layout.tsx` now mounts `apps/web/components/layout/protected-workspace-background.tsx`, which keeps `apps/web/public/my-app-background.png` scoped to protected routes only and layers subtle dimming, animated grid/orb/beam ambience, texture, and a lightweight timed bubble pass without touching public auth backgrounds.
+- `apps/web/components/layout/protected-shell.tsx` and `apps/web/components/layout/shell-nav.tsx` now anchor the protected-shell toolbar/sidebar contract: logo in the sidebar header, locale plus theme controls grouped in the sidebar utilities, a floating scroll-to-top button, and a compact branded Arabic attribution seal that lives at the end of the protected scroll flow instead of in a persistent footer bar.
+- `apps/web/components/site/public-site-shell.tsx` now defines the shared premium public-info header/footer surface for `/about`, `/contact`, and `/donation`, keeping those routes visually cohesive without leaking protected-shell ownership into public pages.
 - `apps/web/components/assessment/assessment-studio.tsx` now uses `apps/web/components/assessment/assessment-field-select.tsx` for Assessment-only dropdown panels and an emerald/cyan/gold studio surface that aligns with the protected shell instead of the older violet-heavy two-column layout.
+- `apps/web/components/layout/protected-signature-seal.tsx` plus `apps/web/lib/branding/protected-signature.ts` now define the shared attribution seal reused by the protected footer, Assessment preview/result surfaces, and export renderers.
+- `apps/web/lib/assessment-file-branding.ts` now defines the dedicated file-surface background/logo/footer/QR metadata used by detached Assessment preview/result pages and the print/PDF export surface, including the first-page-only premium framing rules future agents should keep aligned.
+- `apps/web/lib/site-content.ts` now holds the bilingual long-form public-site copy, including the structured Donation-page cost/continuity/WhatsApp messaging, plus the compact donation/balance labels used by the protected header, which keeps those informational strings out of the core workspace message catalog.
 - A local shared UI primitive layer now exists in `apps/web/components/ui/button.tsx`, `apps/web/components/ui/input.tsx`, and `apps/web/lib/utils.ts`.
 - The current UX direction is intentionally more visual and less text-heavy than earlier passes, with stronger CTA hierarchy, route-specific accent colors, and glassmorphic card treatments across Home, Upload, Assessment, Infographic, Settings, and Admin.
+- `apps/web/app/(public)/admin/login/page.tsx` plus `apps/web/components/auth/admin-login-panel.tsx` now keep the admin entrance on a compact single-surface auth layout with collapsed access notes so the separate admin sign-in flow stays readable without unnecessary scrolling on common laptop/desktop viewports.
 - Current page-focus rule: the protected shell is shared, but each major tool page owns only its own page-scale UI. Shared document continuity appears as compact support UI only and no longer duplicates the upload page inside Assessment or Infographic.
 - Older IBM Plex-era notes remain historically accurate for earlier redesign phases in the change log, but they no longer describe the current live typography stack.
 
@@ -126,12 +152,17 @@ Important Folders And Files
   - `globals.css`
   - `layout.tsx`
   - `global-error.tsx`
+  - `(site)/layout.tsx`
+  - `(site)/about/page.tsx`
+  - `(site)/contact/page.tsx`
+  - `(site)/donation/page.tsx`
   - `(public)/login/page.tsx`
   - `(public)/admin/login/page.tsx`
   - `(protected)/layout.tsx`
   - `(protected)/settings/page.tsx`
   - `(protected)/(completed)/page.tsx`
   - `(protected)/(completed)/upload/page.tsx`
+  - `(protected)/(completed)/history/page.tsx`
   - `(protected)/(completed)/assessment/page.tsx`
   - `(protected)/(completed)/assessment/preview/[id]/page.tsx`
   - `(protected)/(completed)/assessment/results/[id]/page.tsx`
@@ -139,6 +170,8 @@ Important Folders And Files
   - `(protected)/admin/layout.tsx`
   - `(protected)/admin/page.tsx`
   - `(protected)/admin/users/page.tsx`
+  - `api/contact/route.ts`
+  - `api/uploads/[id]/route.ts`
   - `api/**/route.ts`
 - `apps/web`
   - `package.json`
@@ -147,10 +180,17 @@ Important Folders And Files
   - `apphosting.yaml`
   - `proxy.ts`
   - `scripts/normalize-standalone.mjs`
+  - `public/dark-file-background.png`
+  - `public/light-file-background.png`
+  - `public/favicon.svg`
   - `public/my-app-background.png`
 - `apps/web/lib`
   - `return-to.ts`
   - `preferences.ts`
+  - `site-content.ts`
+  - `assessment-file-branding.ts`
+  - `assessment-question-display.ts`
+  - `branding/protected-signature.ts`
   - `messages.ts`
   - `assessment-preview-model.ts`
   - `assessment-routes.ts`
@@ -161,13 +201,17 @@ Important Folders And Files
   - `server/admin-auth.ts`
   - `server/repository.ts`
   - `server/document-runtime.ts`
+  - `server/document-markdown.ts`
+  - `server/owner-scope.ts`
   - `server/assessment-linked-document.ts`
+  - `server/assessment-artifact-storage.ts`
+  - `server/assessment-file-qr.ts`
+  - `server/contact-mail.ts`
   - `server/assessment-records.ts`
   - `server/assessment-retention.ts`
   - `server/assessment-preview.ts`
   - `server/assessment-exporter.ts`
   - `server/assessment-print-renderer.ts`
-  - `server/datalab-convert.ts`
   - `server/runtime.ts`
   - `server/ai/execution.ts`
   - `server/ai/provider-runtime.ts`
@@ -176,15 +220,21 @@ Important Folders And Files
   - `auth/admin-login-panel.tsx`
   - `auth/public-auth-shell.tsx`
   - `auth/sign-out-button.tsx`
+  - `site/public-site-shell.tsx`
+  - `site/contact-form.tsx`
   - `assessment/assessment-field-select.tsx`
   - `document/document-context-card.tsx`
+  - `history/history-document-actions.tsx`
   - `assessment/assessment-export-actions.tsx`
   - `assessment/assessment-preview-shell.tsx`
   - `assessment/assessment-preview-theme-toggle.tsx`
   - `assessment/assessment-result-viewer.tsx`
   - `layout/protected-shell.tsx`
+  - `layout/protected-signature-seal.tsx`
   - `layout/protected-workspace-background.tsx`
   - `layout/shell-nav.tsx`
+  - `preferences/theme-toggle.tsx`
+  - `preferences/locale-toggle.tsx`
   - `settings/profile-settings-form.tsx`
   - `upload/upload-workspace.tsx`
   - `assessment/assessment-studio.tsx`
@@ -214,6 +264,9 @@ Important Folders And Files
 
 Route Map
 - Public routes
+  - `/about`
+  - `/contact`
+  - `/donation`
   - `/login`
   - `/admin/login`
 - Authenticated non-admin shell
@@ -221,6 +274,7 @@ Route Map
 - Completion-required non-admin routes
   - `/`
   - `/upload`
+  - `/history`
   - `/assessment`
   - `/assessment/preview/[id]`
   - `/assessment/results/[id]`
@@ -238,8 +292,12 @@ Route Ownership Clarification
   - preview/result ownership is split cleanly across `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx`, `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`, and the shared viewer/export components under `apps/web/components/assessment/*`
   - does not render the full upload workspace
 - `/infographic`
-  - owns infographic generation, linked-document selection, preview, and infographic history through `apps/web/app/(protected)/(completed)/infographic/page.tsx` and `apps/web/components/infographic/infographic-studio.tsx`
+  - keeps the real infographic generation studio for admins through `apps/web/app/(protected)/(completed)/infographic/page.tsx` and `apps/web/components/infographic/infographic-studio.tsx`
+  - renders a polished non-admin coming-soon placeholder in the same route without pretending that the placeholder is the authorization boundary
   - does not render the full upload workspace
+- `/about`, `/contact`, and `/donation`
+  - share public informational layout ownership through `apps/web/app/(site)/layout.tsx` and `apps/web/components/site/public-site-shell.tsx`
+  - do not borrow protected-shell layout ownership and do not expose the private contact destination email in their client-visible UI
 - Protected shell
   - shared layout only through `apps/web/app/(protected)/layout.tsx`, `apps/web/components/layout/protected-shell.tsx`, and `apps/web/components/layout/shell-nav.tsx`
   - does not decide tool-page content ownership
@@ -253,6 +311,8 @@ Shared State Versus Shared Page UI
 API Map
 - Core/runtime
   - `GET /api/health`
+- Public contact/support
+  - `POST /api/contact`
 - Session/auth
   - `GET /api/auth/me`
   - `POST /api/auth/bootstrap`
@@ -262,6 +322,8 @@ API Map
   - `POST /api/auth/admin/bootstrap`
 - User protected APIs
   - `POST /api/uploads`
+  - `DELETE /api/uploads`
+  - `GET /api/uploads/[id]`
   - `POST /api/assessment`
   - `GET /api/assessment/[id]`
   - `GET /api/assessment/linked-document`
@@ -286,13 +348,15 @@ Backend Runtime And Service Ownership
   - `apps/web/app/api/**/route.ts`: request parsing, auth gating, response shaping
   - `apps/web/lib/server/session.ts`: session verification and route/API guards
   - `apps/web/lib/server/repository.ts`: Firestore-backed persistence with a local in-memory fallback when Firebase Admin runtime is unavailable, including active-document normalization plus assessment result lifecycle normalization
-  - `apps/web/lib/server/document-runtime.ts`: upload validation, conversion orchestration, Storage persistence attempts, and linked-binary reloads for direct-file Assessment generation
+  - `apps/web/lib/server/document-runtime.ts`: upload validation, direct-file markdown snapshot orchestration, Storage persistence attempts, and linked-binary reloads for direct-file Assessment generation
+  - `apps/web/lib/server/document-markdown.ts`: current local document snapshot helper for upload normalization and text-context fallback continuity
   - `apps/web/lib/server/assessment-linked-document.ts`: Assessment-only linked-document resolution that prefers direct PDF input when the selected provider supports it
+  - `apps/web/lib/server/assessment-file-qr.ts`: server-side QR data URL generation for the branded Assessment file surfaces
+  - `apps/web/lib/server/contact-mail.ts`: server-only Gmail SMTP relay for the public Contact page that reads runtime env vars in local dev and Firebase App Hosting without exposing the admin destination or credentials to the client
   - `apps/web/lib/server/assessment-retention.ts`: 3-day Assessment expiry window and route/lifecycle helpers
   - `apps/web/lib/server/assessment-preview.ts`: normalized bilingual Assessment preview/result model generation
   - `apps/web/lib/server/assessment-exporter.ts`: JSON, Markdown, and DOCX artifact generation from one normalized preview model
   - `apps/web/lib/server/assessment-print-renderer.ts`: print-first HTML export surface used by the lightweight PDF route
-  - `apps/web/lib/server/datalab-convert.ts`: external Datalab conversion adapter with local fallback behavior
   - `apps/web/lib/server/runtime.ts`: runtime capability flags returned by inspection endpoints
   - `apps/web/lib/server/firebase-admin.ts`: managed-credentials or service-account Admin bootstrap
 - `apps/api` remains a deliberate future extraction boundary only
@@ -423,7 +487,7 @@ AI, Model, And Provider Orchestration
     - Google Gemini assessment models run through the Google runtime path
     - `qwen3.5-flash` runs through the Alibaba DashScope OpenAI-compatible runtime and must use the US (Virginia) endpoint
   - infographic generation still returns SVG fallback output while external provider-backed infographic execution remains deferred
-  - Datalab conversion inside `apps/web/lib/server/datalab-convert.ts` remains the verified external fetch in the document intake pipeline when Datalab env vars are configured
+  - uploaded document context now comes from the local direct-file snapshot helper in `apps/web/lib/server/document-markdown.ts`, with original-file reuse preferred where the current server/runtime supports it
 
 Firestore, Storage, Rules, And Indexes Strategy
 - Firestore Rules
@@ -465,24 +529,30 @@ Environment Strategy
   - `FIREBASE_PRIVATE_KEY`
   - `FIREBASE_STORAGE_BUCKET`
   - `ZOOTOPIA_ADMIN_EMAILS`
+- Private contact env vars
+  - `SMTP_HOST`
+  - `SMTP_PORT`
+  - `SMTP_SECURE`
+  - `SMTP_USER`
+  - `SMTP_PASS`
+  - `EMAIL_FROM`
+  - `CONTACT_FORM_TO`
 - Private AI env vars
   - `GOOGLE_AI_API_KEY`
   - `DASHSCOPE_API_KEY`
   - optional model-selection env vars referenced from `packages/shared-config/src/models.ts`
-- Private Datalab env vars
-  - `DATALAB_API_KEY`
-  - `DATALAB_CONVERT_URL`
 - Important env notes
   - `.env.example` is the canonical repo env contract
   - root `.env.local` is the canonical local env file for both root Firebase scripts and `apps/web`
   - `apps/web/next.config.ts` reloads the root env through `@next/env` so the live Next.js app sees the same Firebase settings as the workspace scripts
   - `.env.example` currently includes project-specific public Firebase identifiers while keeping server-only credentials blank; it is a real contract file, not a generic neutral placeholder
   - `.env.example` now matches the active App Hosting backend-linked Firebase web app id `1:38079185268:web:adcd16b5e94d3d8c52ec21`
+  - `.env.example` now carries the server-only Gmail SMTP contact-form contract (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `CONTACT_FORM_TO`) for the public Contact page relay and no longer advertises retired Datalab env settings
   - repo-root `.env` is not part of the verified current repo
   - `cloudrun.env` is not part of the verified current repo; only `docs/legacy-reference/cloudrun.reference.env` survives as historical reference
   - `serviceAccountKeyNext.json` is local bootstrap material only and is not a runtime source of truth
   - `apps/web` does not rely on a separate app-local `.env.local`; the root `.env.local` is the intended shared local source
-  - App Hosting user env vars and secrets are not declared in `apps/web/apphosting.yaml` today; public Firebase browser config is instead backfilled at build time from App Hosting's auto-populated `FIREBASE_WEBAPP_CONFIG`, while server-only secret management still remains external to source control
+  - App Hosting user env vars and secrets are not declared in `apps/web/apphosting.yaml` today; public Firebase browser config is instead backfilled at build time from App Hosting's auto-populated `FIREBASE_WEBAPP_CONFIG`, while server-only secret management remains external to source control and the Contact SMTP vars must be supplied as runtime env/secrets in App Hosting
   - The owner-requested shared admin password must never be stored in `.env` files, Firestore, Storage rules, Storage metadata, client code, or public config
 
 Deployment Strategy
@@ -565,11 +635,13 @@ Current Feature Set
 - Premium scientific visual system with animated background layers and glassmorphic protected-workspace surfaces
 - Shared local UI primitive layer for buttons, inputs, and background composition
 - Upload workspace and document record creation
-- Dark-glass upload-first workspace with drag/drop CTA, recent-upload preview, and import-from-link stub UI
-- Datalab-backed conversion when configured, with local fallback extraction
+- Dark-glass upload-first workspace with a click-to-browse document dropzone, recent-upload preview, truthful warning handling, and an active-document continuation card
+- Protected-shell logo/sidebar-preferences/scroll-top/scroll-flow-signature layout contract plus a lightweight timed ambient bubble effect
+- Owner-scoped active upload continuation CTA plus active-file removal
+- Direct-file upload normalization with local markdown snapshots plus original-file reuse when the active server/runtime supports it
 - Assessment generation flow
 - Assessment question counts now use `10..100` in steps of `10`, Assessment requests now carry exactly one mode (`question_generation` by default or `exam_generation`), and the same requests can also carry selected question types plus a 100%-total percentage distribution that flows through shared validation, prompt orchestration, execution fallback normalization, and saved-record normalization.
-- Infographic generation flow
+- Admin-retained infographic generation flow plus non-admin coming-soon UI lock
 - Model/provider selection through the shared AI catalog and same-origin server orchestration
 - Admin overview and user role/status management
 - Health/runtime inspection endpoints
@@ -592,7 +664,7 @@ Important Reusable Files And Modules
   - `apps/web/lib/server/repository.ts`
   - `apps/web/lib/server/firebase-admin.ts`
   - `apps/web/lib/server/document-runtime.ts`
-  - `apps/web/lib/server/datalab-convert.ts`
+  - `apps/web/lib/server/document-markdown.ts`
 - AI orchestration
   - `apps/web/lib/server/ai/execution.ts`
   - `apps/web/lib/server/ai/provider-runtime.ts`
@@ -655,12 +727,14 @@ Current Behavior And Boundaries
   - can access the full user workspace
   - lands on `/upload` after successful login or profile completion
   - keeps `/` as the protected overview route rather than the primary upload landing
-  - can use uploads, assessment generation, and infographic generation
+  - can use uploads and assessment generation
+  - sees Infographic as a coming-soon UI-locked surface in protected navigation/cards and on `/infographic`
 - Authenticated admin
   - must use the separate admin login flow
   - is protected by claims-first server checks
   - is exempt from the non-admin profile-completion gate
   - lands in `/admin`, not `/upload`, after successful admin login
+  - retains infographic studio access in the protected user workspace
 - Suspended user
   - cannot start or continue a valid session regardless of route intent
 
@@ -677,6 +751,190 @@ Generated Artifacts And Non-Source-Of-Truth Paths
 - These files may exist locally after builds or verification runs and should not be used to infer runtime architecture
 
 Change Log
+- 2026-04-04 00:13:11 | Donation Page Trust, Cost Transparency, And WhatsApp-First Support Polish
+  - Root cause addressed: the existing `/donation` page already lived in the correct public route group and shared shell, but its copy was still generic and too light on the concrete reasons support matters. It did not clearly explain the real recurring costs behind the platform, the continuity risk if monthly expenses are not covered, or the intended 2022/2023 legacy framing in a polished and trustworthy way.
+  - What was changed: reworked `apps/web/lib/site-content.ts` so the bilingual Donation content now uses a richer EN/AR structure with hero highlights, educational-project/legacy/continuity cards, explicit recurring-cost items (hosting/infrastructure, continuous development, AI model usage, and future features), future-facing support outcomes, and a stronger trust note; updated `apps/web/app/(site)/donation/page.tsx` so the page now renders that content through a clearer premium hero, a WhatsApp-first personal-contact callout, a secondary Egyptian transfer reference, a transparent cost grid, and a tighter support/trust section without redesigning the broader public site; and added concise code comments around the shared donation copy source plus the trust-sensitive WhatsApp/cost presentation blocks so future agents preserve the current honest tone.
+  - What was preserved intentionally: `/donation` route ownership inside `apps/web/app/(site)`, the shared `apps/web/components/site/public-site-shell.tsx` layout, same EN/AR locale flow through `getSiteContent(locale)`, the current emerald-and-gold visual system, dark/light behavior, responsive card-based composition, and the existing WhatsApp-based personal-contact model instead of inventing a payment gateway or new backend donation flow.
+  - Donation-page result after this pass: the page now explains why Zootopia Club matters, where donations go, why continuity is not guaranteed without monthly support, how the project can become a meaningful fingerprint for the 2022 and 2023 classes, and how users can donate or ask questions personally through WhatsApp `+201124511183`.
+  - Changed files:
+    - `apps/web/lib/site-content.ts`
+    - `apps/web/app/(site)/donation/page.tsx`
+    - `zootopia-club-next-ledger.txt`
+  - Verification:
+    - `npm run lint --workspace @zootopia/web` passed cleanly
+    - `npm run typecheck --workspace @zootopia/web` exited successfully, but `next typegen` still printed the known Windows `EPERM` warning against `apps/web/.next/types/routes.d.ts`
+    - `npm run build --workspace @zootopia/web` passed with the final route tree including `/donation`
+    - No separate browser-side visual session was available in this environment, so responsiveness confidence in this pass comes from the existing route-local grid/flex layout patterns plus the successful production build rather than a live signed-in browser sweep
+
+- 2026-04-04 00:00:26 | Admin Login Polish And Full Admin Account Visibility Hardening
+  - Root cause addressed: the admin login surface had grown visually tall because the essential sign-in flow and its support guidance were split into multiple stacked cards with repeated copy, and the admin user-management path still read only the first 100 Firestore user documents, which meant `/admin` and `/admin/users` could not truthfully guarantee visibility over all platform accounts.
+  - What was changed: tightened `apps/web/components/auth/admin-login-panel.tsx` into a single compact premium card with collapsed access notes, clearer spacing, and the same email/password + bootstrap flow; tuned the admin auth-shell sizing in `apps/web/app/globals.css` so the critical admin sign-in surface fits common laptop/desktop heights more cleanly; shortened the admin-login copy in `apps/web/messages/en.json` and `apps/web/messages/ar.json` while preserving the required security cues and EN/AR support; upgraded `apps/web/lib/server/repository.ts` so admin user listing now merges the full Firebase Auth account inventory with stored Firestore user metadata, can hydrate auth-only accounts on demand for later admin actions, and no longer hides users behind the old 100-document cap; hardened `setUserStatus(...)` so block/unblock now also syncs Firebase Auth's `disabled` flag and revokes refresh tokens in addition to persisting `users.status`; updated `apps/web/components/admin/users-table.tsx` plus `apps/web/app/(protected)/admin/users/page.tsx` to show clearer account metadata (joined date, university code, profile-completion state, current-admin badge) and explicit block/unblock + make-admin/make-user actions; updated `apps/web/app/(protected)/admin/page.tsx` to reuse one admin-user fetch for both the preview list and overview counts after widening user visibility; and added explicit server-authoritative comments to the admin role/status mutation routes under `apps/web/app/api/admin/users/[uid]/*`.
+  - What was preserved intentionally: the existing Firebase-backed auth/bootstrap routes, separate regular-vs-admin login boundaries, `requireAdminUser()` / `getAdminSessionUser()` server gating, allowlisted-email plus `admin: true` claim enforcement, non-admin inability to reach admin routes, and the broader protected/admin dashboard architecture.
+  - Admin-control result after this pass: `/admin` and `/admin/users` can now observe the full platform account set known to Firebase Auth plus Firestore metadata, block/unblock remains admin-only on the server, and suspension is enforced through both stored status and Firebase Auth/session revocation rather than UI state alone.
+  - Changed files:
+    - `apps/web/components/auth/admin-login-panel.tsx`
+    - `apps/web/app/globals.css`
+    - `apps/web/lib/server/repository.ts`
+    - `apps/web/components/admin/users-table.tsx`
+    - `apps/web/app/(protected)/admin/users/page.tsx`
+    - `apps/web/app/(protected)/admin/page.tsx`
+    - `apps/web/app/api/admin/users/[uid]/status/route.ts`
+    - `apps/web/app/api/admin/users/[uid]/role/route.ts`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `zootopia-club-next-ledger.txt`
+  - Verification:
+    - `npm run lint --workspace @zootopia/web` passed cleanly
+    - `npm run typecheck --workspace @zootopia/web` exited successfully, but `next typegen` still printed the known Windows `EPERM` warning against `apps/web/.next/types/routes.d.ts`
+    - `npm run build --workspace @zootopia/web` passed with the final route tree including `/admin`, `/admin/login`, `/admin/users`, `GET /api/admin/users`, and both admin role/status mutation routes
+
+- 2026-04-03 23:36:25 | Owner-Isolated History, Artifact Storage, And Admin Activity Hardening
+  - Root cause addressed: the repo already had owner-scoped upload binaries and owner-scoped assessment metadata, but user-facing preview/result/export routes still admitted admin viewers through the shared repository helper, uploaded source files were not under the same 3-day retention contract as assessment results, generated/export artifacts were not persisted under owner-scoped Storage paths, there was no dedicated `/history` page, and admin observability stopped at overview counts plus sparse role/status mutation logs.
+  - What was changed: added `apps/web/lib/server/owner-scope.ts` as the shared server-only source of truth for owner-scoped Storage path construction and path assertions; extended `packages/shared-types/src/document.ts` and `packages/shared-types/src/assessment.ts` additively with owner/lifecycle/artifact metadata; updated `apps/web/lib/server/document-runtime.ts` so uploads now stamp `ownerRole` plus `expiresAt`, use the shared path helper, and re-validate owner namespace before Storage reads/deletes; added `apps/web/lib/server/assessment-artifact-storage.ts` so assessment generations now persist a canonical result artifact and cache JSON/Markdown/DOCX/print-HTML exports under owner-scoped Storage paths through the existing same-origin routes; updated `apps/web/lib/server/repository.ts` so documents and assessments now share a 3-day lazy cleanup contract, expired uploads/results/artifacts are deleted on server list/read access, admin activity logs can be read for dashboard visibility, and explicit owner-only assessment readers now exist alongside a separate admin-observation lane; updated `apps/web/app/api/uploads/route.ts` plus new `apps/web/app/api/uploads/[id]/route.ts` so Upload keeps the existing owner-scoped remove flow and now exposes an owner-validated download path for source files; updated `apps/web/app/api/assessment/route.ts`, `apps/web/app/api/assessment/[id]/route.ts`, `apps/web/app/api/assessment/results/[id]/route.ts`, and all four assessment export routes so user-facing assessment reads/exports are owner-only, export artifacts are persisted/cached server-side, and audit events are recorded without moving authority into the browser; updated `apps/web/app/api/auth/bootstrap/route.ts`, `apps/web/app/api/auth/admin/bootstrap/route.ts`, and `apps/web/app/api/auth/logout/route.ts` so session creation/logout events are now written into the admin activity log; updated the protected Assessment preview/result pages to use owner-only record access and log owner activity; added the dedicated protected owner History route at `apps/web/app/(protected)/(completed)/history/page.tsx` plus `apps/web/components/history/history-document-actions.tsx`; extended `apps/web/components/layout/shell-nav.tsx` and `packages/shared-config/src/routes.ts` with `/history`; and extended `apps/web/app/(protected)/admin/page.tsx` with a recent platform-activity feed sourced from `adminActivityLogs`.
+  - What was preserved intentionally: `apps/web` remains the only live runtime; browser Firestore/Storage access stays deny-all; upload ownership still begins from the authenticated server session user; assessment generation, preview, result, and export routes remain same-origin App Router Route Handlers; the existing light/dark file-theme query propagation remains the source of truth for preview/result/print surfaces; and the PDF lane intentionally remains a server-owned print/save-as-PDF HTML surface instead of introducing a heavy new PDF renderer in this pass.
+  - Isolation model after this pass: uploaded source files use canonical owner-scoped paths plus server-side path assertions; assessment preview/result/export routes use owner-only repository access; canonical result artifacts and cached exports are written under owner-scoped Storage paths; assessment/document metadata now carries additive owner/lifecycle fields; and admin observability is now explicit on the admin dashboard activity feed instead of being implicitly granted through normal user artifact routes.
+  - Changed files:
+    - `packages/shared-types/src/document.ts`
+    - `packages/shared-types/src/assessment.ts`
+    - `packages/shared-config/src/routes.ts`
+    - `apps/web/lib/server/owner-scope.ts`
+    - `apps/web/lib/server/document-runtime.ts`
+    - `apps/web/lib/server/assessment-retention.ts`
+    - `apps/web/lib/server/assessment-artifact-storage.ts`
+    - `apps/web/lib/server/assessment-records.ts`
+    - `apps/web/lib/server/repository.ts`
+    - `apps/web/lib/server/ai/execution.ts`
+    - `apps/web/app/api/uploads/route.ts`
+    - `apps/web/app/api/uploads/[id]/route.ts`
+    - `apps/web/app/api/auth/bootstrap/route.ts`
+    - `apps/web/app/api/auth/admin/bootstrap/route.ts`
+    - `apps/web/app/api/auth/logout/route.ts`
+    - `apps/web/app/api/assessment/route.ts`
+    - `apps/web/app/api/assessment/[id]/route.ts`
+    - `apps/web/app/api/assessment/results/[id]/route.ts`
+    - `apps/web/app/api/assessment/export/json/[id]/route.ts`
+    - `apps/web/app/api/assessment/export/markdown/[id]/route.ts`
+    - `apps/web/app/api/assessment/export/docx/[id]/route.ts`
+    - `apps/web/app/api/assessment/export/pdf/[id]/route.ts`
+    - `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx`
+    - `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`
+    - `apps/web/app/(protected)/(completed)/history/page.tsx`
+    - `apps/web/app/(protected)/admin/page.tsx`
+    - `apps/web/components/layout/shell-nav.tsx`
+    - `apps/web/components/history/history-document-actions.tsx`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `zootopia-club-next-ledger.txt`
+  - Verification:
+    - `npm run lint --workspace @zootopia/web` passed.
+    - `npm run build --workspace @zootopia/web` passed with the final route tree including `/history` and `GET /api/uploads/[id]`.
+    - `npm run typecheck --workspace @zootopia/web` completed after `next typegen`, but the run still prints the previously known Windows `EPERM` warning against `apps/web/.next/types/routes.d.ts`.
+    - Authenticated browser-side verification of the deployed Firebase-hosted download/export flow remains pending in this environment because no safe signed-in session was available for end-to-end OAuth/download automation during this pass.
+
+- 2026-04-03 22:46:03 | Contact Form Gmail SMTP Runtime Wiring
+  - Root cause addressed: The public Contact page already had a server-owned relay boundary, but the mail helper still used a Resend-style API contract instead of the Gmail SMTP env contract that is actually configured for this project. That mismatch meant the form could validate and submit locally while still not using the intended live transport in local development or Firebase App Hosting.
+  - What was done: Reworked `apps/web/lib/server/contact-mail.ts` into a server-only Nodemailer SMTP helper that reads `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, and `CONTACT_FORM_TO`, caches the transporter safely, and sends clean text/HTML contact emails with the submitter wired into `replyTo`. `apps/web/app/api/contact/route.ts` stayed the single route owner but now adds tighter server-side length limits plus a silent honeypot field for minimal abuse resistance. `apps/web/components/site/contact-form.tsx` gained the matching hidden honeypot field only; the public page architecture and UI flow stayed intact. `.env.example`, `apps/web/package.json`, and `package-lock.json` were updated to reflect the live SMTP contract and the minimal `nodemailer` / `@types/nodemailer` dependency addition.
+  - Scope preserved intentionally: The Contact page still posts only to `POST /api/contact`, the destination address stays server-side only, no SMTP secret moved into browser code, the public UI copy/layout was not redesigned, and no unrelated protected-shell, auth, assessment, or upload architecture was changed.
+  - Local and App Hosting behavior: Local dev continues to use the repo-root `.env.local` loaded into `apps/web` through `@next/env`. Firebase App Hosting uses the same server-side `process.env` contract, so the route remains compatible as long as the SMTP vars are supplied as runtime env/secrets in the backend configuration instead of `NEXT_PUBLIC_*` values.
+  - Verification:
+    - `npm run lint --workspace @zootopia/web` passed.
+    - `npm run typecheck --workspace @zootopia/web` passed.
+    - `npm run build --workspace @zootopia/web` passed and retained `/api/contact` in the route tree.
+    - A non-destructive local SMTP `transporter.verify()` check succeeded against the configured Gmail env without sending a message.
+- 2026-04-03 22:29:51 | Public About Contact Donation Pages And Protected Header Support Polish
+  - Root cause addressed: The current repo had no public informational layer beyond the login pages, no safe contact form relay that kept the admin destination email server-side, and no lightweight support-oriented header affordances in the protected shell for donation or future balance/credits visibility.
+  - What was done: Added a dedicated public-info route group instead of reworking the protected architecture. `apps/web/app/(site)/layout.tsx` plus `apps/web/components/site/public-site-shell.tsx` now own a shared premium public shell for `/about`, `/contact`, and `/donation`, while `apps/web/lib/site-content.ts` centralizes the bilingual long-form copy for those pages plus the compact donation/balance labels used by the protected header. The new page routes live at `apps/web/app/(site)/about/page.tsx`, `apps/web/app/(site)/contact/page.tsx`, and `apps/web/app/(site)/donation/page.tsx`, each using the current emerald-and-gold visual language instead of introducing a second design system.
+  - Contact flow changes: Added `apps/web/components/site/contact-form.tsx`, `apps/web/app/api/contact/route.ts`, and `apps/web/lib/server/contact-mail.ts` so the Contact page now offers a real server-routed message form with bilingual validation/status handling, while the private destination email remains server-only through `.env.example` contract keys `ZOOTOPIA_CONTACT_DESTINATION_EMAIL`, `ZOOTOPIA_CONTACT_FROM_EMAIL`, and `RESEND_API_KEY`. The exact destination is not shown in public UI, and the relay is intentionally small and isolated instead of becoming a broader messaging subsystem.
+  - Shared shell and routing changes: Updated `packages/shared-config/src/routes.ts` with `/about`, `/contact`, and `/donation`, and extended `apps/web/components/layout/protected-shell.tsx` with a compact donation button plus a visual-only balance placeholder chip. That balance UI is intentionally decorative for now and does not invent backend financial logic. No sidebar ownership, auth/session flow, or protected tool routing was redesigned.
+  - Scope preserved intentionally: `apps/web` remains the only live runtime, public login/admin-login pages keep their current ownership, the protected shell remains the only owner of authenticated workspace chrome, EN/AR and light/dark behavior are preserved, no new npm packages were added, and unrelated assessment/upload/admin flows were left untouched.
+  - Changed files:
+    - `.env.example`
+    - `apps/web/app/(site)/layout.tsx`
+    - `apps/web/app/(site)/about/page.tsx`
+    - `apps/web/app/(site)/contact/page.tsx`
+    - `apps/web/app/(site)/donation/page.tsx`
+    - `apps/web/app/api/contact/route.ts`
+    - `apps/web/components/layout/protected-shell.tsx`
+    - `apps/web/components/site/contact-form.tsx`
+    - `apps/web/components/site/public-site-shell.tsx`
+    - `apps/web/lib/server/contact-mail.ts`
+    - `apps/web/lib/site-content.ts`
+    - `packages/shared-config/src/routes.ts`
+    - `zootopia-club-next-ledger.txt`
+  - Verification:
+    - Root `npm run lint` passed.
+    - Root `npm run typecheck` passed cleanly, and `next typegen` completed successfully in this run.
+    - Root `npm run build` passed with the final route tree including `/about`, `/contact`, `/donation`, and `POST /api/contact`.
+    - Live authenticated visual verification of the protected shell/header and real contact-email delivery still depends on environment/session state outside this local build pass, so those remain runtime follow-up rather than build-time regressions.
+
+- 2026-04-03 22:05:58 | Assessment Premium File Surface Refinement
+  - Root cause addressed: The new Assessment preview/result/export architecture already existed, but the detached file-like surfaces still lacked a shared first-page composition system for premium branding, the print/PDF lane was not using the dedicated light/dark file-background assets, export links were not explicitly carrying file-theme state, and multiline generated question choices were still being whitespace-normalized into single-line blocks that made answer options look compressed.
+  - What was done: Audited the current preview/result/export code paths in parallel, then extended the existing architecture instead of replacing it. Added `apps/web/lib/assessment-file-branding.ts` as the shared file-surface source of truth for first-page-only logo/name placement, compact QR metadata, Arabic footer text, and theme-aware background asset selection; added `apps/web/lib/server/assessment-file-qr.ts` so the QR for `https://linktr.ee/ebnabdallah` is generated once on the server as a compact branded data URL; and updated `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx`, `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`, `apps/web/components/assessment/assessment-preview-shell.tsx`, `apps/web/app/api/assessment/export/pdf/[id]/route.ts`, and `apps/web/lib/server/assessment-print-renderer.ts` so preview/result/PDF surfaces now share the same first-page logo rail, upper-right QR card, subtle premium corner accents, theme-correct file backgrounds, and refined all-pages Arabic footer treatment.
+  - Question-layout and export-alignment changes: Added `apps/web/lib/assessment-question-display.ts` and extended `apps/web/lib/server/assessment-preview.ts` plus `apps/web/lib/assessment-preview-model.ts` so the normalized preview model now carries a display-only split between question stem, vertically stacked choice lines, and supplemental lines without changing the persisted assessment contract. Updated `packages/shared-utils/src/validation.ts`, `apps/web/lib/server/assessment-records.ts`, and `apps/web/lib/server/ai/execution.ts` so multiline question/answer/rationale content keeps meaningful line breaks during normalization, then updated `apps/web/components/assessment/assessment-result-viewer.tsx` and `apps/web/lib/server/assessment-exporter.ts` so result and DOCX surfaces render cleaner stacked options, answer hierarchy, and explanation blocks instead of flattened text.
+  - Theme propagation and dependency changes: `apps/web/components/assessment/assessment-export-actions.tsx` now appends the active file theme to detached preview/result/export URLs so the page-like surfaces can stay aligned with the viewer theme, and `apps/web/package.json` / `package-lock.json` now include `qrcode` plus `@types/qrcode` as the only new packages for lightweight branded QR generation.
+  - Scope preserved intentionally: The protected-shell and Assessment route architecture stayed intact, the normalized preview/result/export pipeline remained authoritative, the print-first PDF route stayed the current export mechanism instead of being replaced with a new renderer, no storage/result ownership rules changed, EN/AR support was preserved, and unrelated tool pages were left untouched.
+  - Changed files:
+    - `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx`
+    - `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`
+    - `apps/web/app/api/assessment/export/pdf/[id]/route.ts`
+    - `apps/web/components/assessment/assessment-export-actions.tsx`
+    - `apps/web/components/assessment/assessment-preview-shell.tsx`
+    - `apps/web/components/assessment/assessment-result-viewer.tsx`
+    - `apps/web/lib/assessment-file-branding.ts`
+    - `apps/web/lib/assessment-preview-model.ts`
+    - `apps/web/lib/assessment-question-display.ts`
+    - `apps/web/lib/server/ai/execution.ts`
+    - `apps/web/lib/server/assessment-exporter.ts`
+    - `apps/web/lib/server/assessment-file-qr.ts`
+    - `apps/web/lib/server/assessment-preview.ts`
+    - `apps/web/lib/server/assessment-print-renderer.ts`
+    - `apps/web/lib/server/assessment-records.ts`
+    - `apps/web/package.json`
+    - `package-lock.json`
+    - `packages/shared-utils/src/validation.ts`
+    - `zootopia-club-next-ledger.txt`
+  - Verification:
+    - Root `npm run lint` passed.
+    - Root `npm run build` passed.
+    - Root `npm run typecheck` exited successfully but still printed the known Windows Next type-generation warning: `EPERM` opening `apps/web/.next/types/routes.d.ts`.
+    - Authenticated browser-side visual verification of the protected preview/result routes remains pending in this environment because no signed-in protected-session run was available during this pass.
+
+- 2026-04-03 21:12:00 | Protected Shell Navigation Polish, Upload Continuity, And Infographic UI Lock
+  - Root cause addressed: The protected shell still used a text-only sidebar brand, a generic placeholder footer, and a lower-sidebar theme toggle that competed with language controls. Upload also lacked a persistent active-document CTA and a safe remove action, non-admin users could still walk into Infographic from multiple protected UI entry points, preview/result surfaces lacked the requested branded footer treatment, and the custom Assessment dropdowns still opened with more vertical separation than necessary.
+  - What was done: Refined the shared protected shell instead of rebuilding pages: `apps/web/components/layout/shell-nav.tsx` now places the Zootopia mark in the sidebar header and UI-locks Infographic in protected navigation for non-admins, `apps/web/components/layout/protected-shell.tsx` now moves theme control into the header, keeps locale in the sidebar, tracks the real protected scroll container for a floating scroll-to-top button, and replaces placeholder footer links with a shared Arabic attribution seal from `apps/web/components/layout/protected-signature-seal.tsx` and `apps/web/lib/branding/protected-signature.ts`.
+  - Upload and infographic changes: `apps/web/components/upload/upload-workspace.tsx` now keeps a visible active-document continuation card with a direct Assessment CTA and remove action, while `apps/web/app/api/uploads/route.ts`, `apps/web/lib/server/repository.ts`, `apps/web/lib/server/document-runtime.ts`, and `packages/shared-types/src/document.ts` now support owner-scoped active-file removal with best-effort Storage cleanup and automatic promotion of the next-most-recent document when needed. `apps/web/app/(protected)/(completed)/page.tsx`, `apps/web/app/(protected)/(completed)/upload/page.tsx`, and `apps/web/app/(protected)/(completed)/infographic/page.tsx` now present Infographic as coming soon for non-admin users without inventing fake backend authorization, while admins still retain the real studio.
+  - Result/export branding changes: `apps/web/components/assessment/assessment-preview-shell.tsx`, `apps/web/lib/server/assessment-exporter.ts`, `apps/web/lib/server/assessment-preview.ts`, and `apps/web/lib/server/assessment-print-renderer.ts` now reuse the same seal so preview pages, result pages, Markdown, DOCX, and print/PDF outputs all carry the same branded attribution treatment.
+  - Scope preserved intentionally: Public auth pages and their backgrounds were left untouched, the protected-shell architecture stayed shared, no new packages were added, admin infographic access was preserved, and the infographic restriction remained a UI/page-state lock rather than a newly invented backend auth model. Existing route handlers and auth/session flows were preserved apart from the minimal owner-scoped upload delete method required for the remove-file action.
+  - Changed files:
+    - `apps/web/app/(protected)/(completed)/infographic/page.tsx`
+    - `apps/web/app/(protected)/(completed)/page.tsx`
+    - `apps/web/app/(protected)/(completed)/upload/page.tsx`
+    - `apps/web/app/api/uploads/route.ts`
+    - `apps/web/app/globals.css`
+    - `apps/web/components/assessment/assessment-preview-shell.tsx`
+    - `apps/web/components/auth/sign-out-button.tsx`
+    - `apps/web/components/layout/protected-shell.tsx`
+    - `apps/web/components/layout/protected-signature-seal.tsx`
+    - `apps/web/components/layout/shell-nav.tsx`
+    - `apps/web/components/preferences/locale-toggle.tsx`
+    - `apps/web/components/preferences/theme-toggle.tsx`
+    - `apps/web/components/upload/upload-workspace.tsx`
+    - `apps/web/lib/branding/protected-signature.ts`
+    - `apps/web/lib/server/assessment-exporter.ts`
+    - `apps/web/lib/server/assessment-preview.ts`
+    - `apps/web/lib/server/assessment-print-renderer.ts`
+    - `apps/web/lib/server/document-runtime.ts`
+    - `apps/web/lib/server/repository.ts`
+    - `apps/web/messages/ar.json`
+    - `apps/web/messages/en.json`
+    - `packages/shared-types/src/document.ts`
+    - `zootopia-club-next-ledger.txt`
+  - Verification:
+    - Root `npm run lint` passed.
+    - Root `npm run build` passed.
+    - Root `npm run typecheck` completed successfully but still printed the known Windows Next type-generation warning: `EPERM` opening `apps/web/.next/types/routes.d.ts`.
+    - Authenticated browser-side visual verification is still pending in this environment because no signed-in protected-session run was available during this pass.
+
 - 2026-04-03 19:55:29 | Protected Workspace Background Refinement And Assessment Studio Polish
   - Root cause addressed: The protected workspace still relied on a thin inline background treatment, while the Assessment studio kept a distracting float animation, violet-heavy surfaces, native select controls, a required top-of-form prompt, and a right-side `Latest output` panel that constrained the main form and made spacing/overflow issues harder to control cleanly.
   - What was done: Moved the protected-only workspace background into `apps/web/components/layout/protected-workspace-background.tsx` and wired it through `apps/web/app/(protected)/layout.tsx` so `apps/web/public/my-app-background.png` stays scoped to authenticated routes only. The new layer stack adds subtle dimming, texture, and soft scientific grid/orb/beam ambience with comments that warn future agents not to leak this treatment into public auth routes.
@@ -944,3 +1202,4 @@ Change Log
 2026-04-03 15:44:36 - Added a compact Assessment mode selector without changing the live `apps/web` same-origin runtime, route ownership, or linked-document/model-selection flow. Root cause: after the earlier Assessment hardening and premium-card pass, the current shared Assessment request contract already carried additive `options` for count, difficulty, language, question types, and distribution, but there was still no explicit mode field anywhere in the shared types, validator, prompt builder, or saved-record normalizer, so the UI could not safely choose between question-oriented and exam-oriented generation. What was changed: extended `packages/shared-types/src/assessment.ts` with additive `AssessmentMode` support (`question_generation` and `exam_generation`) inside `AssessmentRequestOptions` plus backward-compatible input aliases and field-error typing; extended `packages/shared-utils/src/validation.ts` so Assessment requests now normalize a default mode of `question_generation`, reject unsupported values safely, and keep the existing additive nested `options` shape intact; updated `apps/web/lib/server/ai/prompt-orchestrator.ts` so the server-authored assessment prompt now includes the selected generation mode and mode-specific authoring instructions; updated `apps/web/lib/server/assessment-records.ts` so saved Assessment records preserve or backfill mode safely during normalization and the fallback summary text now reflects practice-vs-exam wording; updated `apps/web/lib/server/ai/execution.ts` so generation passes the selected mode through to prompt orchestration and summary construction; updated `apps/web/components/assessment/assessment-studio.tsx` so the premium config card now includes a compact two-option mode selector inside the existing form using the current chip styling, defaulting to `Question Generation`, keeping the layout responsive with a one-column mobile / two-column small-screen arrangement, and sending the selected mode inside the existing request payload; and added the short EN/AR labels in `apps/web/messages/en.json` and `apps/web/messages/ar.json`. What was preserved: the `/assessment` page route, `POST /api/assessment` and `GET /api/assessment/[id]`, same-origin backend authority, existing model selector behavior, existing linked-document selection/readiness checks, the premium card structure, question-type/distribution controls, and the current Assessment page ownership inside `apps/web`. Old-project review for this pass: inspected `C:\zootopia_club_ai_platform\src\features\assessment-tool\components\AssessmentStudio.tsx` for prior assessment-goal/exam wording cues and reused no code directly. Changed files in this pass: `packages/shared-types/src/assessment.ts`, `packages/shared-utils/src/validation.ts`, `apps/web/lib/server/ai/prompt-orchestrator.ts`, `apps/web/lib/server/assessment-records.ts`, `apps/web/lib/server/ai/execution.ts`, `apps/web/components/assessment/assessment-studio.tsx`, `apps/web/messages/en.json`, `apps/web/messages/ar.json`, and `zootopia-club-next-ledger.txt`. Verification in this pass: root `npm run lint` passed cleanly; root `npm run typecheck` passed cleanly across all workspaces and, in this run, `next typegen` completed successfully without the earlier Windows `EPERM` warning; root `npm run build` passed with `/assessment`, `/api/assessment`, and `/api/assessment/[id]` in the final route tree; code-level verification confirmed the selector stays inside the existing premium card, defaults to `question_generation`, uses short EN/AR labels, and keeps the current responsive chip-based layout without changing unrelated tool surfaces. Browser-side authenticated visual verification of `/assessment` remains pending in this environment because no valid signed-in session was available for the protected route.
 
 2026-04-03 18:42:11 - Implemented the Assessment direct-file/runtime/result-viewer/export architecture in the live `apps/web` runtime without moving ownership to `apps/api` or rebuilding Upload from scratch. Root cause of the missing feature set: the repo already had owner-scoped upload, extracted-context assessment generation, and saved assessment history, but it still treated linked documents as markdown-only inputs, had no active linked-document concept, had no dedicated preview/result pages, had no retention-aware result metadata, and had no export surface beyond reading the saved JSON-like record back inside `/assessment`. What was changed: extended `packages/shared-types/src/document.ts` with additive `isActive` / `supersededAt` metadata and extended `packages/shared-types/src/assessment.ts` with additive lifecycle/result-view metadata (`status`, `expiresAt`, `previewRoute`, `resultRoute`, richer `meta`, and `inputMode`) while preserving backward compatibility through `apps/web/lib/server/assessment-records.ts`; upgraded `apps/web/lib/server/repository.ts` so document saves now maintain one active linked document per owner, assessments normalize/store retention-aware routes and lifecycle data, expired assessment records are filtered out of history, and viewer access can distinguish expired results safely; upgraded `apps/web/lib/server/document-runtime.ts` so the existing upload flow still runs Datalab extraction for current infographic compatibility but now also exposes stored binary reloads for Assessment direct-file generation; added `apps/web/lib/server/assessment-linked-document.ts`, `apps/web/lib/server/assessment-retention.ts`, `apps/web/lib/assessment-preview-model.ts`, `apps/web/lib/assessment-routes.ts`, `apps/web/lib/server/assessment-preview.ts`, `apps/web/lib/server/assessment-exporter.ts`, and `apps/web/lib/server/assessment-print-renderer.ts` so Assessment now has explicit ownership for linked-document resolution, retention, normalized preview/result shaping, DOCX/Markdown/JSON export, and a print-first PDF lane; upgraded `apps/web/lib/server/ai/provider-runtime.ts`, `apps/web/lib/server/ai/prompt-orchestrator.ts`, and `apps/web/lib/server/ai/execution.ts` so Gemini models can consume the original linked PDF directly from Storage when supported, while unsupported file/model combinations still fall back safely to extracted text context instead of breaking the existing upload architecture; added owner-scoped Assessment result/export routes under `apps/web/app/api/assessment/linked-document/route.ts`, `apps/web/app/api/assessment/results/[id]/route.ts`, `apps/web/app/api/assessment/export/json/[id]/route.ts`, `apps/web/app/api/assessment/export/markdown/[id]/route.ts`, `apps/web/app/api/assessment/export/docx/[id]/route.ts`, and `apps/web/app/api/assessment/export/pdf/[id]/route.ts`; added dedicated protected pages at `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx` and `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`; added the shared viewer/export components `apps/web/components/assessment/assessment-preview-shell.tsx`, `apps/web/components/assessment/assessment-result-viewer.tsx`, `apps/web/components/assessment/assessment-export-actions.tsx`, and `apps/web/components/assessment/assessment-preview-theme-toggle.tsx`; updated `apps/web/app/(protected)/(completed)/assessment/page.tsx` plus `apps/web/components/assessment/assessment-studio.tsx` so the page now preselects the owner’s active linked document, no longer falsely blocks ready documents just because the client only knows about markdown availability, and exposes direct links into the new preview/result pages after generation and from the latest-result card; updated EN/AR message catalogs with the new result/export/retention strings; and added the single new runtime dependency `docx@9.5.1` for real Word export. What was preserved: `apps/web` remains the only live runtime; the same-origin App Router Route Handler architecture remains authoritative; Upload still owns the only full upload workspace; the current infographic flow still gets extracted markdown from Upload; auth/session boundaries and profile-completion gates remain server-enforced; document/result ownership stays owner-scoped; and no provider secrets or privileged model logic moved into the browser. Intentional tradeoff in this pass: PDF export is currently a print-first same-origin HTML route (`/api/assessment/export/pdf/[id]`) that opens a branded print surface and lets the browser Save as PDF, because that is the smallest safe path in this repo without introducing a heavy headless-browser runtime or PDF rendering stack inside App Hosting; JSON, Markdown, and DOCX exports are real direct downloads. Old-project review for this pass: audited `C:\zootopia_club_ai_platform\src\ai\services\promptOrchestrator.ts`, `C:\zootopia_club_ai_platform\src\ai\services\aiExecutor.ts`, `C:\zootopia_club_ai_platform\src\ai\orchestration\toolPromptConfig.ts`, `C:\zootopia_club_ai_platform\src\utils\exporters.ts`, and the `src\components\status\*` result-preview components for selective inspiration only, with no blind code copy. Changed files in this pass: `packages/shared-types/src/document.ts`, `packages/shared-types/src/assessment.ts`, `apps/web/lib/server/assessment-records.ts`, `apps/web/lib/server/repository.ts`, `apps/web/lib/server/document-runtime.ts`, `apps/web/lib/server/assessment-linked-document.ts`, `apps/web/lib/server/assessment-retention.ts`, `apps/web/lib/assessment-preview-model.ts`, `apps/web/lib/assessment-routes.ts`, `apps/web/lib/server/assessment-preview.ts`, `apps/web/lib/server/assessment-exporter.ts`, `apps/web/lib/server/assessment-print-renderer.ts`, `apps/web/lib/server/ai/provider-runtime.ts`, `apps/web/lib/server/ai/prompt-orchestrator.ts`, `apps/web/lib/server/ai/execution.ts`, `apps/web/app/api/assessment/route.ts`, `apps/web/app/api/assessment/[id]/route.ts`, `apps/web/app/api/assessment/linked-document/route.ts`, `apps/web/app/api/assessment/results/[id]/route.ts`, `apps/web/app/api/assessment/export/json/[id]/route.ts`, `apps/web/app/api/assessment/export/markdown/[id]/route.ts`, `apps/web/app/api/assessment/export/docx/[id]/route.ts`, `apps/web/app/api/assessment/export/pdf/[id]/route.ts`, `apps/web/app/(protected)/(completed)/assessment/page.tsx`, `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx`, `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`, `apps/web/components/assessment/assessment-studio.tsx`, `apps/web/components/assessment/assessment-preview-shell.tsx`, `apps/web/components/assessment/assessment-result-viewer.tsx`, `apps/web/components/assessment/assessment-export-actions.tsx`, `apps/web/components/assessment/assessment-preview-theme-toggle.tsx`, `apps/web/messages/en.json`, `apps/web/messages/ar.json`, `apps/web/package.json`, `package-lock.json`, and `zootopia-club-next-ledger.txt`. Verification in this pass: `npm run lint --workspace @zootopia/web` passed; `npm run typecheck --workspace @zootopia/web` passed and still printed the known Windows-only `next typegen` `EPERM` warning against `apps/web/.next/types/routes.d.ts` after route generation; `npm run build --workspace @zootopia/web` passed with the final route tree including `/assessment/preview/[id]`, `/assessment/results/[id]`, `/api/assessment/results/[id]`, and all four Assessment export routes. Browser-side authenticated end-to-end verification of the protected Assessment flow remains pending in this environment because no valid signed-in session was available for the protected routes, so runtime verification here is code-level plus build-time rather than live signed-in UI confirmation.
+2026-04-04 01:07:55 - Removed the stale Datalab Convert runtime path from the live product, cleaned the misleading upload/runtime messaging that came from that retired helper, and polished the protected shell without changing the current `apps/web` architecture. Root cause of the visible issue: the upload pipeline still routed new documents through `apps/web/lib/server/datalab-convert.ts`, so `/api/uploads` could emit Datalab-specific warnings like missing credentials even though the current product now treats direct-file uploads as the real runtime path; that stale runtime flag was also still rendered on Home, Admin, and Settings. What was changed: added `apps/web/lib/server/document-markdown.ts` as the new local document snapshot helper and deleted `apps/web/lib/server/datalab-convert.ts`; updated `apps/web/lib/server/document-runtime.ts` so new uploads now save `extractionEngine: "direct-file"` with the same owner-scoped Storage behavior and truthful warnings only; widened `packages/shared-types/src/document.ts` so historic records using `"datalab-convert"` remain readable while new records use `"direct-file"`; removed the retired Datalab runtime flag from `apps/web/lib/server/runtime.ts` and from the status surfaces in `apps/web/app/(protected)/(completed)/page.tsx`, `apps/web/app/(protected)/admin/page.tsx`, and `apps/web/app/(protected)/settings/page.tsx`; moved the shell theme control out of the protected header and into the sidebar utility area by updating `apps/web/components/preferences/theme-toggle.tsx`, `apps/web/components/layout/shell-nav.tsx`, and `apps/web/components/layout/protected-shell.tsx`, including a collapsed-rail cycle control so theme switching still fits the narrow sidebar; softened the Arabic signature by updating `apps/web/components/layout/protected-signature-seal.tsx`, `apps/web/components/layout/protected-shell.tsx`, and `apps/web/app/globals.css` so the seal now uses a compact variant and lives at the end of the protected scroll flow instead of as a persistent footer bar; added a lightweight timed science-bubble layer to `apps/web/components/layout/protected-workspace-background.tsx` and `apps/web/app/globals.css` so the protected workspace gets a brief upward ambient pass for roughly 3 seconds every 180 seconds without blocking interaction; and refreshed the current-truth docs in `.env.example`, `README.md`, and `docs/architecture.md` so they no longer advertise Datalab as part of the active runtime contract. What was preserved intentionally: `apps/web` remains the only live runtime; the same-origin App Router Route Handler upload/generation architecture stayed intact; the current direct-file upload and linked-document assessment flow still own the workspace; theme persistence still uses the same cookie-backed mechanism; the protected design language, light/dark behavior, EN/AR support, and responsive sidebar contract were preserved; and no new packages or external animation libraries were added. Verification in this pass: `npm run lint --workspace @zootopia/web` passed; `npm run typecheck --workspace @zootopia/web` exited successfully but still printed the known Windows `next typegen` `EPERM` warning against `apps/web/.next/types/routes.d.ts`; `npm run build --workspace @zootopia/web` passed with the protected routes, `/donation`, `/upload`, and `/api/uploads` still present in the final route tree. Authenticated browser-side verification of the protected upload shell remains pending in this environment because no signed-in session was available for a live UI run, so runtime confirmation here is code-level plus build-time rather than a manual protected-route walkthrough.

@@ -10,6 +10,8 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ uid: string }> },
 ) {
+  // Blocking and unblocking belong to the active admin session on the server. The client table may
+  // request a change, but the repository layer owns the persisted status plus Firebase Auth sync.
   const admin = await getAdminSessionUser();
   if (!admin) {
     return apiError("FORBIDDEN", "Admin access is required.", 403);

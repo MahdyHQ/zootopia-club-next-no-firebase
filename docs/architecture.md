@@ -22,7 +22,7 @@
 
 - `apps/web` runs the UI and same-origin route handlers.
 - `apps/api` stays idle unless explicitly developed later.
-- Firebase Admin, provider keys, and Datalab credentials remain server-only.
+- Firebase Admin and provider keys remain server-only, and document uploads use the direct-file runtime inside `apps/web`.
 
 ### Firebase App Hosting
 

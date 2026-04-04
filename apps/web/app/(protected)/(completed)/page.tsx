@@ -27,10 +27,13 @@ export default async function HomePage() {
     requireCompletedUser(APP_ROUTES.home),
     getRequestUiContext(),
   ]);
+  const canAccessInfographic = user.role === "admin";
   const [documents, assessments, infographics] = await Promise.all([
     listDocumentsForUser(user.uid),
     listAssessmentGenerationsForUser(user.uid),
-    listInfographicGenerationsForUser(user.uid),
+    canAccessInfographic
+      ? listInfographicGenerationsForUser(user.uid)
+      : Promise.resolve([]),
   ]);
   const runtimeFlags = getRuntimeFlags();
 
@@ -83,24 +86,45 @@ export default async function HomePage() {
           {[
             { href: APP_ROUTES.upload, label: uiContext.messages.navUpload, title: uiContext.messages.uploadWorkspaceTitle, subtitle: uiContext.messages.uploadPageWorkspaceDetail, icon: UploadCloud },
             { href: APP_ROUTES.assessment, label: uiContext.messages.navAssessment, title: uiContext.messages.assessmentTitle, subtitle: uiContext.messages.assessmentSubtitle, icon: BrainCircuit },
-            { href: APP_ROUTES.infographic, label: uiContext.messages.navInfographic, title: uiContext.messages.infographicTitle, subtitle: uiContext.messages.infographicSubtitle, icon: PieChart },
+            { href: APP_ROUTES.infographic, label: uiContext.messages.navInfographic, title: uiContext.messages.infographicTitle, subtitle: uiContext.messages.infographicSubtitle, icon: PieChart, locked: !canAccessInfographic },
             { href: APP_ROUTES.settings, label: uiContext.messages.navSettings, title: uiContext.messages.settingsTitle, subtitle: uiContext.messages.settingsSubtitle, icon: Settings2 },
           ].map((card, i) => (
-            <Link key={i} href={card.href} className="group relative overflow-hidden rounded-[1.7rem] border border-white/20 dark:border-white/5 bg-white/50 dark:bg-zinc-900/30 p-6 transition-all hover:bg-white/80 dark:hover:bg-zinc-900/50 hover:shadow-lg hover:-translate-y-1">
-              <div className="absolute top-0 right-0 p-6 opacity-0 -translate-x-4 transition-all group-hover:opacity-10 group-hover:translate-x-0">
-                <card.icon className="h-12 w-12 text-emerald-500" />
-              </div>
-              <div className="flex items-center gap-2 mb-4">
-                <card.icon className="h-5 w-5 text-emerald-500" />
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
-                  {card.label}
+            card.locked ? (
+              <article key={i} className="relative overflow-hidden rounded-[1.7rem] border border-amber-500/12 bg-white/40 dark:bg-zinc-900/20 p-6">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <card.icon className="h-5 w-5 text-amber-500" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500">
+                      {card.label}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-200">
+                    {uiContext.messages.comingSoonLabel}
+                  </span>
+                </div>
+                <h2 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+                  {card.title}
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                  {uiContext.messages.infographicLockedBody}
                 </p>
-              </div>
-              <h2 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
-                {card.title}
-              </h2>
-              
-            </Link>
+              </article>
+            ) : (
+              <Link key={i} href={card.href} className="group relative overflow-hidden rounded-[1.7rem] border border-white/20 dark:border-white/5 bg-white/50 dark:bg-zinc-900/30 p-6 transition-all hover:bg-white/80 dark:hover:bg-zinc-900/50 hover:shadow-lg hover:-translate-y-1">
+                <div className="absolute top-0 right-0 p-6 opacity-0 -translate-x-4 transition-all group-hover:opacity-10 group-hover:translate-x-0">
+                  <card.icon className="h-12 w-12 text-emerald-500" />
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <card.icon className="h-5 w-5 text-emerald-500" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
+                    {card.label}
+                  </p>
+                </div>
+                <h2 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+                  {card.title}
+                </h2>
+              </Link>
+            )
           ))}
         </div>
 
@@ -109,7 +133,6 @@ export default async function HomePage() {
             { label: "Firebase Admin", status: runtimeFlags.firebaseAdmin },
             { label: "Google AI", status: runtimeFlags.googleAi },
             { label: "Qwen", status: runtimeFlags.qwen },
-            { label: "Datalab", status: runtimeFlags.datalab }
           ].map((flag, i) => (
             <span key={i} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider border ${
               flag.status 
@@ -237,7 +260,19 @@ export default async function HomePage() {
             </h2>
           </div>
           <div className="space-y-3">
-            {infographics.length === 0 ? (
+            {!canAccessInfographic ? (
+              <div className="rounded-2xl border border-amber-500/12 bg-amber-500/[0.06] px-5 py-6">
+                <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-200">
+                  {uiContext.messages.comingSoonLabel}
+                </span>
+                <p className="mt-4 text-base font-semibold text-zinc-900 dark:text-white">
+                  {uiContext.messages.infographicLockedTitle}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                  {uiContext.messages.infographicLockedBody}
+                </p>
+              </div>
+            ) : infographics.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 px-4 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 bg-white/30 dark:bg-zinc-900/20">
                 <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 text-center">{uiContext.messages.infographicEmpty}</p>
               </div>

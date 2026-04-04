@@ -1,6 +1,8 @@
 import "server-only";
 
 import type {
+  AssessmentArtifactKind,
+  AssessmentArtifactRecord,
   AssessmentDifficulty,
   AssessmentGeneration,
   AssessmentGenerationMeta,
@@ -14,8 +16,15 @@ import type {
   AssessmentRequest,
   AssessmentRequestOptions,
   Locale,
+  ThemeMode,
+  UserRole,
 } from "@zootopia/shared-types";
-import { normalizeOptionalString, normalizeWhitespace } from "@zootopia/shared-utils";
+import {
+  normalizeMultilineWhitespace,
+  normalizeOptionalMultilineString,
+  normalizeOptionalString,
+  normalizeWhitespace,
+} from "@zootopia/shared-utils";
 
 import { getModelById } from "@/lib/ai/models";
 import {
@@ -39,10 +48,12 @@ type AssessmentQuestionLike = Partial<AssessmentQuestion> & {
 };
 
 type AssessmentGenerationLike = Partial<AssessmentGeneration> & {
+  ownerRole?: UserRole;
   status?: AssessmentGenerationStatus;
   expiresAt?: string;
   previewRoute?: string;
   resultRoute?: string;
+  artifacts?: Record<string, Partial<AssessmentArtifactRecord>> | null;
   request?: AssessmentRequestLike;
   meta?: Partial<AssessmentGenerationMeta> & {
     inputMode?: AssessmentInputMode;
@@ -312,7 +323,7 @@ function normalizeAssessmentQuestion(
     return {
       id: `q-${index + 1}`,
       type: questionType,
-      question: normalizeWhitespace(question),
+      question: normalizeMultilineWhitespace(question),
       answer: fallback.answer,
       rationale: fallback.rationale,
       tags: [],
@@ -329,12 +340,12 @@ function normalizeAssessmentQuestion(
   return {
     id: normalizeOptionalString(question.id) ?? `q-${index + 1}`,
     type: questionType,
-    question: normalizeWhitespace(question.question || fallback.question),
-    answer: normalizeWhitespace(
+    question: normalizeMultilineWhitespace(question.question || fallback.question),
+    answer: normalizeMultilineWhitespace(
       question.answer || question.correctAnswer || question.explanation || fallback.answer,
     ),
     rationale:
-      normalizeOptionalString(question.rationale || question.explanation) ??
+      normalizeOptionalMultilineString(question.rationale || question.explanation) ??
       fallback.rationale,
     tags: normalizedTags,
   };
@@ -366,6 +377,81 @@ function normalizeSourceDocument(
 
 function normalizeInputMode(value: unknown): AssessmentInputMode {
   return value === "text-context" || value === "pdf-file" ? value : "prompt-only";
+}
+
+function normalizeOwnerRole(value: unknown): UserRole | undefined {
+  return value === "admin" || value === "user" ? value : undefined;
+}
+
+function normalizeArtifactKind(value: unknown): AssessmentArtifactKind | undefined {
+  return value === "canonical-result" ||
+    value === "export-json" ||
+    value === "export-markdown" ||
+    value === "export-docx" ||
+    value === "export-print-html"
+    ? value
+    : undefined;
+}
+
+function normalizeThemeMode(value: unknown): ThemeMode | null | undefined {
+  if (value === "light" || value === "dark" || value === "system") {
+    return value;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return undefined;
+}
+
+function normalizeAssessmentArtifacts(
+  value: Record<string, Partial<AssessmentArtifactRecord>> | null | undefined,
+) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const normalizedEntries: Array<[string, AssessmentArtifactRecord]> = [];
+
+  for (const [key, artifact] of Object.entries(value)) {
+    const storagePath = normalizeOptionalString(artifact.storagePath);
+    const fileName = normalizeOptionalString(artifact.fileName);
+    const contentType = normalizeOptionalString(artifact.contentType);
+    const kind = normalizeArtifactKind(artifact.kind);
+    const locale = normalizeLanguage(artifact.locale, "en");
+    const createdAt =
+      normalizeOptionalString(artifact.createdAt) ?? new Date().toISOString();
+    const lifecycle = getAssessmentStatus({
+      createdAt,
+      expiresAt: normalizeOptionalString(artifact.expiresAt) ?? null,
+      status: artifact.status,
+    });
+
+    if (!storagePath || !fileName || !contentType || !kind) {
+      continue;
+    }
+
+    normalizedEntries.push([
+      key,
+      {
+        key,
+        kind,
+        locale,
+        themeMode: normalizeThemeMode(artifact.themeMode) ?? null,
+        contentType,
+        fileName,
+        storagePath,
+        status: lifecycle.status,
+        createdAt,
+        expiresAt: lifecycle.expiresAt,
+      },
+    ]);
+  }
+
+  return normalizedEntries.length > 0
+    ? (Object.fromEntries(normalizedEntries) as Record<string, AssessmentArtifactRecord>)
+    : undefined;
 }
 
 export function buildAssessmentPromptPreview(prompt: string) {
@@ -537,6 +623,7 @@ export function normalizeAssessmentGenerationRecord(
   return {
     id: normalizedId,
     ownerUid: normalizeWhitespace(String(record.ownerUid || "")),
+    ownerRole: normalizeOwnerRole(record.ownerRole),
     title:
       normalizeOptionalString(record.title) ??
       buildAssessmentTitle({
@@ -576,6 +663,7 @@ export function normalizeAssessmentGenerationRecord(
         buildAssessmentPromptPreview(request.prompt),
       sourceDocument,
     },
+    artifacts: normalizeAssessmentArtifacts(record.artifacts),
     createdAt,
     updatedAt,
   };

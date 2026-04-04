@@ -128,7 +128,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <div className="grid gap-4 sm:grid-cols-2 mb-8">
             {[
               { label: "Firebase Admin", status: runtimeFlags.firebaseAdmin },
-              { label: "Datalab Convert", status: runtimeFlags.datalab },
               { label: "Google AI", status: runtimeFlags.googleAi },
               { label: "Qwen Models", status: runtimeFlags.qwen }
             ].map((service, i) => (

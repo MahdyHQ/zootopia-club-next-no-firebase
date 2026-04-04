@@ -1,5 +1,5 @@
 import type { AiProviderId } from "./ai";
-import type { Locale } from "./auth";
+import type { Locale, ThemeMode, UserRole } from "./auth";
 import type { DocumentStatus } from "./document";
 
 export type AssessmentDifficulty = "easy" | "medium" | "hard";
@@ -97,9 +97,30 @@ export interface AssessmentGenerationMeta {
   sourceDocument: AssessmentGenerationSourceDocument | null;
 }
 
+export type AssessmentArtifactKind =
+  | "canonical-result"
+  | "export-json"
+  | "export-markdown"
+  | "export-docx"
+  | "export-print-html";
+
+export interface AssessmentArtifactRecord {
+  key: string;
+  kind: AssessmentArtifactKind;
+  locale: Locale;
+  themeMode?: ThemeMode | null;
+  contentType: string;
+  fileName: string;
+  storagePath: string;
+  status: AssessmentGenerationStatus;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface AssessmentGeneration {
   id: string;
   ownerUid: string;
+  ownerRole?: UserRole;
   title: string;
   modelId: string;
   status: AssessmentGenerationStatus;
@@ -109,6 +130,7 @@ export interface AssessmentGeneration {
   request: AssessmentRequest;
   questions: AssessmentQuestion[];
   meta: AssessmentGenerationMeta;
+  artifacts?: Record<string, AssessmentArtifactRecord>;
   createdAt: string;
   updatedAt: string;
 }

@@ -3,6 +3,8 @@ import "server-only";
 import type { AssessmentGeneration, AssessmentQuestionType, Locale } from "@zootopia/shared-types";
 
 import type { NormalizedAssessmentPreview } from "@/lib/assessment-preview-model";
+import { buildAssessmentFileSurface } from "@/lib/assessment-file-branding";
+import { deriveAssessmentQuestionDisplay } from "@/lib/assessment-question-display";
 import {
   buildAssessmentDocxExportRoute,
   buildAssessmentJsonExportRoute,
@@ -10,6 +12,7 @@ import {
   buildAssessmentPdfExportRoute,
   buildAssessmentResultApiRoute,
 } from "@/lib/assessment-routes";
+import { getProtectedSignatureCopy } from "@/lib/branding/protected-signature";
 import type { AppMessages } from "@/lib/messages";
 import { directionForLocale } from "@/lib/preferences";
 
@@ -125,6 +128,7 @@ function buildMarkdownExport(
   generation: AssessmentGeneration,
   messages: AppMessages,
 ) {
+  const signature = getProtectedSignatureCopy(generation.meta.language);
   const lines = [
     `# ${generation.title}`,
     "",
@@ -160,6 +164,8 @@ function buildMarkdownExport(
     lines.push("");
   }
 
+  lines.push("---", "", `> ${signature.composedLine}`);
+
   return lines.join("\n").trim();
 }
 
@@ -171,6 +177,10 @@ export function buildAssessmentPreview(input: {
   const { generation, locale, messages } = input;
   const generatedAtLabel = formatDateLabel(generation.createdAt, locale);
   const expiresAtLabel = formatDateLabel(generation.expiresAt, locale);
+  const fileSurface = buildAssessmentFileSurface({
+    platformName: messages.appName,
+    platformTagline: messages.tagline,
+  });
 
   return {
     id: generation.id,
@@ -216,15 +226,25 @@ export function buildAssessmentPreview(input: {
         value: expiresAtLabel,
       },
     ],
-    questions: generation.questions.map((question, index) => ({
-      id: question.id,
-      index,
-      typeLabel: question.type ? getQuestionTypeLabel(question.type, messages) : null,
-      question: question.question,
-      answer: question.answer,
-      rationale: question.rationale ?? null,
-      tags: question.tags ?? [],
-    })),
+    questions: generation.questions.map((question, index) => {
+      // Build a display-focused stem/options split here so every preview/export surface can
+      // render the same question hierarchy from the current normalized record shape.
+      const display = deriveAssessmentQuestionDisplay(question.question);
+
+      return {
+        id: question.id,
+        index,
+        typeLabel: question.type ? getQuestionTypeLabel(question.type, messages) : null,
+        question: question.question,
+        stem: display.stem,
+        choiceLines: display.choiceLines,
+        supplementalLines: display.supplementalLines,
+        answer: question.answer,
+        rationale: question.rationale ?? null,
+        tags: question.tags ?? [],
+      };
+    }),
+    fileSurface,
     plainTextExport: buildPlainTextExport(generation, messages),
     markdownExport: buildMarkdownExport(generation, messages),
     previewRoute: generation.previewRoute,

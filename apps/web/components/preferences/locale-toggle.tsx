@@ -9,7 +9,7 @@ type LocaleToggleProps = {
   value: Locale;
   label: string;
   labels: Record<Locale, string>;
-  variant?: "default" | "compact";
+  variant?: "default" | "compact" | "toolbar";
 };
 
 function writeCookie(name: string, value: string) {
@@ -26,6 +26,7 @@ export function LocaleToggle({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const compact = variant === "compact";
+  const toolbar = variant === "toolbar";
 
   function applyLocale(nextLocale: Locale) {
     writeCookie(ENV_KEYS.localeCookie, nextLocale);
@@ -35,8 +36,12 @@ export function LocaleToggle({
   }
 
   return (
-    <div className={`toggle-group${compact ? " toggle-group--compact" : ""}`}>
-      <p className="toggle-label">{label}</p>
+    <div
+      className={`toggle-group${compact ? " toggle-group--compact" : ""}${
+        toolbar ? " toggle-group--toolbar" : ""
+      }`}
+    >
+      <p className={toolbar ? "sr-only" : "toggle-label"}>{label}</p>
       <div className="toggle-shell">
         {(["en", "ar"] as const).map((locale) => {
           const selected = value === locale;

@@ -1,11 +1,20 @@
 import { isProfileCompletionRequired } from "@/lib/return-to";
 import { apiError } from "@/lib/server/api";
 import {
+  getAssessmentArtifactRecordKey,
+  loadAssessmentArtifact,
+  persistAssessmentExportArtifact,
+} from "@/lib/server/assessment-artifact-storage";
+import {
   buildAssessmentDocxExport,
   buildAssessmentExportFileBase,
 } from "@/lib/server/assessment-exporter";
 import { buildAssessmentPreview } from "@/lib/server/assessment-preview";
-import { getAssessmentGenerationForViewer } from "@/lib/server/repository";
+import {
+  appendAdminLog,
+  getAssessmentGenerationForOwner,
+  saveAssessmentGeneration,
+} from "@/lib/server/repository";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
@@ -28,7 +37,7 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const generation = await getAssessmentGenerationForViewer(id, user, {
+  const generation = await getAssessmentGenerationForOwner(id, user.uid, {
     includeExpired: true,
   });
 
@@ -51,9 +60,74 @@ export async function GET(
     messages: uiContext.messages,
   });
   const fileBase = buildAssessmentExportFileBase(preview);
-  const buffer = await buildAssessmentDocxExport(preview);
+  const artifactKey = getAssessmentArtifactRecordKey({
+    kind: "export-docx",
+    locale: uiContext.locale,
+  });
+  const existingArtifact = generation.artifacts?.[artifactKey];
+  const existingBuffer = existingArtifact
+    ? await loadAssessmentArtifact(existingArtifact, user.uid)
+    : null;
 
-  return new Response(new Uint8Array(buffer), {
+  if (!existingArtifact || !existingBuffer) {
+    const buffer = await buildAssessmentDocxExport(preview);
+    const storedArtifact = await persistAssessmentExportArtifact({
+      ownerUid: user.uid,
+      generationId: generation.id,
+      kind: "export-docx",
+      locale: uiContext.locale,
+      fileName: `${fileBase}.docx`,
+      fileExtension: "docx",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      body: buffer,
+      createdAt: new Date().toISOString(),
+      expiresAt: generation.expiresAt,
+    });
+
+    if (storedArtifact) {
+      await saveAssessmentGeneration({
+        ...generation,
+        artifacts: {
+          ...(generation.artifacts ?? {}),
+          [storedArtifact.key]: storedArtifact,
+        },
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    await appendAdminLog({
+      actorUid: user.uid,
+      actorRole: user.role,
+      ownerUid: user.uid,
+      ownerRole: user.role,
+      action: "assessment-export-docx",
+      resourceType: "assessment-export",
+      resourceId: generation.id,
+      route: "/api/assessment/export/docx/[id]",
+    });
+
+    return new Response(new Uint8Array(buffer), {
+      headers: {
+        "content-type":
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "content-disposition": `attachment; filename="${fileBase}.docx"`,
+      },
+    });
+  }
+
+  await appendAdminLog({
+    actorUid: user.uid,
+    actorRole: user.role,
+    ownerUid: user.uid,
+    ownerRole: user.role,
+    action: "assessment-export-docx",
+    resourceType: "assessment-export",
+    resourceId: generation.id,
+    route: "/api/assessment/export/docx/[id]",
+  });
+
+  return new Response(new Uint8Array(existingBuffer), {
     headers: {
       "content-type":
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

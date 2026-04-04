@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { NormalizedAssessmentPreview } from "@/lib/assessment-preview-model";
+import { getProtectedSignatureCopy } from "@/lib/branding/protected-signature";
 
 import {
   AlignmentType,
@@ -37,6 +38,7 @@ export async function buildAssessmentDocxExport(preview: NormalizedAssessmentPre
   const isRtl = preview.direction === "rtl";
   const headingAlignment = isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT;
   const bodyAlignment = headingAlignment;
+  const signature = getProtectedSignatureCopy(preview.locale);
 
   const document = new Document({
     sections: [
@@ -110,12 +112,59 @@ export async function buildAssessmentDocxExport(preview: NormalizedAssessmentPre
                 },
                 children: [
                   new TextRun({
-                    text: `${question.index + 1}. ${question.question}`,
+                    text: `${question.index + 1}. ${question.stem}`,
                     bold: true,
                   }),
                 ],
               }),
             ];
+
+            if (question.choiceLines.length > 0) {
+              paragraphs.push(
+                ...question.choiceLines.map(
+                  (choiceLine) =>
+                    new Paragraph({
+                      alignment: bodyAlignment,
+                      bidirectional: isRtl,
+                      indent: isRtl
+                        ? {
+                            right: 420,
+                          }
+                        : {
+                            left: 420,
+                          },
+                      spacing: {
+                        after: 90,
+                      },
+                      children: [
+                        new TextRun({
+                          text: choiceLine,
+                        }),
+                      ],
+                    }),
+                ),
+              );
+            }
+
+            if (question.supplementalLines.length > 0) {
+              paragraphs.push(
+                ...question.supplementalLines.map(
+                  (line) =>
+                    new Paragraph({
+                      alignment: bodyAlignment,
+                      bidirectional: isRtl,
+                      spacing: {
+                        after: 90,
+                      },
+                      children: [
+                        new TextRun({
+                          text: line,
+                        }),
+                      ],
+                    }),
+                ),
+              );
+            }
 
             if (question.typeLabel) {
               paragraphs.push(
@@ -180,6 +229,33 @@ export async function buildAssessmentDocxExport(preview: NormalizedAssessmentPre
             }
 
             return paragraphs;
+          }),
+          /* Exported assessment files carry the same branded attribution seal as the protected viewer.
+             Keep this footer aligned with the shell/result-surface seal so exported artifacts stay recognizably first-party. */
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: {
+              before: 360,
+              after: 80,
+            },
+            children: [
+              new TextRun({
+                text: signature.label,
+                bold: true,
+                color: "0f766e",
+                size: 20,
+              }),
+            ],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            bidirectional: true,
+            children: [
+              new TextRun({
+                text: preview.fileSurface.footerText,
+                size: 22,
+              }),
+            ],
           }),
         ],
       },

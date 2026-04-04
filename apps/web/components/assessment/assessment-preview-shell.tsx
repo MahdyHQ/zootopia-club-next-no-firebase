@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarDays, FileClock, LibraryBig } from "lucide-react";
+import Image from "next/image";
 import { useState } from "react";
 
 import type {
@@ -12,11 +13,13 @@ import type { AppMessages } from "@/lib/messages";
 import { AssessmentExportActions } from "@/components/assessment/assessment-export-actions";
 import { AssessmentPreviewThemeToggle } from "@/components/assessment/assessment-preview-theme-toggle";
 import { AssessmentResultViewer } from "@/components/assessment/assessment-result-viewer";
+import { ProtectedSignatureSeal } from "@/components/layout/protected-signature-seal";
 
 interface AssessmentPreviewShellProps {
   messages: AppMessages;
   preview: NormalizedAssessmentPreview;
   initialThemeMode: AssessmentPreviewThemeMode;
+  qrCodeDataUrl: string;
   view: "preview" | "result";
 }
 
@@ -24,20 +27,108 @@ export function AssessmentPreviewShell({
   messages,
   preview,
   initialThemeMode,
+  qrCodeDataUrl,
   view,
 }: AssessmentPreviewShellProps) {
   const [themeMode, setThemeMode] = useState<AssessmentPreviewThemeMode>(initialThemeMode);
   const dark = themeMode === "dark";
+  const backgroundUrl =
+    themeMode === "light"
+      ? preview.fileSurface.backgroundLightUrl
+      : preview.fileSurface.backgroundDarkUrl;
 
   return (
     <div
-      className={`rounded-[2.4rem] border px-5 py-5 shadow-sm sm:px-6 sm:py-6 lg:px-8 lg:py-8 ${
+      className={`relative overflow-hidden rounded-[2.4rem] border px-5 py-5 shadow-sm sm:px-6 sm:py-6 lg:px-8 lg:py-8 ${
         dark
           ? "border-white/10 bg-slate-950/92 text-white"
           : "border-slate-200 bg-white/92 text-slate-950"
       }`}
+      style={{
+        backgroundImage: `url(${backgroundUrl})`,
+        backgroundPosition: "center",
+        backgroundSize: "cover",
+      }}
     >
-      <div className="flex flex-col gap-6">
+      <div className={`absolute inset-0 ${dark ? "bg-slate-950/80" : "bg-white/78"}`} />
+      {/* These corner accents define the shared premium file-page frame for detached preview/result surfaces.
+          Keep them subtle and scoped here so the file treatment can evolve without leaking into unrelated protected pages. */}
+      <div className="pointer-events-none absolute inset-0">
+        {[
+          "left-4 top-4 border-l border-t sm:left-6 sm:top-6",
+          "right-4 top-4 border-r border-t sm:right-6 sm:top-6",
+          "left-4 bottom-4 border-b border-l sm:left-6 sm:bottom-6",
+          "right-4 bottom-4 border-b border-r sm:right-6 sm:bottom-6",
+        ].map((positionClassName) => (
+          <span
+            key={positionClassName}
+            className={`absolute h-10 w-10 rounded-[0.9rem] ${positionClassName} ${
+              dark ? "border-emerald-200/35" : "border-emerald-700/28"
+            }`}
+          />
+        ))}
+      </div>
+
+      <div className="relative flex flex-col gap-6">
+        {/* This top rail is the shared first-page-only brand composition for detached preview/result surfaces.
+            Keep the logo on the upper-left and the compact QR on the upper-right so the PDF/print lane can mirror it
+            without inventing a second branding system. */}
+        <header className="flex flex-col gap-4 rounded-[1.7rem] border px-4 py-4 sm:px-5 sm:py-5 lg:flex-row lg:items-start lg:justify-between">
+          <div
+            className={`flex items-center gap-3 ${
+              dark ? "border-white/10 text-white" : "border-slate-200 text-slate-950"
+            }`}
+          >
+            <Image
+              src={preview.fileSurface.logoAssetUrl}
+              alt={preview.fileSurface.platformName}
+              width={56}
+              height={56}
+              className="h-12 w-12 rounded-[1rem] shadow-sm sm:h-14 sm:w-14"
+            />
+            <div className="min-w-0">
+              <p className={`text-[0.68rem] font-semibold uppercase tracking-[0.24em] ${dark ? "text-white/55" : "text-slate-500"}`}>
+                {preview.fileSurface.platformTagline}
+              </p>
+              <h2 className="mt-1 text-lg font-bold tracking-tight sm:text-xl">
+                {preview.fileSurface.platformName}
+              </h2>
+            </div>
+          </div>
+
+          <a
+            href={preview.fileSurface.qrTargetUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={`inline-flex w-fit items-center gap-3 self-start rounded-[1.5rem] border px-3 py-3 shadow-sm ${
+              dark
+                ? "border-white/10 bg-white/[0.06] text-white"
+                : "border-slate-200 bg-white/88 text-slate-950"
+            }`}
+          >
+            <Image
+              src={qrCodeDataUrl}
+              alt={
+                preview.locale === "ar"
+                  ? "رمز QR لمنصة زوتوبيا"
+                  : "QR code for Zootopia Club"
+              }
+              width={72}
+              height={72}
+              unoptimized
+              className="h-16 w-16 rounded-[1rem] bg-white p-1.5 shadow-sm sm:h-[4.5rem] sm:w-[4.5rem]"
+            />
+            <div className="min-w-0">
+              <p className={`text-[0.66rem] font-semibold uppercase tracking-[0.22em] ${dark ? "text-white/55" : "text-slate-500"}`}>
+                QR
+              </p>
+              <p className="mt-1 text-sm font-semibold">
+                {preview.fileSurface.qrTargetUrl.replace(/^https?:\/\//, "")}
+              </p>
+            </div>
+          </a>
+        </header>
+
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-4">
             <span
@@ -107,6 +198,7 @@ export function AssessmentPreviewShell({
             <AssessmentExportActions
               messages={messages}
               preview={preview}
+              themeMode={themeMode}
               showPreviewLink={view === "result"}
               showResultLink={view === "preview"}
             />
@@ -152,6 +244,15 @@ export function AssessmentPreviewShell({
           preview={preview}
           themeMode={themeMode}
         />
+
+        {/* Preview and result pages repeat the same protected attribution seal inside the content surface so saved views and exported artifacts stay visually aligned. */}
+        <div className="flex justify-center pt-2">
+          <ProtectedSignatureSeal
+            locale={preview.locale}
+            tone={dark ? "dark" : "light"}
+            className={dark ? "max-w-[44rem] bg-slate-950/75" : "max-w-[44rem] bg-white/92"}
+          />
+        </div>
       </div>
     </div>
   );

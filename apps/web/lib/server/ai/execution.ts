@@ -14,7 +14,7 @@ import type {
   InfographicRequest,
   Locale,
 } from "@zootopia/shared-types";
-import { normalizeWhitespace } from "@zootopia/shared-utils";
+import { normalizeMultilineWhitespace, normalizeWhitespace } from "@zootopia/shared-utils";
 import { randomUUID } from "node:crypto";
 
 import { getModelById } from "@/lib/ai/models";
@@ -486,7 +486,7 @@ function normalizeProviderQuestion(input: {
       ...input.fallback,
       id: `q-${input.index + 1}`,
       question:
-        normalizeWhitespace(input.question) || input.fallback.question,
+        normalizeMultilineWhitespace(input.question) || input.fallback.question,
     } satisfies AssessmentQuestion;
   }
 
@@ -495,13 +495,13 @@ function normalizeProviderQuestion(input: {
     type:
       normalizeAssessmentQuestionType(input.question.type) ?? input.fallback.type,
     question:
-      normalizeWhitespace(String(input.question.question || "")) ||
+      normalizeMultilineWhitespace(String(input.question.question || "")) ||
       input.fallback.question,
     answer:
-      normalizeWhitespace(String(input.question.answer || "")) ||
+      normalizeMultilineWhitespace(String(input.question.answer || "")) ||
       input.fallback.answer,
     rationale:
-      normalizeWhitespace(String(input.question.rationale || "")) ||
+      normalizeMultilineWhitespace(String(input.question.rationale || "")) ||
       input.fallback.rationale,
     tags: normalizeProviderTags(input.question.tags, input.language),
   } satisfies AssessmentQuestion;
@@ -896,6 +896,7 @@ async function executeAssessmentModel(input: {
 
 export async function generateAssessment(input: {
   ownerUid: string;
+  ownerRole?: AssessmentGeneration["ownerRole"];
   request: AssessmentRequest;
   documentContext?: string | null;
   sourceDocument?: AssessmentGenerationSourceDocument | null;
@@ -938,6 +939,7 @@ export async function generateAssessment(input: {
   return {
     id: generationId,
     ownerUid: input.ownerUid,
+    ownerRole: input.ownerRole,
     title: buildAssessmentTitle({
       prompt: input.request.prompt,
       language: input.request.options.language,

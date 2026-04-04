@@ -1,9 +1,17 @@
 "use client";
 
-import type { ApiResult, DocumentRecord, UploadResponse } from "@zootopia/shared-types";
+import { APP_ROUTES } from "@zootopia/shared-config";
+import type {
+  ApiResult,
+  DocumentRecord,
+  RemoveDocumentResponse,
+  UploadResponse,
+} from "@zootopia/shared-types";
 import { validateUploadDescriptor } from "@zootopia/shared-utils";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { BrainCircuit, PieChart, Trash2 } from "lucide-react";
 
 import type { AppMessages } from "@/lib/messages";
 import { SUPPORTED_UPLOAD_FORMAT_BADGES } from "@/lib/upload";
@@ -14,6 +22,7 @@ type UploadWorkspaceProps = {
   onDocumentCreated?: (document: DocumentRecord) => void;
   title?: string;
   description?: string;
+  canAccessInfographic?: boolean;
 };
 
 function formatDocumentSize(sizeBytes: number) {
@@ -34,12 +43,16 @@ export function UploadWorkspace({
   onDocumentCreated,
   title,
   description,
+  canAccessInfographic = false,
 }: UploadWorkspaceProps) {
   const [documents, setDocuments] = useState(initialDocuments);
   const [pending, setPending] = useState(false);
+  const [removingDocumentId, setRemovingDocumentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const latestDocument = documents[0] ?? null;
+  const activeDocument =
+    documents.find((document) => document.isActive) ?? latestDocument;
 
   useEffect(() => {
     setDocuments(initialDocuments);
@@ -98,6 +111,47 @@ export function UploadWorkspace({
       );
     } finally {
       setPending(false);
+    }
+  }
+
+  async function handleRemoveActiveDocument() {
+    if (!activeDocument) {
+      return;
+    }
+
+    if (!window.confirm(messages.uploadRemoveActiveConfirm)) {
+      return;
+    }
+
+    setRemovingDocumentId(activeDocument.id);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `/api/uploads?documentId=${encodeURIComponent(activeDocument.id)}`,
+        {
+          method: "DELETE",
+          credentials: "same-origin",
+        },
+      );
+      const payload =
+        (await response.json()) as ApiResult<RemoveDocumentResponse>;
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(
+          payload.ok ? "DOCUMENT_DELETE_FAILED" : payload.error.message,
+        );
+      }
+
+      setDocuments(payload.data.documents);
+    } catch (removalError) {
+      setError(
+        removalError instanceof Error
+          ? removalError.message
+          : messages.uploadRemoveActiveFailed,
+      );
+    } finally {
+      setRemovingDocumentId(null);
     }
   }
 
@@ -236,6 +290,67 @@ export function UploadWorkspace({
              </div>
            </div>
         )}
+
+        {!pending && activeDocument ? (
+          <div className="space-y-4">
+            {/* Upload owns the active-document continuity card so users can keep moving into Assessment without relinking the same file elsewhere. */}
+            <h4 className="text-sm font-semibold text-foreground">
+              {messages.uploadActiveDocumentLabel}
+            </h4>
+            <div className="rounded-2xl border border-emerald-500/15 bg-[linear-gradient(145deg,rgba(16,185,129,0.08),rgba(15,23,42,0.03))] p-5 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">
+                      {messages.uploadContinueLabel}
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-border bg-background-strong px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
+                      {messages.documentStatusReady}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-base font-semibold text-foreground">
+                    {activeDocument.fileName}
+                  </p>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted">
+                    {messages.uploadContinueBody}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Link
+                    href={APP_ROUTES.assessment}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(16,185,129,0.22)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(16,185,129,0.28)]"
+                  >
+                    <BrainCircuit className="h-4 w-4" />
+                    {messages.uploadOpenAssessmentAction}
+                  </Link>
+
+                  {canAccessInfographic ? (
+                    <Link
+                      href={APP_ROUTES.infographic}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-700 transition-all hover:-translate-y-0.5 hover:border-amber-500/35 hover:bg-amber-500/14 dark:text-amber-200"
+                    >
+                      <PieChart className="h-4 w-4" />
+                      {messages.uploadOpenInfographicAction}
+                    </Link>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveActiveDocument}
+                    disabled={removingDocumentId === activeDocument.id}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger transition-all hover:-translate-y-0.5 hover:bg-danger/20"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {removingDocumentId === activeDocument.id
+                      ? messages.uploadRemovingActiveAction
+                      : messages.uploadRemoveActiveAction}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

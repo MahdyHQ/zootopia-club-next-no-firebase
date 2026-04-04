@@ -12,8 +12,10 @@ import {
   AssessmentExecutionError,
   generateAssessment,
 } from "@/lib/server/ai/execution";
+import { persistAssessmentResultArtifact } from "@/lib/server/assessment-artifact-storage";
 import { resolveAssessmentLinkedDocumentInput } from "@/lib/server/assessment-linked-document";
 import {
+  appendAdminLog,
   getDocumentByIdForOwner,
   saveAssessmentGeneration,
 } from "@/lib/server/repository";
@@ -102,6 +104,7 @@ export async function POST(request: Request) {
   try {
     generation = await generateAssessment({
       ownerUid: user.uid,
+      ownerRole: user.role,
       request: normalized,
       documentContext,
       sourceDocument,
@@ -121,6 +124,35 @@ export async function POST(request: Request) {
     );
   }
 
-  await saveAssessmentGeneration(generation);
-  return apiSuccess(generation, 201);
+  const baseGeneration = {
+    ...generation,
+    ownerRole: user.role,
+  };
+  const resultArtifact = await persistAssessmentResultArtifact(baseGeneration);
+  const savedGeneration = await saveAssessmentGeneration({
+    ...baseGeneration,
+    artifacts: resultArtifact
+      ? {
+          ...(baseGeneration.artifacts ?? {}),
+          [resultArtifact.key]: resultArtifact,
+        }
+      : baseGeneration.artifacts,
+  });
+
+  await appendAdminLog({
+    actorUid: user.uid,
+    actorRole: user.role,
+    ownerUid: user.uid,
+    ownerRole: user.role,
+    action: "assessment-generated",
+    resourceType: "assessment",
+    resourceId: savedGeneration.id,
+    route: "/api/assessment",
+    metadata: {
+      inputMode,
+      modelId: savedGeneration.modelId,
+    },
+  });
+
+  return apiSuccess(savedGeneration, 201);
 }

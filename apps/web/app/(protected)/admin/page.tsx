@@ -2,15 +2,21 @@ import Link from "next/link";
 import { Users, FileText, BrainCircuit, Activity, ChevronRight, ShieldCheck, User, Shield, TerminalSquare, Settings2, Server } from "lucide-react";
 
 import { getRequestUiContext } from "@/lib/server/request-context";
-import { getAdminOverviewData, listUsers } from "@/lib/server/repository";
+import {
+  getAdminOverviewData,
+  listAdminActivityLogs,
+  listUsers,
+} from "@/lib/server/repository";
 import { getRuntimeFlags } from "@/lib/server/runtime";
 import { Button } from "@/components/ui/button";
 
 export default async function AdminPage() {
-  const [uiContext, overview, users] = await Promise.all([
+  const usersPromise = listUsers();
+  const [uiContext, users, overview, activityLogs] = await Promise.all([
     getRequestUiContext(),
-    getAdminOverviewData(),
-    listUsers(),
+    usersPromise,
+    usersPromise.then((users) => getAdminOverviewData(users)),
+    listAdminActivityLogs(12),
   ]);
   const runtimeFlags = getRuntimeFlags();
 
@@ -23,7 +29,7 @@ export default async function AdminPage() {
         <div className="relative z-10 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-              <ShieldCheck className="mr-2 h-4 w-4" />
+              <ShieldCheck className="me-2 h-4 w-4" />
               {uiContext.messages.navAdmin}
             </span>
           </div>
@@ -75,7 +81,7 @@ export default async function AdminPage() {
             <Button asChild variant="outline" className="rounded-full bg-white/50 dark:bg-zinc-900/50 backdrop-blur border-white/20 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <Link href="/admin/users" className="group">
                 {uiContext.messages.navAdminUsers}
-                <ChevronRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                <ChevronRight className="ms-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Link>
             </Button>
           </div>
@@ -113,7 +119,7 @@ export default async function AdminPage() {
                       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
                       : "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 border border-red-200 dark:border-red-500/20"
                   }`}>
-                    <div className={`mr-1.5 h-1.5 w-1.5 rounded-full ${user.status === "active" ? "bg-emerald-500" : "bg-red-500"}`} />
+                    <div className={`me-1.5 h-1.5 w-1.5 rounded-full ${user.status === "active" ? "bg-emerald-500" : "bg-red-500"}`} />
                     {user.status === "active" ? uiContext.messages.statusActive : uiContext.messages.statusSuspended}
                   </span>
                 </div>
@@ -141,7 +147,6 @@ export default async function AdminPage() {
                 { label: "Firebase Admin", status: runtimeFlags.firebaseAdmin },
                 { label: "Google AI", status: runtimeFlags.googleAi },
                 { label: "Qwen Models", status: runtimeFlags.qwen },
-                { label: "Datalab Formatting", status: runtimeFlags.datalab }
               ].map((service, i) => (
                 <div key={i} className="flex items-center justify-between rounded-2xl border border-white/40 dark:border-white/5 bg-white/40 dark:bg-zinc-900/50 p-4 backdrop-blur transition-all hover:bg-white/60 dark:hover:bg-zinc-800/80">
                   <div className="flex items-center gap-3">
@@ -172,6 +177,52 @@ export default async function AdminPage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 sm:p-8">
+        <div className="flex items-center gap-3">
+          <Activity className="h-6 w-6 text-emerald-500" />
+          <div>
+            <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+              {uiContext.messages.adminActivityTitle}
+            </h2>
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mt-1">
+              {uiContext.messages.adminActivitySubtitle}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          {activityLogs.length === 0 ? (
+            <div className="rounded-[1.5rem] border border-dashed border-white/15 bg-white/40 dark:bg-zinc-900/30 p-6 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              {uiContext.messages.adminNoActivity}
+            </div>
+          ) : (
+            activityLogs.map((entry) => (
+              <article
+                key={entry.id}
+                className="rounded-[1.5rem] border border-white/15 bg-white/50 dark:bg-zinc-900/30 p-4"
+              >
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-zinc-900 dark:text-zinc-100 break-words">
+                      {entry.action}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 break-words">
+                      {(entry.ownerUid || entry.actorUid)}{entry.resourceId ? ` • ${entry.resourceId}` : ""}{entry.route ? ` • ${entry.route}` : ""}
+                    </p>
+                  </div>
+                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    {new Intl.DateTimeFormat(uiContext.locale === "ar" ? "ar-EG" : "en-US", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(entry.createdAt))}
+                  </p>
+                </div>
+              </article>
+            ))
+          )}
         </div>
       </section>
     </div>

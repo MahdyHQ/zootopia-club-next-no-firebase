@@ -86,8 +86,37 @@ export function normalizeWhitespace(value: string) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
+export function normalizeMultilineWhitespace(value: string) {
+  const lines = String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => normalizeWhitespace(line));
+  const collapsedLines: string[] = [];
+
+  // Assessment questions can embed answer choices inside multiline text. Preserve those
+  // line breaks while still normalizing noisy spacing so preview/result/export renderers
+  // can stack options cleanly without widening the saved data contract.
+  for (const line of lines) {
+    if (!line) {
+      if (collapsedLines.length > 0 && collapsedLines[collapsedLines.length - 1] !== "") {
+        collapsedLines.push("");
+      }
+      continue;
+    }
+
+    collapsedLines.push(line);
+  }
+
+  return collapsedLines.join("\n").trim();
+}
+
 export function normalizeOptionalString(value: string | null | undefined) {
   const normalized = normalizeWhitespace(String(value || ""));
+  return normalized || undefined;
+}
+
+export function normalizeOptionalMultilineString(value: string | null | undefined) {
+  const normalized = normalizeMultilineWhitespace(String(value || ""));
   return normalized || undefined;
 }
 

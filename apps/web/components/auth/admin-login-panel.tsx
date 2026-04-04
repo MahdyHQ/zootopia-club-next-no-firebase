@@ -3,7 +3,7 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { ApiResult, AdminIdentifierResolution } from "@zootopia/shared-types";
 import { signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
-import { GraduationCap, LoaderCircle } from "lucide-react";
+import { GraduationCap, LoaderCircle, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -259,24 +259,39 @@ export function AdminLoginPanel({
             : messages.adminLoginCta;
 
   return (
-    <div className="relative mx-auto flex w-full max-w-[440px] flex-col gap-6 animate-in fade-in zoom-in-95 duration-700">
-      <div className="relative overflow-hidden rounded-[2.25rem] border border-white/15 bg-white/88 shadow-2xl shadow-black/20 backdrop-blur-2xl dark:bg-zinc-950/72 dark:shadow-black/50 p-8 sm:p-10">
+    <div className="relative mx-auto flex w-full max-w-[460px] flex-col gap-4 animate-in fade-in zoom-in-95 duration-700">
+      <div className="relative overflow-hidden rounded-[2.25rem] border border-white/15 bg-white/90 p-6 shadow-2xl shadow-black/20 backdrop-blur-2xl dark:bg-zinc-950/72 dark:shadow-black/50 sm:p-8">
         <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-amber-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30" />
         <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-amber-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30" />
         
-        <div className="relative z-10">
-          <h2 className="mb-2 text-center font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">
-            {messages.adminLoginCardHint}
-          </h2>
-          <p className="mb-8 text-center text-[0.95rem] leading-relaxed text-zinc-600 dark:text-zinc-400">
-            {messages.adminLoginRestrictedNotice}
-          </p>
+        <div className="relative z-10 flex flex-col gap-5">
+          {/* Keep the admin auth surface compact so common laptop-height viewports keep the status,
+              fields, and primary admin CTA above the fold. Any future operational guidance belongs
+              in the collapsed support details instead of becoming permanent page-height copy here. */}
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-700 shadow-sm dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[0.68rem] font-bold uppercase tracking-[0.24em] text-zinc-500 dark:text-zinc-400">
+                {messages.adminLoginSupportLabel}
+              </p>
+              <h2 className="mt-1 font-[family-name:var(--font-display)] text-[1.75rem] font-bold tracking-tight text-zinc-900 dark:text-white sm:text-[2rem]">
+                {messages.adminLoginCardHint}
+              </h2>
+              <p className="mt-2 max-w-[32rem] text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                {messages.adminLoginRestrictedNotice}
+              </p>
+            </div>
+          </div>
 
           <AuthStatus status={visibleStatus} />
 
-          <form className="mt-8 flex flex-col gap-5" onSubmit={handleSubmit}>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 ms-1">{messages.adminLoginIdentifierLabel}</span>
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+            <label className="flex flex-col gap-2">
+              <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                {messages.adminLoginIdentifierLabel}
+              </span>
               <input
                 type="text"
                 value={identifier}
@@ -286,12 +301,14 @@ export function AdminLoginPanel({
                 }}
                 placeholder={messages.adminLoginIdentifierPlaceholder}
                 autoComplete="username"
-                className="w-full rounded-2xl border-2 border-zinc-100 bg-white py-3.5 px-4 text-sm font-medium text-zinc-900 transition-all focus:outline-none focus:border-amber-500 dark:border-zinc-700/50 dark:bg-zinc-800/60 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+                className="w-full rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3.5 text-sm font-medium text-zinc-900 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700/70 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500"
               />
             </label>
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 ms-1">{messages.adminLoginPasswordLabel}</span>
+            <label className="flex flex-col gap-2">
+              <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                {messages.adminLoginPasswordLabel}
+              </span>
               <input
                 type="password"
                 value={password}
@@ -301,7 +318,7 @@ export function AdminLoginPanel({
                 }}
                 placeholder={messages.adminLoginPasswordPlaceholder}
                 autoComplete="current-password"
-                className="w-full rounded-2xl border-2 border-zinc-100 bg-white py-3.5 px-4 text-sm font-medium text-zinc-900 transition-all focus:outline-none focus:border-amber-500 dark:border-zinc-700/50 dark:bg-zinc-800/60 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+                className="w-full rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3.5 text-sm font-medium text-zinc-900 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700/70 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500"
               />
             </label>
 
@@ -309,29 +326,29 @@ export function AdminLoginPanel({
               type="submit"
               disabled={disabled}
               aria-busy={isBusy}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-600 py-3.5 font-bold text-white shadow-[0_4px_14px_rgba(217,119,6,0.2)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(217,119,6,0.3)] active:scale-[0.98] disabled:opacity-50"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-600 py-3.5 font-bold text-white shadow-[0_14px_30px_rgba(217,119,6,0.24)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(217,119,6,0.3)] active:scale-[0.98] disabled:opacity-50"
             >
               <span>{buttonLabel}</span>
               {isBusy ? <LoaderCircle className="h-5 w-5 animate-spin text-white" aria-hidden="true" /> : null}
             </button>
           </form>
-           
-          <div className="mt-8 flex justify-center">
-            <Link href={APP_ROUTES.login} className="group flex flex-col items-center gap-2 text-sm text-zinc-500 hover:text-amber-600 dark:text-zinc-400 dark:hover:text-amber-400 transition-colors">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-200 bg-white shadow-sm transition-all group-hover:scale-110 group-hover:border-amber-500/30 group-hover:bg-amber-500/5 dark:border-zinc-800 dark:bg-zinc-900">
-                <GraduationCap className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <span className="font-medium tracking-wide">{messages.adminLoginBackAction}</span>
+
+          <div className="flex flex-col gap-3 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/80 sm:flex-row sm:items-center sm:justify-between">
+            <Link
+              href={APP_ROUTES.login}
+              className="inline-flex items-center gap-2 text-sm font-medium text-zinc-500 transition-colors hover:text-amber-600 dark:text-zinc-400 dark:hover:text-amber-400"
+            >
+              <GraduationCap className="h-4 w-4" aria-hidden="true" />
+              <span>{messages.adminLoginBackAction}</span>
             </Link>
+            <div className="w-full sm:w-auto sm:min-w-[13rem]">
+              <AuthSupportDetails
+                label={messages.adminSupportDetailsLabel}
+                notes={supportNotes}
+              />
+            </div>
           </div>
         </div>
-      </div>
-
-      <div className="rounded-[2.25rem] border border-white/15 bg-white/60 p-8 backdrop-blur-md dark:bg-zinc-950/40 dark:border-zinc-800/50 text-sm">
-        <AuthSupportDetails
-          label={messages.adminSupportDetailsLabel}
-          notes={supportNotes}
-        />
       </div>
     </div>
   );

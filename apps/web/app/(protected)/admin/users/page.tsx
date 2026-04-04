@@ -20,7 +20,7 @@ export default async function AdminUsersPage() {
         <div className="relative z-10 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-              <ShieldCheck className="mr-2 h-4 w-4" />
+              <ShieldCheck className="me-2 h-4 w-4" />
               {uiContext.messages.navAdminUsers}
             </span>
           </div>
@@ -36,6 +36,7 @@ export default async function AdminUsersPage() {
       <section className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-sm">
         <UsersTable
           messages={uiContext.messages}
+          locale={uiContext.locale}
           initialUsers={users}
           currentUserId={adminUser.uid}
         />

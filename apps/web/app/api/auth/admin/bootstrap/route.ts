@@ -12,7 +12,11 @@ import {
   getFirebaseAdminAuth,
   hasFirebaseAdminRuntime,
 } from "@/lib/server/firebase-admin";
-import { getRoleFromAuthClaims, upsertUserFromAuth } from "@/lib/server/repository";
+import {
+  appendAdminLog,
+  getRoleFromAuthClaims,
+  upsertUserFromAuth,
+} from "@/lib/server/repository";
 import { getSessionCookieOptions } from "@/lib/preferences";
 
 export const runtime = "nodejs";
@@ -132,6 +136,19 @@ export async function POST(request: Request) {
       sessionCookie,
       getSessionCookieOptions(SESSION_MAX_AGE_SECONDS),
     );
+    await appendAdminLog({
+      actorUid: user.uid,
+      actorRole: user.role,
+      ownerUid: user.uid,
+      ownerRole: user.role,
+      action: "admin-session-created",
+      resourceType: "session",
+      resourceId: user.uid,
+      route: "/api/auth/admin/bootstrap",
+      metadata: {
+        redirectTo: getAuthenticatedUserRedirectPath(user),
+      },
+    });
     return response;
   } catch {
     return apiError(

@@ -99,11 +99,43 @@ export function AssessmentResultViewer({
               </div>
 
               <h3 className="mt-4 whitespace-pre-wrap text-lg font-semibold leading-8 text-inherit">
-                {question.question}
+                {question.stem}
               </h3>
 
+              {question.choiceLines.length > 0 ? (
+                <div className="mt-4 grid gap-2">
+                  {question.choiceLines.map((choiceLine, choiceIndex) => (
+                    <div
+                      key={`${question.id}-${choiceIndex}`}
+                      className={`rounded-[1.1rem] border px-4 py-3 text-sm font-medium leading-6 ${
+                        dark
+                          ? "border-white/10 bg-white/[0.04] text-white/82"
+                          : "border-slate-200 bg-white/88 text-slate-700"
+                      }`}
+                    >
+                      {choiceLine}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {question.supplementalLines.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  {question.supplementalLines.map((line, lineIndex) => (
+                    <p
+                      key={`${question.id}-${lineIndex}`}
+                      className={`text-sm leading-7 ${
+                        dark ? "text-white/72" : "text-slate-600"
+                      }`}
+                    >
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+
               <div
-                className={`mt-4 rounded-[1.25rem] border px-4 py-4 ${
+                className={`mt-5 rounded-[1.25rem] border px-4 py-4 ${
                   dark
                     ? "border-white/10 bg-white/[0.04]"
                     : "border-slate-200 bg-white"
@@ -118,12 +150,20 @@ export function AssessmentResultViewer({
               </div>
 
               {question.rationale ? (
-                <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-inherit/75">
-                  <span className="font-semibold text-inherit">
-                    {messages.assessmentRationaleLabel}:{" "}
-                  </span>
-                  {question.rationale}
-                </p>
+                <div
+                  className={`mt-4 rounded-[1.25rem] border px-4 py-4 ${
+                    dark
+                      ? "border-white/10 bg-slate-950/40"
+                      : "border-slate-200 bg-white/72"
+                  }`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-inherit/60">
+                    {messages.assessmentRationaleLabel}
+                  </p>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-inherit/75">
+                    {question.rationale}
+                  </p>
+                </div>
               ) : null}
 
               {question.tags.length > 0 ? (

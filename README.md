@@ -67,7 +67,7 @@ npm run firebase:rules:deploy
 Important runtime groups:
 
 - Public web env: `NEXT_PUBLIC_FIREBASE_*`
-- Server env: Firebase Admin credentials, admin email config, AI provider keys, Datalab credentials
+- Server env: Firebase Admin credentials, admin email config, and AI provider keys
 - Firestore target: `zootopia-club-next-database`
 
 ## Docs
