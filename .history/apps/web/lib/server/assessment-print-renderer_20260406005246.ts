@@ -21,7 +21,7 @@ import {
    this shared file-surface foundation before Puppeteer capture. Bump this whenever the shared
    assessment file layout changes materially so both lanes can invalidate stale source surfaces
    without collapsing back into one mixed route or cache contract. */
-export const ASSESSMENT_PRINT_LAYOUT_VERSION = "2026-04-06-compact-pdf-v22";
+export const ASSESSMENT_PRINT_LAYOUT_VERSION = "2026-04-06-compact-pdf-v21";
 
 function escapeHtml(value: string) {
   return value

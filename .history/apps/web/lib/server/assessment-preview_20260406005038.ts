@@ -157,8 +157,6 @@ function getQuestionTypeLabel(
   }
 }
 
-const ASSESSMENT_COMPOSITION_VISIBLE_TYPE_BADGES = 4;
-
 function buildCompositionBadges(input: {
   generation: AssessmentGeneration;
   messages: AppMessages;
@@ -190,30 +188,11 @@ function buildCompositionBadges(input: {
       tone: "type" as const,
     }));
 
-  /* Badge compaction keeps preview/result/file headers readable when many question types coexist.
-     Preserve the overflow summary pattern (top few + aggregate) instead of rendering an unlimited
-     badge strip that crowds metadata and breaks bilingual responsive balance. */
-  const visibleTypeBadges = typeBadges.slice(
-    0,
-    ASSESSMENT_COMPOSITION_VISIBLE_TYPE_BADGES,
-  );
-  const hiddenTypeCount = Math.max(0, typeBadges.length - visibleTypeBadges.length);
-
   const summaryBadges: AssessmentPreviewCompositionBadge[] = [];
   if (typeBadges.length > 1) {
     summaryBadges.push({
       key: "mixed",
       label: input.messages.assessmentMixedTypesBadge,
-      value: String(typeBadges.length),
-      tone: "summary",
-    });
-  }
-
-  if (hiddenTypeCount > 0) {
-    summaryBadges.push({
-      key: "more-types",
-      label: input.messages.assessmentAdditionalTypesBadge,
-      value: `+${hiddenTypeCount}`,
       tone: "summary",
     });
   }
@@ -225,7 +204,7 @@ function buildCompositionBadges(input: {
     tone: "summary",
   });
 
-  return [...visibleTypeBadges, ...summaryBadges];
+  return [...typeBadges, ...summaryBadges];
 }
 
 function buildQuestionTypeSummaryLine(badges: AssessmentPreviewCompositionBadge[]) {
@@ -234,17 +213,9 @@ function buildQuestionTypeSummaryLine(badges: AssessmentPreviewCompositionBadge[
     return null;
   }
 
-  const overflowBadge = badges.find((badge) => badge.key === "more-types");
-
-  const compactSummary = typeEntries
+  return typeEntries
     .map((badge) => `${badge.label}${badge.value ? ` · ${badge.value}` : ""}`)
     .join(" | ");
-
-  if (!overflowBadge) {
-    return compactSummary;
-  }
-
-  return `${compactSummary} | ${overflowBadge.label}${overflowBadge.value ? ` ${overflowBadge.value}` : ""}`;
 }
 
 function getInputModeLabel(value: AssessmentGeneration["meta"]["inputMode"], messages: AppMessages) {
@@ -268,10 +239,9 @@ function buildPreviewQuestionItem(input: {
   question: AssessmentGeneration["questions"][number];
   index: number;
   defaultDifficulty: AssessmentGeneration["meta"]["difficulty"];
-  contentLanguage: Locale;
   messages: AppMessages;
 }): AssessmentPreviewQuestionItem {
-  const { question, index, defaultDifficulty, contentLanguage, messages } = input;
+  const { question, index, defaultDifficulty, messages } = input;
 
   // Preview, result, Markdown, DOCX, and PDF surfaces must all consume the same interpreted
   // question hierarchy so inline provider-formatted MCQ choices never drift back into the stem.
@@ -283,14 +253,6 @@ function buildPreviewQuestionItem(input: {
   const resolvedQuestionType =
     question.type ?? (choices.length > 0 ? "mcq" : null);
   const questionDifficulty = question.difficulty ?? defaultDifficulty;
-  const scienceBlocks = buildAssessmentScienceRenderBlocks({
-    locale: contentLanguage,
-    questionType: resolvedQuestionType,
-    structuredData: question.structuredData,
-    questionText: question.question,
-    answerText: question.answer,
-    rationaleText: question.rationale,
-  });
 
   return {
     id: question.id,
@@ -299,8 +261,6 @@ function buildPreviewQuestionItem(input: {
     typeLabel: getQuestionTypeLabel(resolvedQuestionType, messages),
     difficulty: questionDifficulty,
     difficultyLabel: getQuestionDifficultyLabel(questionDifficulty, messages),
-    structuredData: question.structuredData ?? null,
-    scienceBlocks,
     question: question.question,
     stem: display.stem,
     /* Preview/result/PDF question cards now share one server-authored correct-choice flag.
@@ -318,60 +278,6 @@ function buildPreviewQuestionItem(input: {
     rationale: question.rationale ?? null,
     tags: question.tags ?? [],
   };
-}
-
-function buildScienceBlockExportLines(input: {
-  block: AssessmentScienceRenderBlock;
-  linePrefix: string;
-}) {
-  const { block, linePrefix } = input;
-
-  switch (block.kind) {
-    case "value":
-      return block.value
-        ? [`${linePrefix}${block.label}: ${block.value}`]
-        : [];
-    case "pair": {
-      const lines: string[] = [`${linePrefix}${block.label}:`];
-      if (block.leftValue) {
-        lines.push(
-          `${linePrefix}${block.leftLabel || "Left"}: ${block.leftValue}`,
-        );
-      }
-      if (block.rightValue) {
-        lines.push(
-          `${linePrefix}${block.rightLabel || "Right"}: ${block.rightValue}`,
-        );
-      }
-      return lines;
-    }
-    case "list": {
-      if (!block.items || block.items.length === 0) {
-        return [];
-      }
-
-      return [
-        `${linePrefix}${block.label}:`,
-        ...block.items.map((item, index) =>
-          block.ordered
-            ? `${linePrefix}${index + 1}. ${item}`
-            : `${linePrefix}- ${item}`,
-        ),
-      ];
-    }
-    case "pair-list": {
-      if (!block.pairs || block.pairs.length === 0) {
-        return [];
-      }
-
-      return [
-        `${linePrefix}${block.label}:`,
-        ...block.pairs.map((pair) => `${linePrefix}${pair.left} -> ${pair.right}`),
-      ];
-    }
-    default:
-      return [];
-  }
 }
 
 function buildTypeAwareExportDetails(input: {
@@ -436,15 +342,6 @@ function buildTypeAwareExportDetails(input: {
     }
     default:
       break;
-  }
-
-  for (const block of question.scienceBlocks) {
-    lines.push(
-      ...buildScienceBlockExportLines({
-        block,
-        linePrefix,
-      }),
-    );
   }
 
   return lines;
@@ -613,7 +510,6 @@ export function buildAssessmentPreview(input: {
       question,
       index,
       defaultDifficulty: generation.meta.difficulty,
-      contentLanguage,
       messages,
     }),
   );

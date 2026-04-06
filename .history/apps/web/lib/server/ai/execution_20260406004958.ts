@@ -6,6 +6,7 @@ import type {
   AssessmentGenerationSourceDocument,
   AssessmentInputMode,
   AssessmentQuestion,
+  AssessmentQuestionStructuredData,
   AssessmentQuestionType,
   AssessmentQuestionTypeDistribution,
   AssessmentRequest,
@@ -813,7 +814,7 @@ function normalizeProviderTags(
 
 function buildProviderStructuredDataPayload(
   question: ProviderAssessmentQuestion,
-): Record<string, unknown> | undefined {
+): AssessmentQuestionStructuredData | undefined {
   const source = question.structuredData;
   const sourceRecord =
     source && typeof source === "object" ? (source as Record<string, unknown>) : undefined;

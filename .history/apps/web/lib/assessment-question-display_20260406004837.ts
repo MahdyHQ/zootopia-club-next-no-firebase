@@ -37,6 +37,8 @@ const ANSWER_PREFIX_PATTERN =
   /^(?:correct answers?|correct answer|model answer|answer|الإجابة الصحيحة|الإجابة النموذجية|الإجابة|محاور الإجابة)\s*[:：-]\s*/iu;
 const FILL_BLANK_PATTERN = /_{2,}|\[\s*\.{2,}\s*\]|\(\s*\.{2,}\s*\)|\[\s*blank\s*\]/giu;
 const STRUCTURED_LINE_SPLIT_PATTERN = /[\n;|]+/u;
+const STRUCTURED_PAIR_PATTERN =
+  /^(?<left>[^:=\-–—>]{1,120}?)\s*(?:->|=>|=|:|[-–—])\s*(?<right>[^\n]{1,160})$/u;
 const NUMBERED_STEP_PREFIX_PATTERN =
   /^(?:\d{1,2}|[A-Za-z]|[\u0660-\u0669\u06F0-\u06F9]{1,2})[).:-]\s*/u;
 const BULLET_STEP_PREFIX_PATTERN = /^[-*+]\s+/u;

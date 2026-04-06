@@ -371,42 +371,16 @@ function normalizeAssessmentQuestion(
     typeof question === "string"
       ? fallbackType
       : normalizeQuestionType(question.type) ?? fallbackType;
-  const normalizedQuestionText =
-    typeof question === "string"
-      ? normalizeMultilineWhitespace(question)
-      : normalizeMultilineWhitespace(question.question || fallback.question);
-  const normalizedAnswerText =
-    typeof question === "string"
-      ? fallback.answer
-      : normalizeMultilineWhitespace(
-          question.answer || question.correctAnswer || question.explanation || fallback.answer,
-        );
-  const normalizedRationaleText =
-    typeof question === "string"
-      ? fallback.rationale
-      : normalizeOptionalMultilineString(question.rationale || question.explanation) ??
-        fallback.rationale;
-  /* Legacy records may not include structuredData. Resolve from explicit payload first, then
-     derive conservative science-type structure from question/answer text when possible so
-     render/export surfaces stay stable without inventing unverifiable metadata. */
-  const structuredData = resolveAssessmentQuestionStructuredData({
-    questionType: questionType ?? null,
-    structuredData: typeof question === "string" ? undefined : question.structuredData,
-    questionText: normalizedQuestionText,
-    answerText: normalizedAnswerText,
-    rationaleText: normalizedRationaleText,
-  });
 
   if (typeof question === "string") {
     return {
       id: `q-${index + 1}`,
       type: questionType,
       difficulty,
-      question: normalizedQuestionText,
-      answer: normalizedAnswerText,
-      rationale: normalizedRationaleText,
+      question: normalizeMultilineWhitespace(question),
+      answer: fallback.answer,
+      rationale: fallback.rationale,
       tags: [],
-      structuredData,
     };
   }
 
@@ -421,11 +395,14 @@ function normalizeAssessmentQuestion(
     id: normalizeOptionalString(question.id) ?? `q-${index + 1}`,
     type: questionType,
     difficulty: normalizeQuestionDifficulty(question.difficulty) ?? difficulty,
-    question: normalizedQuestionText,
-    answer: normalizedAnswerText,
-    rationale: normalizedRationaleText,
+    question: normalizeMultilineWhitespace(question.question || fallback.question),
+    answer: normalizeMultilineWhitespace(
+      question.answer || question.correctAnswer || question.explanation || fallback.answer,
+    ),
+    rationale:
+      normalizeOptionalMultilineString(question.rationale || question.explanation) ??
+      fallback.rationale,
     tags: normalizedTags,
-    structuredData,
   };
 }
 

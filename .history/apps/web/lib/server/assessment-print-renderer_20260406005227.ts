@@ -21,7 +21,7 @@ import {
    this shared file-surface foundation before Puppeteer capture. Bump this whenever the shared
    assessment file layout changes materially so both lanes can invalidate stale source surfaces
    without collapsing back into one mixed route or cache contract. */
-export const ASSESSMENT_PRINT_LAYOUT_VERSION = "2026-04-06-compact-pdf-v22";
+export const ASSESSMENT_PRINT_LAYOUT_VERSION = "2026-04-06-compact-pdf-v21";
 
 function escapeHtml(value: string) {
   return value
@@ -1224,40 +1224,6 @@ export function buildAssessmentPrintHtml(input: {
         line-height: 1.48;
       }
 
-      /* Science-oriented blocks share one compact visual grammar in print/PDF so rich
-         structured metadata remains readable without introducing fragile layout complexity. */
-      .science-block {
-        border: 1px solid var(--line);
-        border-radius: 11px;
-        background: ${dark
-          ? "linear-gradient(180deg, rgba(6, 15, 30, 0.82), rgba(3, 10, 22, 0.64))"
-          : "linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(241, 249, 247, 0.46))"};
-        padding: 8px 10px;
-        margin-top: 7px;
-      }
-
-      .science-pair-grid {
-        display: grid;
-        gap: 4px;
-        margin-top: 5px;
-      }
-
-      .science-list {
-        margin-top: 5px;
-      }
-
-      .science-list p,
-      .science-pair-grid p,
-      .science-block > p {
-        margin: 0 0 4px;
-        font-size: 12px;
-        line-height: 1.48;
-      }
-
-      .science-list-marker {
-        font-weight: 800;
-      }
-
       .matching-pair-list p {
         margin: 4px 0 0;
       }
@@ -1406,26 +1372,8 @@ export function buildAssessmentPrintHtml(input: {
         margin-top: 4px;
       }
 
-      .question-card--first-page .science-block,
-      .question-card--compact .science-block {
-        border-radius: 9px;
-        padding: 5px 7px;
-        margin-top: 4px;
-      }
-
       .question-card--first-page .type-detail-card p,
       .question-card--compact .type-detail-card p {
-        margin: 3px 0 0;
-        font-size: 11.1px;
-        line-height: 1.34;
-      }
-
-      .question-card--first-page .science-list p,
-      .question-card--first-page .science-pair-grid p,
-      .question-card--first-page .science-block > p,
-      .question-card--compact .science-list p,
-      .question-card--compact .science-pair-grid p,
-      .question-card--compact .science-block > p {
         margin: 3px 0 0;
         font-size: 11.1px;
         line-height: 1.34;

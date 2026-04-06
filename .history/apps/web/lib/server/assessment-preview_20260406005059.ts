@@ -268,10 +268,9 @@ function buildPreviewQuestionItem(input: {
   question: AssessmentGeneration["questions"][number];
   index: number;
   defaultDifficulty: AssessmentGeneration["meta"]["difficulty"];
-  contentLanguage: Locale;
   messages: AppMessages;
 }): AssessmentPreviewQuestionItem {
-  const { question, index, defaultDifficulty, contentLanguage, messages } = input;
+  const { question, index, defaultDifficulty, messages } = input;
 
   // Preview, result, Markdown, DOCX, and PDF surfaces must all consume the same interpreted
   // question hierarchy so inline provider-formatted MCQ choices never drift back into the stem.
@@ -283,14 +282,6 @@ function buildPreviewQuestionItem(input: {
   const resolvedQuestionType =
     question.type ?? (choices.length > 0 ? "mcq" : null);
   const questionDifficulty = question.difficulty ?? defaultDifficulty;
-  const scienceBlocks = buildAssessmentScienceRenderBlocks({
-    locale: contentLanguage,
-    questionType: resolvedQuestionType,
-    structuredData: question.structuredData,
-    questionText: question.question,
-    answerText: question.answer,
-    rationaleText: question.rationale,
-  });
 
   return {
     id: question.id,
@@ -299,8 +290,6 @@ function buildPreviewQuestionItem(input: {
     typeLabel: getQuestionTypeLabel(resolvedQuestionType, messages),
     difficulty: questionDifficulty,
     difficultyLabel: getQuestionDifficultyLabel(questionDifficulty, messages),
-    structuredData: question.structuredData ?? null,
-    scienceBlocks,
     question: question.question,
     stem: display.stem,
     /* Preview/result/PDF question cards now share one server-authored correct-choice flag.
@@ -318,60 +307,6 @@ function buildPreviewQuestionItem(input: {
     rationale: question.rationale ?? null,
     tags: question.tags ?? [],
   };
-}
-
-function buildScienceBlockExportLines(input: {
-  block: AssessmentScienceRenderBlock;
-  linePrefix: string;
-}) {
-  const { block, linePrefix } = input;
-
-  switch (block.kind) {
-    case "value":
-      return block.value
-        ? [`${linePrefix}${block.label}: ${block.value}`]
-        : [];
-    case "pair": {
-      const lines: string[] = [`${linePrefix}${block.label}:`];
-      if (block.leftValue) {
-        lines.push(
-          `${linePrefix}${block.leftLabel || "Left"}: ${block.leftValue}`,
-        );
-      }
-      if (block.rightValue) {
-        lines.push(
-          `${linePrefix}${block.rightLabel || "Right"}: ${block.rightValue}`,
-        );
-      }
-      return lines;
-    }
-    case "list": {
-      if (!block.items || block.items.length === 0) {
-        return [];
-      }
-
-      return [
-        `${linePrefix}${block.label}:`,
-        ...block.items.map((item, index) =>
-          block.ordered
-            ? `${linePrefix}${index + 1}. ${item}`
-            : `${linePrefix}- ${item}`,
-        ),
-      ];
-    }
-    case "pair-list": {
-      if (!block.pairs || block.pairs.length === 0) {
-        return [];
-      }
-
-      return [
-        `${linePrefix}${block.label}:`,
-        ...block.pairs.map((pair) => `${linePrefix}${pair.left} -> ${pair.right}`),
-      ];
-    }
-    default:
-      return [];
-  }
 }
 
 function buildTypeAwareExportDetails(input: {
@@ -436,15 +371,6 @@ function buildTypeAwareExportDetails(input: {
     }
     default:
       break;
-  }
-
-  for (const block of question.scienceBlocks) {
-    lines.push(
-      ...buildScienceBlockExportLines({
-        block,
-        linePrefix,
-      }),
-    );
   }
 
   return lines;
@@ -613,7 +539,6 @@ export function buildAssessmentPreview(input: {
       question,
       index,
       defaultDifficulty: generation.meta.difficulty,
-      contentLanguage,
       messages,
     }),
   );

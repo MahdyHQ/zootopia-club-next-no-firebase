@@ -6,6 +6,7 @@ import type {
   AssessmentGenerationSourceDocument,
   AssessmentInputMode,
   AssessmentQuestion,
+  AssessmentQuestionStructuredData,
   AssessmentQuestionType,
   AssessmentQuestionTypeDistribution,
   AssessmentRequest,
@@ -710,12 +711,6 @@ function buildFallbackAssessmentQuestions(input: {
       language: input.language,
       type,
     });
-    const structuredData = resolveAssessmentQuestionStructuredData({
-      questionType: type,
-      questionText: copy.question,
-      answerText: copy.answer,
-      rationaleText: copy.rationale,
-    });
 
     return {
       id: `q-${index + 1}`,
@@ -725,7 +720,6 @@ function buildFallbackAssessmentQuestions(input: {
       answer: copy.answer,
       rationale: copy.rationale,
       tags: buildAssessmentTagList(topic, input.language),
-      structuredData,
     };
   });
 }
@@ -813,7 +807,7 @@ function normalizeProviderTags(
 
 function buildProviderStructuredDataPayload(
   question: ProviderAssessmentQuestion,
-): Record<string, unknown> | undefined {
+): AssessmentQuestionStructuredData | undefined {
   const source = question.structuredData;
   const sourceRecord =
     source && typeof source === "object" ? (source as Record<string, unknown>) : undefined;

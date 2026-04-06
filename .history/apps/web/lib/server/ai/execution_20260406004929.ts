@@ -6,6 +6,7 @@ import type {
   AssessmentGenerationSourceDocument,
   AssessmentInputMode,
   AssessmentQuestion,
+  AssessmentQuestionStructuredData,
   AssessmentQuestionType,
   AssessmentQuestionTypeDistribution,
   AssessmentRequest,
@@ -710,12 +711,6 @@ function buildFallbackAssessmentQuestions(input: {
       language: input.language,
       type,
     });
-    const structuredData = resolveAssessmentQuestionStructuredData({
-      questionType: type,
-      questionText: copy.question,
-      answerText: copy.answer,
-      rationaleText: copy.rationale,
-    });
 
     return {
       id: `q-${index + 1}`,
@@ -725,7 +720,6 @@ function buildFallbackAssessmentQuestions(input: {
       answer: copy.answer,
       rationale: copy.rationale,
       tags: buildAssessmentTagList(topic, input.language),
-      structuredData,
     };
   });
 }
@@ -811,49 +805,6 @@ function normalizeProviderTags(
   return language === "ar" ? ["مراجعة"] : ["review"];
 }
 
-function buildProviderStructuredDataPayload(
-  question: ProviderAssessmentQuestion,
-): Record<string, unknown> | undefined {
-  const source = question.structuredData;
-  const sourceRecord =
-    source && typeof source === "object" ? (source as Record<string, unknown>) : undefined;
-
-  return {
-    ...(sourceRecord ?? {}),
-    expectedTerm: question.expectedTerm ?? sourceRecord?.expectedTerm,
-    acceptableVariants:
-      question.acceptableVariants ?? sourceRecord?.acceptableVariants,
-    concept: question.concept ?? sourceRecord?.concept,
-    expectedDefinition:
-      question.expectedDefinition ?? sourceRecord?.expectedDefinition,
-    leftEntity: question.leftEntity ?? sourceRecord?.leftEntity,
-    rightEntity: question.rightEntity ?? sourceRecord?.rightEntity,
-    comparisonPoints:
-      question.comparisonPoints ?? sourceRecord?.comparisonPoints,
-    target: question.target ?? sourceRecord?.target,
-    expectedLabel: question.expectedLabel ?? sourceRecord?.expectedLabel,
-    categories: question.categories ?? sourceRecord?.categories,
-    items: question.items ?? sourceRecord?.items,
-    itemCategoryPairs:
-      question.itemCategoryPairs ?? sourceRecord?.itemCategoryPairs,
-    orderedSteps: question.orderedSteps ?? sourceRecord?.orderedSteps,
-    processName: question.processName ?? sourceRecord?.processName,
-    stages: question.stages ?? sourceRecord?.stages,
-    cause: question.cause ?? sourceRecord?.cause,
-    effect: question.effect ?? sourceRecord?.effect,
-    subjectA: question.subjectA ?? sourceRecord?.subjectA,
-    subjectB: question.subjectB ?? sourceRecord?.subjectB,
-    distinctionPoints:
-      question.distinctionPoints ?? sourceRecord?.distinctionPoints,
-    expectedStructure:
-      question.expectedStructure ?? sourceRecord?.expectedStructure,
-    expectedCompound:
-      question.expectedCompound ?? sourceRecord?.expectedCompound,
-    explanatoryNote:
-      question.explanatoryNote ?? sourceRecord?.explanatoryNote,
-  };
-}
-
 function normalizeProviderQuestion(input: {
   question: ProviderAssessmentQuestion | string;
   fallback: AssessmentQuestion;
@@ -861,57 +812,35 @@ function normalizeProviderQuestion(input: {
   language: Locale;
 }): AssessmentQuestion {
   if (typeof input.question === "string") {
-    const normalizedQuestion =
-      normalizeMultilineWhitespace(input.question) || input.fallback.question;
-
     return {
       ...input.fallback,
       id: `q-${input.index + 1}`,
       difficulty: input.fallback.difficulty,
-      question: normalizedQuestion,
-      structuredData: resolveAssessmentQuestionStructuredData({
-        questionType: input.fallback.type,
-        structuredData: input.fallback.structuredData,
-        questionText: normalizedQuestion,
-        answerText: input.fallback.answer,
-        rationaleText: input.fallback.rationale,
-      }),
+      question:
+        normalizeMultilineWhitespace(input.question) || input.fallback.question,
     } satisfies AssessmentQuestion;
   }
 
-  const resolvedType =
-    normalizeAssessmentQuestionType(input.question.type) ?? input.fallback.type;
-  const normalizedQuestion =
-    normalizeMultilineWhitespace(String(input.question.question || "")) ||
-    input.fallback.question;
-  const normalizedAnswer =
-    normalizeMultilineWhitespace(String(input.question.answer || "")) ||
-    input.fallback.answer;
-  const normalizedRationale =
-    normalizeMultilineWhitespace(String(input.question.rationale || "")) ||
-    input.fallback.rationale;
-  const structuredData = resolveAssessmentQuestionStructuredData({
-    questionType: resolvedType,
-    structuredData: buildProviderStructuredDataPayload(input.question),
-    questionText: normalizedQuestion,
-    answerText: normalizedAnswer,
-    rationaleText: normalizedRationale,
-  });
-
   return {
     id: `q-${input.index + 1}`,
-    type: resolvedType,
+    type:
+      normalizeAssessmentQuestionType(input.question.type) ?? input.fallback.type,
     difficulty:
       normalizeProviderQuestionDifficulty(
         input.question.difficulty ??
           input.question.difficulty_level ??
           input.question.level,
       ) ?? input.fallback.difficulty,
-    question: normalizedQuestion,
-    answer: normalizedAnswer,
-    rationale: normalizedRationale,
+    question:
+      normalizeMultilineWhitespace(String(input.question.question || "")) ||
+      input.fallback.question,
+    answer:
+      normalizeMultilineWhitespace(String(input.question.answer || "")) ||
+      input.fallback.answer,
+    rationale:
+      normalizeMultilineWhitespace(String(input.question.rationale || "")) ||
+      input.fallback.rationale,
     tags: normalizeProviderTags(input.question.tags, input.language),
-    structuredData,
   } satisfies AssessmentQuestion;
 }
 

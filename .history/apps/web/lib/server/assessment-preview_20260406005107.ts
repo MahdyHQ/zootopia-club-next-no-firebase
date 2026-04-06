@@ -320,60 +320,6 @@ function buildPreviewQuestionItem(input: {
   };
 }
 
-function buildScienceBlockExportLines(input: {
-  block: AssessmentScienceRenderBlock;
-  linePrefix: string;
-}) {
-  const { block, linePrefix } = input;
-
-  switch (block.kind) {
-    case "value":
-      return block.value
-        ? [`${linePrefix}${block.label}: ${block.value}`]
-        : [];
-    case "pair": {
-      const lines: string[] = [`${linePrefix}${block.label}:`];
-      if (block.leftValue) {
-        lines.push(
-          `${linePrefix}${block.leftLabel || "Left"}: ${block.leftValue}`,
-        );
-      }
-      if (block.rightValue) {
-        lines.push(
-          `${linePrefix}${block.rightLabel || "Right"}: ${block.rightValue}`,
-        );
-      }
-      return lines;
-    }
-    case "list": {
-      if (!block.items || block.items.length === 0) {
-        return [];
-      }
-
-      return [
-        `${linePrefix}${block.label}:`,
-        ...block.items.map((item, index) =>
-          block.ordered
-            ? `${linePrefix}${index + 1}. ${item}`
-            : `${linePrefix}- ${item}`,
-        ),
-      ];
-    }
-    case "pair-list": {
-      if (!block.pairs || block.pairs.length === 0) {
-        return [];
-      }
-
-      return [
-        `${linePrefix}${block.label}:`,
-        ...block.pairs.map((pair) => `${linePrefix}${pair.left} -> ${pair.right}`),
-      ];
-    }
-    default:
-      return [];
-  }
-}
-
 function buildTypeAwareExportDetails(input: {
   locale: Locale;
   question: AssessmentPreviewQuestionItem;
@@ -436,15 +382,6 @@ function buildTypeAwareExportDetails(input: {
     }
     default:
       break;
-  }
-
-  for (const block of question.scienceBlocks) {
-    lines.push(
-      ...buildScienceBlockExportLines({
-        block,
-        linePrefix,
-      }),
-    );
   }
 
   return lines;
@@ -613,7 +550,6 @@ export function buildAssessmentPreview(input: {
       question,
       index,
       defaultDifficulty: generation.meta.difficulty,
-      contentLanguage,
       messages,
     }),
   );
