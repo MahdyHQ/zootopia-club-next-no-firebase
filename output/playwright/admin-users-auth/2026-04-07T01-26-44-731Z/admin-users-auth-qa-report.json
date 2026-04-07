@@ -1,0 +1,757 @@
+{
+  "generatedAt": "2026-04-07T01:27:38.256Z",
+  "baseUrl": "http://127.0.0.1:3020",
+  "selectedAdminEmail": "alahlyeagle@gmail.com",
+  "runId": "2026-04-07T01-26-44-731Z",
+  "totalCombinations": 12,
+  "combinations": [
+    {
+      "route": "/admin/users",
+      "theme": "light",
+      "viewport": {
+        "name": "small-mobile",
+        "width": 320,
+        "height": 568
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-light-small-mobile.png",
+      "innerWidth": 320,
+      "innerHeight": 568,
+      "maxScrollWidth": 320,
+      "scrollHeight": 568,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--north",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--east",
+          "text": ""
+        },
+        {
+          "tag": "aside",
+          "className": "fixed inset-y-0 left-0 z-50 transform flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0 w-[300px] -translate-x-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "h-full p-4 md:p-6 w-full relative",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "relative flex h-full flex-col overflow-hidden rounded-[2.5rem] border border-white/5 bg-background-elevated/40 backdrop-blur-2xl shadow-2xl transition-all duration-300 w-full text-foreground max-h-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "relative z-10 border-b border-white/5 p-6 pb-6 shrink-0",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagle"
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "light",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-light-mobile.png",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "maxScrollWidth": 390,
+      "scrollHeight": 844,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--north",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        },
+        {
+          "tag": "aside",
+          "className": "fixed inset-y-0 left-0 z-50 transform flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0 w-[300px] -translate-x-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "h-full p-4 md:p-6 w-full relative",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "relative flex h-full flex-col overflow-hidden rounded-[2.5rem] border border-white/5 bg-background-elevated/40 backdrop-blur-2xl shadow-2xl transition-all duration-300 w-full text-foreground max-h-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "relative z-10 border-b border-white/5 p-6 pb-6 shrink-0",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagle"
+        },
+        {
+          "tag": "a",
+          "className": "group flex min-w-0 items-center gap-3",
+          "text": "Science Education & Research PlatformZootopia Club"
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "light",
+      "viewport": {
+        "name": "tablet",
+        "width": 768,
+        "height": 1024
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-light-tablet.png",
+      "innerWidth": 768,
+      "innerHeight": 1024,
+      "maxScrollWidth": 768,
+      "scrollHeight": 1024,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        },
+        {
+          "tag": "aside",
+          "className": "fixed inset-y-0 left-0 z-50 transform flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0 w-[300px] -translate-x-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "h-full p-4 md:p-6 w-full relative",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "relative flex h-full flex-col overflow-hidden rounded-[2.5rem] border border-white/5 bg-background-elevated/40 backdrop-blur-2xl shadow-2xl transition-all duration-300 w-full text-foreground max-h-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "relative z-10 border-b border-white/5 p-6 pb-6 shrink-0",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagle"
+        },
+        {
+          "tag": "a",
+          "className": "group flex min-w-0 items-center gap-3",
+          "text": "Science Education & Research PlatformZootopia Club"
+        },
+        {
+          "tag": "svg",
+          "className": {},
+          "text": ""
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "light",
+      "viewport": {
+        "name": "laptop",
+        "width": 1366,
+        "height": 768
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-light-laptop.png",
+      "innerWidth": 1366,
+      "innerHeight": 768,
+      "maxScrollWidth": 1366,
+      "scrollHeight": 768,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "light",
+      "viewport": {
+        "name": "desktop",
+        "width": 1920,
+        "height": 1080
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-light-desktop.png",
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "maxScrollWidth": 1920,
+      "scrollHeight": 1080,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "light",
+      "viewport": {
+        "name": "ultrawide",
+        "width": 2560,
+        "height": 1440
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-light-ultrawide.png",
+      "innerWidth": 2560,
+      "innerHeight": 1440,
+      "maxScrollWidth": 2560,
+      "scrollHeight": 1440,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "dark",
+      "viewport": {
+        "name": "small-mobile",
+        "width": 320,
+        "height": 568
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-dark-small-mobile.png",
+      "innerWidth": 320,
+      "innerHeight": 568,
+      "maxScrollWidth": 320,
+      "scrollHeight": 568,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--north",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--east",
+          "text": ""
+        },
+        {
+          "tag": "aside",
+          "className": "fixed inset-y-0 left-0 z-50 transform flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0 w-[300px] -translate-x-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "h-full p-4 md:p-6 w-full relative",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "relative flex h-full flex-col overflow-hidden rounded-[2.5rem] border border-white/5 bg-background-elevated/40 backdrop-blur-2xl shadow-2xl transition-all duration-300 w-full text-foreground max-h-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "relative z-10 border-b border-white/5 p-6 pb-6 shrink-0",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagle"
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "dark",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-dark-mobile.png",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "maxScrollWidth": 390,
+      "scrollHeight": 844,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--north",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        },
+        {
+          "tag": "aside",
+          "className": "fixed inset-y-0 left-0 z-50 transform flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0 w-[300px] -translate-x-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "h-full p-4 md:p-6 w-full relative",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "relative flex h-full flex-col overflow-hidden rounded-[2.5rem] border border-white/5 bg-background-elevated/40 backdrop-blur-2xl shadow-2xl transition-all duration-300 w-full text-foreground max-h-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "relative z-10 border-b border-white/5 p-6 pb-6 shrink-0",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagle"
+        },
+        {
+          "tag": "a",
+          "className": "group flex min-w-0 items-center gap-3",
+          "text": "Science Education & Research PlatformZootopia Club"
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "dark",
+      "viewport": {
+        "name": "tablet",
+        "width": 768,
+        "height": 1024
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-dark-tablet.png",
+      "innerWidth": 768,
+      "innerHeight": 1024,
+      "maxScrollWidth": 768,
+      "scrollHeight": 1024,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        },
+        {
+          "tag": "aside",
+          "className": "fixed inset-y-0 left-0 z-50 transform flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] lg:static lg:translate-x-0 w-[300px] -translate-x-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "h-full p-4 md:p-6 w-full relative",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "relative flex h-full flex-col overflow-hidden rounded-[2.5rem] border border-white/5 bg-background-elevated/40 backdrop-blur-2xl shadow-2xl transition-all duration-300 w-full text-foreground max-h-full",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagleUploadH"
+        },
+        {
+          "tag": "div",
+          "className": "absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "relative z-10 border-b border-white/5 p-6 pb-6 shrink-0",
+          "text": "Science Education & Research PlatformZootopia ClubSigned in asalahlyeagle"
+        },
+        {
+          "tag": "a",
+          "className": "group flex min-w-0 items-center gap-3",
+          "text": "Science Education & Research PlatformZootopia Club"
+        },
+        {
+          "tag": "svg",
+          "className": {},
+          "text": ""
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "dark",
+      "viewport": {
+        "name": "laptop",
+        "width": 1366,
+        "height": 768
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-dark-laptop.png",
+      "innerWidth": 1366,
+      "innerHeight": 768,
+      "maxScrollWidth": 1366,
+      "scrollHeight": 768,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "dark",
+      "viewport": {
+        "name": "desktop",
+        "width": 1920,
+        "height": 1080
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-dark-desktop.png",
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "maxScrollWidth": 1920,
+      "scrollHeight": 1080,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "route": "/admin/users",
+      "theme": "dark",
+      "viewport": {
+        "name": "ultrawide",
+        "width": 2560,
+        "height": 1440
+      },
+      "finalUrl": "http://127.0.0.1:3020/admin/users",
+      "isAuthenticatedAdminView": true,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\admin-users-auth\\2026-04-07T01-26-44-731Z\\admin-users-dark-ultrawide.png",
+      "innerWidth": 2560,
+      "innerHeight": 1440,
+      "maxScrollWidth": 2560,
+      "scrollHeight": 1440,
+      "horizontalOverflow": false,
+      "overflowingNodes": [
+        {
+          "tag": "div",
+          "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__image",
+          "text": ""
+        },
+        {
+          "tag": "div",
+          "className": "protected-workspace-background__grid",
+          "text": ""
+        },
+        {
+          "tag": "span",
+          "className": "protected-workspace-background__orb protected-workspace-background__orb--west",
+          "text": ""
+        }
+      ]
+    }
+  ]
+}

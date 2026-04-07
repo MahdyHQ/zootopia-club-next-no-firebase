@@ -1,0 +1,634 @@
+[
+  {
+    "route": "/login",
+    "theme": "light",
+    "viewport": {
+      "name": "very-small-mobile",
+      "width": 320,
+      "height": 568
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-light-very-small-mobile.png",
+    "innerWidth": 320,
+    "innerHeight": 568,
+    "maxScrollWidth": 320,
+    "scrollHeight": 1033,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      },
+      {
+        "tag": "div",
+        "className": "pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30"
+      },
+      {
+        "tag": "div",
+        "className": "pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "light",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-light-mobile.png",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "maxScrollWidth": 390,
+    "scrollHeight": 906,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      },
+      {
+        "tag": "div",
+        "className": "pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30"
+      },
+      {
+        "tag": "div",
+        "className": "pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "light",
+    "viewport": {
+      "name": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-light-tablet.png",
+    "innerWidth": 768,
+    "innerHeight": 1024,
+    "maxScrollWidth": 768,
+    "scrollHeight": 1024,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "light",
+    "viewport": {
+      "name": "laptop",
+      "width": 1366,
+      "height": 768
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-light-laptop.png",
+    "innerWidth": 1366,
+    "innerHeight": 768,
+    "maxScrollWidth": 1366,
+    "scrollHeight": 929,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "light",
+    "viewport": {
+      "name": "desktop",
+      "width": 1920,
+      "height": 1080
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-light-desktop.png",
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "maxScrollWidth": 1920,
+    "scrollHeight": 1080,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "light",
+    "viewport": {
+      "name": "ultrawide",
+      "width": 2560,
+      "height": 1440
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-light-ultrawide.png",
+    "innerWidth": 2560,
+    "innerHeight": 1440,
+    "maxScrollWidth": 2560,
+    "scrollHeight": 1440,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "very-small-mobile",
+      "width": 320,
+      "height": 568
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-dark-very-small-mobile.png",
+    "innerWidth": 320,
+    "innerHeight": 568,
+    "maxScrollWidth": 320,
+    "scrollHeight": 1033,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      },
+      {
+        "tag": "div",
+        "className": "pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30"
+      },
+      {
+        "tag": "div",
+        "className": "pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-dark-mobile.png",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "maxScrollWidth": 390,
+    "scrollHeight": 906,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      },
+      {
+        "tag": "div",
+        "className": "pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30"
+      },
+      {
+        "tag": "div",
+        "className": "pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-dark-tablet.png",
+    "innerWidth": 768,
+    "innerHeight": 1024,
+    "maxScrollWidth": 768,
+    "scrollHeight": 1024,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "laptop",
+      "width": 1366,
+      "height": 768
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-dark-laptop.png",
+    "innerWidth": 1366,
+    "innerHeight": 768,
+    "maxScrollWidth": 1366,
+    "scrollHeight": 929,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "desktop",
+      "width": 1920,
+      "height": 1080
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-dark-desktop.png",
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "maxScrollWidth": 1920,
+    "scrollHeight": 1080,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "ultrawide",
+      "width": 2560,
+      "height": 1440
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\login-dark-ultrawide.png",
+    "innerWidth": 2560,
+    "innerHeight": 1440,
+    "maxScrollWidth": 2560,
+    "scrollHeight": 1440,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "light",
+    "viewport": {
+      "name": "very-small-mobile",
+      "width": 320,
+      "height": 568
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-light-very-small-mobile.png",
+    "innerWidth": 320,
+    "innerHeight": 568,
+    "maxScrollWidth": 320,
+    "scrollHeight": 1102,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "light",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-light-mobile.png",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "maxScrollWidth": 390,
+    "scrollHeight": 1059,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "light",
+    "viewport": {
+      "name": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-light-tablet.png",
+    "innerWidth": 768,
+    "innerHeight": 1024,
+    "maxScrollWidth": 768,
+    "scrollHeight": 1083,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "light",
+    "viewport": {
+      "name": "laptop",
+      "width": 1366,
+      "height": 768
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-light-laptop.png",
+    "innerWidth": 1366,
+    "innerHeight": 768,
+    "maxScrollWidth": 1366,
+    "scrollHeight": 784,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "light",
+    "viewport": {
+      "name": "desktop",
+      "width": 1920,
+      "height": 1080
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-light-desktop.png",
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "maxScrollWidth": 1920,
+    "scrollHeight": 1096,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "light",
+    "viewport": {
+      "name": "ultrawide",
+      "width": 2560,
+      "height": 1440
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-light-ultrawide.png",
+    "innerWidth": 2560,
+    "innerHeight": 1440,
+    "maxScrollWidth": 2560,
+    "scrollHeight": 1456,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "very-small-mobile",
+      "width": 320,
+      "height": 568
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-dark-very-small-mobile.png",
+    "innerWidth": 320,
+    "innerHeight": 568,
+    "maxScrollWidth": 320,
+    "scrollHeight": 1102,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-dark-mobile.png",
+    "innerWidth": 390,
+    "innerHeight": 844,
+    "maxScrollWidth": 390,
+    "scrollHeight": 1059,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-dark-tablet.png",
+    "innerWidth": 768,
+    "innerHeight": 1024,
+    "maxScrollWidth": 768,
+    "scrollHeight": 1083,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "laptop",
+      "width": 1366,
+      "height": 768
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-dark-laptop.png",
+    "innerWidth": 1366,
+    "innerHeight": 768,
+    "maxScrollWidth": 1366,
+    "scrollHeight": 784,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "desktop",
+      "width": 1920,
+      "height": 1080
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-dark-desktop.png",
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "maxScrollWidth": 1920,
+    "scrollHeight": 1096,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  },
+  {
+    "route": "/admin/login",
+    "theme": "dark",
+    "viewport": {
+      "name": "ultrawide",
+      "width": 2560,
+      "height": 1440
+    },
+    "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\auth-public\\admin_login-dark-ultrawide.png",
+    "innerWidth": 2560,
+    "innerHeight": 1440,
+    "maxScrollWidth": 2560,
+    "scrollHeight": 1456,
+    "horizontalOverflow": false,
+    "overflowingNodes": [
+      {
+        "tag": "div",
+        "className": "absolute -right-64 -top-64 h-[40rem] w-[40rem] rounded-full bg-accent blur-[100px]"
+      },
+      {
+        "tag": "div",
+        "className": "absolute -bottom-64 -left-64 h-[45rem] w-[45rem] rounded-full bg-gold blur-[120px]"
+      }
+    ]
+  }
+]

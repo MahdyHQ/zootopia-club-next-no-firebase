@@ -1,0 +1,60 @@
+# Public Firebase web config (safe for browser)
+NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyC6hGFAPdpN9jAEH39D5lvnadw9JJX3qyY
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=zootopia2026.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=zootopia2026
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=zootopia2026.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=38079185268
+NEXT_PUBLIC_FIREBASE_APP_ID=1:38079185268:web:adcd16b5e94d3d8c52ec21
+# Private Firebase Admin config (server only)
+FIREBASE_PROJECT_ID="zootopia2026"
+FIREBASE_CLIENT_EMAIL="firebase-adminsdk-fbsvc@zootopia2026.iam.gserviceaccount.com"
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDYmso5HG8UKelP\n+AIE5FGaZtaWw1dQ7fFWJPyJACkyIiZxYMi+HxurBrMppkK94ToOiL/HR5ajSgz2\nfqLYZckTr3cBmwotKnYKKDWCadW/DhjBU+VBneGCD382kK3dw/4C1I3wrcImPUcy\nkYK0UaNvq5qyljdipjatp4cqUFckf5vMvBNxVWLy8jOT4SlCqvk9clrwwDE9m3xF\nCTK3ipIqUqR/HcgsDnk4Y9DNvdYfKs0p7ubxW4uzeBwcDlLky+Go1hLYDmTaHVYr\nBnTyWhFWoCIF8BckQe2gpzTAaD8yM/qY+5/7XFQEFGBzRXxUSKw6uWL3ZDsQ/7pe\nNa34bVEPAgMBAAECggEAC1UFBm1IstV2GazZrv4I9oFLccWUTS1Q4BcwSE43WYjO\nDRMP4/TgFcsHo/XiupwzCHnUDe3elJPPtZrh4MNpr5URYbnSrV+lORo21NtXoPBX\nKdCLVBFmYzXcJUBdfRaZAZBNDfRXp3hMpl/uTPCTReJ3xfPnWUrL3brzId4Xj3B6\n9ri78MHDoVG2SU9oaA3YuufMRchiwDcZztEfu/L9AQv5G5BoPcZErINbsramuyjf\ndWb8RixAaR8LO++YF5hrQQhDMSlkhqeGWCePBQmio/0q4Oc9N8JgPdA6onyvhVEw\nI9cWVNP7YjAEbuWZ35AgHjUFyljffJvlG18DjKFf1QKBgQD9OFQ8eEYK/u0/keSR\nrBIXVMpBdnp090eiCu1YFmA2XYVVfNkRubRHOsstlmoEQ9MQkPX0MV0IkgAkJcKH\nZ6wUg54G5rUy3JMDkXiLPInTmc0LP7PIggvgpD5vgWnrNHjNzyv9909zvZsYM6Mq\nL9NP8sPLSpvRGbwi6zTGtJzjrQKBgQDa+43NOtxhBMVRFQLv9K9Ekr8Nhn98RdS2\njSAL24GRyW3LZ09WQjNtGndjj1CqZWktRGW8Od+h6qsy5VKnhiKkcTm7dAx06HlO\njflIEC63COJQuwrJ2+eE61nL+sOcoaPcUirrRl2hs6eYPCMiGVGVPV51Q72yd0ET\nAWp0Q6m/KwKBgQDVJxiJenkDgoo1i9rK4PytlRtYNaJpWUp8VhRqpRNCUEEPsDON\nXzQpDY3AhzAg/PLrrArODsuQjk3+H6b7kkJhVlWs24HGGbTLOSYulrwyWfInOO1e\nqFHVPIyuElMVwaq7HFycwRSpif7HRZhgx7dqQiGcu+YkAzTCdBmN9rVmVQKBgG1H\ndbdCNXIREGrrImEe6Uw+MyuLwBkDPCixepmQPDPFoo4MCzKPrNw4hfXgMjAmlXsq\nk95/vxMtaavndvz02lrXyii6u/Cnhsnl3c3RjY5314DUJokfvYS+cjxx8qY6n+w1\n8QciQV2Nqwg0ko/UtLrWOkoouQTTsFzMqxREI/SrAoGBAMwXfndtkftRjM2Ztayx\nU0j4QJ+WIk/UrOeisaJBLgsuKng+OCUeRLXuxPxP6DhyAvi0OmJeM70q3tq0CUB+\nB692jfRYP4W6N32nD23reESDvVjZOq9Skk0Csfb8wlueH1teAMeE8SnzTKx1Hffm\ntRzdhWtjekh3X4TBKoXdt80n\n-----END PRIVATE KEY-----\n"
+FIREBASE_STORAGE_BUCKET="zootopia2026.firebasestorage.app"
+ZOOTOPIA_ADMIN_EMAILS=alahlyeagle@gmail.com,elmahdy@admin.com,alahlyeagle13@gmail.com
+# Prefer the canonical FIREBASE_* keys above for new setups.
+FIREBASE_ADMIN_PROJECT_ID="zootopia2026"
+FIREBASE_ADMIN_CLIENT_EMAIL="firebase-adminsdk-fbsvc@zootopia2026.iam.gserviceaccount.com"
+FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDYmso5HG8UKelP\n+AIE5FGaZtaWw1dQ7fFWJPyJACkyIiZxYMi+HxurBrMppkK94ToOiL/HR5ajSgz2\nfqLYZckTr3cBmwotKnYKKDWCadW/DhjBU+VBneGCD382kK3dw/4C1I3wrcImPUcy\nkYK0UaNvq5qyljdipjatp4cqUFckf5vMvBNxVWLy8jOT4SlCqvk9clrwwDE9m3xF\nCTK3ipIqUqR/HcgsDnk4Y9DNvdYfKs0p7ubxW4uzeBwcDlLky+Go1hLYDmTaHVYr\nBnTyWhFWoCIF8BckQe2gpzTAaD8yM/qY+5/7XFQEFGBzRXxUSKw6uWL3ZDsQ/7pe\nNa34bVEPAgMBAAECggEAC1UFBm1IstV2GazZrv4I9oFLccWUTS1Q4BcwSE43WYjO\nDRMP4/TgFcsHo/XiupwzCHnUDe3elJPPtZrh4MNpr5URYbnSrV+lORo21NtXoPBX\nKdCLVBFmYzXcJUBdfRaZAZBNDfRXp3hMpl/uTPCTReJ3xfPnWUrL3brzId4Xj3B6\n9ri78MHDoVG2SU9oaA3YuufMRchiwDcZztEfu/L9AQv5G5BoPcZErINbsramuyjf\ndWb8RixAaR8LO++YF5hrQQhDMSlkhqeGWCePBQmio/0q4Oc9N8JgPdA6onyvhVEw\nI9cWVNP7YjAEbuWZ35AgHjUFyljffJvlG18DjKFf1QKBgQD9OFQ8eEYK/u0/keSR\nrBIXVMpBdnp090eiCu1YFmA2XYVVfNkRubRHOsstlmoEQ9MQkPX0MV0IkgAkJcKH\nZ6wUg54G5rUy3JMDkXiLPInTmc0LP7PIggvgpD5vgWnrNHjNzyv9909zvZsYM6Mq\nL9NP8sPLSpvRGbwi6zTGtJzjrQKBgQDa+43NOtxhBMVRFQLv9K9Ekr8Nhn98RdS2\njSAL24GRyW3LZ09WQjNtGndjj1CqZWktRGW8Od+h6qsy5VKnhiKkcTm7dAx06HlO\njflIEC63COJQuwrJ2+eE61nL+sOcoaPcUirrRl2hs6eYPCMiGVGVPV51Q72yd0ET\nAWp0Q6m/KwKBgQDVJxiJenkDgoo1i9rK4PytlRtYNaJpWUp8VhRqpRNCUEEPsDON\nXzQpDY3AhzAg/PLrrArODsuQjk3+H6b7kkJhVlWs24HGGbTLOSYulrwyWfInOO1e\nqFHVPIyuElMVwaq7HFycwRSpif7HRZhgx7dqQiGcu+YkAzTCdBmN9rVmVQKBgG1H\ndbdCNXIREGrrImEe6Uw+MyuLwBkDPCixepmQPDPFoo4MCzKPrNw4hfXgMjAmlXsq\nk95/vxMtaavndvz02lrXyii6u/Cnhsnl3c3RjY5314DUJokfvYS+cjxx8qY6n+w1\n8QciQV2Nqwg0ko/UtLrWOkoouQTTsFzMqxREI/SrAoGBAMwXfndtkftRjM2Ztayx\nU0j4QJ+WIk/UrOeisaJBLgsuKng+OCUeRLXuxPxP6DhyAvi0OmJeM70q3tq0CUB+\nB692jfRYP4W6N32nD23reESDvVjZOq9Skk0Csfb8wlueH1teAMeE8SnzTKx1Hffm\ntRzdhWtjekh3X4TBKoXdt80n\n-----END PRIVATE KEY-----\n"
+VERCEL_URL=
+__FIREBASE_FRAMEWORKS_ENTRY__=next.js
+__FIREBASE_DEFAULTS__={"config":{"projectId":"zootopia2026","appId":"1:38079185268:web:adcd16b5e94d3d8c52ec21","storageBucket":"zootopia2026.firebasestorage.app","apiKey":"AIzaSyC6hGFAPdpN9jAEH39D5lvnadw9JJX3qyY","authDomain":"zootopia2026.firebaseapp.com","messagingSenderId":"38079185268","projectNumber":"38079185268","version":"2"},"_authTokenSyncURL":"/__session"}
+# Optional compatibility aliases accepted by provider runtime.
+DASHSCOPE_COMPATIBLE_BASE_URL=
+ALIBABA_MODEL_STUDIO_BASE_URL=
+
+# Optional model override env keys used by the shared model catalog.
+GOOGLE_AI_MODEL=
+GOOGLE_AI_ADVANCED_MODEL=
+QWEN_MODEL=
+
+# Private Firebase Admin config (server only)
+# Private AI provider config (server only)
+GOOGLE_AI_API_KEY=AIzaSyA-__Gqo6rQF6JjOTS7LjarxhWkU7kFmaM
+DASHSCOPE_API_KEY=sk-352c675eb1e84a9dbeebd1ac9ba8daae
+
+# Private Datalab config (server only)
+DATALAB_API_KEY=S_ffWG6UaXBekvbr9pZegmGVquiA6XUKyOgtwXODRNo
+# Session and maintenance controls.
+# scope: local .env.local + apphosting-non-secret (runtime) unless noted
+# optional: ZOOTOPIA_SESSION_TTL_SECONDS (default applies when blank)
+# optional: ZOOTOPIA_MAINTENANCE_SECRET, required only when internal scheduler endpoint is enabled
+ZOOTOPIA_SESSION_TTL_SECONDS=3600
+# Default successful assessment credits per UTC day for regular users.
+# fallback: 3 when this value is blank/invalid; admins remain exempt.
+ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS=3
+# Optional legacy alias read by the same server parser.
+DEFAULT_DAILY_ASSESSMENT_CREDITS=
+# scope: secret-manager (runtime) if scheduler endpoint is enabled
+ZOOTOPIA_MAINTENANCE_SECRET=
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=alahlyeagle13@gmail.com
+SMTP_PASS=ptjxdaqmpedufmgm
+EMAIL_FROM=Zootopia Club <alahlyeagle13@gmail.com>
+CONTACT_FORM_TO=alahlyeagle13@gmail.com
+# Admin password handling
+# Never store the shared admin password in .env.local or any checked-in file.
+# Set or rotate Firebase Auth passwords with:
+# npm run firebase:admin:set-passwords -- --password "replace-me"

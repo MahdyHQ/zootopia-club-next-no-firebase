@@ -36,6 +36,93 @@
 				"@zootopia/web"
 			],
 			"isBackground": false
+		},
+		{
+			"label": "assessment-actions-auth-qa",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				".tmp/assessment-actions-auth-qa.mjs"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "assessment-actions-auth-qa-3000",
+			"type": "shell",
+			"command": "$env:ASSESSMENT_QA_BASE_URL='http://127.0.0.1:3000'; node .tmp/assessment-actions-auth-qa.mjs",
+			"isBackground": false
+		},
+		{
+			"label": "kill-port-3020",
+			"type": "shell",
+			"command": "$pids = Get-NetTCPConnection -LocalPort 3020 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; foreach ($pid in $pids) { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue }; if ($pids) { Write-Output \"Killed: $($pids -join ', ')\" } else { Write-Output \"No listener on 3020\" }",
+			"isBackground": false
+		},
+		{
+			"label": "list-node-procs",
+			"type": "shell",
+			"command": "Get-CimInstance Win32_Process -Filter \"name='node.exe'\" | Select-Object ProcessId, CommandLine | Format-List",
+			"isBackground": false
+		},
+		{
+			"label": "list-node-procs-2",
+			"type": "shell",
+			"command": "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' } | Select-Object ProcessId, CommandLine | Format-List",
+			"isBackground": false
+		},
+		{
+			"label": "kill-node-lockers",
+			"type": "shell",
+			"command": "$targets = @(36592,2148,14676); foreach ($procId in $targets) { if (Get-Process -Id $procId -ErrorAction SilentlyContinue) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue; Write-Output \"Stopped $procId\" } }; Write-Output \"Done\"",
+			"isBackground": false
+		},
+		{
+			"label": "standalone-3020-auth-qa",
+			"type": "shell",
+			"command": "$env:HOSTNAME='127.0.0.1'; $env:PORT='3020'; node apps/web/.next/standalone/server.js",
+			"isBackground": true
+		},
+		{
+			"label": "health-3020",
+			"type": "shell",
+			"command": "node -e \"fetch('http://127.0.0.1:3020/api/health').then(r=>r.text()).then(t=>console.log(t)).catch(e=>{console.error(e);process.exit(1);})\"",
+			"isBackground": false
+		},
+		{
+			"label": "health-3020-2",
+			"type": "shell",
+			"command": "node -e 'fetch(\"http://127.0.0.1:3020/api/health\").then(r=>r.text()).then(t=>console.log(t)).catch(e=>{console.error(e);process.exit(1);})'",
+			"isBackground": false
+		},
+		{
+			"label": "health-3020-ps",
+			"type": "shell",
+			"command": "(Invoke-WebRequest -Uri 'http://127.0.0.1:3020/api/health' -UseBasicParsing).Content",
+			"isBackground": false
+		},
+		{
+			"label": "web-start-3025",
+			"type": "shell",
+			"command": "npm run start --workspace @zootopia/web -- --hostname 127.0.0.1 --port 3025",
+			"isBackground": true
+		},
+		{
+			"label": "health-3025",
+			"type": "shell",
+			"command": "(Invoke-WebRequest -Uri 'http://127.0.0.1:3025/api/health' -UseBasicParsing).Content",
+			"isBackground": false
+		},
+		{
+			"label": "assessment-actions-auth-qa-3025",
+			"type": "shell",
+			"command": "$env:ASSESSMENT_QA_BASE_URL='http://127.0.0.1:3025'; node .tmp/assessment-actions-auth-qa.mjs",
+			"isBackground": false
+		},
+		{
+			"label": "assessment-qa-summary-3025",
+			"type": "shell",
+			"command": "$report = Get-Content 'output/playwright/assessment-actions-auth/2026-04-07T12-21-18-727Z/assessment-actions-auth-qa-report.json' -Raw | ConvertFrom-Json; $rows = foreach ($c in $report.combinations) { $groupOverflow = @($c.toolbarMetrics.groups | Where-Object { $_.overflow -eq $true }).Count -gt 0; $pass = $c.isExpectedRoute -and (-not $c.horizontalOverflow) -and $c.toolbarMetrics.present -and (-not $c.toolbarMetrics.overflow) -and (-not $groupOverflow); [PSCustomObject]@{ route=$c.routeLabel; theme=$c.theme; viewport=$c.viewport.name; pass=$pass } }; $rows | Sort-Object route, theme, viewport | Format-Table -AutoSize",
+			"isBackground": false
 		}
 	]
 }
