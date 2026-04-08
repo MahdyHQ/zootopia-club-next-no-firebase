@@ -57,7 +57,7 @@
   "adminLoginIdleTitle": "Use your approved admin identity",
   "adminLoginIdleBody": "Enter your allowlisted email or approved username with your password.",
   "adminLoginIdentifierLabel": "Admin email or username",
-  "adminLoginIdentifierPlaceholder": "Elmahdy Developer Admin Gate ONLY",
+  "adminLoginIdentifierPlaceholder": "elmahdy or elmahdy@admin.com",
   "adminLoginPasswordLabel": "Admin password",
   "adminLoginPasswordPlaceholder": "Enter your admin password",
   "adminLoginSupportLabel": "Restricted admin access",

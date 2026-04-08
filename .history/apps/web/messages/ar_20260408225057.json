@@ -57,7 +57,7 @@
   "adminLoginIdleTitle": "استخدم هويتك الإدارية المعتمدة",
   "adminLoginIdleBody": "أدخل بريدك المسموح به أو اسم المستخدم المعتمد مع كلمة المرور.",
   "adminLoginIdentifierLabel": "بريد المسؤول أو اسم المستخدم",
-  "adminLoginIdentifierPlaceholder": "Elmahdy Developer Admin Gate ONLY",
+  "adminLoginIdentifierPlaceholder": "elmahdy أو elmahdy@admin.com",
   "adminLoginPasswordLabel": "كلمة مرور المسؤول",
   "adminLoginPasswordPlaceholder": "أدخل كلمة مرور المسؤول",
   "adminLoginSupportLabel": "وصول إداري مقيّد",

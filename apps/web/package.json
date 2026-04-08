@@ -17,6 +17,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "docx": "^9.5.1",
+    "exceljs": "^4.4.0",
     "firebase": "^12.11.0",
     "firebase-admin": "^13.5.0",
     "framer-motion": "12.38.0",
