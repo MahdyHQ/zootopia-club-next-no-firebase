@@ -1,0 +1,32 @@
+{
+  "generatedAt": "2026-04-08T23:53:48.394Z",
+  "baseUrl": "http://127.0.0.1:3025",
+  "selectedUserEmail": "elmahdyabdulla208@gmail.com",
+  "selectedUserUid": "8t989c7Za0P9oMH8Uzz142A72xl1",
+  "usedVerifiedPhoneSeedUser": false,
+  "route": "/settings",
+  "typedValue": "1012345678",
+  "typingTrace": [
+    "1",
+    "10",
+    "101",
+    "1012",
+    "10123",
+    "101234",
+    "1012345",
+    "10123456",
+    "101234567",
+    "1012345678"
+  ],
+  "sendButtonEnabled": true,
+  "sendAttempt": {
+    "found": true,
+    "clicked": true,
+    "label": "Send OTP code"
+  },
+  "otpInputVisibleAfterSend": false,
+  "otpInputUsableAfterSend": false,
+  "maxDepthError": false,
+  "pageErrors": [],
+  "consoleErrors": []
+}

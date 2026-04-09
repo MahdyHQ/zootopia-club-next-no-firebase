@@ -1,0 +1,54 @@
+{
+  "baseUrl": "http://127.0.0.1:3025",
+  "checkedAt": "2026-04-09T13:05:45.957Z",
+  "results": [
+    {
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "statusCode": 200,
+      "headerPrivacyLinkVisible": true,
+      "footerPrivacyLinkVisible": true,
+      "privacyUrlAfterHeaderClick": "http://127.0.0.1:3025/privacy",
+      "privacyHeading": "Privacy Policy for Zootopia Club",
+      "isUsingPublicShell": true,
+      "hasProtectedSidebar": false,
+      "horizontalOverflow": false,
+      "isPublicAccessible": true
+    },
+    {
+      "viewport": {
+        "name": "tablet",
+        "width": 834,
+        "height": 1112
+      },
+      "statusCode": 200,
+      "headerPrivacyLinkVisible": true,
+      "footerPrivacyLinkVisible": true,
+      "privacyUrlAfterHeaderClick": "http://127.0.0.1:3025/privacy",
+      "privacyHeading": "Privacy Policy for Zootopia Club",
+      "isUsingPublicShell": true,
+      "hasProtectedSidebar": false,
+      "horizontalOverflow": false,
+      "isPublicAccessible": true
+    },
+    {
+      "viewport": {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      },
+      "statusCode": 200,
+      "headerPrivacyLinkVisible": true,
+      "footerPrivacyLinkVisible": true,
+      "privacyUrlAfterHeaderClick": "http://127.0.0.1:3025/privacy",
+      "privacyHeading": "Privacy Policy for Zootopia Club",
+      "isUsingPublicShell": true,
+      "hasProtectedSidebar": false,
+      "horizontalOverflow": false,
+      "isPublicAccessible": true
+    }
+  ]
+}

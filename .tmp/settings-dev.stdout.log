@@ -1,0 +1,9 @@
+
+> @zootopia/web@0.1.0 dev
+> next dev --turbopack --hostname 127.0.0.1 --port 3025
+
+▲ Next.js 16.2.2 (Turbopack)
+- Local:         http://127.0.0.1:3025
+- Network:       http://127.0.0.1:3025
+✓ Ready in 414ms
+[?25h

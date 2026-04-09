@@ -1,0 +1,18 @@
+⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9
+E Failed to connect to proxy 127.0.0.1:9 with error connect ECONNREFUSED 127.0.0.1:9

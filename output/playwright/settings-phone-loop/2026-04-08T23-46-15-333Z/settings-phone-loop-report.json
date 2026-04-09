@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-04-08T23:46:15.905Z",
+  "baseUrl": "http://127.0.0.1:3025",
+  "selectedUserEmail": "elmahdyabdulla208@gmail.com",
+  "selectedUserUid": "8t989c7Za0P9oMH8Uzz142A72xl1",
+  "usedVerifiedPhoneSeedUser": false,
+  "route": "/settings",
+  "typedValue": "101235",
+  "sendButtonEnabled": true,
+  "maxDepthError": false,
+  "pageErrors": [],
+  "consoleErrors": []
+}

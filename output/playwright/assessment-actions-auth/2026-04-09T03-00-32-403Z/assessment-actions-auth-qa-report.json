@@ -1,0 +1,531 @@
+{
+  "generatedAt": "2026-04-09T03:04:30.982Z",
+  "baseUrl": "http://127.0.0.1:3025",
+  "selectedAdminEmail": "alahlyeagle@gmail.com",
+  "runId": "2026-04-09T03-00-32-403Z",
+  "runtimeFlags": {
+    "firebaseAdmin": true,
+    "googleAi": true,
+    "qwen": true
+  },
+  "routeDiscoverySource": "firestore-fallback",
+  "routes": [
+    {
+      "key": "preview",
+      "label": "assessment-preview",
+      "path": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1"
+    },
+    {
+      "key": "result",
+      "label": "assessment-result",
+      "path": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1"
+    }
+  ],
+  "totalCombinations": 24,
+  "combinations": [
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "light",
+      "viewport": {
+        "name": "small-mobile",
+        "width": 320,
+        "height": 568
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-light-small-mobile.png",
+      "innerWidth": 320,
+      "innerHeight": 568,
+      "maxScrollWidth": 320,
+      "scrollHeight": 1039,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "light",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-light-mobile.png",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "maxScrollWidth": 390,
+      "scrollHeight": 912,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "light",
+      "viewport": {
+        "name": "tablet",
+        "width": 768,
+        "height": 1024
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-light-tablet.png",
+      "innerWidth": 768,
+      "innerHeight": 1024,
+      "maxScrollWidth": 768,
+      "scrollHeight": 1024,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "light",
+      "viewport": {
+        "name": "laptop",
+        "width": 1366,
+        "height": 768
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-light-laptop.png",
+      "innerWidth": 1366,
+      "innerHeight": 768,
+      "maxScrollWidth": 1366,
+      "scrollHeight": 931,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "light",
+      "viewport": {
+        "name": "desktop",
+        "width": 1920,
+        "height": 1080
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-light-desktop.png",
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "maxScrollWidth": 1920,
+      "scrollHeight": 1080,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "light",
+      "viewport": {
+        "name": "ultrawide",
+        "width": 2560,
+        "height": 1440
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-light-ultrawide.png",
+      "innerWidth": 2560,
+      "innerHeight": 1440,
+      "maxScrollWidth": 2560,
+      "scrollHeight": 1440,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "dark",
+      "viewport": {
+        "name": "small-mobile",
+        "width": 320,
+        "height": 568
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-dark-small-mobile.png",
+      "innerWidth": 320,
+      "innerHeight": 568,
+      "maxScrollWidth": 320,
+      "scrollHeight": 1039,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "dark",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-dark-mobile.png",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "maxScrollWidth": 390,
+      "scrollHeight": 912,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "dark",
+      "viewport": {
+        "name": "tablet",
+        "width": 768,
+        "height": 1024
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-dark-tablet.png",
+      "innerWidth": 768,
+      "innerHeight": 1024,
+      "maxScrollWidth": 768,
+      "scrollHeight": 1024,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "dark",
+      "viewport": {
+        "name": "laptop",
+        "width": 1366,
+        "height": 768
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-dark-laptop.png",
+      "innerWidth": 1366,
+      "innerHeight": 768,
+      "maxScrollWidth": 1366,
+      "scrollHeight": 931,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "dark",
+      "viewport": {
+        "name": "desktop",
+        "width": 1920,
+        "height": 1080
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-dark-desktop.png",
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "maxScrollWidth": 1920,
+      "scrollHeight": 1080,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/preview/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-preview",
+      "theme": "dark",
+      "viewport": {
+        "name": "ultrawide",
+        "width": 2560,
+        "height": 1440
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-preview-dark-ultrawide.png",
+      "innerWidth": 2560,
+      "innerHeight": 1440,
+      "maxScrollWidth": 2560,
+      "scrollHeight": 1440,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "light",
+      "viewport": {
+        "name": "small-mobile",
+        "width": 320,
+        "height": 568
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-light-small-mobile.png",
+      "innerWidth": 320,
+      "innerHeight": 568,
+      "maxScrollWidth": 320,
+      "scrollHeight": 1039,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "light",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-light-mobile.png",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "maxScrollWidth": 390,
+      "scrollHeight": 912,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "light",
+      "viewport": {
+        "name": "tablet",
+        "width": 768,
+        "height": 1024
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-light-tablet.png",
+      "innerWidth": 768,
+      "innerHeight": 1024,
+      "maxScrollWidth": 768,
+      "scrollHeight": 1024,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "light",
+      "viewport": {
+        "name": "laptop",
+        "width": 1366,
+        "height": 768
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-light-laptop.png",
+      "innerWidth": 1366,
+      "innerHeight": 768,
+      "maxScrollWidth": 1366,
+      "scrollHeight": 931,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "light",
+      "viewport": {
+        "name": "desktop",
+        "width": 1920,
+        "height": 1080
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-light-desktop.png",
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "maxScrollWidth": 1920,
+      "scrollHeight": 1080,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "light",
+      "viewport": {
+        "name": "ultrawide",
+        "width": 2560,
+        "height": 1440
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-light-ultrawide.png",
+      "innerWidth": 2560,
+      "innerHeight": 1440,
+      "maxScrollWidth": 2560,
+      "scrollHeight": 1440,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "dark",
+      "viewport": {
+        "name": "small-mobile",
+        "width": 320,
+        "height": 568
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-dark-small-mobile.png",
+      "innerWidth": 320,
+      "innerHeight": 568,
+      "maxScrollWidth": 320,
+      "scrollHeight": 1039,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "dark",
+      "viewport": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-dark-mobile.png",
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "maxScrollWidth": 390,
+      "scrollHeight": 912,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "dark",
+      "viewport": {
+        "name": "tablet",
+        "width": 768,
+        "height": 1024
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-dark-tablet.png",
+      "innerWidth": 768,
+      "innerHeight": 1024,
+      "maxScrollWidth": 768,
+      "scrollHeight": 1024,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "dark",
+      "viewport": {
+        "name": "laptop",
+        "width": 1366,
+        "height": 768
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-dark-laptop.png",
+      "innerWidth": 1366,
+      "innerHeight": 768,
+      "maxScrollWidth": 1366,
+      "scrollHeight": 931,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "dark",
+      "viewport": {
+        "name": "desktop",
+        "width": 1920,
+        "height": 1080
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-dark-desktop.png",
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "maxScrollWidth": 1920,
+      "scrollHeight": 1080,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    },
+    {
+      "route": "/assessment/results/6fb845c0-2d77-4c48-a95d-ab2283111ab1",
+      "routeLabel": "assessment-result",
+      "theme": "dark",
+      "viewport": {
+        "name": "ultrawide",
+        "width": 2560,
+        "height": 1440
+      },
+      "finalUrl": "http://127.0.0.1:3025/login",
+      "isExpectedRoute": false,
+      "screenshotPath": "C:\\zootopia-club-next\\output\\playwright\\assessment-actions-auth\\2026-04-09T03-00-32-403Z\\assessment-result-dark-ultrawide.png",
+      "innerWidth": 2560,
+      "innerHeight": 1440,
+      "maxScrollWidth": 2560,
+      "scrollHeight": 1440,
+      "horizontalOverflow": false,
+      "toolbarMetrics": {
+        "present": false
+      }
+    }
+  ]
+}

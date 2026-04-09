@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-04-09T00:23:26.375Z",
+  "baseUrl": "http://127.0.0.1:3025",
+  "selectedAdminEmail": "alahlyeagle@gmail.com",
+  "countryCallingCodeDigits": 2,
+  "expectedMaxNationalDigits": 16,
+  "typedValue": "178123679124789",
+  "typedDigits": 15,
+  "capPass": true,
+  "sendAttempt": {
+    "found": true,
+    "enabled": true,
+    "clicked": true
+  },
+  "otpInputVisibleAfterSend": false,
+  "otpInputUsableAfterSend": false,
+  "pageErrors": [],
+  "consoleErrors": []
+}
