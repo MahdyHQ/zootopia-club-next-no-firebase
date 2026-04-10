@@ -6539,6 +6539,47 @@ Change Log
     - If stronger admin MFA is needed in future, consider: TOTP tokens, optional hardware keys, or organization-scoped claim metadata (not environment-based gates)
     - Password visibility toggle UX pattern is now available as a reusable model for other password fields
   - Future roadmap implications:
-    - Phase N: If unified admin MFA is desired, refactor to per-user TOTP or organization claims
-    - Phase N: If audit logging needs reinforcement, layer in optional admin action signing
-    - Phase N: The simplified 2-field UX is now clean slate for future security enhancements
+   - Phase N: If unified admin MFA is desired, refactor to per-user TOTP or organization claims
+   - Phase N: If audit logging needs reinforcement, layer in optional admin action signing
+   - Phase N: The simplified 2-field UX is now clean slate for future security enhancements
+- 2026-04-10 19:33:23 | Auth session bootstrap determinism fix for regular + admin login loops
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before code edits.
+    - launched parallel exploration for regular login tracing, admin login tracing, session/bootstrap contract tracing, redirect loop tracing, and verification command tracing.
+  - Root causes fixed in this pass:
+    - regular login refresh error came from immediate `/api/auth/me` fetch after Auth.js credentials sign-in; session-cookie propagation could race that request and return unauthenticated state.
+    - regular login bootstrap error handling also attempted to parse `/api/auth/me` response JSON twice on failure paths, dropping real server error codes.
+    - admin login loop came from redirecting to `/admin` before server-observed admin session was stable, causing `/admin` -> `/admin/login` bounce under cookie race timing.
+    - admin identifier resolve route still enforced the deprecated runtime password-gate readiness check, conflicting with the current 2-field admin login flow.
+  - What changed:
+    - `apps/web/components/auth/login-panel.tsx`
+      - replaced one-shot `/api/auth/me` check with bounded polling retries (`SESSION_NOT_ESTABLISHED` treated as transient bootstrap state).
+      - removed double JSON-read error path and made bootstrap failure classification deterministic.
+    - `apps/web/components/auth/admin-login-panel.tsx`
+      - removed unused `adminLoginPassword` payload from Auth.js sign-in call.
+      - added bounded `/api/auth/me` polling and explicit admin-role verification before redirect to `/admin` to prevent bounce loops.
+    - `apps/web/app/api/auth/me/route.ts`
+      - now returns `401 SESSION_NOT_ESTABLISHED` when session is not ready, and `200` only when authenticated session payload is coherent.
+    - `apps/web/components/auth/auth-feedback.ts`
+      - maps `SESSION_NOT_ESTABLISHED` into the existing refresh/re-sign-in guidance for both regular and admin flows.
+    - `apps/web/app/api/auth/admin/resolve-identifier/route.ts`
+      - removed deprecated admin-login-password-gate readiness requirement to align with current 2-field admin flow.
+    - `apps/web/proxy.ts`
+      - added deterministic redirect for authenticated non-admin users on `/admin/login` to avoid extra public-admin-login render pass.
+  - Session/redirect contract after this pass:
+    - regular login only redirects after `/api/auth/me` confirms authenticated session.
+    - admin login only redirects after `/api/auth/me` confirms authenticated admin-role session.
+    - `/api/auth/me` is now explicit about unauthenticated bootstrap state (`401 SESSION_NOT_ESTABLISHED`) with no-store headers.
+    - `/admin/login` no longer depends on deprecated password-gate readiness in identifier resolution.
+  - Verification in this pass:
+    - `npm run lint:web` passed.
+    - `npm run typecheck:web` passed.
+    - `npm run build:web` failed due blocked Google Fonts fetch in this environment (`next/font` fetch errors), not due edited auth files.
+  - Files changed in this pass:
+    - `apps/web/components/auth/login-panel.tsx`
+    - `apps/web/components/auth/admin-login-panel.tsx`
+    - `apps/web/app/api/auth/me/route.ts`
+    - `apps/web/components/auth/auth-feedback.ts`
+    - `apps/web/app/api/auth/admin/resolve-identifier/route.ts`
+    - `apps/web/proxy.ts`
+    - `zootopia-club-next-ledger.txt`

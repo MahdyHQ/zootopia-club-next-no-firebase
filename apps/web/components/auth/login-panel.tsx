@@ -36,6 +36,8 @@ type LoginPhase = "idle" | "authenticating" | "bootstrapping" | "success_handoff
 type LoginMode = "sign_in" | "sign_up";
 
 const BOOTSTRAP_TIMEOUT_MS = 20_000;
+const SESSION_BOOTSTRAP_MAX_ATTEMPTS = 10;
+const SESSION_BOOTSTRAP_RETRY_MS = 120;
 
 function buildLocalText(locale: Locale) {
   if (locale === "ar") {
@@ -102,18 +104,6 @@ function mapSupabaseBrowserError(error: { code?: string; message?: string }, mod
   return createAuthFlowError("SIGNIN_FAILED", message);
 }
 
-async function extractAuthErrorCodeFromResponse(response: Response) {
-  try {
-    const payload = (await response.json()) as {
-      error?: { code?: string };
-    };
-    const code = payload?.error?.code;
-    return typeof code === "string" ? code : null;
-  } catch {
-    return null;
-  }
-}
-
 async function completeAuthJsCredentialsSignIn(input: {
   providerId: "user-credentials";
   idToken: string;
@@ -135,25 +125,42 @@ async function completeAuthJsCredentialsSignIn(input: {
     throw createAuthFlowError("BOOTSTRAP_FAILED", "Unable to establish authenticated session.");
   }
 
-  const meResponse = await fetch("/api/auth/me", {
-    method: "GET",
-    credentials: "same-origin",
-    cache: "no-store",
-  });
+  /* Auth.js cookie issuance can race with the very next /api/auth/me request.
+     Keep bootstrap deterministic by polling briefly until the server reads the new session cookie. */
+  for (let attempt = 0; attempt < SESSION_BOOTSTRAP_MAX_ATTEMPTS; attempt += 1) {
+    const meResponse = await fetch("/api/auth/me", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
 
-  const mePayload = await readApiResult<{
-    session: {
-      authenticated: boolean;
-      user: SessionUser | null;
-    };
-  }>(meResponse, "BOOTSTRAP_RESPONSE_INVALID");
+    const mePayload = await readApiResult<{
+      session: {
+        authenticated: boolean;
+        user: SessionUser | null;
+      };
+    }>(meResponse, "BOOTSTRAP_RESPONSE_INVALID");
 
-  if (!meResponse.ok || !mePayload.ok || !mePayload.data.session.authenticated || !mePayload.data.session.user) {
-    const errorCode = mePayload.ok ? await extractAuthErrorCodeFromResponse(meResponse) : mePayload.error.code;
-    throw createAuthFlowError(errorCode || "BOOTSTRAP_FAILED");
+    if (meResponse.ok && mePayload.ok && mePayload.data.session.authenticated && mePayload.data.session.user) {
+      return mePayload.data.session.user;
+    }
+
+    const responseErrorCode = mePayload.ok ? null : mePayload.error.code;
+    const hasAttemptsRemaining = attempt + 1 < SESSION_BOOTSTRAP_MAX_ATTEMPTS;
+    const isTransientBootstrapState =
+      responseErrorCode === null || responseErrorCode === "SESSION_NOT_ESTABLISHED";
+
+    if (!hasAttemptsRemaining) {
+      throw createAuthFlowError(responseErrorCode || "BOOTSTRAP_FAILED");
+    }
+
+    if (!isTransientBootstrapState) {
+      throw createAuthFlowError(responseErrorCode || "BOOTSTRAP_FAILED");
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, SESSION_BOOTSTRAP_RETRY_MS));
   }
-
-  return mePayload.data.session.user;
+  throw createAuthFlowError("BOOTSTRAP_FAILED");
 }
 
 export function LoginPanel({

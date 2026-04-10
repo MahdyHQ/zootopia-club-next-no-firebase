@@ -35,6 +35,9 @@ type AdminLoginPhase =
   | "bootstrapping"
   | "success_handoff";
 
+const ADMIN_SESSION_BOOTSTRAP_MAX_ATTEMPTS = 10;
+const ADMIN_SESSION_BOOTSTRAP_RETRY_MS = 120;
+
 async function readApiResult<T>(response: Response, invalidCode: string) {
   try {
     return (await response.json()) as ApiResult<T>;
@@ -45,12 +48,10 @@ async function readApiResult<T>(response: Response, invalidCode: string) {
 
 async function completeAdminAuthJsSignIn(input: {
   idToken: string;
-  adminLoginPassword: string;
 }) {
   const signInResult = await signIn("admin-credentials", {
     redirect: false,
     idToken: input.idToken,
-    adminLoginPassword: input.adminLoginPassword,
   });
 
   if (!signInResult) {
@@ -67,6 +68,49 @@ async function completeAdminAuthJsSignIn(input: {
       "Unable to establish authenticated admin session.",
     );
   }
+
+  /* Admin redirect must wait for the server-observed admin session to avoid /admin <-> /admin/login bounce loops. */
+  for (let attempt = 0; attempt < ADMIN_SESSION_BOOTSTRAP_MAX_ATTEMPTS; attempt += 1) {
+    const meResponse = await fetch("/api/auth/me", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+
+    const mePayload = await readApiResult<{
+      session: {
+        authenticated: boolean;
+        user: { role: "admin" | "user" } | null;
+      };
+    }>(meResponse, "ADMIN_BOOTSTRAP_RESPONSE_INVALID");
+
+    if (meResponse.ok && mePayload.ok && mePayload.data.session.authenticated && mePayload.data.session.user) {
+      if (mePayload.data.session.user.role !== "admin") {
+        throw createAuthFlowError(
+          "ADMIN_ACCOUNT_UNAUTHORIZED",
+          "This account is not authorized for admin access.",
+        );
+      }
+      return;
+    }
+
+    const responseErrorCode = mePayload.ok ? null : mePayload.error.code;
+    const hasAttemptsRemaining = attempt + 1 < ADMIN_SESSION_BOOTSTRAP_MAX_ATTEMPTS;
+    const isTransientBootstrapState =
+      responseErrorCode === null || responseErrorCode === "SESSION_NOT_ESTABLISHED";
+
+    if (!hasAttemptsRemaining) {
+      throw createAuthFlowError(responseErrorCode || "ADMIN_BOOTSTRAP_FAILED");
+    }
+
+    if (!isTransientBootstrapState) {
+      throw createAuthFlowError(responseErrorCode || "ADMIN_BOOTSTRAP_FAILED");
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, ADMIN_SESSION_BOOTSTRAP_RETRY_MS));
+  }
+
+  throw createAuthFlowError("ADMIN_BOOTSTRAP_FAILED");
 }
 
 export function AdminLoginPanel({
@@ -141,7 +185,6 @@ export function AdminLoginPanel({
 
     await completeAdminAuthJsSignIn({
       idToken,
-      adminLoginPassword: "",
     });
 
     return APP_ROUTES.admin;
