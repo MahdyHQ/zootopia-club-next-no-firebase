@@ -191,8 +191,8 @@ export async function verifyAdminClaimActivation(
   | { ok: false; code: string; message: string; status: number }
 > {
   /* Admin identity remains server-authoritative by allowlist.
-     Claims are optional at this stage and only act as an explicit deny switch when
-     `admin: false` is present in app metadata, preserving an owner-controlled override. */
+     Claims are optional at this stage: allow claims can continue to permit access, while
+     an explicit `admin: false` deny claim blocks access for an allowlisted account. */
   if (
     hasAdminAccessFromClaims({
       email: input.email,
