@@ -7,9 +7,7 @@ import {
   hasRecentSignIn,
   isAllowlistedAdminEmail,
 } from "@/lib/server/admin-auth";
-import {
-  getFirebaseAdminAuth,
-} from "@/lib/server/firebase-admin";
+import { getServerAuthAdmin } from "@/lib/server/server-auth";
 import {
   appendAdminLog,
   getRoleFromAuthClaims,
@@ -73,7 +71,7 @@ export async function POST(request: Request) {
   const sessionTtlSeconds = getSessionTtlSeconds();
 
   try {
-    const auth = getFirebaseAdminAuth();
+    const auth = getServerAuthAdmin();
     const decodedToken = await auth.verifyIdToken(idToken);
     const tokenClaims = decodedToken as Record<string, unknown>;
 

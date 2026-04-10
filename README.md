@@ -66,13 +66,12 @@ npm run firebase:rules:deploy
 
 Important runtime groups:
 
-- Public web env: `NEXT_PUBLIC_FIREBASE_*`
-- Server env: Firebase Admin credentials, admin email config, and AI provider keys
+- Public web env: `NEXT_PUBLIC_SUPABASE_*`
+- Server env: `SUPABASE_SERVICE_ROLE_KEY`, Firebase server data/storage credentials, admin email config, and AI provider keys
 - Firestore target: `zootopia-club-next-database`
 - Local development source of truth: root `.env.local`
 - Code-managed deploy config source of truth: `apps/web/apphosting.yaml`
 - Secret values source of truth: Cloud Secret Manager (referenced from `apps/web/apphosting.yaml`)
-- Admin password rotation source of truth: Firebase Auth user credentials via `npm run firebase:admin:set-passwords` (not runtime shared-password env checks)
 
 ## Docs
 

@@ -12,7 +12,7 @@ import {
   isProfileCompletionRequired,
 } from "@/lib/return-to";
 import { hasAdminAccessFromClaims } from "@/lib/server/admin-auth";
-import { getFirebaseAdminAuth } from "@/lib/server/firebase-admin";
+import { getServerAuthAdmin } from "@/lib/server/server-auth";
 import { getSessionExpiryTimestamp } from "@/lib/server/session-config";
 import {
   getRoleFromAuthClaims,
@@ -45,7 +45,7 @@ const getVerifiedSessionContext = cache(async () => {
   }
 
   try {
-    const decodedToken = await getFirebaseAdminAuth().verifySessionCookie(
+    const decodedToken = await getServerAuthAdmin().verifySessionCookie(
       sessionCookie,
       true,
     );

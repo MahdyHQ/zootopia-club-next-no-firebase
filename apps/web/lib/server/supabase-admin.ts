@@ -1,8 +1,8 @@
 import "server-only";
 
-import type { DecodedIdToken, UserInfo, UserRecord } from "firebase-admin/auth";
 import { createClient, type User, type SupabaseClient } from "@supabase/supabase-js";
 
+import type { AuthUserInfo, AuthUserRecord, DecodedAuthToken } from "@/lib/server/auth-types";
 import {
   getSupabaseUrl,
   hasSupabasePublicRuntime,
@@ -20,10 +20,7 @@ function readEnv(value: string | undefined) {
 }
 
 export function getSupabaseServiceRoleKey() {
-  return (
-    readEnv(process.env.SUPABASE_SERVICE_ROLE_KEY)
-    || readEnv(process.env.SUPABASE_SERVICE_KEY)
-  );
+  return readEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 export function hasSupabaseAdminRuntime() {
@@ -152,10 +149,10 @@ function normalizeSupabaseTimestamp(value: unknown) {
   return new Date(parsed).toISOString();
 }
 
-function mapSupabaseUserToFirebaseUser(user: User): UserRecord {
+function mapSupabaseUserToAuthRecord(user: User): AuthUserRecord {
   const userRecord = toLooseUserRecord(user);
   const provider = mapProviderToFirebaseProvider(readSupabaseProvider(user));
-  const providerData: UserInfo[] = provider
+  const providerData: AuthUserInfo[] = provider
     ? [
         {
           providerId: provider,
@@ -174,7 +171,7 @@ function mapSupabaseUserToFirebaseUser(user: User): UserRecord {
                 ? user.user_metadata.picture
                 : null,
           phoneNumber: null,
-        } as unknown as UserInfo,
+        },
       ]
     : [];
 
@@ -228,7 +225,7 @@ function mapSupabaseUserToFirebaseUser(user: User): UserRecord {
         email: user.email ?? null,
       };
     },
-  } as unknown as UserRecord;
+  } as AuthUserRecord;
 }
 
 function buildSupabaseDecodedToken(input: {
@@ -276,7 +273,7 @@ function buildSupabaseDecodedToken(input: {
     },
   };
 
-  return decodedToken as unknown as DecodedIdToken;
+  return decodedToken as DecodedAuthToken;
 }
 
 export async function verifySupabaseAccessToken(token: string) {
@@ -307,7 +304,7 @@ export async function listSupabaseAuthUsers(input: {
 }) {
   if (!hasSupabaseAdminRuntime()) {
     return {
-      users: [] as UserRecord[],
+      users: [] as AuthUserRecord[],
       pageToken: undefined,
     };
   }
@@ -326,7 +323,7 @@ export async function listSupabaseAuthUsers(input: {
     });
   }
 
-  const users = (data.users ?? []).map((user: User) => mapSupabaseUserToFirebaseUser(user));
+  const users = (data.users ?? []).map((user: User) => mapSupabaseUserToAuthRecord(user));
   const nextPageToken = users.length === maxResults ? String(currentPage + 1) : undefined;
 
   return {
@@ -345,7 +342,7 @@ export async function getSupabaseAuthUser(uid: string) {
     return null;
   }
 
-  return mapSupabaseUserToFirebaseUser(data.user);
+  return mapSupabaseUserToAuthRecord(data.user);
 }
 
 export async function setSupabaseUserClaims(

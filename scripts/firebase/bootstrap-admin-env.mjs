@@ -45,7 +45,7 @@ async function main() {
   if (missingEntries.length === 0) {
     console.log(".env.local already contains the Firebase Admin bootstrap values.");
     console.log(
-      "Keep the browser-safe NEXT_PUBLIC_FIREBASE_* values in the root .env.local. apps/web loads that root env through @next/env.",
+      "Keep the browser-safe NEXT_PUBLIC_SUPABASE_* values in the root .env.local. apps/web loads that root env through @next/env.",
     );
     return;
   }
@@ -68,7 +68,7 @@ async function main() {
       .join(", ")}`,
   );
   console.log(
-    "Verify FIREBASE_STORAGE_BUCKET against Firebase Console, then keep the browser-safe NEXT_PUBLIC_FIREBASE_* values in the root .env.local for apps/web.",
+    "Verify FIREBASE_STORAGE_BUCKET against Firebase Console, then keep the browser-safe NEXT_PUBLIC_SUPABASE_* values in the root .env.local for apps/web.",
   );
 }
 

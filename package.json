@@ -14,12 +14,6 @@
     "dev:web": "npm run dev --workspace=@zootopia/web",
     "build": "npm run build --workspaces --if-present",
     "build:web": "npm run build --workspace=@zootopia/web",
-    "firebase:deploy": "npx -y firebase-tools@latest deploy --only apphosting,firestore,storage",
-    "firebase:app:deploy": "npx -y firebase-tools@latest deploy --only apphosting:zootopia-club-next-backend",
-    "firebase:admin:bootstrap-env": "node ./scripts/firebase/bootstrap-admin-env.mjs",
-    "firebase:admin:set-claims": "node ./scripts/firebase/set-admin-claims.mjs",
-    "firebase:admin:set-passwords": "node ./scripts/firebase/set-admin-passwords.mjs",
-    "firebase:rules:deploy": "npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes,storage",
     "lint": "npm run lint --workspaces --if-present",
     "lint:web": "npm run lint --workspace=@zootopia/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -42,6 +36,8 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
     "framer-motion": "12.38.0",
     "lucide-react": "^1.7.0",
     "pnpm": "^10.33.0"

@@ -1,13 +1,11 @@
 import "server-only";
 
 import type { AdminAssessmentCreditState, UserDocument } from "@zootopia/shared-types";
-import type { UserInfo } from "firebase-admin/auth";
 import ExcelJS from "exceljs";
 
-import {
-  getFirebaseAdminAuth,
-  hasFirebaseAdminRuntime,
-} from "@/lib/server/firebase-admin";
+import type { AuthUserInfo } from "@/lib/server/auth-types";
+import { getServerAuthAdmin } from "@/lib/server/server-auth";
+import { hasSupabaseAdminRuntime } from "@/lib/server/supabase-admin";
 
 type AdminUserAuthExportMetadata = {
   authDisabled: boolean | null;
@@ -160,7 +158,7 @@ function formatStatus(status: UserDocument["status"]) {
   return status === "active" ? "Active" : "Suspended";
 }
 
-function summarizeProviders(providerData: UserInfo[]) {
+function summarizeProviders(providerData: AuthUserInfo[]) {
   const labels = providerData
     .map((provider) => AUTH_PROVIDER_LABELS[provider.providerId] ?? provider.providerId)
     .map((label) => label.trim())
@@ -188,11 +186,11 @@ function normalizeAuthTimestamp(value: string | null | undefined) {
 
 export async function listAdminUserAuthMetadataByUid() {
   const metadataByUid = new Map<string, AdminUserAuthExportMetadata>();
-  if (!hasFirebaseAdminRuntime()) {
+  if (!hasSupabaseAdminRuntime()) {
     return metadataByUid;
   }
 
-  const auth = getFirebaseAdminAuth();
+  const auth = getServerAuthAdmin();
   let nextPageToken: string | undefined;
 
   do {

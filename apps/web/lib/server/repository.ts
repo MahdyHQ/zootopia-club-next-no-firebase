@@ -23,8 +23,9 @@ import {
   getPhoneNumberMetadata,
   toIsoTimestamp,
 } from "@zootopia/shared-utils";
-import type { UserRecord } from "firebase-admin/auth";
 import { randomUUID } from "node:crypto";
+
+import type { AuthUserRecord } from "@/lib/server/auth-types";
 
 import { getModelById } from "@/lib/ai/models";
 import {
@@ -48,11 +49,11 @@ import {
 import { deleteAssessmentArtifact } from "@/lib/server/assessment-artifact-storage";
 import { normalizeAssessmentGenerationRecord } from "@/lib/server/assessment-records";
 import { deleteDocumentBinaryFromStorage } from "@/lib/server/document-runtime";
+import { getServerAuthAdmin } from "@/lib/server/server-auth";
 import {
-  getFirebaseAdminAuth,
-  getFirebaseAdminFirestore,
-  hasFirebaseAdminRuntime,
-} from "@/lib/server/firebase-admin";
+  getZootopiaFirestore,
+  shouldUseZootopiaPostgresPersistence,
+} from "@/lib/server/zootopia-firestore-pg";
 import {
   getAssessmentStatus,
   getRetentionExpiryTimestamp,
@@ -162,7 +163,7 @@ function getMemoryStore(): MemoryStore {
 }
 
 function shouldUseFirestore() {
-  return hasFirebaseAdminRuntime();
+  return shouldUseZootopiaPostgresPersistence();
 }
 
 function toSafeIsoTimestamp(value: string | null | undefined, fallback: string) {
@@ -223,7 +224,7 @@ async function persistResolvedOwnerRoleBackfill(
   ownerRole: UserRole,
 ) {
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection(collectionName)
       .doc(recordId)
       .set({ ownerRole }, { merge: true });
@@ -333,7 +334,7 @@ async function purgeExpiredDocumentRecord(record: DocumentRecord) {
   await deleteDocumentBinaryFromStorage(record);
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore().collection("documents").doc(record.id).delete();
+    await getZootopiaFirestore().collection("documents").doc(record.id).delete();
   } else {
     getMemoryStore().documents.delete(record.id);
   }
@@ -391,7 +392,7 @@ export async function sweepExpiredUploadedSources(input: {
   let candidates: DocumentRecord[] = [];
 
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("documents")
       .where("expiresAt", "<=", runAt)
       .orderBy("expiresAt", "asc")
@@ -399,7 +400,7 @@ export async function sweepExpiredUploadedSources(input: {
       .get();
 
     candidates = snapshot.docs.map((documentSnapshot) => {
-      const record = documentSnapshot.data() as DocumentRecord;
+      const record = documentSnapshot.data() as unknown as DocumentRecord;
       const normalizedRecord: DocumentRecord = {
         ...record,
         id: record.id || documentSnapshot.id,
@@ -453,7 +454,7 @@ export async function clearUploadWorkspaceForOwner(ownerUid: string) {
   if (shouldUseFirestore()) {
     await Promise.all(
       normalizedRecords.map((record) =>
-        getFirebaseAdminFirestore().collection("documents").doc(record.id).delete(),
+        getZootopiaFirestore().collection("documents").doc(record.id).delete(),
       ),
     );
   } else {
@@ -482,7 +483,7 @@ async function purgeExpiredAssessmentGenerationRecord(record: AssessmentGenerati
   await purgeExpiredAssessmentArtifacts(record);
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection("assessmentGenerations")
       .doc(record.id)
       .delete();
@@ -502,7 +503,7 @@ async function purgeExpiredAssessmentGenerationRecord(record: AssessmentGenerati
 
 async function persistDocumentRecord(record: DocumentRecord) {
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection("documents")
       .doc(record.id)
       .set(omitUndefinedOwnerRole(record), { merge: true });
@@ -519,7 +520,7 @@ async function markPreviousDocumentsInactive(input: {
   const supersededDocuments: DocumentRecord[] = [];
 
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("documents")
       .where("ownerUid", "==", input.ownerUid)
       .orderBy("createdAt", "desc")
@@ -532,7 +533,7 @@ async function markPreviousDocumentsInactive(input: {
           return;
         }
 
-        const existing = documentSnapshot.data() as DocumentRecord;
+        const existing = documentSnapshot.data() as unknown as DocumentRecord;
         if (existing.isActive === false && existing.supersededAt) {
           return;
         }
@@ -639,7 +640,7 @@ function resolveProfileState(input: {
 }
 
 function buildUserDocumentFromAuthRecord(
-  authUser: UserRecord,
+  authUser: AuthUserRecord,
   existing: UserDocument | null,
 ) {
   const now = toIsoTimestamp(new Date());
@@ -696,11 +697,11 @@ function buildUserDocumentFromAuthRecord(
 }
 
 async function listAllFirebaseAuthUsers() {
-  const users: UserRecord[] = [];
+  const users: AuthUserRecord[] = [];
   let nextPageToken: string | undefined;
 
   do {
-    const page = await getFirebaseAdminAuth().listUsers(1000, nextPageToken);
+    const page = await getServerAuthAdmin().listUsers(1000, nextPageToken);
     users.push(...page.users);
     nextPageToken = page.pageToken;
   } while (nextPageToken);
@@ -727,7 +728,7 @@ export function getRoleFromAuthClaims(claims: {
 
 export async function getUserByUid(uid: string) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("users")
       .doc(uid)
       .get();
@@ -736,9 +737,9 @@ export async function getUserByUid(uid: string) {
       try {
         // Admin user management must be able to act on real Firebase Auth accounts even before
         // those accounts have hydrated a Firestore user document through a normal sign-in flow.
-        const authUser = await getFirebaseAdminAuth().getUser(uid);
+        const authUser = await getServerAuthAdmin().getUser(uid);
         const hydratedUser = buildUserDocumentFromAuthRecord(authUser, null);
-        await getFirebaseAdminFirestore()
+        await getZootopiaFirestore()
           .collection("users")
           .doc(uid)
           .set(hydratedUser, { merge: true });
@@ -757,7 +758,7 @@ export async function getUserByUid(uid: string) {
       }
     }
 
-    return snapshot.data() as UserDocument;
+    return snapshot.data() as unknown as UserDocument;
   }
 
   return getMemoryStore().users.get(uid) ?? null;
@@ -809,7 +810,7 @@ export async function upsertUserFromAuth(input: {
   };
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection("users")
       .doc(input.uid)
       .set(nextUser, { merge: true });
@@ -823,13 +824,13 @@ export async function upsertUserFromAuth(input: {
 export async function listUsers() {
   if (shouldUseFirestore()) {
     const [snapshot, authUsers] = await Promise.all([
-      getFirebaseAdminFirestore().collection("users").get(),
+      getZootopiaFirestore().collection("users").get(),
       listAllFirebaseAuthUsers(),
     ]);
     const usersByUid = new Map<string, UserDocument>();
 
     for (const doc of snapshot.docs) {
-      const user = doc.data() as UserDocument;
+      const user = doc.data() as unknown as UserDocument;
       usersByUid.set(user.uid, user);
     }
 
@@ -892,7 +893,7 @@ export async function setUserRole(uid: string, role: UserRole) {
   };
 
   if (shouldUseFirestore()) {
-    const auth = getFirebaseAdminAuth();
+    const auth = getServerAuthAdmin();
     const userRecord = await auth.getUser(uid);
     await auth.setCustomUserClaims(uid, {
       ...(userRecord.customClaims ?? {}),
@@ -900,7 +901,7 @@ export async function setUserRole(uid: string, role: UserRole) {
       admin: role === "admin",
     });
     await auth.revokeRefreshTokens(uid);
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection("users")
       .doc(uid)
       .set(nextUser, { merge: true });
@@ -926,11 +927,11 @@ export async function setUserStatus(uid: string, status: UserStatus) {
   if (shouldUseFirestore()) {
     // Blocking stays server-authoritative here: we mirror the workspace status into Firebase Auth
     // itself and revoke refresh tokens so an old session cannot keep bypassing the admin decision.
-    await getFirebaseAdminAuth().updateUser(uid, {
+    await getServerAuthAdmin().updateUser(uid, {
       disabled: status === "suspended",
     });
-    await getFirebaseAdminAuth().revokeRefreshTokens(uid);
-    await getFirebaseAdminFirestore()
+    await getServerAuthAdmin().revokeRefreshTokens(uid);
+    await getZootopiaFirestore()
       .collection("users")
       .doc(uid)
       .set(nextUser, { merge: true });
@@ -980,7 +981,7 @@ export async function updateUserProfile(
   };
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection("users")
       .doc(uid)
       .set(nextUser, { merge: true });
@@ -1000,7 +1001,7 @@ export async function appendAdminLog(input: Omit<AdminLogEntry, "id" | "createdA
 
   try {
     if (shouldUseFirestore()) {
-      await getFirebaseAdminFirestore()
+      await getZootopiaFirestore()
         .collection("adminActivityLogs")
         .doc(entry.id)
         .set(entry);
@@ -1014,13 +1015,13 @@ export async function appendAdminLog(input: Omit<AdminLogEntry, "id" | "createdA
 
 export async function listAdminActivityLogs(limit = 40) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("adminActivityLogs")
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
 
-    return snapshot.docs.map((doc) => doc.data() as AdminLogEntry);
+    return snapshot.docs.map((doc) => doc.data() as unknown as AdminLogEntry);
   }
 
   return getMemoryStore().adminLogs
@@ -1031,13 +1032,13 @@ export async function listAdminActivityLogs(limit = 40) {
 
 async function listRawDocumentsForOwner(ownerUid: string) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("documents")
       .where("ownerUid", "==", ownerUid)
       .get();
 
     return snapshot.docs.map((doc) => {
-      const record = doc.data() as DocumentRecord;
+      const record = doc.data() as unknown as DocumentRecord;
       return {
         ...record,
         id: record.id || doc.id,
@@ -1052,12 +1053,12 @@ async function listRawDocumentsForOwner(ownerUid: string) {
 
 async function listRawAssessmentGenerationsForOwner(ownerUid: string) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("assessmentGenerations")
       .where("ownerUid", "==", ownerUid)
       .get();
 
-    return snapshot.docs.map((doc) => doc.data() as AssessmentGeneration);
+    return snapshot.docs.map((doc) => doc.data() as unknown as AssessmentGeneration);
   }
 
   return [...getMemoryStore().assessments.values()].filter(
@@ -1067,12 +1068,12 @@ async function listRawAssessmentGenerationsForOwner(ownerUid: string) {
 
 async function listRawInfographicGenerationsForOwner(ownerUid: string) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("infographicGenerations")
       .where("ownerUid", "==", ownerUid)
       .get();
 
-    return snapshot.docs.map((doc) => doc.data() as InfographicGeneration);
+    return snapshot.docs.map((doc) => doc.data() as unknown as InfographicGeneration);
   }
 
   return [...getMemoryStore().infographics.values()].filter(
@@ -1178,14 +1179,14 @@ export async function listDocumentsForUser(ownerUid: string, limit = 20) {
   const resolvedOwnerRole = await resolvePersistedOwnerRole({ ownerUid });
 
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("documents")
       .where("ownerUid", "==", ownerUid)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
 
-    const rawDocuments = snapshot.docs.map((doc) => doc.data() as DocumentRecord);
+    const rawDocuments = snapshot.docs.map((doc) => doc.data() as unknown as DocumentRecord);
     await backfillMissingOwnerRoles("documents", rawDocuments, resolvedOwnerRole);
     const documents = normalizeDocumentRecordList(rawDocuments, resolvedOwnerRole);
     const activeDocuments: DocumentRecord[] = [];
@@ -1224,7 +1225,7 @@ export async function listDocumentsForUser(ownerUid: string, limit = 20) {
 
 export async function getDocumentById(id: string) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("documents")
       .doc(id)
       .get();
@@ -1233,7 +1234,7 @@ export async function getDocumentById(id: string) {
       return null;
     }
 
-    const document = snapshot.data() as DocumentRecord;
+    const document = snapshot.data() as unknown as DocumentRecord;
     const fallbackDocuments = await listDocumentsForUser(document.ownerUid, 10);
     const fallbackActiveId =
       fallbackDocuments.find((record) => record.isActive)?.id ?? null;
@@ -1300,7 +1301,7 @@ async function promoteMostRecentDocumentActive(ownerUid: string) {
   const promotedAt = toIsoTimestamp(new Date());
 
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("documents")
       .where("ownerUid", "==", ownerUid)
       .orderBy("createdAt", "desc")
@@ -1321,7 +1322,7 @@ async function promoteMostRecentDocumentActive(ownerUid: string) {
       { merge: true },
     );
 
-    return nextDocument.data() as DocumentRecord;
+    return nextDocument.data() as unknown as DocumentRecord;
   }
 
   const store = getMemoryStore();
@@ -1350,7 +1351,7 @@ export async function deleteDocumentForOwner(documentId: string, ownerUid: strin
   }
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection("documents")
       .doc(documentId)
       .delete();
@@ -1571,7 +1572,7 @@ function buildAssessmentCreditComputation(input: {
 
 async function readAssessmentCreditAccount(input: { ownerUid: string; nowIso: string }) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
       .doc(input.ownerUid)
       .get();
@@ -1594,7 +1595,7 @@ async function readAssessmentCreditAccount(input: { ownerUid: string; nowIso: st
 
 async function listAssessmentCreditGrantsForOwner(input: { ownerUid: string; nowIso: string }) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
       .where("ownerUid", "==", input.ownerUid)
       .limit(400)
@@ -1630,7 +1631,7 @@ async function readAssessmentDailyCreditLedger(input: {
   const documentId = buildAssessmentDailyCreditDocumentId(input.ownerUid, input.dayKey);
 
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
       .doc(documentId)
       .get();
@@ -1858,8 +1859,8 @@ export async function beginAssessmentGenerationIdempotency(input: {
   let replayGenerationId: string | null = null;
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore().runTransaction(async (transaction) => {
-      const lockRef = getFirebaseAdminFirestore()
+    await getZootopiaFirestore().runTransaction(async (transaction) => {
+      const lockRef = getZootopiaFirestore()
         .collection(ASSESSMENT_GENERATION_IDEMPOTENCY_COLLECTION)
         .doc(docId);
       const lockSnapshot = await transaction.get(lockRef);
@@ -1889,7 +1890,7 @@ export async function beginAssessmentGenerationIdempotency(input: {
           existing.generationId
         ) {
           const generationSnapshot = await transaction.get(
-            getFirebaseAdminFirestore()
+            getZootopiaFirestore()
               .collection("assessmentGenerations")
               .doc(existing.generationId),
           );
@@ -2012,8 +2013,8 @@ export async function completeAssessmentGenerationIdempotency(input: {
   const nowIso = toIsoTimestamp(new Date());
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore().runTransaction(async (transaction) => {
-      const lockRef = getFirebaseAdminFirestore()
+    await getZootopiaFirestore().runTransaction(async (transaction) => {
+      const lockRef = getZootopiaFirestore()
         .collection(ASSESSMENT_GENERATION_IDEMPOTENCY_COLLECTION)
         .doc(input.token.docId);
       const lockSnapshot = await transaction.get(lockRef);
@@ -2071,8 +2072,8 @@ export async function clearAssessmentGenerationIdempotencyLock(input: {
   token: AssessmentGenerationIdempotencyToken;
 }) {
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore().runTransaction(async (transaction) => {
-      const lockRef = getFirebaseAdminFirestore()
+    await getZootopiaFirestore().runTransaction(async (transaction) => {
+      const lockRef = getZootopiaFirestore()
         .collection(ASSESSMENT_GENERATION_IDEMPOTENCY_COLLECTION)
         .doc(input.token.docId);
       const lockSnapshot = await transaction.get(lockRef);
@@ -2132,8 +2133,8 @@ export async function applyAdminAssessmentCreditMutation(input: {
   const mutation = input.mutation;
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore().runTransaction(async (transaction) => {
-      const accountRef = getFirebaseAdminFirestore()
+    await getZootopiaFirestore().runTransaction(async (transaction) => {
+      const accountRef = getZootopiaFirestore()
         .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
         .doc(input.ownerUid);
       const accountSnapshot = await transaction.get(accountRef);
@@ -2285,7 +2286,7 @@ export async function applyAdminAssessmentCreditMutation(input: {
           };
 
           transaction.set(
-            getFirebaseAdminFirestore()
+            getZootopiaFirestore()
               .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
               .doc(grantId),
             grantRecord,
@@ -2300,7 +2301,7 @@ export async function applyAdminAssessmentCreditMutation(input: {
             throw new Error("ASSESSMENT_CREDIT_GRANT_ID_REQUIRED");
           }
 
-          const grantRef = getFirebaseAdminFirestore()
+          const grantRef = getZootopiaFirestore()
             .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
             .doc(grantId);
           const grantSnapshot = await transaction.get(grantRef);
@@ -2539,14 +2540,14 @@ export async function reserveAssessmentDailyCreditAttempt(
   let failure: AssessmentDailyCreditReservationFailure | null = null;
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore().runTransaction(async (transaction) => {
-      const creditsRef = getFirebaseAdminFirestore()
+    await getZootopiaFirestore().runTransaction(async (transaction) => {
+      const creditsRef = getZootopiaFirestore()
         .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
         .doc(documentId);
-      const accountRef = getFirebaseAdminFirestore()
+      const accountRef = getZootopiaFirestore()
         .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
         .doc(user.uid);
-      const grantsQuery = getFirebaseAdminFirestore()
+      const grantsQuery = getZootopiaFirestore()
         .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
         .where("ownerUid", "==", user.uid)
         .limit(400);
@@ -2847,8 +2848,8 @@ export async function releaseAssessmentDailyCreditReservation(input: {
   );
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore().runTransaction(async (transaction) => {
-      const documentRef = getFirebaseAdminFirestore()
+    await getZootopiaFirestore().runTransaction(async (transaction) => {
+      const documentRef = getZootopiaFirestore()
         .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
         .doc(documentId);
       const snapshot = await transaction.get(documentRef);
@@ -2976,7 +2977,7 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
 
   if (isAssessmentDailyCreditsExempt(input.user.role)) {
     if (shouldUseFirestore()) {
-      await getFirebaseAdminFirestore()
+      await getZootopiaFirestore()
         .collection("assessmentGenerations")
         .doc(normalizedRecord.id)
         .set(omitUndefinedOwnerRole(normalizedRecord), { merge: true });
@@ -3011,17 +3012,17 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
   if (shouldUseFirestore()) {
     let credits: AssessmentDailyCreditsSummary | null = null;
 
-    await getFirebaseAdminFirestore().runTransaction(async (transaction) => {
-      const generationRef = getFirebaseAdminFirestore()
+    await getZootopiaFirestore().runTransaction(async (transaction) => {
+      const generationRef = getZootopiaFirestore()
         .collection("assessmentGenerations")
         .doc(normalizedRecord.id);
-      const creditsRef = getFirebaseAdminFirestore()
+      const creditsRef = getZootopiaFirestore()
         .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
         .doc(documentId);
-      const accountRef = getFirebaseAdminFirestore()
+      const accountRef = getZootopiaFirestore()
         .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
         .doc(input.user.uid);
-      const grantsQuery = getFirebaseAdminFirestore()
+      const grantsQuery = getZootopiaFirestore()
         .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
         .where("ownerUid", "==", input.user.uid)
         .limit(400);
@@ -3168,7 +3169,7 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
 
         const grantRef =
           grantRefsById.get(nextGrant.id)
-          ?? getFirebaseAdminFirestore()
+          ?? getZootopiaFirestore()
             .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
             .doc(nextGrant.id);
         transaction.set(
@@ -3339,7 +3340,7 @@ export async function saveAssessmentGeneration(record: AssessmentGeneration) {
   });
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection("assessmentGenerations")
       .doc(normalizedRecord.id)
       .set(omitUndefinedOwnerRole(normalizedRecord), { merge: true });
@@ -3354,14 +3355,14 @@ export async function listAssessmentGenerationsForUser(ownerUid: string, limit =
   const resolvedOwnerRole = await resolvePersistedOwnerRole({ ownerUid });
 
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("assessmentGenerations")
       .where("ownerUid", "==", ownerUid)
       .orderBy("createdAt", "desc")
       .limit(limit)
       .get();
 
-    const rawGenerations = snapshot.docs.map((doc) => doc.data() as AssessmentGeneration);
+    const rawGenerations = snapshot.docs.map((doc) => doc.data() as unknown as AssessmentGeneration);
     await backfillMissingOwnerRoles(
       "assessmentGenerations",
       rawGenerations,
@@ -3416,7 +3417,7 @@ export async function listAssessmentGenerationsForUser(ownerUid: string, limit =
 
 export async function getAssessmentGenerationById(id: string) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("assessmentGenerations")
       .doc(id)
       .get();
@@ -3425,7 +3426,7 @@ export async function getAssessmentGenerationById(id: string) {
       return null;
     }
 
-    const record = snapshot.data() as AssessmentGeneration;
+    const record = snapshot.data() as unknown as AssessmentGeneration;
     const resolvedOwnerRole = await resolvePersistedOwnerRole({
       ownerUid: record.ownerUid,
       ownerRole: record.ownerRole,
@@ -3661,7 +3662,7 @@ export async function saveInfographicGeneration(record: InfographicGeneration) {
   });
 
   if (shouldUseFirestore()) {
-    await getFirebaseAdminFirestore()
+    await getZootopiaFirestore()
       .collection("infographicGenerations")
       .doc(normalizedRecord.id)
       .set(omitUndefinedOwnerRole(normalizedRecord), { merge: true });
@@ -3676,7 +3677,7 @@ export async function listInfographicGenerationsForUser(ownerUid: string, limit 
   const resolvedOwnerRole = await resolvePersistedOwnerRole({ ownerUid });
 
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("infographicGenerations")
       .where("ownerUid", "==", ownerUid)
       .orderBy("createdAt", "desc")
@@ -3684,7 +3685,7 @@ export async function listInfographicGenerationsForUser(ownerUid: string, limit 
       .get();
 
     const rawRecords = snapshot.docs.map((doc) => {
-      const record = doc.data() as InfographicGenerationLike;
+      const record = doc.data() as unknown as InfographicGenerationLike;
       return {
         ...record,
         id: normalizeInfographicText(record.id) || doc.id,
@@ -3717,7 +3718,7 @@ export async function listInfographicGenerationsForUser(ownerUid: string, limit 
 
 export async function getInfographicGenerationById(id: string) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection("infographicGenerations")
       .doc(id)
       .get();
@@ -3726,7 +3727,7 @@ export async function getInfographicGenerationById(id: string) {
       return null;
     }
 
-    const rawRecord = snapshot.data() as InfographicGenerationLike;
+    const rawRecord = snapshot.data() as unknown as InfographicGenerationLike;
     const normalizedRecord = {
       ...rawRecord,
       id: normalizeInfographicText(rawRecord.id) || snapshot.id,
@@ -3789,7 +3790,7 @@ export async function getInfographicGenerationForOwner(
 
 async function countCollection(collectionName: string) {
   if (shouldUseFirestore()) {
-    const snapshot = await getFirebaseAdminFirestore()
+    const snapshot = await getZootopiaFirestore()
       .collection(collectionName)
       .limit(500)
       .get();

@@ -1,0 +1,17 @@
+-- Phase 1: private Storage bucket for migrated object paths
+-- -----------------------------------------------------------------------------
+-- Mirrors Firebase Storage namespaces enforced in firebase/storage.rules:
+--   documents/{ownerUid}/{documentId}/{fileName}
+--   assessment-results/{ownerUid}/{generationId}/{fileName}
+--   assessment-exports/{ownerUid}/{generationId}/{artifactKey}/{fileName}
+--
+-- Access in early phases: server-only via service role (same trust boundary as
+-- Firebase Admin SDK). Add `storage.objects` RLS policies when/if the browser
+-- or authenticated role must touch Storage directly.
+--
+-- Idempotent: safe to re-run on fresh or existing projects where the bucket exists.
+-- -----------------------------------------------------------------------------
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('zootopia-app', 'zootopia-app', false, null, null)
+ON CONFLICT (id) DO NOTHING;

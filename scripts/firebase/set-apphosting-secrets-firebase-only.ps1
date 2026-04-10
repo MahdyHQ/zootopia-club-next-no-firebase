@@ -33,6 +33,7 @@ $FirebaseCliPrefix = @("npx", "-y", "firebase-tools@latest")
 # This definition table is the single source of truth for App Hosting secret setup.
 # Keep secret names aligned with apps/web/apphosting.yaml and env keys aligned with .env.example.
 $SecretDefinitions = @(
+  [pscustomobject]@{ SecretName = "supabase-service-role-key"; EnvKey = "SUPABASE_SERVICE_ROLE_KEY"; Required = $true; Feature = "Supabase server auth adapter" },
   [pscustomobject]@{ SecretName = "google-ai-api-key"; EnvKey = "GOOGLE_AI_API_KEY"; Required = $true; Feature = "Gemini and Google AI runtime" },
   [pscustomobject]@{ SecretName = "dashscope-api-key"; EnvKey = "DASHSCOPE_API_KEY"; Required = $false; Feature = "Qwen DashScope runtime" },
   [pscustomobject]@{ SecretName = "smtp-user"; EnvKey = "SMTP_USER"; Required = $false; Feature = "Contact relay" },

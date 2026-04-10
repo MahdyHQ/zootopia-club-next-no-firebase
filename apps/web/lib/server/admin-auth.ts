@@ -5,7 +5,7 @@ import {
   buildAdminUsernameLookup,
 } from "@zootopia/shared-config";
 import type { AdminIdentifierResolution } from "@zootopia/shared-types";
-import type { DecodedIdToken } from "firebase-admin/auth";
+import type { DecodedAuthToken } from "@/lib/server/auth-types";
 
 function normalizeIdentifier(value: string) {
   return value.trim().toLowerCase();
@@ -109,7 +109,7 @@ export function resolveAdminIdentifier(
   };
 }
 
-export function getDecodedSignInProvider(decodedToken: Pick<DecodedIdToken, "firebase">) {
+export function getDecodedSignInProvider(decodedToken: Pick<DecodedAuthToken, "firebase">) {
   const firebaseClaims = decodedToken.firebase as
     | { sign_in_provider?: unknown }
     | undefined;
@@ -119,7 +119,7 @@ export function getDecodedSignInProvider(decodedToken: Pick<DecodedIdToken, "fir
     : null;
 }
 
-export function hasRecentSignIn(decodedToken: Pick<DecodedIdToken, "auth_time">) {
+export function hasRecentSignIn(decodedToken: Pick<DecodedAuthToken, "auth_time">) {
   const tokenRecord = decodedToken as Record<string, unknown>;
   const authTimeSeconds =
     typeof decodedToken.auth_time === "number"

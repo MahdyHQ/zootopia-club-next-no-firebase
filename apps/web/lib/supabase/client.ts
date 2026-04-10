@@ -1,6 +1,7 @@
 "use client";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   getSupabasePublishableKey,
@@ -14,6 +15,11 @@ export function isSupabaseWebConfigured() {
   return hasSupabasePublicRuntime();
 }
 
+/**
+ * Browser Supabase client. Uses `createBrowserClient` from `@supabase/ssr` per Supabase
+ * Next.js guidance; session persistence stays disabled so the app remains anchored on the
+ * httpOnly `zc_session` cookie issued by `/api/auth/bootstrap`.
+ */
 export function getSupabaseClient() {
   if (cachedClient) {
     return cachedClient;
@@ -26,7 +32,7 @@ export function getSupabaseClient() {
     throw new Error("SUPABASE_WEB_CONFIG_MISSING");
   }
 
-  cachedClient = createClient(supabaseUrl, publishableKey, {
+  cachedClient = createBrowserClient(supabaseUrl, publishableKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

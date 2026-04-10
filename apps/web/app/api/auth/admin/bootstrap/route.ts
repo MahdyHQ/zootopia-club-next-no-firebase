@@ -8,9 +8,7 @@ import {
   isAllowlistedAdminEmail,
   verifyAdminClaimActivation,
 } from "@/lib/server/admin-auth";
-import {
-  getFirebaseAdminAuth,
-} from "@/lib/server/firebase-admin";
+import { getServerAuthAdmin } from "@/lib/server/server-auth";
 import {
   appendAdminLog,
   getRoleFromAuthClaims,
@@ -29,7 +27,7 @@ const ADMIN_BOOTSTRAP_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 /* Auth adapter error codes that indicate a bad or expired token rather
    than an infrastructure failure. These are expected failure modes and should
    return 401 without leaking internal stack traces. */
-const FIREBASE_TOKEN_ERROR_CODES = new Set([
+const AUTH_TOKEN_ERROR_CODES = new Set([
   "auth/id-token-expired",
   "auth/id-token-revoked",
   "auth/invalid-id-token",
@@ -39,7 +37,7 @@ const FIREBASE_TOKEN_ERROR_CODES = new Set([
   "auth/user-not-found",
 ]);
 
-function getFirebaseErrorCode(error: unknown): string {
+function getAuthAdapterErrorCode(error: unknown): string {
   if (typeof error === "object" && error !== null && "code" in error) {
     return String((error as { code: unknown }).code ?? "");
   }
@@ -92,16 +90,16 @@ export async function POST(request: Request) {
 
   const sessionTtlSeconds = getSessionTtlSeconds();
 
-  let decodedToken: Awaited<ReturnType<ReturnType<typeof getFirebaseAdminAuth>["verifyIdToken"]>>;
+  let decodedToken: Awaited<ReturnType<ReturnType<typeof getServerAuthAdmin>["verifyIdToken"]>>;
 
-  /* Isolate token verification so Firebase token errors can be distinguished
+  /* Isolate token verification so auth adapter errors can be distinguished
      from downstream infrastructure failures and returned with the correct
      status code instead of being swallowed into a generic 401. */
   try {
-    const auth = getFirebaseAdminAuth();
+    const auth = getServerAuthAdmin();
     decodedToken = await auth.verifyIdToken(idToken);
   } catch (verifyError) {
-    const code = getFirebaseErrorCode(verifyError);
+    const code = getAuthAdapterErrorCode(verifyError);
 
     if (code === "auth/id-token-revoked") {
       return apiError(
@@ -119,7 +117,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (FIREBASE_TOKEN_ERROR_CODES.has(code)) {
+    if (AUTH_TOKEN_ERROR_CODES.has(code)) {
       return apiError(
         "ID_TOKEN_INVALID",
         "The provided ID token is invalid or has expired.",
@@ -138,7 +136,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const auth = getFirebaseAdminAuth();
+    const auth = getServerAuthAdmin();
     const tokenClaims = decodedToken as Record<string, unknown>;
     const isAllowlisted = isAllowlistedAdminEmail(decodedToken.email ?? null);
     const signInProvider = getDecodedSignInProvider(decodedToken);

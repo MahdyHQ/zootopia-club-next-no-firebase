@@ -7,7 +7,12 @@ import {
 import { randomUUID } from "node:crypto";
 
 import { buildDocumentMarkdownSnapshot } from "@/lib/server/document-markdown";
-import { getFirebaseAdminStorageBucket, hasFirebaseAdminRuntime } from "@/lib/server/firebase-admin";
+import {
+  deleteZootopiaPrivateObject,
+  downloadZootopiaPrivateObject,
+  hasRemoteBlobStorage,
+  uploadZootopiaPrivateObject,
+} from "@/lib/server/supabase-blob-storage";
 import {
   assertOwnerScopedStoragePath,
   buildDocumentStoragePath,
@@ -36,12 +41,11 @@ async function tryPersistBinaryToStorage(input: {
   mimeType: string;
   buffer: Buffer;
 }) {
-  if (!hasFirebaseAdminRuntime()) {
+  if (!hasRemoteBlobStorage()) {
     return null;
   }
 
   try {
-    const bucket = getFirebaseAdminStorageBucket();
     const path = buildDocumentStoragePath({
       ownerUid: input.ownerUid,
       documentId: input.documentId,
@@ -52,11 +56,10 @@ async function tryPersistBinaryToStorage(input: {
        owner's namespace even if a path builder is changed accidentally. */
     const storagePath = assertOwnerScopedStoragePath(path, input.ownerUid, ["documents"]);
 
-    await bucket.file(storagePath).save(input.buffer, {
-      metadata: {
-        contentType: input.mimeType,
-      },
-      resumable: false,
+    await uploadZootopiaPrivateObject({
+      path: storagePath,
+      body: input.buffer,
+      contentType: input.mimeType,
     });
 
     return storagePath;
@@ -69,17 +72,15 @@ export async function loadDocumentBinaryFromStorage(record: Pick<
   DocumentRecord,
   "storagePath" | "ownerUid" | "id"
 >) {
-  if (!record.storagePath || !hasFirebaseAdminRuntime()) {
+  if (!record.storagePath || !hasRemoteBlobStorage()) {
     return null;
   }
 
   try {
-    const bucket = getFirebaseAdminStorageBucket();
     const storagePath = assertOwnerScopedStoragePath(record.storagePath, record.ownerUid, [
       "documents",
     ]);
-    const [buffer] = await bucket.file(storagePath).download();
-    return buffer;
+    return downloadZootopiaPrivateObject(storagePath);
   } catch {
     return null;
   }
@@ -89,16 +90,15 @@ export async function deleteDocumentBinaryFromStorage(record: Pick<
   DocumentRecord,
   "storagePath" | "ownerUid"
 >) {
-  if (!record.storagePath || !hasFirebaseAdminRuntime()) {
+  if (!record.storagePath || !hasRemoteBlobStorage()) {
     return;
   }
 
   try {
-    const bucket = getFirebaseAdminStorageBucket();
     const storagePath = assertOwnerScopedStoragePath(record.storagePath, record.ownerUid, [
       "documents",
     ]);
-    await bucket.file(storagePath).delete();
+    await deleteZootopiaPrivateObject(storagePath);
   } catch {
     // Storage cleanup is best-effort only. The document record remains the primary owner-scoped source of truth.
   }

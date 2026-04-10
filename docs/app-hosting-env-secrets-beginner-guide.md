@@ -5,7 +5,7 @@ This is the production-safe env contract for this repo.
 ## What this guide guarantees
 
 - It classifies each important env family by purpose, sensitivity, and where it belongs.
-- It keeps backend authority on Firebase Auth and server routes.
+- It keeps backend authority on Supabase-authenticated server routes.
 - It avoids unsafe runtime shared-password patterns.
 - It explains exactly what is automatic vs manual in App Hosting.
 
@@ -44,9 +44,10 @@ Legend:
 
 | Family | Keys | Sensitivity | Required or optional | Local (.env.local) | Deployed (App Hosting) |
 | --- | --- | --- | --- | --- | --- |
-| Firebase web client config | NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, NEXT_PUBLIC_FIREBASE_APP_ID | public | required | yes | apphosting non-secret (BUILD) |
+| Supabase web client config | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY | public | required | yes | apphosting non-secret (BUILD) |
+| Supabase server auth | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY | internal/secret mix | required | yes | non-secret URL + secret reference (RUNTIME) |
 | Firebase server project routing | FIREBASE_PROJECT_ID, FIREBASE_STORAGE_BUCKET | internal | required | yes | apphosting non-secret (RUNTIME) |
-| Firebase Admin credential fallback | FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, FIREBASE_ADMIN_CLIENT_EMAIL, FIREBASE_ADMIN_PRIVATE_KEY, FIREBASE_ADMIN_PROJECT_ID | secret/internal mix | optional fallback | yes | secret refs only when managed identity is not used |
+| Firebase Admin credential fallback | FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY | secret/internal mix | optional fallback | yes | secret refs only when managed identity is not used |
 | Admin authorization controls | ZOOTOPIA_ADMIN_EMAILS | internal | required | yes | apphosting non-secret (RUNTIME) |
 | Session TTL control | ZOOTOPIA_SESSION_TTL_SECONDS | internal | optional | yes | apphosting non-secret (RUNTIME) |
 | Internal maintenance gate | ZOOTOPIA_MAINTENANCE_SECRET | secret | optional (required only when maintenance endpoint is used) | yes | apphosting secret reference (RUNTIME) |
@@ -56,8 +57,7 @@ Legend:
 | Contact relay non-secrets | SMTP_HOST, SMTP_PORT, SMTP_SECURE | internal | optional (required when /api/contact is enabled) | yes | apphosting non-secret (RUNTIME) |
 | Contact relay secrets | SMTP_USER, SMTP_PASS, EMAIL_FROM, CONTACT_FORM_TO | secret/internal mix | optional (required when /api/contact is enabled) | yes | apphosting secret references (RUNTIME) |
 | Local PDF executable overrides | ASSESSMENT_PDF_BROWSER_EXECUTABLE_PATH, PUPPETEER_EXECUTABLE_PATH | local-only | optional | yes | never set in apphosting |
-| Command-only admin password input | ZOOTOPIA_ADMIN_PASSWORD | secret | optional input channel for rotation command only | shell/session only | never set in apphosting |
-| System-injected runtime/build values | FIREBASE_WEBAPP_CONFIG, FIREBASE_CONFIG, GOOGLE_CLOUD_PROJECT, GCLOUD_PROJECT, GOOGLE_APPLICATION_CREDENTIALS, K_SERVICE, FUNCTION_TARGET, NODE_ENV | system-managed | automatic | optionally present | do not set manually |
+| System-injected runtime/build values | FIREBASE_CONFIG, GOOGLE_CLOUD_PROJECT, GCLOUD_PROJECT, GOOGLE_APPLICATION_CREDENTIALS, K_SERVICE, FUNCTION_TARGET, NODE_ENV | system-managed | automatic | optionally present | do not set manually |
 
 ## Current apphosting.yaml contract
 
@@ -65,15 +65,12 @@ Legend:
 
 BUILD values:
 
-- NEXT_PUBLIC_FIREBASE_API_KEY
-- NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-- NEXT_PUBLIC_FIREBASE_PROJECT_ID
-- NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-- NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-- NEXT_PUBLIC_FIREBASE_APP_ID
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
 RUNTIME values:
 
+- SUPABASE_URL
 - FIREBASE_PROJECT_ID
 - FIREBASE_STORAGE_BUCKET
 - ZOOTOPIA_ADMIN_EMAILS
@@ -95,6 +92,7 @@ Optional commented non-secret compatibility aliases:
 
 Active:
 
+- SUPABASE_SERVICE_ROLE_KEY -> supabase-service-role-key
 - GOOGLE_AI_API_KEY -> google-ai-api-key
 
 Optional (commented until needed):
@@ -108,46 +106,26 @@ Optional (commented until needed):
 - FIREBASE_CLIENT_EMAIL -> firebase-client-email
 - FIREBASE_PRIVATE_KEY -> firebase-private-key
 
-## Safe dynamic admin-password design
+## Safe admin auth design
 
 This repo does not use a runtime shared admin password variable for login checks. That is intentional.
 
 Why this is safer:
 
-- Admin auth is enforced by Firebase Auth sign-in + allowlist + admin claim checks.
-- Password ownership stays at user-account level in Firebase Auth.
-- Session issuance uses verified Firebase ID tokens, not a server-side shared secret comparison.
+- Admin auth is enforced by Supabase sign-in plus server-side allowlist and role/claim checks.
+- Password ownership stays at user-account level in the auth provider.
+- Session issuance uses verified access tokens, not a server-side shared secret comparison.
 
 Unsafe pattern to avoid:
 
 - Do not add any runtime variable like ZOOTOPIA_ADMIN_PASSWORD to apphosting.yaml.
 - Do not implement route handlers that compare a shared password from process.env for admin login.
 
-Supported dynamic rotation workflow:
+Supported rotation workflow:
 
-1. Choose a new password from your secure process.
-2. Rotate Firebase Auth admin account passwords via script.
-
-Linux/macOS one-shot:
-
-```bash
-npm run firebase:admin:set-passwords -- --password='NEW_PASSWORD'
-```
-
-PowerShell one-shot:
-
-```powershell
-$env:ZOOTOPIA_ADMIN_PASSWORD='NEW_PASSWORD'; npm run firebase:admin:set-passwords; Remove-Item Env:ZOOTOPIA_ADMIN_PASSWORD
-```
-
-Pipeline-safe mode (new script option):
-
-```bash
-echo 'NEW_PASSWORD' | npm run firebase:admin:set-passwords -- --password-stdin
-```
-
-3. Admin users sign out and sign back in so refreshed tokens are used.
-4. Keep password values out of .env files and out of source control.
+1. Rotate credentials in the auth provider (Supabase dashboard/admin API).
+2. Ensure allowlisted admins sign out and sign back in so refreshed tokens are used.
+3. Keep password values out of .env files and out of source control.
 
 ## Reserved key safety for App Hosting
 
@@ -188,8 +166,7 @@ FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY----
 
 Automatic by platform:
 
-- App Hosting injects system variables (for example FIREBASE_WEBAPP_CONFIG and FIREBASE_CONFIG).
-- apps/web/next.config.ts can backfill NEXT_PUBLIC_FIREBASE_* from FIREBASE_WEBAPP_CONFIG if needed.
+- App Hosting injects system variables (for example FIREBASE_CONFIG).
 
 Manual by operator:
 

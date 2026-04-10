@@ -10,10 +10,8 @@ export const ASSESSMENT_DAILY_SUCCESS_LIMIT_FALLBACK = 3;
 export const ASSESSMENT_DAILY_SUCCESS_LIMIT = ASSESSMENT_DAILY_SUCCESS_LIMIT_FALLBACK;
 export const ASSESSMENT_DAILY_CREDIT_TIME_ZONE = "UTC";
 export const ASSESSMENT_DAILY_RESERVATION_TTL_MS = 30 * 60 * 1000;
-export const ASSESSMENT_DAILY_SUCCESS_LIMIT_ENV_KEYS = [
-  "ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS",
-  "DEFAULT_DAILY_ASSESSMENT_CREDITS",
-] as const;
+export const ASSESSMENT_DAILY_SUCCESS_LIMIT_ENV_KEY =
+  "ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS";
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MIN = 1;
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MAX = 1000;
 
@@ -33,14 +31,14 @@ function parsePositiveInteger(value: unknown) {
 }
 
 export function getDefaultDailyAssessmentCreditsLimit() {
-  for (const envKey of ASSESSMENT_DAILY_SUCCESS_LIMIT_ENV_KEYS) {
-    const parsed = parsePositiveInteger(process.env[envKey]);
-    if (parsed) {
-      return Math.min(
-        ASSESSMENT_DAILY_SUCCESS_LIMIT_MAX,
-        Math.max(ASSESSMENT_DAILY_SUCCESS_LIMIT_MIN, parsed),
-      );
-    }
+  const parsed = parsePositiveInteger(
+    process.env[ASSESSMENT_DAILY_SUCCESS_LIMIT_ENV_KEY],
+  );
+  if (parsed) {
+    return Math.min(
+      ASSESSMENT_DAILY_SUCCESS_LIMIT_MAX,
+      Math.max(ASSESSMENT_DAILY_SUCCESS_LIMIT_MIN, parsed),
+    );
   }
 
   return ASSESSMENT_DAILY_SUCCESS_LIMIT_FALLBACK;

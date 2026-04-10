@@ -8,9 +8,11 @@ import type {
 } from "@zootopia/shared-types";
 
 import {
-  getFirebaseAdminStorageBucket,
-  hasFirebaseAdminRuntime,
-} from "@/lib/server/firebase-admin";
+  deleteZootopiaPrivateObject,
+  downloadZootopiaPrivateObject,
+  hasRemoteBlobStorage,
+  uploadZootopiaPrivateObject,
+} from "@/lib/server/supabase-blob-storage";
 import { buildAssessmentGeneratedFileName } from "@/lib/server/export-file-naming";
 import {
   assertOwnerScopedStoragePath,
@@ -55,7 +57,7 @@ export async function persistAssessmentExportArtifact(input: {
   createdAt: string;
   expiresAt?: string | null;
 }) {
-  if (!hasFirebaseAdminRuntime()) {
+  if (!hasRemoteBlobStorage()) {
     return null;
   }
 
@@ -74,14 +76,11 @@ export async function persistAssessmentExportArtifact(input: {
     "assessment-exports",
   ]);
 
-  await getFirebaseAdminStorageBucket()
-    .file(assertedStoragePath)
-    .save(toBuffer(input.body), {
-      resumable: false,
-      metadata: {
-        contentType: input.contentType,
-      },
-    });
+  await uploadZootopiaPrivateObject({
+    path: assertedStoragePath,
+    body: toBuffer(input.body),
+    contentType: input.contentType,
+  });
 
   return {
     key: getAssessmentArtifactRecordKey({
@@ -109,7 +108,7 @@ export async function persistAssessmentExportArtifact(input: {
 export async function persistAssessmentResultArtifact(
   generation: AssessmentGeneration,
 ) {
-  if (!hasFirebaseAdminRuntime()) {
+  if (!hasRemoteBlobStorage()) {
     return null;
   }
 
@@ -129,14 +128,11 @@ export async function persistAssessmentResultArtifact(
     "assessment-results",
   ]);
 
-  await getFirebaseAdminStorageBucket()
-    .file(assertedStoragePath)
-    .save(Buffer.from(JSON.stringify(generation, null, 2)), {
-      resumable: false,
-      metadata: {
-        contentType: "application/json; charset=utf-8",
-      },
-    });
+  await uploadZootopiaPrivateObject({
+    path: assertedStoragePath,
+    body: Buffer.from(JSON.stringify(generation, null, 2)),
+    contentType: "application/json; charset=utf-8",
+  });
 
   return {
     key: "canonical-result",
@@ -156,7 +152,7 @@ export async function loadAssessmentArtifact(
   artifact: Pick<AssessmentArtifactRecord, "storagePath">,
   ownerUid: string,
 ) {
-  if (!artifact.storagePath || !hasFirebaseAdminRuntime()) {
+  if (!artifact.storagePath || !hasRemoteBlobStorage()) {
     return null;
   }
 
@@ -165,8 +161,7 @@ export async function loadAssessmentArtifact(
       "assessment-results",
       "assessment-exports",
     ]);
-    const [buffer] = await getFirebaseAdminStorageBucket().file(storagePath).download();
-    return buffer;
+    return downloadZootopiaPrivateObject(storagePath);
   } catch {
     return null;
   }
@@ -176,7 +171,7 @@ export async function deleteAssessmentArtifact(
   artifact: Pick<AssessmentArtifactRecord, "storagePath">,
   ownerUid: string,
 ) {
-  if (!artifact.storagePath || !hasFirebaseAdminRuntime()) {
+  if (!artifact.storagePath || !hasRemoteBlobStorage()) {
     return;
   }
 
@@ -185,8 +180,8 @@ export async function deleteAssessmentArtifact(
       "assessment-results",
       "assessment-exports",
     ]);
-    await getFirebaseAdminStorageBucket().file(storagePath).delete();
+    await deleteZootopiaPrivateObject(storagePath);
   } catch {
-    // Artifact cleanup is best-effort. Route handlers still enforce owner validation via Firestore metadata first.
+    // Artifact cleanup is best-effort. Route handlers still enforce owner validation via repository metadata first.
   }
 }
