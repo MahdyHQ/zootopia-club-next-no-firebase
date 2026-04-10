@@ -326,7 +326,35 @@ export async function verifySupabaseAccessToken(token: string) {
   try {
     const { data, error } = await getSupabaseAdminClient().auth.getUser(trimmedToken);
 
-    if (error || !data.user) {
+    if (error) {
+      const errorRecord = error as {
+        status?: number;
+        code?: string;
+        message?: string;
+      };
+      const status = Number(errorRecord.status ?? 0);
+      const code = String(errorRecord.code || "").toLowerCase();
+      const message = String(errorRecord.message || "").toLowerCase();
+      const tokenRejected =
+        status === 400
+        || status === 401
+        || code.includes("token")
+        || code.includes("jwt")
+        || message.includes("token")
+        || message.includes("jwt")
+        || message.includes("expired");
+
+      if (tokenRejected) {
+        return null;
+      }
+
+      throw Object.assign(
+        new Error(errorRecord.message || "Supabase token verification failed."),
+        { code: "auth/internal-error" },
+      );
+    }
+
+    if (!data.user) {
       return null;
     }
 
@@ -334,8 +362,15 @@ export async function verifySupabaseAccessToken(token: string) {
       token: trimmedToken,
       user: data.user,
     });
-  } catch {
-    return null;
+  } catch (error) {
+    if (typeof error === "object" && error && "code" in error) {
+      throw error;
+    }
+
+    throw Object.assign(
+      new Error("Supabase token verification failed unexpectedly."),
+      { code: "auth/internal-error" },
+    );
   }
 }
 

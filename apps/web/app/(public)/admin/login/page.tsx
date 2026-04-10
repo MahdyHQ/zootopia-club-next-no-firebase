@@ -17,7 +17,9 @@ export default async function AdminLoginPage() {
     getRequestUiContext(),
   ]);
 
-  if (user) {
+  /* Keep the admin entrance reachable for signed-in non-admin users so they can
+     switch identities without being bounced back into regular protected routes. */
+  if (user?.role === "admin") {
     redirect(getAuthenticatedUserRedirectPath(user));
   }
 

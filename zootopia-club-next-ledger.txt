@@ -1,5 +1,5 @@
 Zootopia Club Next Master Ledger
-Last refreshed: 2026-04-10 23:45:00
+Last refreshed: 2026-04-10 19:56:00
 
 Project Identity
 - Name: Zootopia Club Next
@@ -6542,3 +6542,51 @@ Change Log
     - Phase N: If unified admin MFA is desired, refactor to per-user TOTP or organization claims
     - Phase N: If audit logging needs reinforcement, layer in optional admin action signing
     - Phase N: The simplified 2-field UX is now clean slate for future security enhancements
+
+- 2026-04-10 19:56:00 | Login/session stabilization follow-up: admin loop guards + token classification + logout cookie clearing
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before this pass.
+    - launched 5 parallel read-only subagent traces (regular login runtime, admin login runtime, cookie/bootstrap contract, redirect/layout loops, verification workflow), then consolidated findings before edits.
+    - read all requested auth/session files directly before changes.
+  - Root causes confirmed in current code:
+    - regular login refresh surface was over-reporting token-staleness for mixed verification failures because server token verification collapsed most Supabase verification failures into `auth/invalid-id-token`, which maps to refresh guidance.
+    - admin login had contradictory gate/runtime behavior: `/api/auth/admin/resolve-identifier` still required `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` even though active admin sign-in flow no longer uses that factor.
+    - `/admin/login` redirected any authenticated user (including non-admin sessions), causing admin-entry bounce/loop conditions during account switching.
+    - `/api/auth/logout` reported success without explicitly clearing Auth.js cookie family on the server response.
+  - What changed (surgical):
+    - `apps/web/lib/server/supabase-admin.ts`
+      - hardened `verifySupabaseAccessToken(...)` error classification:
+        - token-rejected failures return `null` (invalid/expired path),
+        - non-token verification failures now throw `auth/internal-error`.
+    - `apps/web/lib/server/server-auth.ts`
+      - `verifyIdToken(...)` now preserves `auth/internal-error` as temporary verification-runtime failure instead of collapsing to invalid-token.
+    - `apps/web/app/api/auth/admin/resolve-identifier/route.ts`
+      - removed stale `hasConfiguredAdminLoginPasswordGate()` requirement so identifier resolution matches current 2-field admin flow.
+    - `apps/web/components/auth/admin-login-panel.tsx`
+      - removed stale `adminLoginPassword` payload threading from Auth.js sign-in call.
+    - `apps/web/auth.ts`
+      - removed stale `adminLoginPassword` credential field from `admin-credentials` provider definition.
+    - `apps/web/app/(public)/admin/login/page.tsx`
+      - redirect to authenticated destination now applies only to authenticated admins; signed-in non-admin users can access admin entrance to switch identities without bounce loops.
+    - `apps/web/app/api/auth/logout/route.ts`
+      - added explicit server-side deletion for Auth.js cookie family (`session-token`, `csrf-token`, `callback-url` variants) before returning logout success.
+  - What was preserved intentionally:
+    - claims-first admin authority (allowlist + claims + server checks) remains unchanged.
+    - regular vs admin route separation remains unchanged.
+    - profile-completion policy and protected-layout authority remain server-side.
+  - Verification in this pass:
+    - `npm run lint --workspace @zootopia/web` ✅ passed.
+    - `npm run typecheck --workspace @zootopia/web` ✅ passed.
+    - `npm run build --workspace @zootopia/web` ⚠️ failed due blocked Google Fonts fetch in this sandbox (`next/font` remote fetch errors for Alexandria/Amiri/Geist/JetBrains Mono/Plus Jakarta Sans), not due auth/session edits.
+    - runtime endpoint checks (local dev on `127.0.0.1:3030`):
+      - `GET /api/auth/me` returned coherent anonymous snapshot + no-store headers.
+      - `POST /api/auth/logout` returned success and emitted explicit Auth.js cookie-clearing `Set-Cookie` headers.
+  - Files changed in this pass:
+    - `apps/web/app/(public)/admin/login/page.tsx`
+    - `apps/web/app/api/auth/admin/resolve-identifier/route.ts`
+    - `apps/web/app/api/auth/logout/route.ts`
+    - `apps/web/components/auth/admin-login-panel.tsx`
+    - `apps/web/auth.ts`
+    - `apps/web/lib/server/server-auth.ts`
+    - `apps/web/lib/server/supabase-admin.ts`
+    - `zootopia-club-next-ledger.txt`

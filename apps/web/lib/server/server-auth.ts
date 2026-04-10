@@ -37,7 +37,23 @@ export function getServerAuthAdmin() {
 
   cachedAdapter = {
     async verifyIdToken(idToken: string) {
-      const decodedToken = await verifySupabaseAccessToken(idToken);
+      let decodedToken: DecodedAuthToken | null = null;
+      try {
+        decodedToken = await verifySupabaseAccessToken(idToken);
+      } catch (error) {
+        const code =
+          typeof error === "object" && error && "code" in error
+            ? String((error as { code?: unknown }).code ?? "")
+            : "";
+        if (code === "auth/internal-error") {
+          throw buildAuthError(
+            "auth/internal-error",
+            "Supabase token verification is temporarily unavailable.",
+          );
+        }
+        throw error;
+      }
+
       if (!decodedToken) {
         throw buildAuthError(
           "auth/invalid-id-token",

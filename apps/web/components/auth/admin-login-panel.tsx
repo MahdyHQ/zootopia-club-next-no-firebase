@@ -45,12 +45,10 @@ async function readApiResult<T>(response: Response, invalidCode: string) {
 
 async function completeAdminAuthJsSignIn(input: {
   idToken: string;
-  adminLoginPassword: string;
 }) {
   const signInResult = await signIn("admin-credentials", {
     redirect: false,
     idToken: input.idToken,
-    adminLoginPassword: input.adminLoginPassword,
   });
 
   if (!signInResult) {
@@ -141,7 +139,6 @@ export function AdminLoginPanel({
 
     await completeAdminAuthJsSignIn({
       idToken,
-      adminLoginPassword: "",
     });
 
     return APP_ROUTES.admin;
