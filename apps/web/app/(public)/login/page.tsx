@@ -36,7 +36,7 @@ export default async function LoginPage() {
           alt="Faculty of Science"
           fill
           priority
-          className="object-cover object-center opacity-100 transition-opacity duration-500 dark:opacity-0"
+          className="theme-image-light object-cover object-center"
           sizes="100vw"
         />
         <Image
@@ -44,10 +44,10 @@ export default async function LoginPage() {
           alt="Faculty of Science"
           fill
           priority
-          className="object-cover object-center opacity-0 transition-opacity duration-500 dark:opacity-100"
+          className="theme-image-dark object-cover object-center"
           sizes="100vw"
         />
-        <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px] transition-colors duration-700 dark:bg-background/65 dark:backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-sm transition-colors duration-700" />
       </div>
 
       {/* Regular-login badge ownership:
@@ -63,7 +63,7 @@ export default async function LoginPage() {
           alt=""
           width={288}
           height={175}
-          className="h-auto w-24 max-w-[34vw] rounded-lg border border-white/45 bg-white/35 p-1.5 shadow-[0_10px_28px_rgba(10,24,39,0.26)] backdrop-blur-[2px] transition-colors duration-500 sm:w-28 md:w-36 dark:border-white/20 dark:bg-slate-950/28 dark:shadow-[0_12px_30px_rgba(0,0,0,0.38)]"
+          className="h-auto w-24 max-w-[34vw] rounded-lg border border-border bg-background-elevated/70 p-1.5 shadow-[0_10px_28px_rgba(10,24,39,0.26)] backdrop-blur-[2px] transition-colors duration-500 sm:w-28 md:w-36"
           sizes="(max-width: 640px) min(34vw, 96px), (max-width: 1024px) 112px, 144px"
         />
       </div>
@@ -97,7 +97,7 @@ export default async function LoginPage() {
         <div className="flex flex-1 flex-col justify-center">
           <div className="mb-10 text-center">
             {/* Engraved style Bismillah */}
-            <h2 dir="rtl" className="mb-6 font-[family-name:var(--font-amiri)] text-xl text-foreground/80 font-bold tracking-wide drop-shadow-[0_1px_1px_rgba(255,255,255,0.5)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] opacity-90 transition-all duration-300">
+            <h2 dir="rtl" className="mb-6 font-[family-name:var(--font-amiri)] text-xl text-foreground/80 font-bold tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)] opacity-90 transition-all duration-300">
               بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
             </h2>
             <div className="inline-flex flex-col items-center justify-center">
@@ -121,7 +121,7 @@ export default async function LoginPage() {
 
         {/* Copyright Footer */}
         {/* Keep this footer in-flow (not fixed) so short screens can still scroll without clipping text. */}
-        <div className="mt-6 border-t border-white/30 pt-4 text-center sm:mt-8 sm:pt-5 dark:border-white/10">
+        <div className="mt-6 border-t border-border pt-4 text-center sm:mt-8 sm:pt-5">
           <p className="text-xs font-medium text-foreground-muted/70 drop-shadow-sm">
             © {currentYear} Zootopia Club. All rights reserved.
           </p>

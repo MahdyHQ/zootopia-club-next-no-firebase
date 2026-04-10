@@ -306,6 +306,7 @@ export function mapAdminLoginError(
         "assertive",
       );
     case "ADMIN_CLAIM_REQUIRED":
+    case "ADMIN_CLAIM_DENIED":
       return status(
         "danger",
         "permission",

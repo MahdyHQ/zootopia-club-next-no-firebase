@@ -70,13 +70,6 @@ env:
     availability:
       - RUNTIME
 
-  # Additional admin gate password for /admin/login bootstrap.
-  # This is required as an extra factor and must stay server-only.
-  - variable: ZOOTOPIA_ADMIN_LOGIN_PASSWORD
-    secret: zootopia-admin-login-password
-    availability:
-      - RUNTIME
-
   - variable: ZOOTOPIA_SESSION_TTL_SECONDS
     value: "3600"
     availability:
@@ -138,8 +131,7 @@ env:
       - RUNTIME
 
   # Admin sign-in passwords are managed in Supabase Auth user records.
-  # ZOOTOPIA_ADMIN_LOGIN_PASSWORD is an additional server gate only and must never
-  # replace allowlist + claim + recent-sign-in verification.
+  # Server-side allowlist checks remain the admin authority boundary.
 
   # Secret Manager references.
   # Create with: firebase apphosting:secrets:set <secret-name>
@@ -189,4 +181,3 @@ env:
   #   secret: zootopia-maintenance-secret
   #   availability:
   #     - RUNTIME
-

@@ -1,7 +1,5 @@
 import "server-only";
 
-import { createHash, timingSafeEqual } from "node:crypto";
-
 import {
   buildAdminUsernameLookup,
 } from "@zootopia/shared-config";
@@ -26,59 +24,6 @@ export function getAllowlistedAdminEmails() {
 
 export function hasConfiguredAdminAllowlist() {
   return getAllowlistedAdminEmails().length > 0;
-}
-
-function readConfiguredAdminLoginPasswordFromEnv() {
-  return (process.env.ZOOTOPIA_ADMIN_LOGIN_PASSWORD ?? "").trim();
-}
-
-export function hasConfiguredAdminLoginPasswordGate() {
-  return readConfiguredAdminLoginPasswordFromEnv().length > 0;
-}
-
-function hashAdminLoginPasswordGateValue(value: string) {
-  return createHash("sha256").update(value, "utf8").digest();
-}
-
-export function verifyAdminLoginPasswordGate(inputPassword: string | null | undefined):
-  | { ok: true }
-  | { ok: false; code: string; message: string; status: number } {
-  const configuredPassword = readConfiguredAdminLoginPasswordFromEnv();
-  if (!configuredPassword) {
-    return {
-      ok: false,
-      code: "ADMIN_LOGIN_PASSWORD_UNCONFIGURED",
-      message:
-        "Admin access is temporarily unavailable because the runtime admin password gate is not configured.",
-      status: 503,
-    };
-  }
-
-  const providedPassword = String(inputPassword ?? "").trim();
-  if (!providedPassword) {
-    return {
-      ok: false,
-      code: "ADMIN_LOGIN_PASSWORD_REQUIRED",
-      message: "Enter the environment admin access password to continue.",
-      status: 400,
-    };
-  }
-
-  /* Keep this gate constant-time by comparing fixed-size hashes instead of
-     branching on raw string length/content. This avoids turning the additional
-     admin password factor into an accidental timing side-channel. */
-  const configuredHash = hashAdminLoginPasswordGateValue(configuredPassword);
-  const providedHash = hashAdminLoginPasswordGateValue(providedPassword);
-  if (!timingSafeEqual(configuredHash, providedHash)) {
-    return {
-      ok: false,
-      code: "ADMIN_LOGIN_PASSWORD_INVALID",
-      message: "The environment admin access password is invalid.",
-      status: 403,
-    };
-  }
-
-  return { ok: true };
 }
 
 function getAdminEmailSet() {
@@ -245,6 +190,9 @@ export async function verifyAdminClaimActivation(
   | { ok: true }
   | { ok: false; code: string; message: string; status: number }
 > {
+  /* Admin identity remains server-authoritative by allowlist.
+     Claims are optional at this stage: allow claims can continue to permit access, while
+     an explicit `admin: false` deny claim blocks access for an allowlisted account. */
   if (
     hasAdminAccessFromClaims({
       email: input.email,
@@ -261,20 +209,14 @@ export async function verifyAdminClaimActivation(
       admin: userRecord.customClaims?.admin,
     })
   ) {
-    return {
-      ok: false,
-      code: "ADMIN_TOKEN_REFRESH_REQUIRED",
-      message:
-        "The `admin: true` claim is already assigned on this account, but this sign-in token has not refreshed yet. Sign out, wait a few seconds, and sign back in through /admin/login so a fresh token can pick up the claim.",
-      status: 403,
-    };
+    return { ok: true };
   }
 
   return {
     ok: false,
-    code: "ADMIN_CLAIM_REQUIRED",
+    code: "ADMIN_CLAIM_DENIED",
     message:
-      "This allowlisted account does not yet have the required `admin: true` app metadata claim. Ask the owner to assign that claim in Supabase Auth, then sign out and sign back in through /admin/login.",
+      "This allowlisted account is explicitly denied by admin claim policy (`admin: false`).",
     status: 403,
   };
 }

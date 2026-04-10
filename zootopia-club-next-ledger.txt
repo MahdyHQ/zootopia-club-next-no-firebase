@@ -6583,3 +6583,57 @@ Change Log
     - `apps/web/app/api/auth/admin/resolve-identifier/route.ts`
     - `apps/web/proxy.ts`
     - `zootopia-club-next-ledger.txt`
+- 2026-04-10 21:05:19 | Supabase auth/admin stabilization + owner-isolation policies + login dark-mode repair
+  - Mandatory-first-step compliance:
+    - read `zootopia-club-next-ledger.txt` at task start and compared findings against current repository code.
+    - spawned parallel subagents for auth/session trace, admin allowlist trace, DB/RLS trace, storage policy trace, theme regression trace, dependency audit, and lint/type/build verification.
+  - Documentation verification:
+    - consulted Next.js local docs in `node_modules/next/dist/docs` for Route Handlers, authentication/session guidance, and environment-variable server/client boundaries.
+    - attempted direct fetches of official Supabase and Next.js web docs for latest patterns; network access to those domains was blocked in this environment.
+  - Root cause of current admin password rejection:
+    - `/admin/login` validates the entered password against Supabase Auth email/password sign-in (account credential), not against `ZOOTOPIA_ADMIN_LOGIN_PASSWORD`.
+    - active admin sign-in flow was never using the env gate field, creating an expectation mismatch and confusing error copy.
+  - Admin model changes:
+    - kept Supabase Auth as identity provider for all users.
+    - kept server-side allowlist (`ZOOTOPIA_ADMIN_EMAILS`) as primary admin authority.
+    - converted claim handling to optional policy mode: allowlisted admins are accepted unless explicitly denied by `admin: false` claim.
+    - removed inactive shared admin gate wiring from active runtime/auth config surface.
+  - DB/storage isolation changes:
+    - added migration `supabase/migrations/20260410213000_phase1_owner_rls_and_storage_policies.sql`.
+    - enforced owner-scoped table policies using `auth.uid()` for user-owned tables.
+    - added owner-scoped `storage.objects` policies for `zootopia-private` with namespace+uid path checks:
+      - `documents/<uid>/...`
+      - `assessment-results/<uid>/...`
+      - `assessment-exports/<uid>/...`
+      - `uploads/temp/<uid>/...`
+    - ensured `zootopia-private` bucket exists to align migrations with server runtime code.
+  - Theme/design fixes:
+    - removed hardcoded light-surface classes from `/login` and `/admin/login` auth cards/inputs and replaced with tokenized theme-aware surfaces.
+    - introduced theme-controlled dual-image classes (`theme-image-light` / `theme-image-dark`) driven by `data-theme` (+ system-dark media query) for stable dark rendering.
+    - added password visibility toggles to regular login password and confirm-password fields.
+  - Files changed in this pass:
+    - `apps/web/lib/server/admin-auth.ts`
+    - `apps/web/lib/server/supabase-admin.ts`
+    - `apps/web/auth.ts`
+    - `apps/web/components/auth/auth-feedback.ts`
+    - `apps/web/components/auth/login-panel.tsx`
+    - `apps/web/components/auth/admin-login-panel.tsx`
+    - `apps/web/components/auth/public-auth-shell.tsx`
+    - `apps/web/app/(public)/login/page.tsx`
+    - `apps/web/app/globals.css`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `apps/web/apphosting.yaml`
+    - `supabase/migrations/20260410213000_phase1_owner_rls_and_storage_policies.sql`
+    - `zootopia-club-next-ledger.txt`
+  - Verification:
+    - `npm run check:web`:
+      - lint ✅ passed
+      - typecheck ✅ passed
+      - build ❌ failed in sandbox due blocked Google Fonts fetch (`next/font/google` network failure), unrelated to auth/storage edits.
+    - post-review fix validation:
+      - `npm run lint:web` ✅ passed
+      - `npm run typecheck:web` ✅ passed
+    - parallel validation:
+      - code review ✅ (1 wording comment fixed)
+      - CodeQL scan ✅ no alerts reported (noted scan-size skip message).

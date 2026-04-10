@@ -294,7 +294,7 @@ export function AdminLoginPanel({
 
   return (
     <div className="relative mx-auto flex w-full max-w-[440px] flex-col gap-2 animate-in fade-in zoom-in-95 duration-700">
-      <div className="relative overflow-hidden rounded-[2.1rem] border border-white/15 bg-white/90 p-4 shadow-2xl shadow-black/20 backdrop-blur-2xl dark:bg-zinc-950/72 dark:shadow-black/50 sm:p-5">
+      <div className="relative overflow-hidden rounded-[2.1rem] border border-border bg-background-elevated/90 p-4 shadow-2xl shadow-black/20 backdrop-blur-2xl sm:p-5">
         
         <div className="relative z-10 flex flex-col gap-3">
           {/* Keep the admin sign-in card operational and compact: form first, runtime/security notes second. */}
@@ -303,7 +303,7 @@ export function AdminLoginPanel({
 
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
             <label className="flex flex-col gap-2">
-              <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
                 {messages.adminLoginIdentifierLabel}
               </span>
               <input
@@ -315,19 +315,19 @@ export function AdminLoginPanel({
                 }}
                 placeholder={messages.adminLoginIdentifierPlaceholder}
                 autoComplete="username"
-                className="w-full rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3.5 text-sm font-medium text-zinc-900 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700/70 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 placeholder:text-foreground-muted/80"
               />
             </label>
 
             <label className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+                <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
                   {messages.adminLoginPasswordLabel}
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="me-2 inline-flex items-center justify-center text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  className="me-2 inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
@@ -346,7 +346,7 @@ export function AdminLoginPanel({
                 }}
                 placeholder={messages.adminLoginPasswordPlaceholder}
                 autoComplete="current-password"
-                className="w-full rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3.5 text-sm font-medium text-zinc-900 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 dark:border-zinc-700/70 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 placeholder:text-foreground-muted/80"
               />
             </label>
 
@@ -361,10 +361,10 @@ export function AdminLoginPanel({
             </button>
           </form>
 
-          <div className="flex items-center justify-start border-t border-zinc-200/70 pt-3 dark:border-zinc-800/80">
+          <div className="flex items-center justify-start border-t border-border pt-3">
             <Link
               href={APP_ROUTES.login}
-              className="inline-flex items-center gap-2 text-sm font-medium text-zinc-500 transition-colors hover:text-amber-600 dark:text-zinc-400 dark:hover:text-amber-400"
+              className="inline-flex items-center gap-2 text-sm font-medium text-foreground-muted transition-colors hover:text-amber-600"
             >
               <GraduationCap className="h-4 w-4" aria-hidden="true" />
               <span>{messages.adminLoginBackAction}</span>

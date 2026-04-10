@@ -41,12 +41,21 @@ export function PublicAuthShell({
         <div className={shellBodyClassName}>
           <section className={mediaPanelClassName}>
             <div className="auth-media-image">
+              {/* Keep both media variants mounted so dark mode never flashes a light-only hero on auth pages. */}
               <Image
                 src="/science-faculty-enhanced-light-5.png"
                 alt={imageAlt}
                 fill
                 priority
-                className="object-cover object-center"
+                className="theme-image-light object-cover object-center"
+                sizes="(max-width: 639px) 100vw, (max-width: 1023px) 100vw, 58vw"
+              />
+              <Image
+                src="/science-faculty-enhanced-dark-4.png"
+                alt={imageAlt}
+                fill
+                priority
+                className="theme-image-dark object-cover object-center"
                 sizes="(max-width: 639px) 100vw, (max-width: 1023px) 100vw, 58vw"
               />
             </div>
