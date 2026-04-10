@@ -99,18 +99,17 @@ async function completeAdminAuthJsSignIn(input: {
     const isTransientBootstrapState =
       responseErrorCode === null || responseErrorCode === "SESSION_NOT_ESTABLISHED";
 
-    if (!hasAttemptsRemaining) {
-      throw createAuthFlowError(responseErrorCode || "ADMIN_BOOTSTRAP_FAILED");
-    }
-
     if (!isTransientBootstrapState) {
       throw createAuthFlowError(responseErrorCode || "ADMIN_BOOTSTRAP_FAILED");
     }
 
-    await new Promise((resolve) => window.setTimeout(resolve, ADMIN_SESSION_BOOTSTRAP_RETRY_MS));
+    if (hasAttemptsRemaining) {
+      await new Promise((resolve) => window.setTimeout(resolve, ADMIN_SESSION_BOOTSTRAP_RETRY_MS));
+      continue;
+    }
   }
-
   throw createAuthFlowError("ADMIN_BOOTSTRAP_FAILED");
+
 }
 
 export function AdminLoginPanel({

@@ -150,15 +150,14 @@ async function completeAuthJsCredentialsSignIn(input: {
     const isTransientBootstrapState =
       responseErrorCode === null || responseErrorCode === "SESSION_NOT_ESTABLISHED";
 
-    if (!hasAttemptsRemaining) {
-      throw createAuthFlowError(responseErrorCode || "BOOTSTRAP_FAILED");
-    }
-
     if (!isTransientBootstrapState) {
       throw createAuthFlowError(responseErrorCode || "BOOTSTRAP_FAILED");
     }
 
-    await new Promise((resolve) => window.setTimeout(resolve, SESSION_BOOTSTRAP_RETRY_MS));
+    if (hasAttemptsRemaining) {
+      await new Promise((resolve) => window.setTimeout(resolve, SESSION_BOOTSTRAP_RETRY_MS));
+      continue;
+    }
   }
   throw createAuthFlowError("BOOTSTRAP_FAILED");
 }
