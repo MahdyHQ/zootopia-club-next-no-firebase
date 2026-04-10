@@ -162,6 +162,7 @@ export function mapRegularLoginError(
     case "RECENT_SIGN_IN_REQUIRED":
     case "ID_TOKEN_INVALID":
     case "ID_TOKEN_REVOKED":
+    case "SESSION_NOT_ESTABLISHED":
     case "REDIRECT_RESULT_MISSING":
       return status(
         "warning",
@@ -330,6 +331,7 @@ export function mapAdminLoginError(
     case "RECENT_SIGN_IN_REQUIRED":
     case "ID_TOKEN_INVALID":
     case "ID_TOKEN_REVOKED":
+    case "SESSION_NOT_ESTABLISHED":
       return status(
         "warning",
         "warning",
