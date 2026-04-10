@@ -1,0 +1,186 @@
+# App Hosting deployment config for the active monorepo app root: apps/web.
+# YAML uses indentation and "-" list items. There are no curly braces or trailing commas.
+#
+# Important: this file is deployment/runtime config, not TypeScript config.
+# - tsconfig.json controls TypeScript checking and emit behavior.
+# - apphosting.yaml controls App Hosting build/runtime env and Cloud Run settings.
+#
+# Variable precedence from Firebase docs:
+# 1) Firebase console
+# 2) apphosting.<env>.yaml
+# 3) apphosting.yaml
+# 4) Firebase system-provided vars (for example FIREBASE_CONFIG)
+#
+# If the same variable is set in both console and this file, console wins.
+#
+# Reserved-name safety (Firebase App Hosting + Cloud Run):
+# - Do not define keys that begin with X_FIREBASE_, X_GOOGLE_, CLOUD_RUN_.
+# - Do not define PORT, K_SERVICE, K_REVISION, or K_CONFIGURATION.
+# - Prefer project-specific keys (for example ZOOTOPIA_*) for custom variables.
+
+# Cloud Run service settings for this backend.
+# See https://firebase.google.com/docs/app-hosting/configure#cloud-run
+runConfig:
+  minInstances: 0
+  # maxInstances: 100
+  # concurrency: 80
+  # cpu: 1
+  # memoryMiB: 512
+
+# Environment variables and secret references.
+# See https://firebase.google.com/docs/app-hosting/configure
+env:
+  # Browser-safe Supabase auth config.
+  # BUILD-only is enough because NEXT_PUBLIC_* values are bundled at build time.
+  - variable: NEXT_PUBLIC_SUPABASE_URL
+    value: "https://REPLACE_WITH_PROJECT_REF.supabase.co"
+    availability:
+      - BUILD
+
+  - variable: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    value: "REPLACE_WITH_SUPABASE_PUBLISHABLE_KEY"
+    availability:
+      - BUILD
+
+  # Server auth runtime config.
+  - variable: SUPABASE_URL
+    value: "https://REPLACE_WITH_PROJECT_REF.supabase.co"
+    availability:
+      - RUNTIME
+
+  - variable: SUPABASE_SERVICE_ROLE_KEY
+    secret: supabase-service-role-key
+    availability:
+      - RUNTIME
+
+  # Server-only Postgres connection (Supabase pooler or direct). Required for durable persistence.
+  - variable: SUPABASE_DATABASE_URL
+    secret: supabase-database-url
+    availability:
+      - RUNTIME
+
+  - variable: ZOOTOPIA_ADMIN_EMAILS
+    value: "alahlyeagle@gmail.com,elmahdy@admin.com,alahlyeagle13@gmail.com"
+    availability:
+      - RUNTIME
+
+  # Additional admin gate password for /admin/login bootstrap.
+  # This is required as an extra factor and must stay server-only.
+  - variable: ZOOTOPIA_ADMIN_LOGIN_PASSWORD
+    secret: zootopia-admin-login-password
+    availability:
+      - RUNTIME
+
+  - variable: ZOOTOPIA_SESSION_TTL_SECONDS
+    value: "3600"
+    availability:
+      - RUNTIME
+
+  # Default successful assessment credits per UTC day for regular users.
+  # The server falls back to 3 when this is missing/invalid.
+  - variable: ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS
+    value: "3"
+    availability:
+      - RUNTIME
+
+  - variable: DASHSCOPE_BASE_URL
+    value: "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
+    availability:
+      - RUNTIME
+
+  # Optional aliases for compatibility with older configs/scripts.
+  # Keep blank or omit unless you need to override DASHSCOPE_BASE_URL.
+  # - variable: DASHSCOPE_COMPATIBLE_BASE_URL
+  #   value: ""
+  #   availability:
+  #     - RUNTIME
+
+  # - variable: ALIBABA_MODEL_STUDIO_BASE_URL
+  #   value: ""
+  #   availability:
+  #     - RUNTIME
+
+  - variable: GOOGLE_AI_MODEL
+    value: "gemini-3.1-flash-lite-preview"
+    availability:
+      - RUNTIME
+
+  - variable: GOOGLE_AI_ADVANCED_MODEL
+    value: "gemini-2.5-pro"
+    availability:
+      - RUNTIME
+
+  - variable: QWEN_MODEL
+    value: "qwen3.5-flash"
+    availability:
+      - RUNTIME
+
+  # Contact relay non-secret runtime defaults (only used when /api/contact is enabled).
+  - variable: SMTP_HOST
+    value: "smtp.gmail.com"
+    availability:
+      - RUNTIME
+
+  - variable: SMTP_PORT
+    value: "587"
+    availability:
+      - RUNTIME
+
+  - variable: SMTP_SECURE
+    value: "false"
+    availability:
+      - RUNTIME
+
+  # Admin sign-in passwords are managed in Supabase Auth user records.
+  # ZOOTOPIA_ADMIN_LOGIN_PASSWORD is an additional server gate only and must never
+  # replace allowlist + claim + recent-sign-in verification.
+
+  # Secret Manager references.
+  # Create with: firebase apphosting:secrets:set <secret-name>
+  # Keep secret values out of source control.
+  # Keep this list aligned with scripts/firebase/set-apphosting-secrets-firebase-only.ps1.
+  # Transitional/deprecation note: scripts/firebase is retained for now but is pending retirement.
+  # Removal criteria: document and validate a replacement secret-management workflow,
+  # then update this comment and Guide-Files/powershell-script-commands-guide.md in the same pass.
+
+  # Primary AI secret for the default Gemini runtime path.
+  - variable: GOOGLE_AI_API_KEY
+    secret: google-ai-api-key
+    availability:
+      - RUNTIME
+
+  # Optional secrets for additional providers/features.
+  # Uncomment entries only for features you actually use.
+
+  - variable: DASHSCOPE_API_KEY
+    secret: dashscope-api-key
+    availability:
+      - RUNTIME
+
+  - variable: SMTP_USER
+    secret: smtp-user
+    availability:
+      - RUNTIME
+
+  - variable: SMTP_PASS
+    secret: smtp-pass
+    availability:
+      - RUNTIME
+
+  - variable: EMAIL_FROM
+    secret: smtp-email-from
+    availability:
+      - RUNTIME
+
+  - variable: CONTACT_FORM_TO
+    secret: contact-form-to
+    availability:
+      - RUNTIME
+
+  # Optional maintenance secret. Uncomment only when scheduler-driven
+  # /api/internal/maintenance/expired-uploads invocations are enabled.
+  # - variable: ZOOTOPIA_MAINTENANCE_SECRET
+  #   secret: zootopia-maintenance-secret
+  #   availability:
+  #     - RUNTIME
+

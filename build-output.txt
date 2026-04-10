@@ -1,0 +1,83 @@
+
+> @zootopia/web@0.1.0 build
+> node --max-old-space-size=16384 -e "const{spawnSync}=require('node:child_process');const nextBin=require.resolve('next/dist/bin/next');const result=spawnSync(process.execPath,[nextBin,'build'],{stdio:'inherit'});process.exit(result.status??1);"
+
+Γû▓ Next.js 16.2.2 (Turbopack)
+- Environments: .env.local
+- Experiments (use with caution):
+  ┬╖ cpus: 8
+  Γ£ô externalDir
+  Γ£ô workerThreads
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 8.3s
+  Running TypeScript ...
+  Finished TypeScript in 6.6s ...
+  Collecting page data using 8 workers ...
+  Generating static pages using 8 workers (0/22) ...
+  Finalizing page optimization ...
+
+Route (app)
+Γöî ╞Æ /
+Γö£ ╞Æ /_not-found
+Γö£ ╞Æ /about
+Γö£ ╞Æ /admin
+Γö£ ╞Æ /admin/login
+Γö£ ╞Æ /admin/users
+Γö£ ╞Æ /api/admin/overview
+Γö£ ╞Æ /api/admin/users
+Γö£ ╞Æ /api/admin/users/[uid]/credits
+Γö£ ╞Æ /api/admin/users/[uid]/role
+Γö£ ╞Æ /api/admin/users/[uid]/status
+Γö£ ╞Æ /api/admin/users/export
+Γö£ ╞Æ /api/assessment
+Γö£ ╞Æ /api/assessment/[id]
+Γö£ ╞Æ /api/assessment/credits
+Γö£ ╞Æ /api/assessment/export/docx/[id]
+Γö£ ╞Æ /api/assessment/export/json/[id]
+Γö£ ╞Æ /api/assessment/export/markdown/[id]
+Γö£ ╞Æ /api/assessment/export/pdf/[id]
+Γö£ ╞Æ /api/assessment/export/pdf/fast/[id]
+Γö£ ╞Æ /api/assessment/export/pdf/pro/[id]
+Γö£ ╞Æ /api/assessment/linked-document
+Γö£ ╞Æ /api/assessment/results/[id]
+Γö£ ╞Æ /api/auth/[...nextauth]
+Γö£ ╞Æ /api/auth/admin/bootstrap
+Γö£ ╞Æ /api/auth/admin/resolve-identifier
+Γö£ ╞Æ /api/auth/bootstrap
+Γö£ ╞Æ /api/auth/logout
+Γö£ ╞Æ /api/auth/me
+Γö£ ╞Æ /api/contact
+Γö£ ╞Æ /api/health
+Γö£ ╞Æ /api/infographic
+Γö£ ╞Æ /api/infographic/[id]
+Γö£ ╞Æ /api/internal/maintenance/expired-uploads
+Γö£ ╞Æ /api/uploads
+Γö£ ╞Æ /api/uploads/[id]
+Γö£ ╞Æ /api/users/me/profile
+Γö£ Γùï /apple-icon.png
+Γö£ ╞Æ /assessment
+Γö£ ╞Æ /assessment/preview/[id]
+Γö£ ╞Æ /assessment/results/[id]
+Γö£ ╞Æ /contact
+Γö£ ╞Æ /donation
+Γö£ ╞Æ /hall-of-honor
+Γö£ ╞Æ /history
+Γö£ Γùï /icon.svg
+Γö£ ╞Æ /infographic
+Γö£ ╞Æ /journey
+Γö£ ╞Æ /login
+Γö£ ╞Æ /privacy
+Γö£ ╞Æ /settings
+Γöö ╞Æ /upload
+
+
+╞Æ Proxy (Middleware)
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+
+
+> @zootopia/web@0.1.0 postbuild
+> node ./scripts/normalize-standalone.mjs
+

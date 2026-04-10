@@ -4,13 +4,15 @@ import {
   Plus_Jakarta_Sans,
   Alexandria,
   JetBrains_Mono,
-  Amiri,
-} from "next/font/google";
+  Amiri, Geist } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { VitalBackground } from "@/components/ui/vital-background";
 import "./globals.css";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 const latinFont = Plus_Jakarta_Sans({
   variable: "--font-latin",
@@ -65,7 +67,7 @@ export default async function RootLayout({
       dir={direction}
       data-theme={themeMode}
       suppressHydrationWarning
-      className={`${latinFont.variable} ${arabicFont.variable} ${monoFont.variable} ${amiriFont.variable} antialiased`}
+      className={cn("antialiased", latinFont.variable, arabicFont.variable, monoFont.variable, amiriFont.variable, "font-sans", geist.variable)}
     >
       {/* Some browser extensions inject transient <body> attributes client-side; suppressing here avoids false hydration warnings. */}
       <body suppressHydrationWarning className="min-h-screen relative">
