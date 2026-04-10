@@ -2,7 +2,7 @@
 
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { ApiResult, Locale, SessionUser } from "@zootopia/shared-types";
-import { LoaderCircle, LogIn, Mail, Shield, UserPlus } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle, LogIn, Mail, Shield, UserPlus } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -175,6 +175,8 @@ export function LoginPanel({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const supabaseConfigured = isSupabaseWebConfigured();
   const isBusy = phase !== "idle";
   const localText = buildLocalText(locale);
@@ -392,7 +394,7 @@ export function LoginPanel({
       : (isBusy ? messages.loginCtaWorking : localText.signInButton);
 
   return (
-    <div className="relative mx-auto w-full max-w-[440px] overflow-hidden rounded-[2rem] border border-white/15 bg-white/88 p-6 shadow-2xl shadow-black/20 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-700 dark:bg-zinc-950/72 dark:shadow-black/50 sm:rounded-[2.25rem] sm:p-8">
+    <div className="relative mx-auto w-full max-w-[440px] overflow-hidden rounded-[2rem] border border-border bg-background-elevated/90 p-6 shadow-2xl shadow-black/20 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-700 sm:rounded-[2.25rem] sm:p-8">
       <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30" />
       <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30" />
 
@@ -434,11 +436,11 @@ export function LoginPanel({
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="space-y-2 block">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
               {localText.emailLabel}
             </span>
-            <div className="flex items-center gap-2 rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3 dark:border-zinc-700/70 dark:bg-zinc-900/70">
-              <Mail className="h-4.5 w-4.5 text-zinc-400" />
+            <div className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3">
+              <Mail className="h-4.5 w-4.5 text-foreground-muted" />
               <input
                 type="email"
                 value={email}
@@ -449,7 +451,7 @@ export function LoginPanel({
                   }
                 }}
                 autoComplete={mode === "sign_up" ? "email" : "username"}
-                className="w-full bg-transparent text-sm font-medium text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100"
+                className="w-full bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-foreground-muted/80"
                 placeholder="name@university.edu"
                 required
               />
@@ -457,11 +459,21 @@ export function LoginPanel({
           </label>
 
           <label className="space-y-2 block">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
-              {localText.passwordLabel}
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+                {localText.passwordLabel}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(event) => {
                 setPassword(event.target.value);
@@ -470,7 +482,7 @@ export function LoginPanel({
                 }
               }}
               autoComplete={mode === "sign_up" ? "new-password" : "current-password"}
-              className="w-full rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3.5 text-sm font-medium text-zinc-900 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 dark:border-zinc-700/70 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+              className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 placeholder:text-foreground-muted/80"
               placeholder="••••••••"
               required
               minLength={8}
@@ -479,11 +491,21 @@ export function LoginPanel({
 
           {mode === "sign_up" ? (
             <label className="space-y-2 block">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
-                {localText.confirmPasswordLabel}
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+                  {localText.confirmPasswordLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((value) => !value)}
+                  className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <input
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(event) => {
                   setConfirmPassword(event.target.value);
@@ -492,7 +514,7 @@ export function LoginPanel({
                   }
                 }}
                 autoComplete="new-password"
-                className="w-full rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3.5 text-sm font-medium text-zinc-900 shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 dark:border-zinc-700/70 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 placeholder:text-foreground-muted/80"
                 placeholder="••••••••"
                 required
                 minLength={8}

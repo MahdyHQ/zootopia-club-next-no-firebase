@@ -223,6 +223,40 @@ body {
     var(--background);
 }
 
+/* Public auth hero image ownership:
+   Keep both light/dark assets mounted and switch opacity via data-theme selectors so
+   login/admin-login media remains correct even when utility `dark:` class variants are not active. */
+.theme-image-light,
+.theme-image-dark {
+  transition: opacity 0.5s;
+}
+
+.theme-image-light {
+  opacity: 1;
+}
+
+.theme-image-dark {
+  opacity: 0;
+}
+
+:root[data-theme="dark"] .theme-image-light {
+  opacity: 0;
+}
+
+:root[data-theme="dark"] .theme-image-dark {
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .theme-image-light {
+    opacity: 0;
+  }
+
+  :root[data-theme="system"] .theme-image-dark {
+    opacity: 1;
+  }
+}
+
 /* Protected workspace background system.
    This is mounted only from app/(protected)/layout.tsx so login and admin auth pages keep their own media ownership. */
 .protected-workspace-background {

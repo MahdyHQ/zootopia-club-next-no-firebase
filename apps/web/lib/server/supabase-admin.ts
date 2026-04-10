@@ -279,10 +279,13 @@ function buildSupabaseDecodedToken(input: {
       ? (input.user.app_metadata as Record<string, unknown>)
       : null;
 
-  const adminClaim =
+  const hasAdminAllowClaim =
     appMetadata?.admin === true ||
     appMetadata?.role === "admin" ||
-    (payload.admin === true || payload.role === "admin");
+    payload.admin === true ||
+    payload.role === "admin";
+  const hasAdminDenyClaim = appMetadata?.admin === false || payload.admin === false;
+  const adminClaim = hasAdminAllowClaim ? true : hasAdminDenyClaim ? false : undefined;
 
   const decodedToken = {
     ...payload,
@@ -301,7 +304,7 @@ function buildSupabaseDecodedToken(input: {
           ? input.user.user_metadata.avatar_url
           : undefined,
     admin: adminClaim,
-    role: adminClaim ? "admin" : "user",
+    role: adminClaim === true ? "admin" : "user",
     auth_time:
       typeof payload.auth_time === "number"
         ? payload.auth_time

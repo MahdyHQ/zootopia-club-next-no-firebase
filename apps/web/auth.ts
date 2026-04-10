@@ -380,7 +380,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: "Admin credentials",
       credentials: {
         idToken: { label: "ID token", type: "text" },
-        adminLoginPassword: { label: "Admin password gate", type: "password" },
       },
       authorize: authorizeAdminCredentials,
     }),
