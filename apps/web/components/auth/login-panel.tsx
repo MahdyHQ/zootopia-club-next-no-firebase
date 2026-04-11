@@ -18,6 +18,7 @@ import {
   AuthStatus,
   AuthSupportDetails,
 } from "@/components/auth/auth-status";
+import { readCredentialsSignInErrorCode } from "@/components/auth/signin-result";
 import type { AppMessages } from "@/lib/messages";
 import {
   getEphemeralSupabaseClient,
@@ -36,8 +37,8 @@ type LoginPhase = "idle" | "authenticating" | "bootstrapping" | "success_handoff
 type LoginMode = "sign_in" | "sign_up";
 
 const BOOTSTRAP_TIMEOUT_MS = 20_000;
-const SESSION_BOOTSTRAP_MAX_ATTEMPTS = 10;
-const SESSION_BOOTSTRAP_RETRY_MS = 120;
+const SESSION_BOOTSTRAP_MAX_ATTEMPTS = 40;
+const SESSION_BOOTSTRAP_RETRY_MS = 200;
 
 function buildLocalText(locale: Locale) {
   if (locale === "ar") {
@@ -118,7 +119,9 @@ async function completeAuthJsCredentialsSignIn(input: {
   }
 
   if (signInResult.error) {
-    throw createAuthFlowError(signInResult.code || signInResult.error);
+    throw createAuthFlowError(
+      readCredentialsSignInErrorCode(signInResult) || "BOOTSTRAP_FAILED",
+    );
   }
 
   if (!signInResult.ok) {
@@ -148,7 +151,9 @@ async function completeAuthJsCredentialsSignIn(input: {
     const responseErrorCode = mePayload.ok ? null : mePayload.error.code;
     const hasAttemptsRemaining = attempt + 1 < SESSION_BOOTSTRAP_MAX_ATTEMPTS;
     const isTransientBootstrapState =
-      responseErrorCode === null || responseErrorCode === "SESSION_NOT_ESTABLISHED";
+      responseErrorCode === null
+      || responseErrorCode === "SESSION_NOT_ESTABLISHED"
+      || (meResponse.status >= 500 && meResponse.status < 600);
 
     if (!isTransientBootstrapState) {
       throw createAuthFlowError(responseErrorCode || "BOOTSTRAP_FAILED");

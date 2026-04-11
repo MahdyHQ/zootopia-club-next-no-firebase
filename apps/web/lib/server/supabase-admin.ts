@@ -185,6 +185,21 @@ function normalizeSupabaseTimestamp(value: unknown) {
   return new Date(parsed).toISOString();
 }
 
+/**
+ * Converts a Supabase timestamp field into UNIX seconds for auth recency checks.
+ * Returns `undefined` when input is missing/invalid so callers can continue with
+ * other fallback sources without throwing.
+ */
+function normalizeSupabaseTimestampToUnixSeconds(value: unknown) {
+  const iso = normalizeSupabaseTimestamp(value);
+  if (!iso) {
+    return undefined;
+  }
+
+  const seconds = Math.floor(Date.parse(iso) / 1000);
+  return Number.isFinite(seconds) ? seconds : undefined;
+}
+
 function mapSupabaseUserToAuthRecord(user: User): AuthUserRecord {
   const userRecord = toLooseUserRecord(user);
   const provider = mapProviderToAuthProvider(readSupabaseProvider(user));
@@ -269,6 +284,19 @@ function buildSupabaseDecodedToken(input: {
   user: User;
 }) {
   const payload = decodeJwtPayload(input.token) ?? {};
+  const userRecord = toLooseUserRecord(input.user);
+  const fallbackAuthTimeSeconds =
+    normalizeSupabaseTimestampToUnixSeconds(userRecord.last_sign_in_at) ??
+    normalizeSupabaseTimestampToUnixSeconds(userRecord.updated_at) ??
+    normalizeSupabaseTimestampToUnixSeconds(userRecord.created_at);
+  const resolvedAuthTimeSeconds =
+    typeof payload.auth_time === "number"
+      ? payload.auth_time
+      : typeof payload.iat === "number"
+        ? payload.iat
+        : fallbackAuthTimeSeconds;
+  const resolvedIatSeconds =
+    typeof payload.iat === "number" ? payload.iat : resolvedAuthTimeSeconds;
   /* Provider is resolved from the current JWT payload first so admin password-only
      checks reflect this sign-in token, not only account-level identity metadata. */
   const provider = mapProviderToAuthProvider(
@@ -305,12 +333,8 @@ function buildSupabaseDecodedToken(input: {
           : undefined,
     admin: adminClaim,
     role: adminClaim === true ? "admin" : "user",
-    auth_time:
-      typeof payload.auth_time === "number"
-        ? payload.auth_time
-        : typeof payload.iat === "number"
-          ? payload.iat
-          : undefined,
+    auth_time: resolvedAuthTimeSeconds,
+    iat: resolvedIatSeconds,
     // Legacy claim shape is retained so older provider readers keep working during cleanup.
     firebase: {
       sign_in_provider: provider,

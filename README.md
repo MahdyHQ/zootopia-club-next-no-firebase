@@ -37,7 +37,36 @@ npm run dev
 npm run lint
 npm run typecheck
 npm run build
+npm run check:web
+npm run supabase:check
 ```
+
+## Supabase database + storage workflow (code-first)
+
+- SQL schema and policy source of truth: `supabase/migrations/*.sql`
+- Migration ordering check: `npm run supabase:migrations:validate`
+- Migration listing for reviews/CI logs: `npm run supabase:migrations:list`
+
+Apply to a linked Supabase project (from development environment):
+
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+Storage bucket and object-path policies are already codified in migrations, including:
+
+- `zootopia-private` private bucket creation
+- owner-scoped object policies for:
+  - `documents/{ownerUid}/...`
+  - `assessment-results/{ownerUid}/...`
+  - `assessment-exports/{ownerUid}/...`
+  - `uploads/temp/{ownerUid}/...`
+
+Minimum manual dashboard work that remains:
+
+- create/rotate project secrets and inject runtime env values (`AUTH_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DATABASE_URL`, `ZOOTOPIA_ADMIN_EMAILS`, and `NEXT_PUBLIC_SUPABASE_*`)
+- create/maintain admin Auth users that must match `ZOOTOPIA_ADMIN_EMAILS`
 
 ## Deployment Paths
 
