@@ -4,7 +4,7 @@ Last refreshed: 2026-04-11 02:10:00
 Project Identity
 - Name: Zootopia Club Next
 - Workspace root: C:\zootopia-club-next
-- Architecture reference: Guide-Files\Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md (DEPRECATED Firebase-era; see "Current Truth Snapshot" below for active stack)
+- Primary architecture guide: Guide-Files\Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md
 - Old-project reference: C:\zootopia_club_ai_platform
 
 Current Truth Snapshot
