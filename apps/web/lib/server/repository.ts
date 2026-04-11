@@ -65,7 +65,7 @@ import { hasSupabaseAdminRuntime } from "@/lib/server/supabase-admin";
 import {
   getZootopiaFirestore,
   shouldUseZootopiaPostgresPersistence,
-} from "@/lib/server/zootopia-firestore-pg";
+} from "@/lib/server/zootopia-postgres-adapter";
 import {
   getAssessmentStatus,
   getRetentionExpiryTimestamp,

@@ -9,7 +9,7 @@ Zootopia Club Next is the simplified 2026 monorepo rebuild of the Zootopia Club 
 - `packages/shared-config`: app constants, routes, feature flags, model catalog
 - `packages/shared-types`: shared request, response, auth, document, assessment, infographic, and admin types
 - `packages/shared-utils`: pure helpers, RTL helpers, upload policy, validation
-- `firebase`: legacy Firebase-era rule and index artifacts (historical only)
+- `docs/legacy-reference/`: historical deployment/runtime/Firebase-era reference material
 
 The project root is the monorepo manager only. It intentionally does not act as a second Next.js app.
 

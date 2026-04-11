@@ -46,7 +46,7 @@ Monorepo Structure
 - Shared packages
   - `packages/shared-config`, `packages/shared-types`, `packages/shared-utils`
 - Legacy/reference
-  - `firebase/*` and `scripts/firebase/*` are legacy-maintenance assets
+  - `docs/legacy-reference/*` contains historical deployment/runtime material
 
 Dependency And Runtime Baseline
 - Root workspace baseline
@@ -78,14 +78,13 @@ Important Folders And Files
   - `app/` (App Router pages + Route Handlers)
   - `components/`
   - `lib/server/` (auth, repository, storage, AI runtime, admin guards)
+  - `lib/server/zootopia-postgres-adapter.ts` (ACTIVE Supabase Postgres adapter; file name is legacy-misleading, pending rename)
   - `auth.ts` (Auth.js config + credential providers)
   - `next.config.ts`
-  - legacy App Hosting config artifacts (historical rollback/reference only)
   - `scripts/normalize-standalone.mjs`
 - `apps/api`
   - placeholder workspace package for future backend extraction only
 - Legacy/reference folders
-  - `firebase/` (legacy Firebase-era rules/index artifacts)
   - `docs/legacy-reference/` (historical deployment/runtime material)
 
 Route Map
@@ -203,13 +202,15 @@ Mandatory Profile Completion Architecture
   - protected user APIs return `PROFILE_INCOMPLETE` when the user is still gated
 
 Legacy Firebase Integration (Historical/Inactive)
-- Firebase-era assets are retained only as historical or rollback-reference material.
-- No active runtime path depends on Firebase Auth, Firestore, Firebase Storage, Firebase Hosting, or Firebase App Hosting as primary services.
+- NO ACTIVE Firebase services are currently integrated.
+- No active runtime path depends on Firebase Auth, Firestore, Firebase Storage, Firebase Hosting, or Firebase App Hosting.
+- Misleading filenames still present in active code (pending cleanup):
+  - `zootopia-firestore-pg.ts` - Actually a **Supabase Postgres adapter** with Firestore-shaped API; file name should be `zootopia-postgres-adapter.ts` (rename pending)
+  - Functions `getZootopiaFirestore()` and `shouldUseFirestore()` are similarly misleading; they reference Supabase Postgres, not Firebase
 - Legacy references remain in:
-  - `firebase/*` (rules/index archive)
-  - legacy App Hosting rollback contract artifacts
-  - `docs/legacy-reference/*` and legacy operational notes
-- Transitional `scripts/firebase/*` remain for controlled legacy operations and should not be expanded as active architecture.
+  - Environment files: Firebase env vars are commented-out for reference only (never activated)
+  - `docs/legacy-reference/*` - historical deployment/runtime/App Hosting material
+  - Comments and documentation notes where source system is explicitly Firebase-era data (ETL context)
 
 AI, Model, And Provider Orchestration
 - Model catalog authority
@@ -334,11 +335,9 @@ Important Scripts And Commands
   - `npm run clean:web`, `npm run rebuild:web`
   - `npm run start`, `npm run start:web`
 - Legacy maintenance scripts (reference/compatibility only)
-  - `npm run firebase:admin:bootstrap-env`
-  - `npm run firebase:admin:set-claims`
-  - `npm run firebase:admin:set-passwords`
-  - `npm run firebase:rules:deploy`
-  - `scripts/firebase/*`
+  - **None of these Firebase npm scripts currently exist in the repository:**
+    - (legacy references: `npm run firebase:admin:bootstrap-env`, `npm run firebase:admin:set-claims`, `npm run firebase:admin:set-passwords`, `npm run firebase:rules:deploy`)
+  - Do NOT use these; equivalent functionality is now Supabase-based
 
 Important Security Assumptions And Trust Boundaries
 - Server-side verification is the trust boundary; client UI state is never authoritative.
@@ -489,3 +488,95 @@ Verification outcomes (post-change)
 Notes for future agents
 - If callback/session regresses with `BOOTSTRAP_FAILED` or `ADMIN_BOOTSTRAP_FAILED`, inspect `[auth-trace]` events first; all critical stages now emit trace IDs and classified failures.
 - Keep auth-critical persistence on Supabase claims unless a dedicated relational user schema migration is fully planned and applied end-to-end.
+
+2026-04-11 - Architecture Truth-Alignment + Naming Cleanup (File Renames, Ledger Corrections, Docs Updates)
+
+Scope
+- Aggressive removal of Firebase/Firestore/App-Hosting misleading terminology from active code and documentation
+- File system renaming to remove obsolete Firebase-era names from active codebase
+- Ledger accuracy corrections (fixed references to non-existent Firebase folders and scripts)
+- Environment and deployment truth consolidation (Supabase/Auth.js/Vercel as canonical active stack)
+
+Mandatory first-step compliance
+- Read zootopia-club-next-ledger.txt completely before edits (completed)
+- Ran exploration subagent to audit Firebase/Firestore/App-Hosting naming across the repo
+- Evaluated current state versus desired truth before making changes
+
+File renames (Phase 2)
+- OLD: `apps/web/lib/server/zootopia-firestore-pg.ts` → NEW: `apps/web/lib/server/zootopia-postgres-adapter.ts`
+  - Reason: File name was misleadingly claiming a Firebase/Firestore relationship when it's actually a Supabase Postgres adapter
+  - Added prominent header comment explaining: "Despite confusing 'Firestore' naming in function/class names, this is a Supabase Postgres adapter only"
+  - Future cleanup: Function names (getZootopiaFirestore, shouldUseFirestore) will be renamed when migration fully complete
+- File deletion: Removed old `zootopia-firestore-pg.ts` after creating replacement
+
+Import path updates (Phase 3)
+- `apps/web/lib/server/repository.ts`: Updated import from `zootopia-firestore-pg` to `zootopia-postgres-adapter`
+- `apps/web/app/api/health/route.ts`: Updated import from `zootopia-firestore-pg` to `zootopia-postgres-adapter`
+- Documentation cross-references:
+  - `docs/firestore-storage-to-zc-entities-etl.md`: Updated file reference (2 locations)
+  - `docs/legacy-reference/firestore-storage-to-zc-entities-etl.md`: Updated file reference (2 locations)
+
+Ledger accuracy corrections (Phase 1)
+- Removed inaccurate claim: "`firebase/*` and `scripts/firebase/*` are legacy-maintenance assets"
+  - These folders do NOT exist in the current repo; reference was stale/copied from historical context
+- Updated "Important Folders And Files" section to remove non-existent `/firebase/` folder reference
+- Updated "Legacy Firebase Integration" section to clarify:
+  - NO ACTIVE Firebase services integrated (emphasis added)
+  - Documented misleading file names still present (zootopia-postgres-adapter.ts, function names)
+  - Explained these misleading names exist for backward compatibility during migration
+- Updated "Important Scripts And Commands" section to note that firebase npm scripts do NOT actually exist:
+  - (Legacy references only; do not use)
+
+Environment files validation (Phase 5)
+- `.env.example`: Already has Firebase commented-out section marked "Legacy Firebase script compatibility"
+- `apps/web/.env.local`: Already correctly structured with Supabase as primary, Firebase commented
+
+Documentation updates (Phase 4 & 6)
+- `README.md`: Updated monorepo structure to remove reference to non-existent `firebase:` folder, replaced with `docs/legacy-reference/: historical deployment/runtime material`
+- `docs/architecture.md`: Verified active-current truth (Supabase/Auth.js/Vercel); wording is correct
+- `docs/firestore-storage-to-zc-entities-etl.md`: Cross-reference updated to new file name
+
+Active source code references (acceptable/documented)
+- `apps/web/lib/server/supabase-admin.ts` line 339: `firebase:` field in JWT claims is backward-compatibility shape
+- `apps/web/lib/server/auth-types.ts` line 51: `firebase?` optional field for JWT shape migration compatibility
+- `apps/web/lib/server/admin-auth.ts` lines 195-202: Reading legacy Firebase provider claims for backward-compat
+- `apps/web/next.config.ts` line 12: Comment about "legacy Firebase-era scripts" is accurate context
+- `apps/web/lib/server/zootopia-postgres-adapter.ts`: Header comments explain the misleading naming and context
+
+Removed stale references
+- Removed claim that `/firebase/` folder contains rules/index artifacts (doesn't exist; was stale ledger ref)
+- Removed claim that `scripts/firebase/*` remain as transitional maintenance (don't exist)
+- Corrected ledger section titles and descriptions to not imply Firebase as optional/fallback deployment
+
+Remaining Firebase references (intentionally retained with scope)
+- ETL terminology: `docs/firestore-storage-to-zc-entities-etl.md` discusses migration FROM Firebase TO Supabase (source system context)
+- App Hosting guide: `docs/legacy-reference/app-hosting-env-secrets-beginner-guide.md` (marked as legacy/reference)
+- Backward-compat JWT fields: Firebase provider claims fields in Supabase JWT (deprecated but retained for session migration)
+- Comments in adapter file: Explain misleading naming and pending cleanup
+- Changelog history: Previous entries documenting earlier Firebase-era architecture states are preserved
+
+Verification results
+- `npm run lint --workspace @zootopia/web`: ✅ PASSED (no new linting errors)
+- `npm run typecheck --workspace @zootopia/web`: ✅ PASSED (types generated successfully, tsc --noEmit clean)
+- `npm run build --workspace @zootopia/web`: ✅ PASSED (9.6s compile, 47 routes confirmed, postbuild normalization complete)
+
+Safety and impact assessment
+- File rename cascade: 2 direct imports updated, no transitive cascades required
+- Function name changes: NOT applied (getZootopiaFirestore, shouldUseFirestore remain unchanged to minimize risk and line count)
+- Runtime logic: UNCHANGED (rename was file/path/import only; no behavior modifications)
+- Backward compatibility: MAINTAINED (all deprecated shapes, env, and JWT fields preserved)
+- Build artifacts: CLEAN (all 47 routes compile, no type/lint regressions)
+
+Architecture truth after this pass
+- Active deployment: Vercel only (Firebase App Hosting marked historical/reference-only)
+- Active persistence: Supabase Auth + Supabase Postgres + Supabase Storage (no Firebase active paths)
+- Active session: Auth.js JWT cookies with server-side Supabase token verification
+- Active adapter file: `zootopia-postgres-adapter.ts` (renamed from misleading Firebase name)
+- Misleading naming pending: Functions and classes inside adapter still use "Firestore" terminology; will be renamed in future pass
+
+Next agent checklist
+- If working with the adapter file, remember: It's Supabase Postgres, NOT Firebase. File name is now correct.
+- Remaining function/class names (getZootopiaFirestore, PgFirestore, shouldUseFirestore) will need future cleanup once migration fully complete
+- Do not restore Firebase-era deployment assumptions; Vercel is sole active deployment target
+- Do not re-add references to non-existent `/firebase/` or `/scripts/firebase/` folders unless they are actually created
+- Reserved for future work: Renaming the remaining misleading function names (getZootopiaFirestore → getZootopiaPgAdapter) and class name (PgFirestore → PgPostgresAdapter) once cascading function call sites can be safely updated

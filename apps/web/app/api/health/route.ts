@@ -2,7 +2,7 @@ import { APP_NAME } from "@zootopia/shared-config";
 
 import { apiSuccess } from "@/lib/server/api";
 import { getRuntimeFlags } from "@/lib/server/runtime";
-import { shouldUseZootopiaPostgresPersistence } from "@/lib/server/zootopia-firestore-pg";
+import { shouldUseZootopiaPostgresPersistence } from "@/lib/server/zootopia-postgres-adapter";
 
 export const runtime = "nodejs";
 

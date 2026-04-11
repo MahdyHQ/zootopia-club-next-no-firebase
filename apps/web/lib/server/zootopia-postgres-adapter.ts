@@ -1,3 +1,20 @@
+/**
+ * SUPABASE POSTGRES ADAPTER
+ *
+ * IMPORTANT: Despite the confusing "Firestore" naming in function/class names within this file,
+ * this adapter provides a Supabase Postgres database interface only.
+ *
+ * The confusing names exist because the API surface mimics Firestore to minimize disruption
+ * during the Firebase → Supabase migration. These names (PgFirestore, getZootopiaFirestore, etc.)
+ * refer to the Supabase Postgres backend, NOT to Firebase/Firestore.
+ *
+ * Future cleanup: Function names should be renamed to remove the misleading "Firestore" terminology
+ * once migration is fully complete and all call sites can be safely updated.
+ *
+ * Active backend: Supabase Postgres (`zc_entities` table via `postgres` client)
+ * Data persistence: Supabase Storage and PostgreSQL  persistence only
+ */
+
 import "server-only";
 
 import postgres from "postgres";
