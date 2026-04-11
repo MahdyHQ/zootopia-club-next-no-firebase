@@ -23,7 +23,7 @@ for (const file of files) {
   }
 
   const timestamp = match[1];
-  if (!timestamp || timestamp <= previous) {
+  if (timestamp <= previous) {
     console.error(`Migration order violation: ${file}`);
     process.exit(1);
   }

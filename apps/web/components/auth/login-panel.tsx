@@ -18,6 +18,7 @@ import {
   AuthStatus,
   AuthSupportDetails,
 } from "@/components/auth/auth-status";
+import { readCredentialsSignInErrorCode } from "@/components/auth/signin-result";
 import type { AppMessages } from "@/lib/messages";
 import {
   getEphemeralSupabaseClient,
@@ -118,18 +119,8 @@ async function completeAuthJsCredentialsSignIn(input: {
   }
 
   if (signInResult.error) {
-    const callbackUrlCode = typeof signInResult.url === "string"
-      ? (() => {
-          try {
-            const url = new URL(signInResult.url, window.location.origin);
-            return url.searchParams.get("code") || url.searchParams.get("error");
-          } catch {
-            return null;
-          }
-        })()
-      : null;
     throw createAuthFlowError(
-      callbackUrlCode || signInResult.code || signInResult.error,
+      readCredentialsSignInErrorCode(signInResult) || "BOOTSTRAP_FAILED",
     );
   }
 

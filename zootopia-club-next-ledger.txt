@@ -6824,3 +6824,13 @@ Change Log
     - `scripts/supabase/validate-migrations-order.mjs`
     - `README.md`
     - `zootopia-club-next-ledger.txt`
+  - 2026-04-11 12:01:50 | Post-validation follow-up refinements
+    - extracted Auth.js credentials sign-in error-code parsing to shared helper:
+      - `apps/web/components/auth/signin-result.ts`
+      - consumed by both `login-panel.tsx` and `admin-login-panel.tsx` to prevent divergence.
+    - added JSDoc on Supabase timestamp-to-unix fallback helper in `supabase-admin.ts`.
+    - removed redundant impossible null-check branch in `scripts/supabase/validate-migrations-order.mjs`.
+    - verification:
+      - `npm run lint:web` ✅
+      - `npm run typecheck:web` ✅
+      - `npm run supabase:check` ✅

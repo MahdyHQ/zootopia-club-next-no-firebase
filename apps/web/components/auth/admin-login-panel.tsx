@@ -22,6 +22,7 @@ import {
   isSupabaseWebConfigured,
   primeEphemeralSupabaseClient,
 } from "@/lib/supabase/client";
+import { readCredentialsSignInErrorCode } from "@/components/auth/signin-result";
 
 type AdminLoginPanelProps = {
   messages: AppMessages;
@@ -59,18 +60,8 @@ async function completeAdminAuthJsSignIn(input: {
   }
 
   if (signInResult.error) {
-    const callbackUrlCode = typeof signInResult.url === "string"
-      ? (() => {
-          try {
-            const url = new URL(signInResult.url, window.location.origin);
-            return url.searchParams.get("code") || url.searchParams.get("error");
-          } catch {
-            return null;
-          }
-        })()
-      : null;
     throw createAuthFlowError(
-      callbackUrlCode || signInResult.code || signInResult.error,
+      readCredentialsSignInErrorCode(signInResult) || "ADMIN_BOOTSTRAP_FAILED",
     );
   }
 

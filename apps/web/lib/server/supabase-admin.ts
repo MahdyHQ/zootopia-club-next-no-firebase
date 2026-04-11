@@ -185,6 +185,11 @@ function normalizeSupabaseTimestamp(value: unknown) {
   return new Date(parsed).toISOString();
 }
 
+/**
+ * Converts a Supabase timestamp field into UNIX seconds for auth recency checks.
+ * Returns `undefined` when input is missing/invalid so callers can continue with
+ * other fallback sources without throwing.
+ */
 function normalizeSupabaseTimestampToUnixSeconds(value: unknown) {
   const iso = normalizeSupabaseTimestamp(value);
   if (!iso) {
