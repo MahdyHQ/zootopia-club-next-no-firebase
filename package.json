@@ -22,6 +22,9 @@
     "check:web": "npm run lint:web && npm run typecheck:web && npm run build:web",
     "clean:web": "node -e \"const fs=require('node:fs');const targets=['apps/web/.next'];for(const target of targets){if(fs.existsSync(target)){fs.rmSync(target,{recursive:true,force:true});console.log('Removed',target);}else{console.log('Skipped',target);}}\"",
     "rebuild:web": "npm run clean:web && npm run build:web",
+    "supabase:migrations:list": "node ./scripts/supabase/list-migrations.mjs",
+    "supabase:migrations:validate": "node ./scripts/supabase/validate-migrations-order.mjs",
+    "supabase:check": "npm run supabase:migrations:validate && npm run supabase:migrations:list",
     "start": "npm run start --workspace=@zootopia/web",
     "start:web": "npm run start --workspace=@zootopia/web"
   },

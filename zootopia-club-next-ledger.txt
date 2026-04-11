@@ -6760,3 +6760,67 @@ Change Log
     - `.env.example`
     - `apps/web/apphosting.yaml`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-11 11:58:40 | Auth.js + Supabase session bootstrap coherence hardening (regular + admin) and Supabase code-first workflow scripts
+  - Mandatory-first-step compliance:
+    - re-read `zootopia-club-next-ledger.txt` before this pass.
+    - completed read-first tracing for regular login, admin login, `/api/auth/me`, proxy/route guards, Supabase auth/db wiring, env/runtime gating, UI error mapping, and validation command paths.
+    - attempted official web doc fetches for Auth.js/Next.js/Supabase guidance; network access was blocked in sandbox for those domains in this pass, so implementation aligned against current repo runtime contracts and existing Next.js 16 conventions already used in code.
+  - Root-cause findings addressed in this pass:
+    - regular `/login` refresh-loop failures were primarily tied to bootstrap/session coherence instability:
+      1) Auth.js credential callback code propagation could degrade to generic error surfaces when `signIn(..., { redirect: false })` returned only URL query codes.
+      2) bootstrap poll windows (10 x 120ms ~= 1.2s) were too tight for slower cookie/session propagation and produced false bootstrap failures.
+      3) Supabase decoded-token recency checks depended on JWT payload `auth_time`/`iat`; when payload fields were absent/unreliable, `RECENT_SIGN_IN_REQUIRED` could be emitted even for fresh valid sign-ins.
+    - admin `/admin/login` generic completion failures shared the same bootstrap race and callback-code extraction issues, which obscured concrete server codes and increased fallback-to-generic UI paths.
+  - Surgical changes applied:
+    - `apps/web/lib/server/supabase-admin.ts`
+      - added timestamp fallback derivation for decoded token recency fields from verified Supabase user metadata (`last_sign_in_at`, `updated_at`, `created_at`) when JWT payload `auth_time`/`iat` is missing.
+      - now sets fallback `auth_time` and `iat` in decoded token shape to keep server-side `hasRecentSignIn` deterministic for valid fresh credentials.
+    - `apps/web/components/auth/login-panel.tsx`
+      - expanded bootstrap polling window from `10x120ms` to `40x200ms` (8s) to reduce false negatives during cookie/session propagation.
+      - added callback URL code extraction (`code`/`error` query params) when Auth.js signIn response exposes error context through URL only.
+      - treated transient `/api/auth/me` 5xx states as retryable during bootstrap.
+    - `apps/web/components/auth/admin-login-panel.tsx`
+      - mirrored regular-flow bootstrap hardening: `40x200ms`, callback URL code extraction, transient 5xx retry handling.
+    - `apps/web/app/api/auth/me/route.ts`
+      - added `dynamic = "force-dynamic"` and `revalidate = 0` to keep auth-sensitive session checks uncached/deterministic at runtime.
+    - `package.json`
+      - added developer-facing Supabase workflow scripts:
+        - `supabase:migrations:list`
+        - `supabase:migrations:validate`
+        - `supabase:check`
+    - `scripts/supabase/list-migrations.mjs`
+      - deterministic listing for migration review/CI visibility.
+    - `scripts/supabase/validate-migrations-order.mjs`
+      - validates timestamped migration naming/order contract for code-managed schema flow.
+    - `README.md`
+      - documented code-first Supabase DB/storage workflow, migration scripts, policy-managed storage namespaces, and minimum remaining manual dashboard tasks.
+  - Verification in this pass:
+    - baseline pre-edit check after dependency install:
+      - `npm run check:web`
+        - lint ✅
+        - typecheck ✅
+        - build ❌ blocked by sandbox inability to fetch Google Fonts (`next/font/google` remote fetch), unrelated to auth/session logic edits.
+    - post-change validation:
+      - `npm run lint:web` ✅ passed.
+      - `npm run typecheck:web` ✅ passed.
+      - `npm run build:web` ❌ same sandbox font-fetch network restriction (unchanged external limitation).
+      - `npm run supabase:check` ✅ passed (`4` migration files validated/listed).
+    - runtime probes on local dev server (`127.0.0.1:3030`):
+      - `GET /api/auth/me` returned `401 SESSION_NOT_ESTABLISHED` with no-store headers and dynamic route behavior.
+      - `POST /api/auth/admin/resolve-identifier` returned `503 SUPABASE_ADMIN_UNAVAILABLE` in this sandbox due missing runtime secrets (expected in this environment), confirming server-side env gating remains explicit/fail-closed.
+  - Current-state implications:
+    - Auth.js remains the active session layer; Supabase remains identity/data backend.
+    - regular/admin bootstrap now waits longer for server-observed session coherence before redirect handoff.
+    - admin/user redirect separation logic stays server-authoritative; bootstrap no longer eagerly fails under short propagation windows.
+    - Supabase database/storage provisioning visibility from development is improved via migration validation/listing scripts + README runbook.
+  - Files changed in this pass:
+    - `apps/web/lib/server/supabase-admin.ts`
+    - `apps/web/components/auth/login-panel.tsx`
+    - `apps/web/components/auth/admin-login-panel.tsx`
+    - `apps/web/app/api/auth/me/route.ts`
+    - `package.json`
+    - `scripts/supabase/list-migrations.mjs`
+    - `scripts/supabase/validate-migrations-order.mjs`
+    - `README.md`
+    - `zootopia-club-next-ledger.txt`

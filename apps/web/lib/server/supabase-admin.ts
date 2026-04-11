@@ -185,6 +185,16 @@ function normalizeSupabaseTimestamp(value: unknown) {
   return new Date(parsed).toISOString();
 }
 
+function normalizeSupabaseTimestampToUnixSeconds(value: unknown) {
+  const iso = normalizeSupabaseTimestamp(value);
+  if (!iso) {
+    return undefined;
+  }
+
+  const seconds = Math.floor(Date.parse(iso) / 1000);
+  return Number.isFinite(seconds) ? seconds : undefined;
+}
+
 function mapSupabaseUserToAuthRecord(user: User): AuthUserRecord {
   const userRecord = toLooseUserRecord(user);
   const provider = mapProviderToAuthProvider(readSupabaseProvider(user));
@@ -269,6 +279,11 @@ function buildSupabaseDecodedToken(input: {
   user: User;
 }) {
   const payload = decodeJwtPayload(input.token) ?? {};
+  const userRecord = toLooseUserRecord(input.user);
+  const fallbackAuthTimeSeconds =
+    normalizeSupabaseTimestampToUnixSeconds(userRecord.last_sign_in_at) ??
+    normalizeSupabaseTimestampToUnixSeconds(userRecord.updated_at) ??
+    normalizeSupabaseTimestampToUnixSeconds(userRecord.created_at);
   /* Provider is resolved from the current JWT payload first so admin password-only
      checks reflect this sign-in token, not only account-level identity metadata. */
   const provider = mapProviderToAuthProvider(
@@ -310,7 +325,11 @@ function buildSupabaseDecodedToken(input: {
         ? payload.auth_time
         : typeof payload.iat === "number"
           ? payload.iat
-          : undefined,
+          : fallbackAuthTimeSeconds,
+    iat:
+      typeof payload.iat === "number"
+        ? payload.iat
+        : fallbackAuthTimeSeconds,
     // Legacy claim shape is retained so older provider readers keep working during cleanup.
     firebase: {
       sign_in_provider: provider,

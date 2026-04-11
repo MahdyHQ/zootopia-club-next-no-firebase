@@ -35,8 +35,8 @@ type AdminLoginPhase =
   | "bootstrapping"
   | "success_handoff";
 
-const ADMIN_SESSION_BOOTSTRAP_MAX_ATTEMPTS = 10;
-const ADMIN_SESSION_BOOTSTRAP_RETRY_MS = 120;
+const ADMIN_SESSION_BOOTSTRAP_MAX_ATTEMPTS = 40;
+const ADMIN_SESSION_BOOTSTRAP_RETRY_MS = 200;
 
 async function readApiResult<T>(response: Response, invalidCode: string) {
   try {
@@ -59,7 +59,19 @@ async function completeAdminAuthJsSignIn(input: {
   }
 
   if (signInResult.error) {
-    throw createAuthFlowError(signInResult.code || signInResult.error);
+    const callbackUrlCode = typeof signInResult.url === "string"
+      ? (() => {
+          try {
+            const url = new URL(signInResult.url, window.location.origin);
+            return url.searchParams.get("code") || url.searchParams.get("error");
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+    throw createAuthFlowError(
+      callbackUrlCode || signInResult.code || signInResult.error,
+    );
   }
 
   if (!signInResult.ok) {
@@ -97,7 +109,9 @@ async function completeAdminAuthJsSignIn(input: {
     const responseErrorCode = mePayload.ok ? null : mePayload.error.code;
     const hasAttemptsRemaining = attempt + 1 < ADMIN_SESSION_BOOTSTRAP_MAX_ATTEMPTS;
     const isTransientBootstrapState =
-      responseErrorCode === null || responseErrorCode === "SESSION_NOT_ESTABLISHED";
+      responseErrorCode === null
+      || responseErrorCode === "SESSION_NOT_ESTABLISHED"
+      || (meResponse.status >= 500 && meResponse.status < 600);
 
     if (!isTransientBootstrapState) {
       throw createAuthFlowError(responseErrorCode || "ADMIN_BOOTSTRAP_FAILED");

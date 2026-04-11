@@ -3,6 +3,8 @@ import { getRuntimeFlags } from "@/lib/server/runtime";
 import { getSessionSnapshot } from "@/lib/server/session";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
   // Keep /api/auth/me as the app-specific auth status surface while Auth.js owns session cookies.
