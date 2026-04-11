@@ -1,0 +1,2 @@
+$env:ANTHROPIC_BASE_URL="https://dashscope-intl.aliyuncs.com/apps/anthropic"
+$env:ANTHROPIC_API_KEY="your_alibaba_api_key"

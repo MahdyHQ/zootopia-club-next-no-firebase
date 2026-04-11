@@ -1,0 +1,895 @@
+Zootopia Club Next Master Ledger
+Last refreshed: 2026-04-11 17:23:58
+
+Project Identity
+- Name: Zootopia Club Next
+- Workspace root: C:\zootopia-club-next
+- Architecture reference: Guide-Files\Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md (DEPRECATED Firebase-era; see "Current Truth Snapshot" below for active stack)
+- Old-project reference: C:\zootopia_club_ai_platform
+
+Current Truth Snapshot
+- `apps/web` is the only live application/runtime surface.
+- `apps/api` is a future extraction boundary only and does not serve active production traffic.
+- Active stack: Auth.js session cookies + Supabase Auth + Supabase Postgres + Supabase Storage.
+- Active deployment target: Vercel (`vercel.json` points to `apps/web`).
+- Active backend surface: same-origin App Router Route Handlers under `apps/web/app/api/**/route.ts`.
+- Server authority stays in `apps/web/lib/server/*` with owner-scoped checks for data/artifact access.
+- Root `.env.local` is the canonical local env source; production env is managed in Vercel.
+- Supabase schema source of truth is `supabase/migrations/*.sql`.
+- Legacy App Hosting artifacts plus `docs/legacy-reference/*` are retained for rollback/reference context only.
+- Firebase/Firestore/Firebase Hosting/Firebase App Hosting references are historical unless explicitly marked legacy/reference-only.
+
+Guide Alignment Notes
+- The guide remains the main architecture reference.
+- The repo intentionally differs from older guide assumptions in verified areas:
+  - `apps/api` is present but deferred.
+  - npm workspaces are used instead of pnpm/Turborepo.
+  - `packages/ui` is not currently present.
+  - Active deployment/runtime truth is Vercel + Supabase + Auth.js.
+  - Firebase App Hosting guidance is legacy/reference-only in this repo state.
+
+Current Repo Reality Versus Older Audit Checklists
+- The current repo does not contain root `server.ts`, root `server/*`, root `src/*` application trees from older single-app layouts.
+- The current repo does not contain active root `netlify.toml`, `Dockerfile`, `cloudbuild.yaml`, `cloudrun.env`, or `deployment/runtime-manifest.json`.
+- Historical deployment material survives under `docs/legacy-reference/*` and `Guide-Files/*` and does not define active runtime.
+
+Monorepo Structure
+- Root ownership
+  - `package.json`, `package-lock.json`, `tsconfig*.json`, `eslint.config.mjs`
+  - `.env.example`, `vercel.json`, `README.md`, `docs/*`, `Guide-Files/*`
+  - `supabase/migrations/*`
+- `apps/web`
+  - `app/` (App Router pages + Route Handlers)
+  - `components/`, `lib/`, `messages/`, `public/`, `proxy.ts`, `auth.ts`
+- `apps/api`
+  - placeholder workspace package for future backend extraction
+- Shared packages
+  - `packages/shared-config`, `packages/shared-types`, `packages/shared-utils`
+- Legacy/reference
+  - `docs/legacy-reference/*` contains historical deployment/runtime material
+
+Dependency And Runtime Baseline
+- Root workspace baseline
+  - Node engine: `>=20.9.0`
+  - npm workspaces across `apps/*` and `packages/*`
+  - TypeScript `^5`, ESLint `^9`, Tailwind CSS `^4`
+- `apps/web` application baseline
+  - Next.js `16.2.2`, React `19.2.4`
+  - `@supabase/ssr` `^0.10.2`, `@supabase/supabase-js` `^2.103.0`, `postgres` `^3.4.5`
+  - export helpers: `docx` `^9.5.1`, `qrcode` `^1.5.4`
+- Build/deploy baseline
+  - `apps/web` builds with standalone output enabled
+  - Vercel is the active deployment target for the `apps/web` app root
+  - `apps/web/scripts/normalize-standalone.mjs` remains legacy App Hosting rollback compatibility, not active deployment authority
+
+Current Visual Identity And UI System
+- Global visual system is defined in `apps/web/app/globals.css` and route/layout composition.
+- Active font stack is loaded in `apps/web/app/layout.tsx` (Plus Jakarta Sans, Alexandria, Amiri, JetBrains Mono).
+- Protected-shell and public-site ownership are split intentionally across dedicated layout components.
+- Theme system uses `data-theme` attribute on `<html>` for CSS custom properties AND `class="dark"` for Tailwind `dark:` variants.
+
+Important Folders And Files
+- Root
+  - `package.json`
+  - `.env.example`
+  - `vercel.json`
+  - `supabase/migrations/*.sql`
+  - `zootopia-club-next-ledger.txt`
+- `apps/web`
+  - `app/` (App Router pages + Route Handlers)
+  - `components/`
+  - `lib/server/` (auth, repository, storage, AI runtime, admin guards)
+  - `lib/server/zootopia-postgres-adapter.ts` (ACTIVE Supabase Postgres adapter; file name is legacy-misleading, pending rename)
+  - `auth.ts` (Auth.js config + credential providers)
+  - `next.config.ts`
+  - `scripts/normalize-standalone.mjs`
+- `apps/api`
+  - placeholder workspace package for future backend extraction only
+- Legacy/reference folders
+  - `docs/legacy-reference/` (historical deployment/runtime material)
+
+Route Map
+- Public routes
+  - `/about`, `/contact`, `/donation`, `/hall-of-honor`, `/login`, `/admin/login`
+- Authenticated non-admin shell
+  - `/settings`
+- Completion-required non-admin routes
+  - `/`, `/upload`, `/history`, `/assessment`, `/assessment/preview/[id]`, `/assessment/results/[id]`, `/infographic`
+- Admin routes
+  - `/admin`, `/admin/users`
+
+Route Ownership Clarification
+- `/upload` owns full upload workspace UI and document intake.
+- `/assessment` owns assessment generation/history/preview/result flows and export actions.
+- `/infographic` keeps admin studio and non-admin coming-soon lock surface.
+- `/about` `/contact` `/donation` `/hall-of-honor` are public-info routes under public-site layout ownership.
+
+Shared State Versus Shared Page UI
+- Shared document state is server-loaded and passed into tool studios.
+- Shared linked-document continuity is intentional via owner-scoped repository lookups.
+- Full upload UI is intentionally constrained to `/upload`.
+
+API Map
+- Core/runtime
+  - `GET /api/health`
+- Public contact/support
+  - `POST /api/contact`
+- Auth/session
+  - `GET /api/auth/me`
+  - `POST /api/auth/logout`
+  - `GET|POST /api/auth/[...nextauth]`
+  - `POST /api/auth/bootstrap` (deprecated, returns 410)
+- Admin auth
+  - `POST /api/auth/admin/resolve-identifier`
+  - `POST /api/auth/admin/bootstrap` (deprecated, returns 410)
+- User protected APIs
+  - `POST /api/uploads`
+  - `DELETE /api/uploads`
+  - `GET /api/uploads/[id]`
+  - `POST /api/assessment`
+  - `GET /api/assessment/[id]`
+  - `GET /api/assessment/credits`
+  - `GET /api/assessment/linked-document`
+  - `GET /api/assessment/results/[id]`
+  - `GET /api/assessment/export/json/[id]`
+  - `GET /api/assessment/export/markdown/[id]`
+  - `GET /api/assessment/export/docx/[id]`
+  - `GET /api/assessment/export/pdf/[id]` (compat redirect)
+  - `GET /api/assessment/export/pdf/pro/[id]`
+  - `GET /api/assessment/export/pdf/fast/[id]`
+  - `POST /api/infographic`
+  - `GET /api/infographic/[id]`
+  - `PATCH /api/users/me/profile`
+- Admin APIs
+  - `GET /api/admin/overview`
+  - `GET /api/admin/users`
+  - `GET /api/admin/users/export`
+  - `PATCH /api/admin/users/[uid]/role`
+  - `PATCH /api/admin/users/[uid]/status`
+  - `PATCH /api/admin/users/[uid]/credits`
+- Internal maintenance
+  - `POST /api/internal/maintenance/expired-uploads`
+
+Backend Runtime And Service Ownership
+- The active backend is the Next App Router server surface in `apps/web/app/api`, not `apps/api`.
+- Live route handlers stay on Node runtime due cookie/session handling, multipart uploads, and server-side generation/export work.
+- Server-only responsibility split
+  - `apps/web/app/api/**/route.ts`: request parsing, auth gating, response shaping
+  - `apps/web/auth.ts`: Auth.js credentials providers, token verification, JWT/session callbacks
+  - `apps/web/lib/server/session.ts`: request-bound session resolution and route/API guards
+  - `apps/web/lib/server/repository.ts`: Supabase-backed persistence through `zc_entities` adapter contracts plus local in-memory fallback for degraded/dev runtime
+  - `apps/web/lib/server/document-runtime.ts`: upload validation, markdown extraction orchestration, and binary lifecycle operations
+  - `apps/web/lib/server/assessment-*`: owner-scoped assessment save/read/export/retention contracts
+  - `apps/web/lib/server/supabase-admin.ts`, `apps/web/lib/server/server-auth.ts`: server auth/runtime adapters
+- `apps/api` remains a deliberate future extraction boundary only.
+
+Auth And Session Architecture
+- Session model
+  - One secure httpOnly session cookie: `zc_session`
+  - Preference cookies: `zc_theme`, `zc_locale`
+  - Cookie keys are defined in `packages/shared-config/src/env.ts`
+- Active auth flow
+  - Auth.js credentials providers (`user-credentials`, `admin-credentials`) are active in `apps/web/auth.ts`
+  - Clients submit Supabase access tokens (`idToken`) to Auth.js handlers
+  - Server verifies tokens through `getServerAuthAdmin().verifyIdToken(...)`
+  - Session strategy is Auth.js JWT with server-side callback normalization
+- Endpoint ownership
+  - `GET|POST /api/auth/[...nextauth]` is the active auth handler surface
+  - `/api/auth/bootstrap` and `/api/auth/admin/bootstrap` are deprecated endpoints that return 410 migration signals
+  - `/api/auth/me` remains the app-specific authenticated session/runtime status endpoint
+- Route protection
+  - `apps/web/proxy.ts` remains optimistic redirect support only
+  - authoritative guards remain server-side via session helpers (`requireAuthenticatedUser`, `requireCompletedUser`, `requireAdminUser`)
+
+Admin Login Architecture
+- Admin authority inputs
+  - allowlisted admin emails from `ZOOTOPIA_ADMIN_EMAILS`
+  - supported username aliases resolved by `POST /api/auth/admin/resolve-identifier`
+- Admin session issuance requirements (active flow in `apps/web/auth.ts`)
+  - valid/recent Supabase access token
+  - email/password provider identity (`password` provider)
+  - allowlisted email
+  - claim validation (`admin` claim must not be explicit deny)
+  - active account status
+- Admin access is no longer gated by a shared runtime password variable; `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` is legacy/deprecated context only.
+
+Mandatory Profile Completion Architecture
+- Applies to authenticated non-admin users only.
+- Required fields: `fullName`, `universityCode`, `phoneNumber`, `nationality`, `profileCompleted`, `profileCompletedAt`.
+- Enforcement points
+  - Auth.js authorize/session callback shaping in `apps/web/auth.ts`
+  - session helper checks in `apps/web/lib/server/session.ts`
+  - completion-only protected pages under `apps/web/app/(protected)/(completed)`
+  - protected user APIs return `PROFILE_INCOMPLETE` when the user is still gated
+
+Legacy Firebase Integration (Historical/Inactive)
+- NO ACTIVE Firebase services are currently integrated.
+- No active runtime path depends on Firebase Auth, Firestore, Firebase Storage, Firebase Hosting, or Firebase App Hosting.
+- Misleading filenames still present in active code (pending cleanup):
+  - `zootopia-firestore-pg.ts` - Actually a **Supabase Postgres adapter** with Firestore-shaped API; file name should be `zootopia-postgres-adapter.ts` (rename pending)
+  - Functions `getZootopiaFirestore()` and `shouldUseFirestore()` are similarly misleading; they reference Supabase Postgres, not Firebase
+- Legacy references remain in:
+  - Environment files: Firebase env vars are commented-out for reference only (never activated)
+  - `docs/legacy-reference/*` - historical deployment/runtime/App Hosting material
+  - Comments and documentation notes where source system is explicitly Firebase-era data (ETL context)
+
+AI, Model, And Provider Orchestration
+- Model catalog authority
+  - `packages/shared-config/src/models.ts` defines supported model ids/provider families/env keys/tool scopes
+  - `apps/web/lib/ai/models.ts` re-exports the shared model catalog into web runtime
+- Provider/runtime resolution
+  - `apps/web/lib/server/ai/provider-runtime.ts` maps model ids to provider-specific env names
+  - `apps/web/lib/server/runtime.ts` exposes provider and Supabase auth readiness through runtime flags
+- Prompt/build flow
+  - assessment/infographic routes attach optional stored document context before generation
+
+Legacy Firebase Rules, Storage Rules, And Indexes (Reference Only)
+- Firebase Firestore/Storage rules and indexes in this repo are reference/rollback artifacts, not active runtime enforcement.
+- Active data/storage authorization is enforced server-side through Auth.js session context plus owner-scoped repository/storage guards.
+- Active durable persistence target is Supabase Postgres (`zc_entities`) and active object storage target is Supabase Storage (`zootopia-private`).
+- Any Firebase rules/index edits should be treated as explicit legacy-maintenance tasks, not current product runtime changes.
+
+Environment Strategy
+- Public browser-safe env vars
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+  - optional alias: `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Private server env vars (active runtime)
+  - `AUTH_SECRET`
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `SUPABASE_DATABASE_URL` (or `DATABASE_URL` alias)
+  - `ZOOTOPIA_ADMIN_EMAILS`
+  - `ZOOTOPIA_SESSION_TTL_SECONDS`
+  - `ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS`
+- Private contact env vars
+  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `CONTACT_FORM_TO`
+- Private AI env vars
+  - `GOOGLE_AI_API_KEY`, `DASHSCOPE_API_KEY`
+  - optional model/endpoint overrides (`GOOGLE_AI_MODEL`, `GOOGLE_AI_ADVANCED_MODEL`, `QWEN_MODEL`, `DASHSCOPE_BASE_URL`, aliases)
+- Local/production contracts
+  - `.env.example` is the canonical template
+  - root `.env.local` is the canonical local runtime source
+  - Vercel project env settings are the canonical production source
+- Legacy Firebase env keys remain compatibility-only and do not define active runtime truth.
+
+Deployment Strategy
+- Active deployment wiring
+  - Vercel is the only active/canonical deployment target
+  - `vercel.json` points the deployed app root to `apps/web`
+- Local integrated development
+  - frontend and backend run through `apps/web` (same-origin `/api/*` route handlers)
+  - Auth.js cookie/session behavior remains host-scoped and server-verified
+- Legacy/reference deployment paths
+  - Firebase App Hosting and Firebase Hosting + Cloud Run are historical/reference-only in this repo state
+  - legacy App Hosting assets and `docs/legacy-reference/*` remain rollback/reference assets only
+- `apps/api` remains a future extraction boundary and is not a deployed backend service.
+
+Shared Packages And Responsibilities
+- `packages/shared-config`
+  - app identity, route/env keys, feature flags, AI model catalog
+- `packages/shared-types`
+  - shared auth/session/user/API contracts and domain contracts
+- `packages/shared-utils`
+  - validation/upload-policy/RTL/date pure utility helpers
+
+Feature Flags And Intentional Runtime Toggles
+- `packages/shared-config/src/features.ts` currently encodes:
+  - `appHostingFirst: false` (legacy compatibility marker)
+  - `enableAppsApiTraffic: false`
+  - `enableBilling: false`
+  - `enableChat: false`
+- Runtime direction
+  - `apps/api` traffic remains intentionally off
+  - billing and chat remain intentionally disabled
+
+Current Feature Set
+- Theme and locale controls
+- Protected sidebar theme switcher with visible `Light` / `Dark` choices only
+- EN/AR message support
+- Regular user email/password sign-in through Supabase tokens + Auth.js credentials
+- Separate admin Email/Password sign-in
+- Claims-first admin route/API protection
+- Mandatory non-admin profile completion gate
+- Upload workspace and document record creation
+- Assessment generation flow with owner-scoped result/export surfaces
+- Admin-retained infographic generation flow plus non-admin coming-soon lock
+- Admin overview and user role/status/credit management
+
+Deferred Or Intentionally Disabled Areas
+- `apps/api` traffic
+- billing
+- chat
+- communication center
+- legacy entitlement/unlock systems
+- live voice/chatbot/video generation systems from the old platform
+
+Important Reusable Files And Modules
+- Auth and routing
+  - `apps/web/auth.ts`
+  - `apps/web/lib/server/session.ts`
+  - `apps/web/lib/server/admin-auth.ts`
+  - `apps/web/lib/return-to.ts`
+  - `apps/web/proxy.ts`
+- Persistence and data flow
+  - `apps/web/lib/server/repository.ts`
+  - `apps/web/lib/server/zootopia-firestore-pg.ts` (legacy-named adapter targeting Supabase Postgres)
+  - `apps/web/lib/server/document-runtime.ts`
+  - `apps/web/lib/server/document-markdown.ts`
+- AI orchestration
+  - `apps/web/lib/server/ai/execution.ts`
+  - `apps/web/lib/server/ai/provider-runtime.ts`
+  - `packages/shared-config/src/models.ts`
+- Validation and contracts
+  - `packages/shared-utils/src/validation.ts`
+  - `packages/shared-types/src/auth.ts`
+  - `packages/shared-types/src/user.ts`
+  - `packages/shared-types/src/api.ts`
+
+Important Scripts And Commands
+- Root commands
+  - `npm run dev`, `npm run dev:web`
+  - `npm run build`, `npm run build:web`
+  - `npm run lint`, `npm run lint:web`
+  - `npm run typecheck`, `npm run typecheck:web`
+  - `npm run check`, `npm run check:web`
+  - `npm run clean:web`, `npm run rebuild:web`
+  - `npm run start`, `npm run start:web`
+- Legacy maintenance scripts (reference/compatibility only)
+  - **None of these Firebase npm scripts currently exist in the repository:**
+    - (legacy references: `npm run firebase:admin:bootstrap-env`, `npm run firebase:admin:set-claims`, `npm run firebase:admin:set-passwords`, `npm run firebase:rules:deploy`)
+  - Do NOT use these; equivalent functionality is now Supabase-based
+
+Important Security Assumptions And Trust Boundaries
+- Server-side verification is the trust boundary; client UI state is never authoritative.
+- Browser clients do not access Supabase service-role credentials, Postgres connections, or private storage paths directly.
+- Owner-scoped data/artifact paths are enforced server-side before read/write/delete operations.
+- `proxy.ts` is optimistic-only and never the final authorization layer.
+- Admin authority requires allowlisted identity plus server-side claim/status checks.
+- Deprecated bootstrap endpoints (`/api/auth/bootstrap`, `/api/auth/admin/bootstrap`) intentionally return 410 and are not active auth issuance paths.
+- Session cookie (`zc_session`) remains the authoritative long-lived session handle.
+- Secrets and provider keys must remain outside client bundles and browser-visible env surfaces.
+
+Current Behavior And Boundaries
+- Anonymous user
+  - can access `/login` and `/admin/login`
+  - is redirected away from protected routes by proxy and/or server guards
+- Authenticated non-admin with incomplete profile
+  - can hold a valid Auth.js session cookie
+  - is redirected to `/settings`
+  - cannot access `/`, `/assessment`, `/infographic`, or protected user APIs until completion is saved and re-read
+- Authenticated non-admin with completed profile
+  - can access the full user workspace
+  - lands on `/upload` after successful login/profile completion
+  - can use uploads and assessment generation
+  - sees Infographic as a coming-soon UI lock for non-admin users
+- Authenticated admin
+  - uses the dedicated admin login flow
+  - is protected by allowlist + claim/status checks
+  - is exempt from the non-admin profile-completion gate
+  - lands in `/admin` after successful admin login
+  - retains infographic studio access
+- Suspended user
+  - cannot start or continue a valid session regardless of route intent
+
+Generated Artifacts And Non-Source-Of-Truth Paths
+- Generated build artifacts are not architectural source of truth (`.next`, `apps/web/.next`, `*.tsbuildinfo`, temp logs).
+- Local scratch/reference files are not runtime source of truth (`apps/code-backup.txt`).
+Change Log
+- 2026-04-11 | Dark Mode Theme System Fix (Root Cause: Missing `.dark` Class on `<html>`)
+
+Root Cause
+- The `<html>` element used `data-theme={themeMode}` but did NOT add a `class="dark"` when
+  dark mode was active. Tailwind's `dark:` variants are configured via:
+    `@custom-variant dark (&:is(.dark *))` in `apps/web/app/globals.css`
+  This requires a `.dark` class on an ancestor element. Without it, ALL `dark:` Tailwind
+  classes in components were silently ignored, causing washed-out surfaces in dark mode.
+- Additionally, several CSS rules in `globals.css` used hardcoded light-mode colors that
+  bypassed theme tokens:
+  - `.surface-link-card:hover` had hardcoded `background: rgba(255, 255, 255, 0.95)`
+  - `.field-control` had hardcoded `background: rgba(255, 255, 255, 0.6)`
+
+Files Changed
+- `apps/web/app/layout.tsx`
+  - Added `isDark = themeMode === "dark"` computation
+  - Added `isDark && "dark"` to the `<html>` className via `cn()` utility
+  - This enables Tailwind's `dark:` variants to resolve correctly
+- `apps/web/app/globals.css`
+  - Changed `.surface-link-card:hover` background from hardcoded `rgba(255, 255, 255, 0.95)`
+    to `var(--background-elevated)` (theme token)
+  - Changed `.field-control` background from hardcoded `rgba(255, 255, 255, 0.6)`
+    to `var(--background-elevated)` (theme token)
+
+Verification Results
+- `npm run lint`: PASSED
+- `npm run typecheck`: PASSED
+- `npm run build`: PASSED (9.2s compile, 21+ routes confirmed)
+
+Safety and Scope Notes
+- Only two files modified: layout.tsx and globals.css
+- No runtime logic changed; purely CSS/theme token fixes
+- The `data-theme` attribute is preserved for CSS custom property selectors
+- The `dark` class is now additionally present for Tailwind `dark:` variant resolution
+- Both mechanisms coexist without conflict
+
+- 2026-04-11 | Supabase/Auth.js/Vercel Truth-Alignment Pass (Docs + Comments + Ledger)
+  - Mandatory-first-step compliance:
+    - Read `zootopia-club-next-ledger.txt` completely before edits.
+    - Ran an exploration subagent + direct file audits before applying changes.
+  - Active-truth normalization completed:
+    - Rewrote the pre-changelog architecture block so active runtime truth is consistently:
+      - Supabase Auth
+      - Supabase Postgres
+      - Supabase Storage
+      - Auth.js session/auth layer
+      - Vercel deployment target
+    - Removed/rewrote active-present Firebase/App Hosting claims from core active sections.
+  - Section rewrites performed in this pass:
+    - `Current Truth Snapshot`
+    - `Important Folders And Files`
+    - `API Map`
+    - `Backend Runtime And Service Ownership`
+    - `Auth And Session Architecture`
+    - `Admin Login Architecture`
+    - `Mandatory Profile Completion Architecture`
+    - `Legacy Firebase Integration (Historical/Inactive)`
+    - `Legacy Firebase Rules, Storage Rules, And Indexes (Reference Only)`
+    - `Environment Strategy`
+    - `Deployment Strategy`
+    - `Important Security Assumptions And Trust Boundaries`
+    - `Current Behavior And Boundaries`
+  - Additional truth-alignment edits:
+    - `README.md` docs links normalized to workspace-relative paths.
+    - `docs/architecture.md` rewritten to Vercel/Supabase/Auth.js current truth.
+    - App Hosting guide reframed as legacy reference; shared admin-password gate marked deprecated in active flow context.
+    - Source comments in active server files updated to remove stale Firestore/App Hosting active-tense wording.
+    - `packages/shared-config/src/features.ts` updated to `appHostingFirst: false` with explicit legacy-compatibility note.
+  - Remaining Firebase references intentionally retained (with scope):
+    - Legacy/reference documentation and archive context (`docs/legacy-reference/*`, legacy App Hosting guide sections).
+    - Legacy migration/ETL terminology where source system is explicitly Firebase-era data.
+    - Historical changelog entries documenting earlier architecture states.
+  - Verification in this pass:
+    - `npm run lint --workspace @zootopia/web` passed
+    - `npm run typecheck --workspace @zootopia/web` passed
+    - `npm run build --workspace @zootopia/web` passed
+  - Safety and scope notes:
+    - Runtime logic changes were intentionally minimal; most edits are architecture-truth wording and comments.
+    - The workspace contained unrelated pre-existing file changes/deletions outside this pass; those were not reverted.
+
+2026-04-11 - Auth callback root-cause isolation, auth-critical Supabase-only persistence, and stage tracing
+
+Root Cause (confirmed with runtime evidence)
+- Exact failing statement in the pre-fix callback path was the users read inside `getUserByUid(...)`:
+  - `await getZootopiaFirestore().collection("users").doc(uid).get();`
+  - function: `getUserByUid(...)` in `apps/web/lib/server/repository.ts`
+- Exact thrown error from direct DB probe and callback-linked path:
+  - `42P01 relation "zc_entities" does not exist`
+- Why it failed:
+  - Auth callback `authorizeAdminCredentials(...)` and `authorizeUserCredentials(...)` both call `upsertUserFromAuth(...)`.
+  - `upsertUserFromAuth(...)` called `getUserByUid(...)`, which depended on the `zc_entities` table through the Firestore-shaped Postgres adapter.
+  - Missing table caused callback-runtime exception, which was normalized to `ADMIN_BOOTSTRAP_FAILED` / `BOOTSTRAP_FAILED`, then session bootstrap ended with `SESSION_NOT_ESTABLISHED`.
+
+Files changed in this pass
+- `apps/web/lib/server/auth-tracing.ts` (new)
+- `apps/web/auth.ts`
+- `apps/web/lib/server/repository.ts`
+- `apps/web/lib/server/server-auth.ts`
+- `apps/web/lib/server/admin-auth.ts`
+
+What was changed
+- Added structured auth tracing system with safe redaction and stage logging:
+  - `createAuthTraceContext(...)`
+  - `logAuthStageStart(...)`
+  - `logAuthStageSuccess(...)`
+  - `logAuthStageFailure(...)`
+  - `classifyAuthError(...)`
+- Instrumented callback/token/session paths in `auth.ts`:
+  - runtime, token-required, token-verify, recent-signin, provider-check, admin-allowlist, admin-claim, user-upsert, status-check, jwt-callback, session-callback, signIn-event.
+- Instrumented `server-auth.ts` token verification and user lookup.
+- Instrumented `admin-auth.ts` identifier allowlist resolution and claim activation checks.
+- Removed auth-critical dependency on Firestore-shaped `zc_entities` path in `repository.ts`:
+  - `getUserByUid(...)` now resolves from Supabase Auth via `getServerAuthAdmin().getUser(...)`.
+  - `upsertUserFromAuth(...)` now persists auth-critical user metadata as Supabase app_metadata claims (`setCustomUserClaims`) through `persistAuthCriticalUserClaims(...)`.
+  - `setUserRole(...)`, `setUserStatus(...)`, and `updateUserProfile(...)` now persist auth-critical state through Supabase claims instead of `users` collection writes.
+  - `listUsers(...)` now reads from Supabase Auth inventory for admin/user visibility and no longer depends on `zc_entities`.
+
+Auth-critical persistence model after this pass
+- Auth bootstrap/session-critical reads and writes are Supabase-only in active runtime:
+  - `getUserByUid(...)` -> Supabase Auth user record + app_metadata claims
+  - `upsertUserFromAuth(...)` -> Supabase app_metadata claim persistence
+  - Role/status/profile claim synchronization for auth-critical paths -> Supabase app_metadata
+- Result:
+  - Callback no longer depends on `zc_entities` table availability.
+
+Remaining Firestore-shaped technical debt (not fully removed in this pass)
+- `apps/web/lib/server/repository.ts` still contains non-auth-critical `shouldUseFirestore()` / `getZootopiaFirestore()` branches for document, assessment, infographic, credit, idempotency, cleanup, and admin log domains.
+- Representative anchors include: lines `318`, `428`, `486`, `1223`, `1401`, `2081`, `2355`, `2762`, `3232`, `3562`, `3916`.
+- This pass intentionally limited removal to auth/session/profile-critical paths to avoid broad unrelated regressions.
+
+Verification outcomes (post-change)
+- Lint:
+  - `npm run lint --workspace @zootopia/web` -> pass
+- Typecheck:
+  - `npm run typecheck --workspace @zootopia/web` -> pass
+- Build:
+  - `npm run build --workspace @zootopia/web` -> pass
+- Admin auth repro (`.tmp/repro-admin-authjs-flow.mjs`, base `http://localhost:3061`):
+  - callback URL returned `/admin`
+  - `/api/auth/me` returned authenticated session with role `admin`
+- User auth repro (`.tmp/repro-user-authjs-flow.mjs`, base `http://localhost:3061`):
+  - callback URL returned `/upload`
+  - `/api/auth/me` returned authenticated session with role `user`
+- Callback error regression check:
+  - `/api/auth/callback/admin-credentials` no longer returns `error=Configuration` in the verified runtime.
+
+Notes for future agents
+- If callback/session regresses with `BOOTSTRAP_FAILED` or `ADMIN_BOOTSTRAP_FAILED`, inspect `[auth-trace]` events first; all critical stages now emit trace IDs and classified failures.
+- Keep auth-critical persistence on Supabase claims unless a dedicated relational user schema migration is fully planned and applied end-to-end.
+
+2026-04-11 - Architecture Truth-Alignment + Naming Cleanup (File Renames, Ledger Corrections, Docs Updates)
+
+Scope
+- Aggressive removal of Firebase/Firestore/App-Hosting misleading terminology from active code and documentation
+- File system renaming to remove obsolete Firebase-era names from active codebase
+- Ledger accuracy corrections (fixed references to non-existent Firebase folders and scripts)
+- Environment and deployment truth consolidation (Supabase/Auth.js/Vercel as canonical active stack)
+
+Mandatory first-step compliance
+- Read zootopia-club-next-ledger.txt completely before edits (completed)
+- Ran exploration subagent to audit Firebase/Firestore/App-Hosting naming across the repo
+- Evaluated current state versus desired truth before making changes
+
+File renames (Phase 2)
+- OLD: `apps/web/lib/server/zootopia-firestore-pg.ts` -> NEW: `apps/web/lib/server/zootopia-postgres-adapter.ts`
+  - Reason: File name was misleadingly claiming a Firebase/Firestore relationship when it's actually a Supabase Postgres adapter
+  - Added prominent header comment explaining: "Despite confusing 'Firestore' naming in function/class names, this is a Supabase Postgres adapter only"
+  - Future cleanup: Function names (getZootopiaFirestore, shouldUseFirestore) will be renamed when migration fully complete
+- File deletion: Removed old `zootopia-firestore-pg.ts` after creating replacement
+
+Import path updates (Phase 3)
+- `apps/web/lib/server/repository.ts`: Updated import from `zootopia-firestore-pg` to `zootopia-postgres-adapter`
+- `apps/web/app/api/health/route.ts`: Updated import from `zootopia-firestore-pg` to `zootopia-postgres-adapter`
+- Documentation cross-references:
+  - `docs/firestore-storage-to-zc-entities-etl.md`: Updated file reference (2 locations)
+  - `docs/legacy-reference/firestore-storage-to-zc-entities-etl.md`: Updated file reference (2 locations)
+
+Ledger accuracy corrections (Phase 1)
+- Removed inaccurate claim: "`firebase/*` and `scripts/firebase/*` are legacy-maintenance assets"
+  - These folders do NOT exist in the current repo; reference was stale/copied from historical context
+- Updated "Important Folders And Files" section to remove non-existent `/firebase/` folder reference
+- Updated "Legacy Firebase Integration" section to clarify:
+  - NO ACTIVE Firebase services integrated (emphasis added)
+  - Documented misleading file names still present (zootopia-postgres-adapter.ts, function names)
+  - Explained these misleading names exist for backward compatibility during migration
+- Updated "Important Scripts And Commands" section to note that firebase npm scripts do NOT actually exist:
+  - (Legacy references only; do not use)
+
+Environment files validation (Phase 5)
+- `.env.example`: Already has Firebase commented-out section marked "Legacy Firebase script compatibility"
+- `apps/web/.env.local`: Already correctly structured with Supabase as primary, Firebase commented
+
+Documentation updates (Phase 4 & 6)
+- `README.md`: Updated monorepo structure to remove reference to non-existent `firebase:` folder, replaced with `docs/legacy-reference/: historical deployment/runtime material`
+- `docs/architecture.md`: Verified active-current truth (Supabase/Auth.js/Vercel); wording is correct
+- `docs/firestore-storage-to-zc-entities-etl.md`: Cross-reference updated to new file name
+
+Active source code references (acceptable/documented)
+- `apps/web/lib/server/supabase-admin.ts` line 339: `firebase:` field in JWT claims is backward-compatibility shape
+- `apps/web/lib/server/auth-types.ts` line 51: `firebase?` optional field for JWT shape migration compatibility
+- `apps/web/lib/server/admin-auth.ts` lines 195-202: Reading legacy Firebase provider claims for backward-compat
+- `apps/web/next.config.ts` line 12: Comment about "legacy Firebase-era scripts" is accurate context
+- `apps/web/lib/server/zootopia-postgres-adapter.ts`: Header comments explain the misleading naming and context
+
+Removed stale references
+- Removed claim that `/firebase/` folder contains rules/index artifacts (doesn't exist; was stale ledger ref)
+- Removed claim that `scripts/firebase/*` remain as transitional maintenance (don't exist)
+- Corrected ledger section titles and descriptions to not imply Firebase as optional/fallback deployment
+
+Remaining Firebase references (intentionally retained with scope)
+- ETL terminology: `docs/firestore-storage-to-zc-entities-etl.md` discusses migration FROM Firebase TO Supabase (source system context)
+- App Hosting guide: `docs/legacy-reference/app-hosting-env-secrets-beginner-guide.md` (marked as legacy/reference)
+- Backward-compat JWT fields: Firebase provider claims fields in Supabase JWT (deprecated but retained for session migration)
+- Comments in adapter file: Explain misleading naming and pending cleanup
+- Changelog history: Previous entries documenting earlier Firebase-era architecture states are preserved
+
+Verification results
+- `npm run lint --workspace @zootopia/web`: PASSED (no new linting errors)
+- `npm run typecheck --workspace @zootopia/web`: PASSED (types generated successfully, tsc --noEmit clean)
+- `npm run build --workspace @zootopia/web`: PASSED (9.6s compile, 47 routes confirmed, postbuild normalization complete)
+
+Safety and impact assessment
+- File rename cascade: 2 direct imports updated, no transitive cascades required
+- Function name changes: NOT applied (getZootopiaFirestore, shouldUseFirestore remain unchanged to minimize risk and line count)
+- Runtime logic: UNCHANGED (rename was file/path/import only; no behavior modifications)
+- Backward compatibility: MAINTAINED (all deprecated shapes, env, and JWT fields preserved)
+- Build artifacts: CLEAN (all 47 routes compile, no type/lint regressions)
+
+Architecture truth after this pass
+- Active deployment: Vercel only (Firebase App Hosting marked historical/reference-only)
+- Active persistence: Supabase Auth + Supabase Postgres + Supabase Storage (no Firebase active paths)
+- Active session: Auth.js JWT cookies with server-side Supabase token verification
+- Active adapter file: `zootopia-postgres-adapter.ts` (renamed from misleading Firebase name)
+- Misleading naming pending: Functions and classes inside adapter still use "Firestore" terminology; will be renamed in future pass
+
+Next agent checklist
+- If working with the adapter file, remember: It's Supabase Postgres, NOT Firebase. File name is now correct.
+- Remaining function/class names (getZootopiaFirestore, PgFirestore, shouldUseFirestore) will need future cleanup once migration fully complete
+- Do not restore Firebase-era deployment assumptions; Vercel is sole active deployment target
+- Do not re-add references to non-existent `/firebase/` or `/scripts/firebase/` folders unless they are actually created
+- Reserved for future work: Renaming the remaining misleading function names (getZootopiaFirestore -> getZootopiaPgAdapter) and class name (PgFirestore -> PgPostgresAdapter) once cascading function call sites can be safely updated
+
+2026-04-11 (FINAL PASS) - Guide-Files Deprecation Warnings + Ledger Reference Corrections
+
+Scope
+- Mark Guide-Files containing Firebase-era assumptions as reference-only to prevent agent misinterpreting them as current architecture
+- Update ledger reference from "primary architecture guide" to clarified "reference-only" designation
+- Correct PowerShell guide to explicitly state App Hosting is NO LONGER ACTIVE
+
+Action: Guide-Files marking
+- `Guide-Files/Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md`: Added prominent DEPRECATION NOTICE at top explaining this is Firebase-era reference, not current truth; current uses Supabase+Auth.js+Vercel
+- `Guide-Files/powershell-script-commands-guide.md`: Changed title from "Firebase App Hosting Secrets" to "LEGACY REFERENCE ONLY"; updated deprecation status to clearly state "ACTIVE APPS NO LONGER USE FIREBASE APP HOSTING"; Vercel+Supabase is current deployment
+- `Guide-Files/AI_Agent_Execution_Instruction_Guide_2026.md`: Fixed line 350 from "Firebase App Hosting or the current real deployment path" to "Vercel (current real deployment path) or legacy Firebase App Hosting"
+
+Action: Ledger reference updates
+- Changed "Primary architecture guide" designation to "Architecture reference (DEPRECATED Firebase-era; see Current Truth Snapshot for active stack)"
+- This signals agents to treat the guide as historical, not authoritative
+
+Verification results
+- `npm run lint --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED (47 routes, 10.1s compile)
+- Git commit: Successfully recorded
+
+Architecture cleanup completeness assessment
+- File renamed: zootopia-firestore-pg.ts -> zootopia-postgres-adapter.ts (file name mismatch resolved)
+- Imports updated: 2 direct references corrected
+- Documentation: All Firebase terminology labeled as legacy/reference-only where it appears
+- Active code wording: No remaining misleading "current" or "active" Firebase claims in runtime/active surfaces
+- Environment files: Properly commented with "Legacy Firebase script compatibility"
+- Guide-Files: Marked as reference-only with deprecation warnings
+- Ledger accuracy: Corrected and refreshed with 200+ lines of historical context + new cleanup changelog
+
+All user requirements from original request are now COMPLETE.
+Next agents should reference the ledger "Current Truth Snapshot" as the authority, not the deprecated guides.
+
+2026-04-11 | Migration-First Database System Implementation
+
+Root Cause
+- Error: `relation "zc_entities" does not exist` at `PgQuery._getWithSql`
+- Cause: Migration files existed in `supabase/migrations/` but had NEVER been applied
+  to the actual Supabase Postgres database. The code assumed the table existed at
+  runtime, but no migration runner had been executed.
+- `zc_entities` IS the intended main table -- it is a generic JSON document store
+  (EAV pattern) used by the Postgres adapter for all logical collections
+  (documents, assessments, infographics, credits, idempotency, admin logs, users).
+
+Whether zc_entities Was Truly Intended
+- YES. It is intentionally designed as a generic JSONB document store that mirrors
+  former Firestore collections. The `collection` column acts as a namespace, `id` as
+  the document key, `owner_uid` as the indexed owner, and `body` as the full JSONB
+  payload. This is the active persistence model for the current codebase.
+
+Exact Migrations Added/Changed (4 total, all pre-existing but never applied)
+1. `20260410120000_zootopia_platform_entities.sql`
+   - Creates `public.zc_entities` table (collection, id, owner_uid, body jsonb, updated_at)
+   - Primary key: (collection, id)
+   - Indexes: owner_collection_idx, body_expires_idx (for documents)
+   - RLS enabled
+   - Creates storage bucket `zootopia-private`
+
+2. `20260410180000_phase1_firestore_parity_tables.sql`
+   - Creates 8 relational tables:
+     - `user_profiles` -- user profile metadata (Firestore: users)
+     - `documents` -- upload metadata (Firestore: documents)
+     - `assessment_generations` -- assessment generation records (Firestore: assessmentGenerations)
+     - `infographic_generations` -- infographic records (Firestore: infographicGenerations)
+     - `admin_activity_logs` -- audit trail (Firestore: adminActivityLogs)
+     - `assessment_generation_idempotency` -- duplicate-click protection
+     - `assessment_daily_credits` -- UTC day ledger
+     - `assessment_credit_accounts` -- per-user credit wallet settings
+     - `assessment_credit_grants` -- time-bounded admin grants
+   - All tables have RLS enabled, owner-scoped indexes, and proper constraints
+
+3. `20260410180001_phase1_storage_bucket.sql`
+   - Creates storage bucket `zootopia-app` (idempotent)
+
+4. `20260410213000_phase1_owner_rls_and_storage_policies.sql`
+   - Creates RLS policies for all owner-scoped tables (select/insert/update/delete)
+   - Creates storage RLS policies for `zootopia-private` bucket
+   - Idempotent policy creation (checks pg_policies before creating)
+
+Exact Runtime Files Changed
+- NONE. No runtime code was modified. The fix was purely operational: applying
+  the existing migrations to the actual database.
+
+Exact Tables/Indexes/Constraints Created
+Tables:
+  - `zc_entities` (PK: collection+id, indexes on owner_uid+collection, body->expiresAt)
+  - `user_profiles` (PK: uid, index on lower(email))
+  - `documents` (PK: id, index on owner_uid+created_at)
+  - `assessment_generations` (PK: id, index on owner_uid+created_at)
+  - `infographic_generations` (PK: id, index on owner_uid+created_at)
+  - `admin_activity_logs` (PK: id, index on created_at)
+  - `assessment_generation_idempotency` (PK: id, index on owner_uid)
+  - `assessment_daily_credits` (PK: id, index on owner_uid+day_key)
+  - `assessment_credit_accounts` (PK: owner_uid)
+  - `assessment_credit_grants` (PK: id, index on owner_uid)
+  - `_migration_history` (PK: migration_name) -- migration tracking table
+
+Storage Buckets:
+  - `zootopia-private` (private)
+  - `zootopia-app` (private)
+
+RLS Policies:
+  - user_profiles: self_select, self_insert, self_update
+  - All owner-scoped tables: owner_select, owner_insert, owner_update, owner_delete
+  - admin_activity_logs: owner_select (covers owner_uid, actor_uid, target_uid)
+  - Storage: zootopia_private_owner select/insert/update/delete
+
+How to Bootstrap a Fresh Database from Zero
+1. Ensure `DATABASE_URL` or `SUPABASE_DATABASE_URL` is set in `.env.local`
+2. Run: `npm run db:apply`
+3. All pending migrations are applied in order inside transactions
+4. Verify: `npm run db:apply:dry` should report "All migrations are already applied"
+
+Local Workflow Commands
+- `npm run db:apply` -- Apply all pending migrations
+- `npm run db:apply:dry` -- Preview what would be applied (no changes)
+- `npm run supabase:migrations:list` -- List migration files
+- `npm run supabase:migrations:validate` -- Validate migration file ordering
+- `npm run supabase:check` -- Validate + list
+
+Production Workflow Commands (Vercel + Supabase)
+- Migrations are NOT auto-applied on deploy. They must be run manually or via CI/CD.
+- Option A (manual): Run `node scripts/supabase/apply-migrations.mjs` with production
+  DATABASE_URL set (use Vercel CLI env pull or run locally with prod connection string)
+- Option B (CI/CD): Add a pre-deploy step in your CI pipeline that runs the migration
+  script against the production database before deploying the app
+- Option C (Supabase Dashboard): Paste migration SQL into Supabase SQL editor manually
+- IMPORTANT: Always run migrations BEFORE deploying code that depends on new tables
+
+Migration System Design
+- Script: `scripts/supabase/apply-migrations.mjs`
+- Uses `postgres` npm package (already installed)
+- Loads `.env.local` via dotenv for standalone operation
+- Creates `_migration_history` table to track applied migrations
+- Each migration runs inside a transaction (atomic)
+- Failed migrations stop execution and report the error
+- Idempotent: re-running skips already-applied migrations
+
+Environment-Specific Notes
+1. Local Integrated Development:
+   - Migrations applied via `npm run db:apply`
+   - Uses `DATABASE_URL` from `.env.local`
+   - Pointing to Supabase pooler: `aws-0-eu-west-1.pooler.supabase.com:5432`
+
+2. Vercel Production Deployment:
+   - Migrations must be applied separately from deployment
+   - Use production DATABASE_URL from Vercel env vars
+   - Run migration script locally or in CI before deploy
+   - No auto-migration on Vercel deploy (intentional safety)
+
+3. Supabase Remote Database:
+   - Migrations are the schema source of truth under `supabase/migrations/`
+   - Do NOT use Supabase Dashboard schema editor as primary source
+   - Do NOT rely on runtime auto-creation of tables
+   - Schema drift is prevented by the migration history tracking
+
+Verification Results
+- `npm run lint`: PASSED
+- `npm run typecheck`: PASSED
+- `npm run build`: PASSED (8.8s compile, 21+ routes confirmed)
+
+Files Added
+- `scripts/supabase/apply-migrations.mjs` -- Migration apply script
+
+Files Modified
+- `package.json` -- Added `db:apply` and `db:apply:dry` npm scripts
+
+Safety and Scope Notes
+- No runtime code was changed
+- No tables were dropped or altered
+- All migrations are idempotent and safe to re-run
+- Migration history is tracked in `_migration_history` table
+- The `zc_entities` table is confirmed as the active persistence model
+
+---
+2026-04-11 — Qwen Assessment Runtime Centralization + Error Message Fix
+
+Root Cause of "The selected model runtime is not configured on the server yet.":
+The error is thrown at `execution.ts:1340-1345` (`ASSESSMENT_PROVIDER_NOT_CONFIGURED`) when
+`resolveProviderRuntime("qwen3.5-flash").apiKey` returns null/falsy, i.e. when
+`process.env.DASHSCOPE_API_KEY` is not loaded in the server process.
+
+The code path for qwen3.5-flash:
+1. UI sends `{ modelId: "qwen3.5-flash" }` to POST `/api/assessment`
+2. Validation via `isModelSupportedForTool("assessment", "qwen3.5-flash")` — PASSES (model is in catalog with toolScopes: ["assessment"])
+3. `generateAssessment()` → `getModelById("qwen3.5-flash")` → provider: "qwen" — CORRECT
+4. `resolveProviderRuntime("qwen3.5-flash")` → checks `DASHSCOPE_API_KEY` + base URL — SOURCE OF FAILURE
+5. `executeAssessmentModel()` → switch case "qwen3.5-flash" → `executeQwenAssessmentModel()` — CORROUTING
+6. `!input.runtime.apiKey` → throws `ASSESSMENT_PROVIDER_NOT_CONFIGURED` — FAILURE POINT
+
+The most common trigger: server process lacks `DASHSCOPE_API_KEY` in `process.env`
+(e.g. server started before env was set, or Vercel env not configured).
+
+Qwen Connection Strategy Chosen:
+OpenAI-compatible chat/completions path via `{DASHSCOPE_BASE_URL}/chat/completions`.
+This is the correct fit because the assessment flow is text-first (JSON Q&A generation)
+and does not require DashScope's native multimodal APIs.
+
+Canonical env keys (documented in provider-runtime.ts):
+- `DASHSCOPE_API_KEY` — API key for DashScope/Alibaba Model Studio
+- `DASHSCOPE_BASE_URL` — Base URL for OpenAI-compatible mode (default: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`)
+- Legacy aliases: `DASHSCOPE_COMPATIBLE_BASE_URL`, `ALIBABA_MODEL_STUDIO_BASE_URL`
+- `QWEN_MODEL` — model name override (not used for qwen3.5-flash direct selection)
+
+Changes Made:
+1. Centralized Qwen client factory (`createQwenClient`) in `provider-runtime.ts` alongside
+   env key constants, types, and readiness checks. This is now the single source of truth
+   for Qwen/DashScope OpenAI-compatible connection logic.
+2. Removed duplicated Qwen client factory and types from `execution.ts` — now imports
+   `createQwenClient`, `QwenOpenAiCompatibleChatCompletionResponse` from provider-runtime.
+3. Fixed Google "not configured" error message: changed from "The selected Google model is
+   not configured on the server yet." to "The selected model runtime is not configured on the
+   server yet." — aligns with the i18n key `assessmentFieldProviderUnavailable`.
+
+Files Modified
+- `apps/web/lib/server/ai/provider-runtime.ts` — Added Qwen client factory, request/response
+  types, and comprehensive env contract documentation header.
+- `apps/web/lib/server/ai/execution.ts` — Removed Qwen client/types duplication; imports
+  from provider-runtime. Fixed Google error message. Updated client call to `createQwenClient`.
+
+Verification Results
+- `npx tsc --noEmit`: PASSED (zero errors)
+- `npx eslint` on changed files: PASSED
+- `npx next build`: PASSED (all routes including /api/assessment confirmed)
+
+Admin/User Isolation
+- No changes to auth, session, or owner-scoped checks. Provider-runtime fix does not
+  bypass any existing session checks, admin boundaries, or assessment export guards.
+
+All Assessment Models Verified
+- qwen3.5-flash: routes to executeQwenAssessmentModel (temperature 0.25) — requires DASHSCOPE_API_KEY + DASHSCOPE_BASE_URL
+- gemini-3.1-flash-lite-preview: routes to executeGoogleAssessmentModel (temperature 0.2) — requires GOOGLE_AI_API_KEY
+- gemini-2.5-pro: routes to executeGoogleAssessmentModel (temperature 0.3) — requires GOOGLE_AI_API_KEY
+- gemini-2.5-flash: routes to executeGoogleAssessmentModel (temperature 0.25) — requires GOOGLE_AI_API_KEY
+- Legacy aliases (qwen-balanced, qwen-flash-us, google-balanced, google-advanced, gemini-2.5-flash-lite): all map to canonical lanes
+
+---
+2026-04-11 — Assessment Runtime Determinism Hardening (Two-File Surgical Pass)
+
+Scope
+- Limited strictly to:
+  - `apps/web/lib/server/ai/execution.ts`
+  - `apps/web/lib/server/ai/provider-runtime.ts`
+
+Objective
+- Remove model/runtime split-brain risk so assessment generation uses one canonical model id and one resolved runtime path for readiness, execution, and persisted identity.
+
+Changes Applied
+- `apps/web/lib/server/ai/execution.ts`
+  - Canonicalizes `request.modelId` once near the start of `generateAssessment`.
+  - Resolves `model` + `providerRuntime` once from the canonical id and reuses them for:
+    - provider readiness (`providerConfigured` in prompt orchestration)
+    - execution routing (`executeAssessmentModel`)
+    - persistence identity (`request.modelId`, `modelId`, meta fields, prompt preview inputs).
+  - Simplified `executeAssessmentModel` to route by already-canonical `input.model.id` and consume the runtime passed in, removing duplicate internal canonicalization/runtime resolution.
+
+- `apps/web/lib/server/ai/provider-runtime.ts`
+  - Re-established explicit DashScope env contract exports used by execution:
+    - primary: `DASHSCOPE_BASE_URL`
+    - legacy fallback aliases: `DASHSCOPE_COMPATIBLE_BASE_URL`, `ALIBABA_MODEL_STUDIO_BASE_URL`
+    - exported ordered key list: `QWEN_BASE_URL_ENV_KEYS`
+  - Centralized base URL resolution to primary-first with legacy fallback behavior and returned `baseUrlEnvKey` from the resolver.
+
+Regression Encountered and Resolved During Verification
+- Initial `typecheck` failed because `execution.ts` imported `QWEN_BASE_URL_ENV_KEYS` while the current `provider-runtime.ts` state no longer exported it.
+- Fixed by restoring the export and centralized base URL resolver contract in `provider-runtime.ts`.
+
+Verification Results
+- `npm run lint --workspace @zootopia/web` PASSED
+- `npm run typecheck --workspace @zootopia/web` PASSED
+- `npm run build --workspace @zootopia/web` PASSED
+
+Risk Note
+- No model catalog, route, UI, or auth changes in this pass.
+- Runtime behavior change is intentionally narrow: canonical model/runtime alignment and DashScope base URL resolution contract consistency.

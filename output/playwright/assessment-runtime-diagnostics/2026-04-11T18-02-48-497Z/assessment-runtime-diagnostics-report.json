@@ -1,0 +1,297 @@
+{
+  "runId": "2026-04-11T18-02-48-497Z",
+  "baseUrl": "http://127.0.0.1:3045",
+  "missingConfigBaseUrl": "http://127.0.0.1:3046",
+  "qaAccounts": {
+    "adminEmail": "qa-admin-runtime-20260411@example.com",
+    "userAEmail": "qa-user-a-2026-04-11T18-02-48-497Z@example.com",
+    "userBEmail": "qa-user-b-2026-04-11T18-02-48-497Z@example.com"
+  },
+  "checks": {
+    "adminLaneRejected": true,
+    "qwenPathVerified": false,
+    "googlePathVerified": true,
+    "ownerLaneSeparationVerified": false,
+    "missingConfigCodeVerified": true
+  },
+  "attempts": {
+    "adminLaneAttempt": {
+      "status": 403,
+      "ok": false,
+      "payload": {
+        "ok": false,
+        "error": {
+          "code": "ASSESSMENT_USER_LANE_REQUIRED",
+          "message": "Assessment generation is available only from the user lane."
+        }
+      },
+      "text": "{\"ok\":false,\"error\":{\"code\":\"ASSESSMENT_USER_LANE_REQUIRED\",\"message\":\"Assessment generation is available only from the user lane.\"}}"
+    },
+    "qwenAttempt": {
+      "status": 201,
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "data": {
+          "generation": {
+            "id": "886f774a-f8fe-0cba-03b4-b2fe6f75fd45",
+            "ownerUid": "766ded59-7240-4636-b012-6880fae7e1b4",
+            "title": "Assessment · Assessment diagnostics 2026-04-11T18-02-48-497Z qwen",
+            "modelId": "qwen3.5-flash",
+            "status": "ready",
+            "expiresAt": "2026-04-14T18:03:26.904Z",
+            "previewRoute": "/assessment/preview/886f774a-f8fe-0cba-03b4-b2fe6f75fd45",
+            "resultRoute": "/assessment/results/886f774a-f8fe-0cba-03b4-b2fe6f75fd45",
+            "request": {
+              "prompt": "Assessment diagnostics 2026-04-11T18-02-48-497Z qwen",
+              "modelId": "qwen3.5-flash",
+              "options": {
+                "mode": "question_generation",
+                "questionCount": 10,
+                "difficulty": "easy",
+                "language": "en",
+                "questionTypes": [
+                  "mcq"
+                ],
+                "questionTypeDistribution": [
+                  {
+                    "type": "mcq",
+                    "percentage": 100
+                  }
+                ]
+              }
+            },
+            "questions": [
+              {
+                "id": "q-1",
+                "difficulty": "easy",
+                "question": "Which organelle is known as the powerhouse of the cell? ⚡\nA) Nucleus\nB) Mitochondria\nC) Ribosome\nD) Golgi Apparatus",
+                "answer": "B",
+                "rationale": "Mitochondria generate most of the chemical energy needed to power the cell's biochemical reactions through ATP production.",
+                "tags": [
+                  "biology",
+                  "cell-biology",
+                  "organelles"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-2",
+                "difficulty": "easy",
+                "question": "What is the chemical symbol for Gold? 💰\nA) Ag\nB) Au\nC) Fe\nD) Pb",
+                "answer": "B",
+                "rationale": "Gold is represented by the symbol Au, derived from the Latin word 'aurum'.",
+                "tags": [
+                  "chemistry",
+                  "periodic-table",
+                  "elements"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-3",
+                "difficulty": "medium",
+                "question": "According to Newton's Second Law, Force equals mass times what? 🏋️‍♂️\nA) Velocity\nB) Acceleration\nC) Momentum\nD) Energy",
+                "answer": "B",
+                "rationale": "Newton's Second Law states F = ma, where F is force, m is mass, and a is acceleration.",
+                "tags": [
+                  "physics",
+                  "mechanics",
+                  "newton-laws"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-4",
+                "difficulty": "easy",
+                "question": "Which state of matter has a definite volume but no definite shape? 💧\nA) Solid\nB) Liquid\nC) Gas\nD) Plasma",
+                "answer": "B",
+                "rationale": "Liquids flow to take the shape of their container but maintain a constant volume.",
+                "tags": [
+                  "chemistry",
+                  "states-of-matter",
+                  "properties"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-5",
+                "difficulty": "medium",
+                "question": "In photosynthesis, plants primarily absorb which gas? 🌿\nA) Oxygen\nB) Nitrogen\nC) Carbon Dioxide\nD) Hydrogen",
+                "answer": "C",
+                "rationale": "Plants use carbon dioxide (CO₂) along with water and sunlight to produce glucose and oxygen.",
+                "tags": [
+                  "biology",
+                  "photosynthesis",
+                  "plants"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-6",
+                "difficulty": "easy",
+                "question": "What is the pH value of pure water at 25°C? 🌊\nA) 0\nB) 7\nC) 14\nD) 10",
+                "answer": "B",
+                "rationale": "Pure water is neutral, meaning it has a pH of exactly 7 on the standard scale.",
+                "tags": [
+                  "chemistry",
+                  "acids-bases",
+                  "ph-scale"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-7",
+                "difficulty": "medium",
+                "question": "Which planet in our solar system is known as the Red Planet? 🔴\nA) Venus\nB) Mars\nC) Jupiter\nD) Saturn",
+                "answer": "B",
+                "rationale": "Mars appears red due to iron oxide (rust) prevalent on its surface.",
+                "tags": [
+                  "astronomy",
+                  "solar-system",
+                  "planets"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-8",
+                "difficulty": "easy",
+                "question": "What is the basic unit of heredity called? 🧬\nA) Chromosome\nB) Gene\nC) DNA\nD) Protein",
+                "answer": "B",
+                "rationale": "A gene is the fundamental physical and functional unit of heredity that carries genetic information.",
+                "tags": [
+                  "biology",
+                  "genetics",
+                  "dna"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-9",
+                "difficulty": "medium",
+                "question": "Which type of energy is stored in a battery? 🔋\nA) Kinetic Energy\nB) Chemical Energy\nC) Thermal Energy\nD) Nuclear Energy",
+                "answer": "B",
+                "rationale": "Batteries store potential energy in the form of chemical bonds that convert to electrical energy.",
+                "tags": [
+                  "physics",
+                  "energy",
+                  "electricity"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-10",
+                "difficulty": "easy",
+                "question": "What is the process of a solid turning directly into a gas called? ❄️➡️💨\nA) Evaporation\nB) Sublimation\nC) Condensation\nD) Deposition",
+                "answer": "B",
+                "rationale": "Sublimation is the phase transition from solid directly to gas without passing through the liquid phase.",
+                "tags": [
+                  "chemistry",
+                  "phase-change",
+                  "matter"
+                ],
+                "type": "mcq"
+              }
+            ],
+            "meta": {
+              "summary": "Foundational Science Assessment Diagnostics - April 2026 🧪🔬",
+              "questionCount": 10,
+              "difficulty": "easy",
+              "language": "en",
+              "mode": "question_generation",
+              "questionTypes": [
+                "mcq"
+              ],
+              "questionTypeDistribution": [
+                {
+                  "type": "mcq",
+                  "percentage": 100
+                }
+              ],
+              "modelLabel": "Qwen 3.5 Flash",
+              "provider": "qwen",
+              "inputMode": "prompt-only",
+              "promptPreview": "Assessment diagnostics 2026-04-11T18-02-48-497Z qwen",
+              "sourceDocument": null
+            },
+            "createdAt": "2026-04-11T18:03:26.904Z",
+            "updatedAt": "2026-04-11T18:03:26.904Z",
+            "ownerRole": "user",
+            "artifacts": {
+              "canonical-result": {
+                "key": "canonical-result",
+                "kind": "canonical-result",
+                "locale": "en",
+                "themeMode": null,
+                "contentType": "application/json; charset=utf-8",
+                "fileName": "zootopiaclub-manual-input-assessment-question-generation-2026-04-11-1803.json",
+                "storagePath": "assessment-results/766ded59-7240-4636-b012-6880fae7e1b4/886f774a-f8fe-0cba-03b4-b2fe6f75fd45/result.json",
+                "status": "ready",
+                "createdAt": "2026-04-11T18:03:26.904Z",
+                "expiresAt": "2026-04-14T18:03:26.904Z"
+              }
+            }
+          },
+          "credits": {
+            "applies": true,
+            "isAdminExempt": false,
+            "assessmentAccess": "enabled",
+            "dayKey": "2026-04-11",
+            "dailyDefaultLimit": 3,
+            "dailyLimit": 3,
+            "dailyLimitSource": "default",
+            "usedCount": 1,
+            "dailyRemainingCount": 2,
+            "manualCreditsAvailable": 0,
+            "grantCreditsAvailable": 0,
+            "extraCreditsAvailable": 0,
+            "activeGrantCount": 0,
+            "totalRemainingCount": 2,
+            "remainingCount": 2,
+            "resetsAt": "2026-04-12T00:00:00.000Z"
+          }
+        }
+      },
+      "text": "{\"ok\":true,\"data\":{\"generation\":{\"id\":\"886f774a-f8fe-0cba-03b4-b2fe6f75fd45\",\"ownerUid\":\"766ded59-7240-4636-b012-6880fae7e1b4\",\"title\":\"Assessment · Assessment diagnostics 2026-04-11T18-02-48-497Z qwen\",\"modelId\":\"qwen3.5-flash\",\"status\":\"ready\",\"expiresAt\":\"2026-04-14T18:03:26.904Z\",\"previewRoute\":\"/assessment/preview/886f774a-f8fe-0cba-03b4-b2fe6f75fd45\",\"resultRoute\":\"/assessment/results/886f774a-f8fe-0cba-03b4-b2fe6f75fd45\",\"request\":{\"prompt\":\"Assessment diagnostics 2026-04-11T18-02-48-497Z qwen\",\"modelId\":\"qwen3.5-flash\",\"options\":{\"mode\":\"question_generation\",\"questionCount\":10,\"difficulty\":\"easy\",\"language\":\"en\",\"questionTypes\":[\"mcq\"],\"questionTypeDistribution\":[{\"type\":\"mcq\",\"percentage\":100}]}},\"questions\":[{\"id\":\"q-1\",\"difficulty\":\"easy\",\"question\":\"Which organelle is known as the powerhouse of the cell? ⚡\\nA) Nucleus\\nB) Mitochondria\\nC) Ribosome\\nD) Golgi Apparatus\",\"answer\":\"B\",\"rationale\":\"Mitochondria generate most of the chemical energy needed to power the cell's biochemical reactions through ATP production.\",\"tags\":[\"biology\",\"cell-biology\",\"organelles\"],\"type\":\"mcq\"},{\"id\":\"q-2\",\"difficulty\":\"easy\",\"question\":\"What is the chemical symbol for Gold? 💰\\nA) Ag\\nB) Au\\nC) Fe\\nD) Pb\",\"answer\":\"B\",\"rationale\":\"Gold is represented by the symbol Au, derived from the Latin word 'aurum'.\",\"tags\":[\"chemistry\",\"periodic-table\",\"elements\"],\"type\":\"mcq\"},{\"id\":\"q-3\",\"difficulty\":\"medium\",\"question\":\"According to Newton's Second Law, Force equals mass times what? 🏋️‍♂️\\nA) Velocity\\nB) Acceleration\\nC) Momentum\\nD) Energy\",\"answer\":\"B\",\"rationale\":\"Newton's Second Law states F = ma, where F is force, m is mass, and a is acceleration.\",\"tags\":[\"physics\",\"mechanics\",\"newton-laws\"],\"type\":\"mcq\"},{\"id\":\"q-4\",\"difficulty\":\"easy\",\"question\":\"Which state of matter has a definite volume but no definite shape? 💧\\nA) Solid\\nB) Liquid\\nC) Gas\\nD) Plasma\",\"answer\":\"B\",\"rationale\":\"Liquids flow to take the shape of their container but maintain a constant volume.\",\"tags\":[\"chemistry\",\"states-of-matter\",\"properties\"],\"type\":\"mcq\"},{\"id\":\"q-5\",\"difficulty\":\"medium\",\"question\":\"In photosynthesis, plants primarily absorb which gas? 🌿\\nA) Oxygen\\nB) Nitrogen\\nC) Carbon Dioxide\\nD) Hydrogen\",\"answer\":\"C\",\"rationale\":\"Plants use carbon dioxide (CO₂) along with water and sunlight to produce glucose and oxygen.\",\"tags\":[\"biology\",\"photosynthesis\",\"plants\"],\"type\":\"mcq\"},{\"id\":\"q-6\",\"difficulty\":\"easy\",\"question\":\"What is the pH value of pure water at 25°C? 🌊\\nA) 0\\nB) 7\\nC) 14\\nD) 10\",\"answer\":\"B\",\"rationale\":\"Pure water is neutral, meaning it has a pH of exactly 7 on the standard scale.\",\"tags\":[\"chemistry\",\"acids-bases\",\"ph-scale\"],\"type\":\"mcq\"},{\"id\":\"q-7\",\"difficulty\":\"medium\",\"question\":\"Which planet in our solar system is known as the Red Planet? 🔴\\nA) Venus\\nB) Mars\\nC) Jupiter\\nD) Saturn\",\"answer\":\"B\",\"rationale\":\"Mars appears red due to iron oxide (rust) prevalent on its surface.\",\"tags\":[\"astronomy\",\"solar-system\",\"planets\"],\"type\":\"mcq\"},{\"id\":\"q-8\",\"difficulty\":\"easy\",\"question\":\"What is the basic unit of heredity called? 🧬\\nA) Chromosome\\nB) Gene\\nC) DNA\\nD) Protein\",\"answer\":\"B\",\"rationale\":\"A gene is the fundamental physical and functional unit of heredity that carries genetic information.\",\"tags\":[\"biology\",\"genetics\",\"dna\"],\"type\":\"mcq\"},{\"id\":\"q-9\",\"difficulty\":\"medium\",\"question\":\"Which type of energy is stored in a battery? 🔋\\nA) Kinetic Energy\\nB) Chemical Energy\\nC) Thermal Energy\\nD) Nuclear Energy\",\"answer\":\"B\",\"rationale\":\"Batteries store potential energy in the form of chemical bonds that convert to electrical energy.\",\"tags\":[\"physics\",\"energy\",\"electricity\"],\"type\":\"mcq\"},{\"id\":\"q-10\",\"difficulty\":\"easy\",\"question\":\"What is the process of a solid turning directly into a gas called? ❄️➡️💨\\nA) Evaporation\\nB) Sublimation\\nC) Condensation\\nD) Deposition\",\"answer\":\"B\",\"rationale\":\"Sublimation is the phase transition from solid directly to gas without passing through the liquid phase.\",\"tags\":[\"chemistry\",\"phase-change\",\"matter\"],\"type\":\"mcq\"}],\"meta\":{\"summary\":\"Foundational Science Assessment Diagnostics - April 2026 🧪🔬\",\"questionCount\":10,\"difficulty\":\"easy\",\"language\":\"en\",\"mode\":\"question_generation\",\"questionTypes\":[\"mcq\"],\"questionTypeDistribution\":[{\"type\":\"mcq\",\"percentage\":100}],\"modelLabel\":\"Qwen 3.5 Flash\",\"provider\":\"qwen\",\"inputMode\":\"prompt-only\",\"promptPreview\":\"Assessment diagnostics 2026-04-11T18-02-48-497Z qwen\",\"sourceDocument\":null},\"createdAt\":\"2026-04-11T18:03:26.904Z\",\"updatedAt\":\"2026-04-11T18:03:26.904Z\",\"ownerRole\":\"user\",\"artifacts\":{\"canonical-result\":{\"key\":\"canonical-result\",\"kind\":\"canonical-result\",\"locale\":\"en\",\"themeMode\":null,\"contentType\":\"application/json; charset=utf-8\",\"fileName\":\"zootopiaclub-manual-input-assessment-question-generation-2026-04-11-1803.json\",\"storagePath\":\"assessment-results/766ded59-7240-4636-b012-6880fae7e1b4/886f774a-f8fe-0cba-03b4-b2fe6f75fd45/result.json\",\"status\":\"ready\",\"createdAt\":\"2026-04-11T18:03:26.904Z\",\"expiresAt\":\"2026-04-14T18:03:26.904Z\"}}},\"credits\":{\"applies\":true,\"isAdminExempt\":false,\"assessmentAccess\":\"enabled\",\"dayKey\":\"2026-04-11\",\"dailyDefaultLimit\":3,\"dailyLimit\":3,\"dailyLimitSource\":\"default\",\"usedCount\":1,\"dailyRemainingCount\":2,\"manualCreditsAvailable\":0,\"grantCreditsAvailable\":0,\"extraCreditsAvailable\":0,\"activeGrantCount\":0,\"totalRemainingCount\":2,\"remainingCount\":2,\"resetsAt\":\"2026-04-12T00:00:00.000Z\"}}}"
+    },
+    "qwenEvaluation": {
+      "pass": false,
+      "reason": "unexpected-response",
+      "generationId": null,
+      "code": null
+    },
+    "googleAttempt": {
+      "status": 503,
+      "ok": false,
+      "payload": {
+        "ok": false,
+        "error": {
+          "code": "ASSESSMENT_PROVIDER_AUTH_FAILED",
+          "message": "The selected Google model runtime is not authorized to execute this request."
+        }
+      },
+      "text": "{\"ok\":false,\"error\":{\"code\":\"ASSESSMENT_PROVIDER_AUTH_FAILED\",\"message\":\"The selected Google model runtime is not authorized to execute this request.\"}}"
+    },
+    "googleEvaluation": {
+      "pass": true,
+      "reason": "provider-path-error",
+      "generationId": null,
+      "code": "ASSESSMENT_PROVIDER_AUTH_FAILED"
+    },
+    "generationId": null,
+    "ownerReadByOwner": null,
+    "ownerReadByOtherUser": null,
+    "missingConfigAttempt": {
+      "status": 503,
+      "ok": false,
+      "payload": {
+        "ok": false,
+        "error": {
+          "code": "ASSESSMENT_PROVIDER_API_KEY_MISSING",
+          "message": "Qwen assessment runtime is missing DASHSCOPE_API_KEY on the server."
+        }
+      },
+      "text": "{\"ok\":false,\"error\":{\"code\":\"ASSESSMENT_PROVIDER_API_KEY_MISSING\",\"message\":\"Qwen assessment runtime is missing DASHSCOPE_API_KEY on the server.\"}}"
+    }
+  }
+}

@@ -1,0 +1,514 @@
+{
+  "runId": "2026-04-11T18-03-40-658Z",
+  "baseUrl": "http://127.0.0.1:3045",
+  "missingConfigBaseUrl": "http://127.0.0.1:3046",
+  "qaAccounts": {
+    "adminEmail": "qa-admin-runtime-20260411@example.com",
+    "userAEmail": "qa-user-a-2026-04-11T18-03-40-658Z@example.com",
+    "userBEmail": "qa-user-b-2026-04-11T18-03-40-658Z@example.com"
+  },
+  "checks": {
+    "adminLaneRejected": true,
+    "qwenPathVerified": true,
+    "googlePathVerified": true,
+    "ownerLaneSeparationVerified": true,
+    "missingConfigCodeVerified": true
+  },
+  "attempts": {
+    "adminLaneAttempt": {
+      "status": 403,
+      "ok": false,
+      "payload": {
+        "ok": false,
+        "error": {
+          "code": "ASSESSMENT_USER_LANE_REQUIRED",
+          "message": "Assessment generation is available only from the user lane."
+        }
+      },
+      "text": "{\"ok\":false,\"error\":{\"code\":\"ASSESSMENT_USER_LANE_REQUIRED\",\"message\":\"Assessment generation is available only from the user lane.\"}}"
+    },
+    "qwenAttempt": {
+      "status": 201,
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "data": {
+          "generation": {
+            "id": "726f2d10-263c-b25e-5fcd-3a012b25934e",
+            "ownerUid": "7e106ee9-9490-43ca-8ea6-47fd6dab28fb",
+            "title": "Assessment · Assessment diagnostics 2026-04-11T18-03-40-658Z qwen",
+            "modelId": "qwen3.5-flash",
+            "status": "ready",
+            "expiresAt": "2026-04-14T18:04:17.567Z",
+            "previewRoute": "/assessment/preview/726f2d10-263c-b25e-5fcd-3a012b25934e",
+            "resultRoute": "/assessment/results/726f2d10-263c-b25e-5fcd-3a012b25934e",
+            "request": {
+              "prompt": "Assessment diagnostics 2026-04-11T18-03-40-658Z qwen",
+              "modelId": "qwen3.5-flash",
+              "options": {
+                "mode": "question_generation",
+                "questionCount": 10,
+                "difficulty": "easy",
+                "language": "en",
+                "questionTypes": [
+                  "mcq"
+                ],
+                "questionTypeDistribution": [
+                  {
+                    "type": "mcq",
+                    "percentage": 100
+                  }
+                ]
+              }
+            },
+            "questions": [
+              {
+                "id": "q-1",
+                "difficulty": "easy",
+                "question": "Which organelle is known as the powerhouse of the cell? 🧬\nA) Nucleus\nB) Mitochondria\nC) Ribosome\nD) Golgi Apparatus",
+                "answer": "B",
+                "rationale": "Mitochondria generate most of the chemical energy needed to power the cell's biochemical reactions through cellular respiration.",
+                "tags": [
+                  "biology",
+                  "cell-biology",
+                  "organelles"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-2",
+                "difficulty": "easy",
+                "question": "What is the atomic number of Carbon? ⚛️\nA) 4\nB) 6\nC) 8\nD) 12",
+                "answer": "B",
+                "rationale": "The atomic number represents the number of protons in the nucleus; Carbon has 6 protons.",
+                "tags": [
+                  "chemistry",
+                  "periodic-table",
+                  "atoms"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-3",
+                "difficulty": "easy",
+                "question": "Which law states that force equals mass times acceleration? 🍎\nA) Newton's First Law\nB) Newton's Second Law\nC) Newton's Third Law\nD) Law of Conservation of Energy",
+                "answer": "B",
+                "rationale": "Newton's Second Law is mathematically expressed as F = ma (Force = mass × acceleration).",
+                "tags": [
+                  "physics",
+                  "mechanics",
+                  "newton"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-4",
+                "difficulty": "easy",
+                "question": "In which state of matter do particles have a fixed shape and volume? ❄️\nA) Solid\nB) Liquid\nC) Gas\nD) Plasma",
+                "answer": "A",
+                "rationale": "Solids maintain a definite shape and volume because their particles are tightly packed in a fixed arrangement.",
+                "tags": [
+                  "chemistry",
+                  "states-of-matter",
+                  "properties"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-5",
+                "difficulty": "easy",
+                "question": "What process do plants use to convert light energy into chemical energy? 🌿\nA) Respiration\nB) Fermentation\nC) Photosynthesis\nD) Transpiration",
+                "answer": "C",
+                "rationale": "Photosynthesis uses sunlight to synthesize foods from carbon dioxide and water, releasing oxygen.",
+                "tags": [
+                  "biology",
+                  "plants",
+                  "energy"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-6",
+                "difficulty": "easy",
+                "question": "Which gas makes up the majority of Earth's atmosphere? 🌍\nA) Oxygen\nB) Carbon Dioxide\nC) Nitrogen\nD) Argon",
+                "answer": "C",
+                "rationale": "Nitrogen comprises approximately 78% of Earth's atmosphere by volume.",
+                "tags": [
+                  "earth-science",
+                  "atmosphere",
+                  "composition"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-7",
+                "difficulty": "easy",
+                "question": "What is the primary pigment responsible for absorbing light in photosynthesis? 💡\nA) Carotene\nB) Chlorophyll\nC) Xanthophyll\nD) Melanin",
+                "answer": "B",
+                "rationale": "Chlorophyll absorbs light energy primarily in the blue and red wavelengths to drive photosynthesis.",
+                "tags": [
+                  "biology",
+                  "photosynthesis",
+                  "pigments"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-8",
+                "difficulty": "easy",
+                "question": "Which subatomic particle carries a negative charge? 🔋\nA) Proton\nB) Neutron\nC) Electron\nD) Photon",
+                "answer": "C",
+                "rationale": "Electrons orbit the nucleus and carry a single negative elementary charge.",
+                "tags": [
+                  "chemistry",
+                  "atomic-structure",
+                  "particles"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-9",
+                "difficulty": "easy",
+                "question": "What is the pH value of pure water at 25°C? 🧪\nA) 0\nB) 7\nC) 14\nD) 10",
+                "answer": "B",
+                "rationale": "Pure water is neutral, having a pH of 7 on the standard scale where 0-6 is acidic and 8-14 is basic.",
+                "tags": [
+                  "chemistry",
+                  "acids-bases",
+                  "ph-scale"
+                ],
+                "type": "mcq"
+              },
+              {
+                "id": "q-10",
+                "difficulty": "easy",
+                "question": "Sound waves require what to travel through? 🔊\nA) Vacuum\nB) Medium\nC) Light\nD) Electricity",
+                "answer": "B",
+                "rationale": "Sound is a mechanical wave that requires a material medium (solid, liquid, or gas) to propagate.",
+                "tags": [
+                  "physics",
+                  "waves",
+                  "sound"
+                ],
+                "type": "mcq"
+              }
+            ],
+            "meta": {
+              "summary": "Foundational Science Assessment Diagnostic - 10 MCQs covering Biology, Chemistry, and Physics basics.",
+              "questionCount": 10,
+              "difficulty": "easy",
+              "language": "en",
+              "mode": "question_generation",
+              "questionTypes": [
+                "mcq"
+              ],
+              "questionTypeDistribution": [
+                {
+                  "type": "mcq",
+                  "percentage": 100
+                }
+              ],
+              "modelLabel": "Qwen 3.5 Flash",
+              "provider": "qwen",
+              "inputMode": "prompt-only",
+              "promptPreview": "Assessment diagnostics 2026-04-11T18-03-40-658Z qwen",
+              "sourceDocument": null
+            },
+            "createdAt": "2026-04-11T18:04:17.567Z",
+            "updatedAt": "2026-04-11T18:04:17.567Z",
+            "ownerRole": "user",
+            "artifacts": {
+              "canonical-result": {
+                "key": "canonical-result",
+                "kind": "canonical-result",
+                "locale": "en",
+                "themeMode": null,
+                "contentType": "application/json; charset=utf-8",
+                "fileName": "zootopiaclub-manual-input-assessment-question-generation-2026-04-11-1804.json",
+                "storagePath": "assessment-results/7e106ee9-9490-43ca-8ea6-47fd6dab28fb/726f2d10-263c-b25e-5fcd-3a012b25934e/result.json",
+                "status": "ready",
+                "createdAt": "2026-04-11T18:04:17.567Z",
+                "expiresAt": "2026-04-14T18:04:17.567Z"
+              }
+            }
+          },
+          "credits": {
+            "applies": true,
+            "isAdminExempt": false,
+            "assessmentAccess": "enabled",
+            "dayKey": "2026-04-11",
+            "dailyDefaultLimit": 3,
+            "dailyLimit": 3,
+            "dailyLimitSource": "default",
+            "usedCount": 1,
+            "dailyRemainingCount": 2,
+            "manualCreditsAvailable": 0,
+            "grantCreditsAvailable": 0,
+            "extraCreditsAvailable": 0,
+            "activeGrantCount": 0,
+            "totalRemainingCount": 2,
+            "remainingCount": 2,
+            "resetsAt": "2026-04-12T00:00:00.000Z"
+          }
+        }
+      },
+      "text": "{\"ok\":true,\"data\":{\"generation\":{\"id\":\"726f2d10-263c-b25e-5fcd-3a012b25934e\",\"ownerUid\":\"7e106ee9-9490-43ca-8ea6-47fd6dab28fb\",\"title\":\"Assessment · Assessment diagnostics 2026-04-11T18-03-40-658Z qwen\",\"modelId\":\"qwen3.5-flash\",\"status\":\"ready\",\"expiresAt\":\"2026-04-14T18:04:17.567Z\",\"previewRoute\":\"/assessment/preview/726f2d10-263c-b25e-5fcd-3a012b25934e\",\"resultRoute\":\"/assessment/results/726f2d10-263c-b25e-5fcd-3a012b25934e\",\"request\":{\"prompt\":\"Assessment diagnostics 2026-04-11T18-03-40-658Z qwen\",\"modelId\":\"qwen3.5-flash\",\"options\":{\"mode\":\"question_generation\",\"questionCount\":10,\"difficulty\":\"easy\",\"language\":\"en\",\"questionTypes\":[\"mcq\"],\"questionTypeDistribution\":[{\"type\":\"mcq\",\"percentage\":100}]}},\"questions\":[{\"id\":\"q-1\",\"difficulty\":\"easy\",\"question\":\"Which organelle is known as the powerhouse of the cell? 🧬\\nA) Nucleus\\nB) Mitochondria\\nC) Ribosome\\nD) Golgi Apparatus\",\"answer\":\"B\",\"rationale\":\"Mitochondria generate most of the chemical energy needed to power the cell's biochemical reactions through cellular respiration.\",\"tags\":[\"biology\",\"cell-biology\",\"organelles\"],\"type\":\"mcq\"},{\"id\":\"q-2\",\"difficulty\":\"easy\",\"question\":\"What is the atomic number of Carbon? ⚛️\\nA) 4\\nB) 6\\nC) 8\\nD) 12\",\"answer\":\"B\",\"rationale\":\"The atomic number represents the number of protons in the nucleus; Carbon has 6 protons.\",\"tags\":[\"chemistry\",\"periodic-table\",\"atoms\"],\"type\":\"mcq\"},{\"id\":\"q-3\",\"difficulty\":\"easy\",\"question\":\"Which law states that force equals mass times acceleration? 🍎\\nA) Newton's First Law\\nB) Newton's Second Law\\nC) Newton's Third Law\\nD) Law of Conservation of Energy\",\"answer\":\"B\",\"rationale\":\"Newton's Second Law is mathematically expressed as F = ma (Force = mass × acceleration).\",\"tags\":[\"physics\",\"mechanics\",\"newton\"],\"type\":\"mcq\"},{\"id\":\"q-4\",\"difficulty\":\"easy\",\"question\":\"In which state of matter do particles have a fixed shape and volume? ❄️\\nA) Solid\\nB) Liquid\\nC) Gas\\nD) Plasma\",\"answer\":\"A\",\"rationale\":\"Solids maintain a definite shape and volume because their particles are tightly packed in a fixed arrangement.\",\"tags\":[\"chemistry\",\"states-of-matter\",\"properties\"],\"type\":\"mcq\"},{\"id\":\"q-5\",\"difficulty\":\"easy\",\"question\":\"What process do plants use to convert light energy into chemical energy? 🌿\\nA) Respiration\\nB) Fermentation\\nC) Photosynthesis\\nD) Transpiration\",\"answer\":\"C\",\"rationale\":\"Photosynthesis uses sunlight to synthesize foods from carbon dioxide and water, releasing oxygen.\",\"tags\":[\"biology\",\"plants\",\"energy\"],\"type\":\"mcq\"},{\"id\":\"q-6\",\"difficulty\":\"easy\",\"question\":\"Which gas makes up the majority of Earth's atmosphere? 🌍\\nA) Oxygen\\nB) Carbon Dioxide\\nC) Nitrogen\\nD) Argon\",\"answer\":\"C\",\"rationale\":\"Nitrogen comprises approximately 78% of Earth's atmosphere by volume.\",\"tags\":[\"earth-science\",\"atmosphere\",\"composition\"],\"type\":\"mcq\"},{\"id\":\"q-7\",\"difficulty\":\"easy\",\"question\":\"What is the primary pigment responsible for absorbing light in photosynthesis? 💡\\nA) Carotene\\nB) Chlorophyll\\nC) Xanthophyll\\nD) Melanin\",\"answer\":\"B\",\"rationale\":\"Chlorophyll absorbs light energy primarily in the blue and red wavelengths to drive photosynthesis.\",\"tags\":[\"biology\",\"photosynthesis\",\"pigments\"],\"type\":\"mcq\"},{\"id\":\"q-8\",\"difficulty\":\"easy\",\"question\":\"Which subatomic particle carries a negative charge? 🔋\\nA) Proton\\nB) Neutron\\nC) Electron\\nD) Photon\",\"answer\":\"C\",\"rationale\":\"Electrons orbit the nucleus and carry a single negative elementary charge.\",\"tags\":[\"chemistry\",\"atomic-structure\",\"particles\"],\"type\":\"mcq\"},{\"id\":\"q-9\",\"difficulty\":\"easy\",\"question\":\"What is the pH value of pure water at 25°C? 🧪\\nA) 0\\nB) 7\\nC) 14\\nD) 10\",\"answer\":\"B\",\"rationale\":\"Pure water is neutral, having a pH of 7 on the standard scale where 0-6 is acidic and 8-14 is basic.\",\"tags\":[\"chemistry\",\"acids-bases\",\"ph-scale\"],\"type\":\"mcq\"},{\"id\":\"q-10\",\"difficulty\":\"easy\",\"question\":\"Sound waves require what to travel through? 🔊\\nA) Vacuum\\nB) Medium\\nC) Light\\nD) Electricity\",\"answer\":\"B\",\"rationale\":\"Sound is a mechanical wave that requires a material medium (solid, liquid, or gas) to propagate.\",\"tags\":[\"physics\",\"waves\",\"sound\"],\"type\":\"mcq\"}],\"meta\":{\"summary\":\"Foundational Science Assessment Diagnostic - 10 MCQs covering Biology, Chemistry, and Physics basics.\",\"questionCount\":10,\"difficulty\":\"easy\",\"language\":\"en\",\"mode\":\"question_generation\",\"questionTypes\":[\"mcq\"],\"questionTypeDistribution\":[{\"type\":\"mcq\",\"percentage\":100}],\"modelLabel\":\"Qwen 3.5 Flash\",\"provider\":\"qwen\",\"inputMode\":\"prompt-only\",\"promptPreview\":\"Assessment diagnostics 2026-04-11T18-03-40-658Z qwen\",\"sourceDocument\":null},\"createdAt\":\"2026-04-11T18:04:17.567Z\",\"updatedAt\":\"2026-04-11T18:04:17.567Z\",\"ownerRole\":\"user\",\"artifacts\":{\"canonical-result\":{\"key\":\"canonical-result\",\"kind\":\"canonical-result\",\"locale\":\"en\",\"themeMode\":null,\"contentType\":\"application/json; charset=utf-8\",\"fileName\":\"zootopiaclub-manual-input-assessment-question-generation-2026-04-11-1804.json\",\"storagePath\":\"assessment-results/7e106ee9-9490-43ca-8ea6-47fd6dab28fb/726f2d10-263c-b25e-5fcd-3a012b25934e/result.json\",\"status\":\"ready\",\"createdAt\":\"2026-04-11T18:04:17.567Z\",\"expiresAt\":\"2026-04-14T18:04:17.567Z\"}}},\"credits\":{\"applies\":true,\"isAdminExempt\":false,\"assessmentAccess\":\"enabled\",\"dayKey\":\"2026-04-11\",\"dailyDefaultLimit\":3,\"dailyLimit\":3,\"dailyLimitSource\":\"default\",\"usedCount\":1,\"dailyRemainingCount\":2,\"manualCreditsAvailable\":0,\"grantCreditsAvailable\":0,\"extraCreditsAvailable\":0,\"activeGrantCount\":0,\"totalRemainingCount\":2,\"remainingCount\":2,\"resetsAt\":\"2026-04-12T00:00:00.000Z\"}}}"
+    },
+    "qwenEvaluation": {
+      "pass": true,
+      "reason": "generation-created",
+      "generationId": "726f2d10-263c-b25e-5fcd-3a012b25934e",
+      "code": null
+    },
+    "googleAttempt": {
+      "status": 503,
+      "ok": false,
+      "payload": {
+        "ok": false,
+        "error": {
+          "code": "ASSESSMENT_PROVIDER_AUTH_FAILED",
+          "message": "The selected Google model runtime is not authorized to execute this request."
+        }
+      },
+      "text": "{\"ok\":false,\"error\":{\"code\":\"ASSESSMENT_PROVIDER_AUTH_FAILED\",\"message\":\"The selected Google model runtime is not authorized to execute this request.\"}}"
+    },
+    "googleEvaluation": {
+      "pass": true,
+      "reason": "provider-path-error",
+      "generationId": null,
+      "code": "ASSESSMENT_PROVIDER_AUTH_FAILED"
+    },
+    "generationId": "726f2d10-263c-b25e-5fcd-3a012b25934e",
+    "ownerReadByOwner": {
+      "status": 200,
+      "ok": true,
+      "payload": {
+        "ok": true,
+        "data": {
+          "id": "726f2d10-263c-b25e-5fcd-3a012b25934e",
+          "ownerUid": "7e106ee9-9490-43ca-8ea6-47fd6dab28fb",
+          "title": "Assessment · Assessment diagnostics 2026-04-11T18-03-40-658Z qwen",
+          "modelId": "qwen3.5-flash",
+          "status": "ready",
+          "expiresAt": "2026-04-14T18:04:17.567Z",
+          "previewRoute": "/assessment/preview/726f2d10-263c-b25e-5fcd-3a012b25934e",
+          "resultRoute": "/assessment/results/726f2d10-263c-b25e-5fcd-3a012b25934e",
+          "request": {
+            "prompt": "Assessment diagnostics 2026-04-11T18-03-40-658Z qwen",
+            "modelId": "qwen3.5-flash",
+            "options": {
+              "mode": "question_generation",
+              "questionCount": 10,
+              "difficulty": "easy",
+              "language": "en",
+              "questionTypes": [
+                "mcq"
+              ],
+              "questionTypeDistribution": [
+                {
+                  "type": "mcq",
+                  "percentage": 100
+                }
+              ]
+            }
+          },
+          "questions": [
+            {
+              "id": "q-1",
+              "difficulty": "easy",
+              "question": "Which organelle is known as the powerhouse of the cell? 🧬\nA) Nucleus\nB) Mitochondria\nC) Ribosome\nD) Golgi Apparatus",
+              "answer": "B",
+              "rationale": "Mitochondria generate most of the chemical energy needed to power the cell's biochemical reactions through cellular respiration.",
+              "tags": [
+                "biology",
+                "cell-biology",
+                "organelles"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-2",
+              "difficulty": "easy",
+              "question": "What is the atomic number of Carbon? ⚛️\nA) 4\nB) 6\nC) 8\nD) 12",
+              "answer": "B",
+              "rationale": "The atomic number represents the number of protons in the nucleus; Carbon has 6 protons.",
+              "tags": [
+                "chemistry",
+                "periodic-table",
+                "atoms"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-3",
+              "difficulty": "easy",
+              "question": "Which law states that force equals mass times acceleration? 🍎\nA) Newton's First Law\nB) Newton's Second Law\nC) Newton's Third Law\nD) Law of Conservation of Energy",
+              "answer": "B",
+              "rationale": "Newton's Second Law is mathematically expressed as F = ma (Force = mass × acceleration).",
+              "tags": [
+                "physics",
+                "mechanics",
+                "newton"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-4",
+              "difficulty": "easy",
+              "question": "In which state of matter do particles have a fixed shape and volume? ❄️\nA) Solid\nB) Liquid\nC) Gas\nD) Plasma",
+              "answer": "A",
+              "rationale": "Solids maintain a definite shape and volume because their particles are tightly packed in a fixed arrangement.",
+              "tags": [
+                "chemistry",
+                "states-of-matter",
+                "properties"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-5",
+              "difficulty": "easy",
+              "question": "What process do plants use to convert light energy into chemical energy? 🌿\nA) Respiration\nB) Fermentation\nC) Photosynthesis\nD) Transpiration",
+              "answer": "C",
+              "rationale": "Photosynthesis uses sunlight to synthesize foods from carbon dioxide and water, releasing oxygen.",
+              "tags": [
+                "biology",
+                "plants",
+                "energy"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-6",
+              "difficulty": "easy",
+              "question": "Which gas makes up the majority of Earth's atmosphere? 🌍\nA) Oxygen\nB) Carbon Dioxide\nC) Nitrogen\nD) Argon",
+              "answer": "C",
+              "rationale": "Nitrogen comprises approximately 78% of Earth's atmosphere by volume.",
+              "tags": [
+                "earth-science",
+                "atmosphere",
+                "composition"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-7",
+              "difficulty": "easy",
+              "question": "What is the primary pigment responsible for absorbing light in photosynthesis? 💡\nA) Carotene\nB) Chlorophyll\nC) Xanthophyll\nD) Melanin",
+              "answer": "B",
+              "rationale": "Chlorophyll absorbs light energy primarily in the blue and red wavelengths to drive photosynthesis.",
+              "tags": [
+                "biology",
+                "photosynthesis",
+                "pigments"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-8",
+              "difficulty": "easy",
+              "question": "Which subatomic particle carries a negative charge? 🔋\nA) Proton\nB) Neutron\nC) Electron\nD) Photon",
+              "answer": "C",
+              "rationale": "Electrons orbit the nucleus and carry a single negative elementary charge.",
+              "tags": [
+                "chemistry",
+                "atomic-structure",
+                "particles"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-9",
+              "difficulty": "easy",
+              "question": "What is the pH value of pure water at 25°C? 🧪\nA) 0\nB) 7\nC) 14\nD) 10",
+              "answer": "B",
+              "rationale": "Pure water is neutral, having a pH of 7 on the standard scale where 0-6 is acidic and 8-14 is basic.",
+              "tags": [
+                "chemistry",
+                "acids-bases",
+                "ph-scale"
+              ],
+              "type": "mcq"
+            },
+            {
+              "id": "q-10",
+              "difficulty": "easy",
+              "question": "Sound waves require what to travel through? 🔊\nA) Vacuum\nB) Medium\nC) Light\nD) Electricity",
+              "answer": "B",
+              "rationale": "Sound is a mechanical wave that requires a material medium (solid, liquid, or gas) to propagate.",
+              "tags": [
+                "physics",
+                "waves",
+                "sound"
+              ],
+              "type": "mcq"
+            }
+          ],
+          "meta": {
+            "summary": "Foundational Science Assessment Diagnostic - 10 MCQs covering Biology, Chemistry, and Physics basics.",
+            "questionCount": 10,
+            "difficulty": "easy",
+            "language": "en",
+            "mode": "question_generation",
+            "questionTypes": [
+              "mcq"
+            ],
+            "questionTypeDistribution": [
+              {
+                "type": "mcq",
+                "percentage": 100
+              }
+            ],
+            "modelLabel": "Qwen 3.5 Flash",
+            "provider": "qwen",
+            "inputMode": "prompt-only",
+            "promptPreview": "Assessment diagnostics 2026-04-11T18-03-40-658Z qwen",
+            "sourceDocument": null
+          },
+          "createdAt": "2026-04-11T18:04:17.567Z",
+          "updatedAt": "2026-04-11T18:04:17.567Z",
+          "ownerRole": "user",
+          "artifacts": {
+            "canonical-result": {
+              "key": "canonical-result",
+              "kind": "canonical-result",
+              "locale": "en",
+              "themeMode": null,
+              "contentType": "application/json; charset=utf-8",
+              "fileName": "zootopiaclub-manual-input-assessment-question-generation-2026-04-11-1804.json",
+              "storagePath": "assessment-results/7e106ee9-9490-43ca-8ea6-47fd6dab28fb/726f2d10-263c-b25e-5fcd-3a012b25934e/result.json",
+              "status": "ready",
+              "createdAt": "2026-04-11T18:04:17.567Z",
+              "expiresAt": "2026-04-14T18:04:17.567Z"
+            }
+          }
+        }
+      },
+      "text": "{\"ok\":true,\"data\":{\"id\":\"726f2d10-263c-b25e-5fcd-3a012b25934e\",\"ownerUid\":\"7e106ee9-9490-43ca-8ea6-47fd6dab28fb\",\"title\":\"Assessment · Assessment diagnostics 2026-04-11T18-03-40-658Z qwen\",\"modelId\":\"qwen3.5-flash\",\"status\":\"ready\",\"expiresAt\":\"2026-04-14T18:04:17.567Z\",\"previewRoute\":\"/assessment/preview/726f2d10-263c-b25e-5fcd-3a012b25934e\",\"resultRoute\":\"/assessment/results/726f2d10-263c-b25e-5fcd-3a012b25934e\",\"request\":{\"prompt\":\"Assessment diagnostics 2026-04-11T18-03-40-658Z qwen\",\"modelId\":\"qwen3.5-flash\",\"options\":{\"mode\":\"question_generation\",\"questionCount\":10,\"difficulty\":\"easy\",\"language\":\"en\",\"questionTypes\":[\"mcq\"],\"questionTypeDistribution\":[{\"type\":\"mcq\",\"percentage\":100}]}},\"questions\":[{\"id\":\"q-1\",\"difficulty\":\"easy\",\"question\":\"Which organelle is known as the powerhouse of the cell? 🧬\\nA) Nucleus\\nB) Mitochondria\\nC) Ribosome\\nD) Golgi Apparatus\",\"answer\":\"B\",\"rationale\":\"Mitochondria generate most of the chemical energy needed to power the cell's biochemical reactions through cellular respiration.\",\"tags\":[\"biology\",\"cell-biology\",\"organelles\"],\"type\":\"mcq\"},{\"id\":\"q-2\",\"difficulty\":\"easy\",\"question\":\"What is the atomic number of Carbon? ⚛️\\nA) 4\\nB) 6\\nC) 8\\nD) 12\",\"answer\":\"B\",\"rationale\":\"The atomic number represents the number of protons in the nucleus; Carbon has 6 protons.\",\"tags\":[\"chemistry\",\"periodic-table\",\"atoms\"],\"type\":\"mcq\"},{\"id\":\"q-3\",\"difficulty\":\"easy\",\"question\":\"Which law states that force equals mass times acceleration? 🍎\\nA) Newton's First Law\\nB) Newton's Second Law\\nC) Newton's Third Law\\nD) Law of Conservation of Energy\",\"answer\":\"B\",\"rationale\":\"Newton's Second Law is mathematically expressed as F = ma (Force = mass × acceleration).\",\"tags\":[\"physics\",\"mechanics\",\"newton\"],\"type\":\"mcq\"},{\"id\":\"q-4\",\"difficulty\":\"easy\",\"question\":\"In which state of matter do particles have a fixed shape and volume? ❄️\\nA) Solid\\nB) Liquid\\nC) Gas\\nD) Plasma\",\"answer\":\"A\",\"rationale\":\"Solids maintain a definite shape and volume because their particles are tightly packed in a fixed arrangement.\",\"tags\":[\"chemistry\",\"states-of-matter\",\"properties\"],\"type\":\"mcq\"},{\"id\":\"q-5\",\"difficulty\":\"easy\",\"question\":\"What process do plants use to convert light energy into chemical energy? 🌿\\nA) Respiration\\nB) Fermentation\\nC) Photosynthesis\\nD) Transpiration\",\"answer\":\"C\",\"rationale\":\"Photosynthesis uses sunlight to synthesize foods from carbon dioxide and water, releasing oxygen.\",\"tags\":[\"biology\",\"plants\",\"energy\"],\"type\":\"mcq\"},{\"id\":\"q-6\",\"difficulty\":\"easy\",\"question\":\"Which gas makes up the majority of Earth's atmosphere? 🌍\\nA) Oxygen\\nB) Carbon Dioxide\\nC) Nitrogen\\nD) Argon\",\"answer\":\"C\",\"rationale\":\"Nitrogen comprises approximately 78% of Earth's atmosphere by volume.\",\"tags\":[\"earth-science\",\"atmosphere\",\"composition\"],\"type\":\"mcq\"},{\"id\":\"q-7\",\"difficulty\":\"easy\",\"question\":\"What is the primary pigment responsible for absorbing light in photosynthesis? 💡\\nA) Carotene\\nB) Chlorophyll\\nC) Xanthophyll\\nD) Melanin\",\"answer\":\"B\",\"rationale\":\"Chlorophyll absorbs light energy primarily in the blue and red wavelengths to drive photosynthesis.\",\"tags\":[\"biology\",\"photosynthesis\",\"pigments\"],\"type\":\"mcq\"},{\"id\":\"q-8\",\"difficulty\":\"easy\",\"question\":\"Which subatomic particle carries a negative charge? 🔋\\nA) Proton\\nB) Neutron\\nC) Electron\\nD) Photon\",\"answer\":\"C\",\"rationale\":\"Electrons orbit the nucleus and carry a single negative elementary charge.\",\"tags\":[\"chemistry\",\"atomic-structure\",\"particles\"],\"type\":\"mcq\"},{\"id\":\"q-9\",\"difficulty\":\"easy\",\"question\":\"What is the pH value of pure water at 25°C? 🧪\\nA) 0\\nB) 7\\nC) 14\\nD) 10\",\"answer\":\"B\",\"rationale\":\"Pure water is neutral, having a pH of 7 on the standard scale where 0-6 is acidic and 8-14 is basic.\",\"tags\":[\"chemistry\",\"acids-bases\",\"ph-scale\"],\"type\":\"mcq\"},{\"id\":\"q-10\",\"difficulty\":\"easy\",\"question\":\"Sound waves require what to travel through? 🔊\\nA) Vacuum\\nB) Medium\\nC) Light\\nD) Electricity\",\"answer\":\"B\",\"rationale\":\"Sound is a mechanical wave that requires a material medium (solid, liquid, or gas) to propagate.\",\"tags\":[\"physics\",\"waves\",\"sound\"],\"type\":\"mcq\"}],\"meta\":{\"summary\":\"Foundational Science Assessment Diagnostic - 10 MCQs covering Biology, Chemistry, and Physics basics.\",\"questionCount\":10,\"difficulty\":\"easy\",\"language\":\"en\",\"mode\":\"question_generation\",\"questionTypes\":[\"mcq\"],\"questionTypeDistribution\":[{\"type\":\"mcq\",\"percentage\":100}],\"modelLabel\":\"Qwen 3.5 Flash\",\"provider\":\"qwen\",\"inputMode\":\"prompt-only\",\"promptPreview\":\"Assessment diagnostics 2026-04-11T18-03-40-658Z qwen\",\"sourceDocument\":null},\"createdAt\":\"2026-04-11T18:04:17.567Z\",\"updatedAt\":\"2026-04-11T18:04:17.567Z\",\"ownerRole\":\"user\",\"artifacts\":{\"canonical-result\":{\"key\":\"canonical-result\",\"kind\":\"canonical-result\",\"locale\":\"en\",\"themeMode\":null,\"contentType\":\"application/json; charset=utf-8\",\"fileName\":\"zootopiaclub-manual-input-assessment-question-generation-2026-04-11-1804.json\",\"storagePath\":\"assessment-results/7e106ee9-9490-43ca-8ea6-47fd6dab28fb/726f2d10-263c-b25e-5fcd-3a012b25934e/result.json\",\"status\":\"ready\",\"createdAt\":\"2026-04-11T18:04:17.567Z\",\"expiresAt\":\"2026-04-14T18:04:17.567Z\"}}}}"
+    },
+    "ownerReadByOtherUser": {
+      "status": 404,
+      "ok": false,
+      "payload": {
+        "ok": false,
+        "error": {
+          "code": "ASSESSMENT_NOT_FOUND",
+          "message": "Assessment generation not found."
+        }
+      },
+      "text": "{\"ok\":false,\"error\":{\"code\":\"ASSESSMENT_NOT_FOUND\",\"message\":\"Assessment generation not found.\"}}"
+    },
+    "missingConfigAttempt": {
+      "status": 503,
+      "ok": false,
+      "payload": {
+        "ok": false,
+        "error": {
+          "code": "ASSESSMENT_PROVIDER_API_KEY_MISSING",
+          "message": "Qwen assessment runtime is missing DASHSCOPE_API_KEY on the server."
+        }
+      },
+      "text": "{\"ok\":false,\"error\":{\"code\":\"ASSESSMENT_PROVIDER_API_KEY_MISSING\",\"message\":\"Qwen assessment runtime is missing DASHSCOPE_API_KEY on the server.\"}}"
+    }
+  }
+}
