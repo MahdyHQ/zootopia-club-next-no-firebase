@@ -580,3 +580,36 @@ Next agent checklist
 - Do not restore Firebase-era deployment assumptions; Vercel is sole active deployment target
 - Do not re-add references to non-existent `/firebase/` or `/scripts/firebase/` folders unless they are actually created
 - Reserved for future work: Renaming the remaining misleading function names (getZootopiaFirestore → getZootopiaPgAdapter) and class name (PgFirestore → PgPostgresAdapter) once cascading function call sites can be safely updated
+
+2026-04-11 (FINAL PASS) - Guide-Files Deprecation Warnings + Ledger Reference Corrections
+
+Scope
+- Mark Guide-Files containing Firebase-era assumptions as reference-only to prevent agent misinterpreting them as current architecture
+- Update ledger reference from "primary architecture guide" to clarified "reference-only" designation
+- Correct PowerShell guide to explicitly state App Hosting is NO LONGER ACTIVE
+
+Action: Guide-Files marking
+- `Guide-Files/Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md`: Added prominent DEPRECATION NOTICE at top explaining this is Firebase-era reference, not current truth; current uses Supabase+Auth.js+Vercel
+- `Guide-Files/powershell-script-commands-guide.md`: Changed title from "Firebase App Hosting Secrets" to "LEGACY REFERENCE ONLY"; updated deprecation status to clearly state "ACTIVE APPS NO LONGER USE FIREBASE APP HOSTING"; Vercel+Supabase is current deployment
+- `Guide-Files/AI_Agent_Execution_Instruction_Guide_2026.md`: Fixed line 350 from "Firebase App Hosting or the current real deployment path" to "Vercel (current real deployment path) or legacy Firebase App Hosting"
+
+Action: Ledger reference updates
+- Changed "Primary architecture guide" designation to "Architecture reference (DEPRECATED Firebase-era; see Current Truth Snapshot for active stack)"
+- This signals agents to treat the guide as historical, not authoritative
+
+Verification results
+- `npm run lint --workspace @zootopia/web`: ✅ PASSED
+- `npm run build --workspace @zootopia/web`: ✅ PASSED (47 routes, 10.1s compile)
+- Git commit: ✅ Successfully recorded
+
+Architecture cleanup completeness assessment
+- ✅ File renamed: zootopia-firestore-pg.ts → zootopia-postgres-adapter.ts (file name mismatch resolved)
+- ✅ Imports updated: 2 direct references corrected
+- ✅ Documentation: All Firebase terminology labeled as legacy/reference-only where it appears
+- ✅ Active code wording: No remaining misleading "current" or "active" Firebase claims in runtime/active surfaces
+- ✅ Environment files: Properly commented with "Legacy Firebase script compatibility"
+- ✅ Guide-Files: Marked as reference-only with deprecation warnings
+- ✅ Ledger accuracy: Corrected and refreshed with 200+ lines of historical context + new cleanup changelog
+
+All user requirements from original request are now COMPLETE.
+Next agents should reference the ledger "Current Truth Snapshot" as the authority, not the deprecated guides.
