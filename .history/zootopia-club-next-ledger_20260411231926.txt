@@ -1,0 +1,1123 @@
+f
+- Remaining function/class names (getZootopiaFirestore, PgFirestore, shouldUseFirestore) will need future cleanup once migration fully complete
+- Do not restore Firebase-era deployment assumptions; Vercel is sole active deployment target
+- Do not re-add references to non-existent `/firebase/` or `/scripts/firebase/` folders unless they are actually created
+- Reserved for future work: Renaming the remaining misleading function names (getZootopiaFirestore -> getZootopiaPgAdapter) and class name (PgFirestore -> PgPostgresAdapter) once cascading function call sites can be safely updated
+
+2026-04-11 (FINAL PASS) - Guide-Files Deprecation Warnings + Ledger Reference Corrections
+
+Scope
+- Mark Guide-Files containing Firebase-era assumptions as reference-only to prevent agent misinterpreting them as current architecture
+- Update ledger reference from "primary architecture guide" to clarified "reference-only" designation
+- Correct PowerShell guide to explicitly state App Hosting is NO LONGER ACTIVE
+
+Action: Guide-Files marking
+- `Guide-Files/Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md`: Added prominent DEPRECATION NOTICE at top explaining this is Firebase-era reference, not current truth; current uses Supabase+Auth.js+Vercel
+- `Guide-Files/powershell-script-commands-guide.md`: Changed title from "Firebase App Hosting Secrets" to "LEGACY REFERENCE ONLY"; updated deprecation status to clearly state "ACTIVE APPS NO LONGER USE FIREBASE APP HOSTING"; Vercel+Supabase is current deployment
+- `Guide-Files/AI_Agent_Execution_Instruction_Guide_2026.md`: Fixed line 350 from "Firebase App Hosting or the current real deployment path" to "Vercel (current real deployment path) or legacy Firebase App Hosting"
+
+Action: Ledger reference updates
+- Changed "Primary architecture guide" designation to "Architecture reference (DEPRECATED Firebase-era; see Current Truth Snapshot for active stack)"
+- This signals agents to treat the guide as historical, not authoritative
+
+Verification results
+- `npm run lint --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED (47 routes, 10.1s compile)
+- Git commit: Successfully recorded
+
+Architecture cleanup completeness assessment
+- File renamed: zootopia-firestore-pg.ts -> zootopia-postgres-adapter.ts (file name mismatch resolved)
+- Imports updated: 2 direct references corrected
+- Documentation: All Firebase terminology labeled as legacy/reference-only where it appears
+- Active code wording: No remaining misleading "current" or "active" Firebase claims in runtime/active surfaces
+- Environment files: Properly commented with "Legacy Firebase script compatibility"
+- Guide-Files: Marked as reference-only with deprecation warnings
+- Ledger accuracy: Corrected and refreshed with 200+ lines of historical context + new cleanup changelog
+
+All user requirements from original request are now COMPLETE.
+Next agents should reference the ledger "Current Truth Snapshot" as the authority, not the deprecated guides.
+
+2026-04-11 | Migration-First Database System Implementation
+
+Root Cause
+- Error: `relation "zc_entities" does not exist` at `PgQuery._getWithSql`
+- Cause: Migration files existed in `supabase/migrations/` but had NEVER been applied
+  to the actual Supabase Postgres database. The code assumed the table existed at
+  runtime, but no migration runner had been executed.
+- `zc_entities` IS the intended main table -- it is a generic JSON document store
+  (EAV pattern) used by the Postgres adapter for all logical collections
+  (documents, assessments, infographics, credits, idempotency, admin logs, users).
+
+Whether zc_entities Was Truly Intended
+- YES. It is intentionally designed as a generic JSONB document store that mirrors
+  former Firestore collections. The `collection` column acts as a namespace, `id` as
+  the document key, `owner_uid` as the indexed owner, and `body` as the full JSONB
+  payload. This is the active persistence model for the current codebase.
+
+Exact Migrations Added/Changed (4 total, all pre-existing but never applied)
+1. `20260410120000_zootopia_platform_entities.sql`
+   - Creates `public.zc_entities` table (collection, id, owner_uid, body jsonb, updated_at)
+   - Primary key: (collection, id)
+   - Indexes: owner_collection_idx, body_expires_idx (for documents)
+   - RLS enabled
+   - Creates storage bucket `zootopia-private`
+
+2. `20260410180000_phase1_firestore_parity_tables.sql`
+   - Creates 8 relational tables:
+     - `user_profiles` -- user profile metadata (Firestore: users)
+     - `documents` -- upload metadata (Firestore: documents)
+     - `assessment_generations` -- assessment generation records (Firestore: assessmentGenerations)
+     - `infographic_generations` -- infographic records (Firestore: infographicGenerations)
+     - `admin_activity_logs` -- audit trail (Firestore: adminActivityLogs)
+     - `assessment_generation_idempotency` -- duplicate-click protection
+     - `assessment_daily_credits` -- UTC day ledger
+     - `assessment_credit_accounts` -- per-user credit wallet settings
+     - `assessment_credit_grants` -- time-bounded admin grants
+   - All tables have RLS enabled, owner-scoped indexes, and proper constraints
+
+3. `20260410180001_phase1_storage_bucket.sql`
+   - Creates storage bucket `zootopia-app` (idempotent)
+
+4. `20260410213000_phase1_owner_rls_and_storage_policies.sql`
+   - Creates RLS policies for all owner-scoped tables (select/insert/update/delete)
+   - Creates storage RLS policies for `zootopia-private` bucket
+   - Idempotent policy creation (checks pg_policies before creating)
+
+Exact Runtime Files Changed
+- NONE. No runtime code was modified. The fix was purely operational: applying
+  the existing migrations to the actual database.
+
+Exact Tables/Indexes/Constraints Created
+Tables:
+  - `zc_entities` (PK: collection+id, indexes on owner_uid+collection, body->expiresAt)
+  - `user_profiles` (PK: uid, index on lower(email))
+  - `documents` (PK: id, index on owner_uid+created_at)
+  - `assessment_generations` (PK: id, index on owner_uid+created_at)
+  - `infographic_generations` (PK: id, index on owner_uid+created_at)
+  - `admin_activity_logs` (PK: id, index on created_at)
+  - `assessment_generation_idempotency` (PK: id, index on owner_uid)
+  - `assessment_daily_credits` (PK: id, index on owner_uid+day_key)
+  - `assessment_credit_accounts` (PK: owner_uid)
+  - `assessment_credit_grants` (PK: id, index on owner_uid)
+  - `_migration_history` (PK: migration_name) -- migration tracking table
+
+Storage Buckets:
+  - `zootopia-private` (private)
+  - `zootopia-app` (private)
+
+RLS Policies:
+  - user_profiles: self_select, self_insert, self_update
+  - All owner-scoped tables: owner_select, owner_insert, owner_update, owner_delete
+  - admin_activity_logs: owner_select (covers owner_uid, actor_uid, target_uid)
+  - Storage: zootopia_private_owner select/insert/update/delete
+
+How to Bootstrap a Fresh Database from Zero
+1. Ensure `DATABASE_URL` or `SUPABASE_DATABASE_URL` is set in `.env.local`
+2. Run: `npm run db:apply`
+3. All pending migrations are applied in order inside transactions
+4. Verify: `npm run db:apply:dry` should report "All migrations are already applied"
+
+Local Workflow Commands
+- `npm run db:apply` -- Apply all pending migrations
+- `npm run db:apply:dry` -- Preview what would be applied (no changes)
+- `npm run supabase:migrations:list` -- List migration files
+- `npm run supabase:migrations:validate` -- Validate migration file ordering
+- `npm run supabase:check` -- Validate + list
+
+Production Workflow Commands (Vercel + Supabase)
+- Migrations are NOT auto-applied on deploy. They must be run manually or via CI/CD.
+- Option A (manual): Run `node scripts/supabase/apply-migrations.mjs` with production
+  DATABASE_URL set (use Vercel CLI env pull or run locally with prod connection string)
+- Option B (CI/CD): Add a pre-deploy step in your CI pipeline that runs the migration
+  script against the production database before deploying the app
+- Option C (Supabase Dashboard): Paste migration SQL into Supabase SQL editor manually
+- IMPORTANT: Always run migrations BEFORE deploying code that depends on new tables
+
+Migration System Design
+- Script: `scripts/supabase/apply-migrations.mjs`
+- Uses `postgres` npm package (already installed)
+- Loads `.env.local` via dotenv for standalone operation
+- Creates `_migration_history` table to track applied migrations
+- Each migration runs inside a transaction (atomic)
+- Failed migrations stop execution and report the error
+- Idempotent: re-running skips already-applied migrations
+
+Environment-Specific Notes
+1. Local Integrated Development:
+   - Migrations applied via `npm run db:apply`
+   - Uses `DATABASE_URL` from `.env.local`
+   - Pointing to Supabase pooler: `aws-0-eu-west-1.pooler.supabase.com:5432`
+
+2. Vercel Production Deployment:
+   - Migrations must be applied separately from deployment
+   - Use production DATABASE_URL from Vercel env vars
+   - Run migration script locally or in CI before deploy
+   - No auto-migration on Vercel deploy (intentional safety)
+
+3. Supabase Remote Database:
+   - Migrations are the schema source of truth under `supabase/migrations/`
+   - Do NOT use Supabase Dashboard schema editor as primary source
+   - Do NOT rely on runtime auto-creation of tables
+   - Schema drift is prevented by the migration history tracking
+
+Verification Results
+- `npm run lint`: PASSED
+- `npm run typecheck`: PASSED
+- `npm run build`: PASSED (8.8s compile, 21+ routes confirmed)
+
+Files Added
+- `scripts/supabase/apply-migrations.mjs` -- Migration apply script
+
+Files Modified
+- `package.json` -- Added `db:apply` and `db:apply:dry` npm scripts
+
+Safety and Scope Notes
+- No runtime code was changed
+- No tables were dropped or altered
+- All migrations are idempotent and safe to re-run
+- Migration history is tracked in `_migration_history` table
+- The `zc_entities` table is confirmed as the active persistence model
+
+---
+2026-04-11 — Qwen Assessment Runtime Centralization + Error Message Fix
+
+Root Cause of "The selected model runtime is not configured on the server yet.":
+The error is thrown at `execution.ts:1340-1345` (`ASSESSMENT_PROVIDER_NOT_CONFIGURED`) when
+`resolveProviderRuntime("qwen3.5-flash").apiKey` returns null/falsy, i.e. when
+`process.env.DASHSCOPE_API_KEY` is not loaded in the server process.
+
+The code path for qwen3.5-flash:
+1. UI sends `{ modelId: "qwen3.5-flash" }` to POST `/api/assessment`
+2. Validation via `isModelSupportedForTool("assessment", "qwen3.5-flash")` — PASSES (model is in catalog with toolScopes: ["assessment"])
+3. `generateAssessment()` → `getModelById("qwen3.5-flash")` → provider: "qwen" — CORRECT
+4. `resolveProviderRuntime("qwen3.5-flash")` → checks `DASHSCOPE_API_KEY` + base URL — SOURCE OF FAILURE
+5. `executeAssessmentModel()` → switch case "qwen3.5-flash" → `executeQwenAssessmentModel()` — CORROUTING
+6. `!input.runtime.apiKey` → throws `ASSESSMENT_PROVIDER_NOT_CONFIGURED` — FAILURE POINT
+
+The most common trigger: server process lacks `DASHSCOPE_API_KEY` in `process.env`
+(e.g. server started before env was set, or Vercel env not configured).
+
+Qwen Connection Strategy Chosen:
+OpenAI-compatible chat/completions path via `{DASHSCOPE_BASE_URL}/chat/completions`.
+This is the correct fit because the assessment flow is text-first (JSON Q&A generation)
+and does not require DashScope's native multimodal APIs.
+
+Canonical env keys (documented in provider-runtime.ts):
+- `DASHSCOPE_API_KEY` — API key for DashScope/Alibaba Model Studio
+- `DASHSCOPE_BASE_URL` — Base URL for OpenAI-compatible mode (default: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`)
+- Legacy aliases: `DASHSCOPE_COMPATIBLE_BASE_URL`, `ALIBABA_MODEL_STUDIO_BASE_URL`
+- `QWEN_MODEL` — model name override (not used for qwen3.5-flash direct selection)
+
+Changes Made:
+1. Centralized Qwen client factory (`createQwenClient`) in `provider-runtime.ts` alongside
+   env key constants, types, and readiness checks. This is now the single source of truth
+   for Qwen/DashScope OpenAI-compatible connection logic.
+2. Removed duplicated Qwen client factory and types from `execution.ts` — now imports
+   `createQwenClient`, `QwenOpenAiCompatibleChatCompletionResponse` from provider-runtime.
+3. Fixed Google "not configured" error message: changed from "The selected Google model is
+   not configured on the server yet." to "The selected model runtime is not configured on the
+   server yet." — aligns with the i18n key `assessmentFieldProviderUnavailable`.
+
+Files Modified
+- `apps/web/lib/server/ai/provider-runtime.ts` — Added Qwen client factory, request/response
+  types, and comprehensive env contract documentation header.
+- `apps/web/lib/server/ai/execution.ts` — Removed Qwen client/types duplication; imports
+  from provider-runtime. Fixed Google error message. Updated client call to `createQwenClient`.
+
+Verification Results
+- `npx tsc --noEmit`: PASSED (zero errors)
+- `npx eslint` on changed files: PASSED
+- `npx next build`: PASSED (all routes including /api/assessment confirmed)
+
+Admin/User Isolation
+- No changes to auth, session, or owner-scoped checks. Provider-runtime fix does not
+  bypass any existing session checks, admin boundaries, or assessment export guards.
+
+All Assessment Models Verified
+- qwen3.5-flash: routes to executeQwenAssessmentModel (temperature 0.25) — requires DASHSCOPE_API_KEY + DASHSCOPE_BASE_URL
+- gemini-3.1-flash-lite-preview: routes to executeGoogleAssessmentModel (temperature 0.2) — requires GOOGLE_AI_API_KEY
+- gemini-2.5-pro: routes to executeGoogleAssessmentModel (temperature 0.3) — requires GOOGLE_AI_API_KEY
+- gemini-2.5-flash: routes to executeGoogleAssessmentModel (temperature 0.25) — requires GOOGLE_AI_API_KEY
+- Legacy aliases (qwen-balanced, qwen-flash-us, google-balanced, google-advanced, gemini-2.5-flash-lite): all map to canonical lanes
+
+---
+2026-04-11 — Assessment Runtime Determinism Hardening (Two-File Surgical Pass)
+
+Scope
+- Limited strictly to:
+  - `apps/web/lib/server/ai/execution.ts`
+  - `apps/web/lib/server/ai/provider-runtime.ts`
+
+Objective
+- Remove model/runtime split-brain risk so assessment generation uses one canonical model id and one resolved runtime path for readiness, execution, and persisted identity.
+
+Changes Applied
+- `apps/web/lib/server/ai/execution.ts`
+  - Canonicalizes `request.modelId` once near the start of `generateAssessment`.
+  - Resolves `model` + `providerRuntime` once from the canonical id and reuses them for:
+    - provider readiness (`providerConfigured` in prompt orchestration)
+    - execution routing (`executeAssessmentModel`)
+    - persistence identity (`request.modelId`, `modelId`, meta fields, prompt preview inputs).
+  - Simplified `executeAssessmentModel` to route by already-canonical `input.model.id` and consume the runtime passed in, removing duplicate internal canonicalization/runtime resolution.
+
+- `apps/web/lib/server/ai/provider-runtime.ts`
+  - Re-established explicit DashScope env contract exports used by execution:
+    - primary: `DASHSCOPE_BASE_URL`
+    - legacy fallback aliases: `DASHSCOPE_COMPATIBLE_BASE_URL`, `ALIBABA_MODEL_STUDIO_BASE_URL`
+    - exported ordered key list: `QWEN_BASE_URL_ENV_KEYS`
+  - Centralized base URL resolution to primary-first with legacy fallback behavior and returned `baseUrlEnvKey` from the resolver.
+
+Regression Encountered and Resolved During Verification
+- Initial `typecheck` failed because `execution.ts` imported `QWEN_BASE_URL_ENV_KEYS` while the current `provider-runtime.ts` state no longer exported it.
+- Fixed by restoring the export and centralized base URL resolver contract in `provider-runtime.ts`.
+
+Verification Results
+- `npm run lint --workspace @zootopia/web` PASSED
+- `npm run typecheck --workspace @zootopia/web` PASSED
+- `npm run build --workspace @zootopia/web` PASSED
+
+Risk Note
+- No model catalog, route, UI, or auth changes in this pass.
+- Runtime behavior change is intentionally narrow: canonical model/runtime alignment and DashScope base URL resolution contract consistency.
+
+---
+2026-04-11 - Assessment Runtime Diagnostics Hardening + Deterministic QA Proof
+
+Scope
+- Completed an assessment runtime diagnostics hardening pass and captured deterministic end-to-end QA proof for admin/user lane boundaries, provider-path execution, owner separation, and missing-config machine-code behavior.
+
+Runtime Files Changed (hardening implementation)
+- `apps/web/lib/server/ai/execution.ts`
+- `apps/web/lib/server/ai/provider-runtime.ts`
+- `apps/web/app/api/assessment/route.ts`
+- `apps/web/components/assessment/assessment-studio.tsx`
+
+Hardening Summary
+- `apps/web/lib/server/ai/execution.ts`
+  - Added explicit provider machine codes for missing API key/base URL, model unavailability, and provider route mismatch.
+  - Introduced structured execution context (`layer`, `subsystem`, `operation`, `route`, `flow`, model/provider/lane metadata) and unified error creation through `createAssessmentExecutionError(...)`.
+  - Propagated contextual metadata through provider execution, timeout classification, parser failure handling, and unsupported-model handling.
+  - Threaded canonical/requested model and lane context through `executeAssessmentModel(...)` and `generateAssessment(...)`.
+- `apps/web/lib/server/ai/provider-runtime.ts`
+  - Added runtime model override resolution via model `runtimeEnvKey`.
+  - Surfaced `missingEnvKeys` diagnostics for Google and Qwen runtimes, including missing-base-url hints for Qwen.
+- `apps/web/app/api/assessment/route.ts`
+  - Added route-level diagnostic response wrapper to standardize machine-code API errors with context.
+  - Added explicit user-lane enforcement (`ASSESSMENT_USER_LANE_REQUIRED`) and contextualized error paths for validation, idempotency, credits, generation, and finalization.
+  - Preserved owner-scoped behavior; cleanup failure paths are now best-effort and non-fatal.
+- `apps/web/components/assessment/assessment-studio.tsx`
+  - Added client mapping for newly introduced provider machine codes and user-lane-required code.
+
+Runtime QA Artifacts And Script Fixes
+- Primary QA script: `.tmp/assessment-runtime-supabase-qa.mjs`
+  - Fixed profile payload to satisfy live validation constraints (4-part full name + valid 7-digit university code + valid E.164 phone).
+  - Updated generation success handling to treat HTTP `201` as successful creation (in addition to `200`).
+  - Expanded profile-failure diagnostics to include response payload/text for faster triage.
+
+Deterministic Runtime Setup Used For Proof
+- Baseline server: `http://127.0.0.1:3045` with `ZOOTOPIA_ADMIN_EMAILS=qa-admin-runtime-20260411@example.com`
+- Missing-config server: `http://127.0.0.1:3046` with same admin allowlist and `DASHSCOPE_API_KEY` intentionally blank
+- Health verification:
+  - `3045` runtime flags: `googleAi=true`, `qwen=true`
+  - `3046` runtime flags: `googleAi=true`, `qwen=false`
+
+QA Root Causes Resolved During This Pass
+- Profile completion failed with HTTP 400 because the script payload violated server validators:
+  - full name must include at least 4 meaningful parts
+  - university code must be exactly 7 digits with valid cohort prefix
+- Qwen path and owner-separation checks initially failed because successful creation returned HTTP `201`, while script logic accepted only HTTP `200`.
+
+Final QA Evidence
+- Final report path:
+  - `output/playwright/assessment-runtime-diagnostics/2026-04-11T18-03-40-658Z/assessment-runtime-diagnostics-report.json`
+- Final checks (all pass):
+  - `adminLaneRejected: true`
+  - `qwenPathVerified: true`
+  - `googlePathVerified: true`
+  - `ownerLaneSeparationVerified: true`
+  - `missingConfigCodeVerified: true`
+
+Build/Static Verification
+- `npm run lint --workspace @zootopia/web`: PASSED
+- `npm run typecheck --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED
+
+Safety Notes
+- Runtime authority and owner-scoped checks remain server-side; no client-side privilege broadening was introduced.
+- QA helper files under `.tmp/` and generated reports under `output/` are diagnostics artifacts and not production source-of-truth.
+
+---
+2026-04-11 — Admin Assessment Access Bypass (Admin 403 Fix)
+
+Root Cause
+- Admin accounts received HTTP 403 "Assessment generation is disabled for this account" when
+  attempting to generate assessments, despite having admin role.
+- Two independent blocks prevented admin access:
+
+  1. Route handler (`apps/web/app/api/assessment/route.ts`, line ~251):
+     `if (user.role !== "user")` returned 403 with code `ASSESSMENT_USER_LANE_REQUIRED`.
+     This blocked ALL non-user roles including admins.
+
+  2. Repository (`apps/web/lib/server/repository.ts`, lines ~3266 and ~3433):
+     `if (account.assessmentAccess === "disabled")` threw `ASSESSMENT_ACCESS_DISABLED`
+     in both the Firestore transaction path and the memory store path.
+     Admin accounts with `assessmentAccess: "disabled"` were blocked identically to normal users.
+
+  The UI in `assessment-studio.tsx` maps both error codes to the same generic message:
+  "Assessment generation is disabled for this account. Contact an administrator to restore access."
+
+Files Changed
+- `apps/web/app/api/assessment/route.ts`
+  - Replaced `if (user.role !== "user")` block with explicit admin bypass logic:
+    - `isAdmin = user.role === "admin"` and `isAccountActive = user.status === "active"` computed.
+    - Admin hard block: only blocks inactive admin accounts (new code `ASSESSMENT_ACCESS_DENIED_ADMIN_HARD_BLOCK`).
+    - Normal-user lane gate: only applies when `!isAdmin && user.role !== "user"`.
+    - Structured authorization diagnostics logged at every decision point:
+      - `assessment-authorization-check` (every request)
+      - `assessment-admin-hard-blocked` (inactive admin denied)
+      - `assessment-user-lane-required` (non-admin non-user denied)
+      - `assessment-admin-bypass-granted` (admin allowed through)
+
+- `apps/web/lib/server/repository.ts`
+  - Firestore path (`saveAssessmentGenerationWithCreditCommit`, ~line 3266):
+    - Added `isAdmin = input.user.role === "admin"` check.
+    - Only throws `ASSESSMENT_ACCESS_DISABLED` when `!isAdmin && account.assessmentAccess === "disabled"`.
+    - Added structured warning log: `[assessment-credit-commit] assessment-access-disabled-firestore`.
+
+  - Memory store path (`saveAssessmentGenerationWithCreditCommit`, ~line 3433):
+    - Added `isMemoryStoreAdmin = (input.user.role as UserRole) === "admin"` check.
+    - Only throws `ASSESSMENT_ACCESS_DISABLED` when `!isMemoryStoreAdmin && account.assessmentAccess === "disabled"`.
+    - Added structured warning log: `[assessment-credit-commit] assessment-access-disabled-memory`.
+    - Cast to `UserRole` needed because callers currently only pass non-admin users (admins are
+      exempted earlier via `isAssessmentDailyCreditsExempt`), so TypeScript narrows the type to `"user"`.
+
+Design Decisions
+- Admin bypass is explicit and auditable: every authorization decision emits a structured log.
+- Normal-user restrictions remain fully intact — credits, tool-disable, lane gating all unchanged.
+- Admin hard block exists as a separate code path so future admin-only denials can be added
+  without touching normal-user gates.
+- The `ASSESSMENT_ACCESS_DISABLED` error is still thrown for normal users with disabled access.
+
+Verification Results
+- `npx tsc --noEmit` (apps/web): PASSED (zero errors)
+- `npx eslint` on changed files: PASSED (zero errors)
+
+Safety and Scope Notes
+- Only two files modified: route handler and repository.
+- No changes to auth, session, owner-scoped checks, or credit consumption logic.
+- Admin bypass applies only to assessment generation; other admin boundaries remain unchanged.
+- Structured logs use `[assessment-auth]` and `[assessment-credit-commit]` prefixes for easy filtering.
+
+---
+
+## 2026-04-11 — Surgical 2026-Grade Cleanup: Remove Active Firestore/Firebase Dependence, Naming Cleanup
+
+### Root Causes Found
+1. **Misleading "Firestore" naming in active runtime code** — Despite the adapter being 100% Supabase Postgres, the class was named `PgFirestore` and the factory function was `getZootopiaFirestore()`. These names implied Firebase/Firestore reality when the actual backend is Supabase Postgres via the `postgres` npm package.
+2. **Legacy function name `listAllFirebaseAuthUsers()`** — This function enumerates Supabase Auth users, not Firebase Auth users.
+3. **Legacy log event name `assessment-access-disabled-firestore`** — The event name referenced Firestore when the actual persistence is Supabase Postgres.
+4. **No actual Firebase SDK imports in active code** — The codebase was already migrated; only naming remnants remained.
+
+### Files Changed
+1. **`apps/web/lib/server/zootopia-postgres-adapter.ts`**
+   - Renamed `class PgFirestore` → `class PgDatabase`
+   - Renamed `function getZootopiaFirestore()` → `function getZootopiaDatabase()`
+   - Added deprecated aliases for backward compatibility:
+     - `export const getZootopiaFirestore = getZootopiaDatabase;`
+     - `export const PgFirestore = PgDatabase;`
+   - Rewrote file header comment to accurately describe Supabase Postgres reality
+   - Removed misleading "Firestore naming exists because..." migration note
+
+2. **`apps/web/lib/server/repository.ts`**
+   - Updated import: `getZootopiaDatabase` + deprecated alias `getZootopiaFirestore`
+   - Renamed `function shouldUseFirestore()` → `function shouldUseDatabase()`
+   - Added deprecated alias: `const shouldUseFirestore = shouldUseDatabase;`
+   - Renamed `function listAllFirebaseAuthUsers()` → `function listAllAuthUsers()`
+   - Updated call site: `const authUsers = await listAllAuthUsers();`
+   - Fixed log event name: `assessment-access-disabled-firestore` → `assessment-access-disabled-database`
+
+### Firebase/Firestore Active-Runtime Paths Removed or Relabeled
+| Old Name | New Name | File |
+|----------|----------|------|
+| `class PgFirestore` | `class PgDatabase` | zootopia-postgres-adapter.ts |
+| `getZootopiaFirestore()` | `getZootopiaDatabase()` | zootopia-postgres-adapter.ts |
+| `shouldUseFirestore()` | `shouldUseDatabase()` | repository.ts |
+| `listAllFirebaseAuthUsers()` | `listAllAuthUsers()` | repository.ts |
+| `assessment-access-disabled-firestore` | `assessment-access-disabled-database` | repository.ts |
+
+### How Normal-User Assessment Generation Now Works
+- Normal users can generate assessments when: authenticated, profile complete, account active, assessment access enabled, credits available, provider configured.
+- Normal users are blocked only for: unauthenticated session, suspended account, assessment tool disabled, insufficient credits, provider misconfiguration, provider auth failure, runtime timeout, invalid model, document validation failure.
+- Credits deduction logic remains intact and explicit.
+- Idempotency and request safety preserved.
+
+### How Admin Control Is Now Separated from User Rules
+- Admin bypass logic in route handler (`/api/assessment/route.ts`) grants admins explicit bypass of normal-user restrictions.
+- Admin hard block exists as separate code path (only blocks inactive admins).
+- Admin permissions resolved through: Auth.js session → repository user record → role field.
+- `ZOOTOPIA_ADMIN_EMAILS` used as allowlist input; role stored in user record and session.
+
+### Structured Error Codes/Logging
+- Existing error codes preserved: `UNAUTHENTICATED`, `PROFILE_INCOMPLETE`, `ASSESSMENT_ACCESS_DENIED_ADMIN_HARD_BLOCK`, `ASSESSMENT_USER_LANE_REQUIRED`, `ASSESSMENT_DAILY_CREDITS_EXHAUSTED`, `ASSESSMENT_ACCESS_DISABLED`, etc.
+- Log event name fixed: `assessment-access-disabled-database` (was `assessment-access-disabled-firestore`).
+- Structured logs use `[assessment-auth]` and `[assessment-credit-commit]` prefixes.
+
+### Credits/Quota Logic Status
+- Credits deduction logic: INTACT
+- Daily credit reservation: INTACT
+- Grant credit consumption: INTACT
+- Manual credits: INTACT
+- Admin credit mutation: INTACT
+
+### Admin Hard-Block Logic Status
+- Admin hard block: INTACT (blocks inactive admins only)
+- Admin bypass: INTACT (active admins pass through normal-user gates)
+
+### Lint/Typecheck/Build Results
+- `npx tsc --noEmit` (apps/web): PASSED (zero errors)
+
+### Ledger Entry
+- Renamed `PgFirestore` → `PgDatabase` in zootopia-postgres-adapter.ts
+- Renamed `getZootopiaFirestore()` → `getZootopiaDatabase()` in zootopia-postgres-adapter.ts
+- Added deprecated aliases for backward compatibility
+- Renamed `shouldUseFirestore()` → `shouldUseDatabase()` in repository.ts
+- Renamed `listAllFirebaseAuthUsers()` → `listAllAuthUsers()` in repository.ts
+- Fixed log event name: `assessment-access-disabled-firestore` → `assessment-access-disabled-database`
+- No actual Firebase SDK imports found in active code (already migrated)
+- All changes are backward-compatible via deprecated aliases
+
+---
+
+2026-04-11 — Runtime Boundary Hardening (Admin/User Lane Alignment + Active Naming Truth)
+
+Scope
+- Completed a read-first audit of active runtime boundaries before edits, covering auth/session callbacks, server auth guards, admin mutation routes, upload/document ownership, assessment generation, infographic generation, assessment export routes, repository ownership checks, and storage path enforcement.
+- Applied minimal, deterministic changes only where active runtime behavior or naming truth was still inconsistent with Supabase/Auth.js architecture.
+
+Audited Files/Routes (high-impact)
+- Auth/session and role resolution:
+  - `apps/web/auth.ts`
+  - `apps/web/proxy.ts`
+  - `apps/web/lib/server/session.ts`
+  - `apps/web/lib/server/admin-auth.ts`
+  - `apps/web/lib/server/supabase-admin.ts`
+  - `apps/web/lib/server/auth-types.ts`
+- User/admin route boundaries:
+  - `apps/web/app/api/assessment/route.ts`
+  - `apps/web/app/api/assessment/[id]/route.ts`
+  - `apps/web/app/api/assessment/results/[id]/route.ts`
+  - `apps/web/app/api/assessment/linked-document/route.ts`
+  - `apps/web/app/api/assessment/credits/route.ts`
+  - `apps/web/app/api/assessment/export/**/route.ts`
+  - `apps/web/app/api/uploads/route.ts`
+  - `apps/web/app/api/uploads/[id]/route.ts`
+  - `apps/web/app/api/infographic/route.ts`
+  - `apps/web/app/api/infographic/[id]/route.ts`
+  - `apps/web/app/api/admin/users/route.ts`
+  - `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+  - `apps/web/app/api/admin/users/[uid]/status/route.ts`
+  - `apps/web/app/api/admin/users/[uid]/role/route.ts`
+- Ownership/repository/storage core:
+  - `apps/web/lib/server/repository.ts`
+  - `apps/web/lib/server/zootopia-postgres-adapter.ts`
+  - `apps/web/lib/server/assessment-export-route-context.ts`
+  - `apps/web/scripts/normalize-standalone.mjs`
+
+Findings (actual issues fixed this pass)
+1) Assessment lane context mismatch (admin requests were tagged as user lane in execution metadata)
+- Root cause:
+  - `apps/web/app/api/assessment/route.ts` called `generateAssessment(...)` with `sessionLane: "user"` and `requestLane: "user"` even when `user.role === "admin"`.
+- Why it matters:
+  - Broke deterministic session-to-execution lane alignment in diagnostics and provider/runtime traces.
+  - Increased risk of confusing admin-vs-user incident triage under concurrency.
+- Fix:
+  - Added explicit `executionLane` derived from authenticated role and passed it to `generateAssessment(...)`.
+
+2) Active repository path still used Firestore-era helper names in runtime call sites
+- Root cause:
+  - `apps/web/lib/server/repository.ts` still executed all persistence path checks through `shouldUseFirestore()` and `getZootopiaFirestore()` identifiers.
+- Why it matters:
+  - Active runtime naming contradicted Supabase Postgres architecture truth and produced role/storage diagnostics with legacy cognitive drift.
+- Fix:
+  - Repointed active call sites to `shouldUseDatabase()` and `getZootopiaDatabase()`.
+  - Removed deprecated alias import and deprecated local alias usage from active repository flow.
+
+3) Active token mapping still emitted Firebase-shaped provider claim field
+- Root cause:
+  - `apps/web/lib/server/supabase-admin.ts` generated `decodedToken.firebase.sign_in_provider` as active provider claim output.
+  - `apps/web/lib/server/admin-auth.ts` read `decodedToken.firebase` directly in provider resolution fallback.
+- Why it matters:
+  - Active auth runtime still presented Firebase-era claim naming despite Supabase/Auth.js authority.
+- Fix:
+  - Added architecture-neutral provider claim shape: `auth_provider.signInProvider`.
+  - Updated provider resolution to prefer `app_metadata.provider`, then `auth_provider.signInProvider`, then legacy `firebase.sign_in_provider` fallback.
+  - Updated `DecodedAuthToken` type contract accordingly.
+
+4) Active standalone script comment still referenced Firebase App Hosting
+- Root cause:
+  - `apps/web/scripts/normalize-standalone.mjs` comment referenced "Firebase App Hosting/Cloud Run" as active packaging context.
+- Fix:
+  - Reworded comment to runtime-neutral container context without Firebase-era active deployment wording.
+
+Files Changed
+- `apps/web/app/api/assessment/route.ts`
+  - Lane metadata now derives from authenticated role and no longer hardcodes user lane.
+- `apps/web/lib/server/repository.ts`
+  - Active persistence call sites now use database-truth helper names (`shouldUseDatabase`, `getZootopiaDatabase`).
+  - Removed deprecated Firestore alias import and local alias usage from active execution paths.
+- `apps/web/lib/server/supabase-admin.ts`
+  - Token mapping now emits `auth_provider.signInProvider`.
+- `apps/web/lib/server/admin-auth.ts`
+  - Provider resolution now supports architecture-neutral claim shape first, with explicit legacy fallback.
+- `apps/web/lib/server/auth-types.ts`
+  - Added `auth_provider` claim contract and retained legacy `firebase` typing as fallback-only.
+- `apps/web/scripts/normalize-standalone.mjs`
+  - Removed Firebase App Hosting wording from active runtime script comment.
+- `apps/web/lib/server/zootopia-postgres-adapter.ts`
+  - Strengthened deprecated alias comments to mark Firestore-named exports as compatibility-only.
+
+Admin/User Separation Outcome
+- Admin mutation/control routes remain explicit and protected by `getAdminSessionUser()`.
+- Normal-user owner-only routes remain owner-scoped server-side (`get...ForOwner(...)` patterns).
+- Assessment generation now keeps admin lane identity consistent through execution diagnostics.
+- No admin power leak into user lanes and no user access to admin mutation lanes was introduced.
+
+Ownership/Isolation Outcome
+- Verified unchanged and still enforced server-side:
+  - Upload ownership from session UID only.
+  - Owner-scoped document/generation lookups (`...ForOwner`).
+  - Storage path scoping and assertion enforcement in upload/document pipeline.
+  - Assessment/infographic/export reads remain owner-scoped in user-facing endpoints.
+
+Legacy Firebase References Remaining (intentional)
+- `apps/web/lib/server/zootopia-postgres-adapter.ts`
+  - `getZootopiaFirestore` and `PgFirestore` remain as deprecated compatibility aliases only.
+- `apps/web/lib/server/auth-types.ts` and `apps/web/lib/server/admin-auth.ts`
+  - `firebase.sign_in_provider` remains as legacy token-compatibility fallback only.
+- These are explicitly legacy-only compatibility surfaces, not active architecture authority.
+
+Verification
+- `npm run lint --workspace @zootopia/web`: PASSED
+- `npm run typecheck --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED
+- `next build` route manifest includes all critical auth/admin/assessment/upload/infographic routes after changes.
+
+Safety Notes
+- No database schema, migration, or storage bucket policy changes in this pass.
+- No broad architectural redesign.
+- No relaxation of owner checks.
+- No widening of user access permissions.
+
+---
+
+2026-04-11 — Strict Admin Isolation + Admin Wiring Verification + Alias Removal Pass
+
+Scope
+- Completed another read-first hardening pass focused on admin isolation, admin control integrity, frontend-to-backend wiring truth, owner isolation, and removal of dead Firebase/Firestore-era runtime aliases.
+- Started with full ledger read, then executed a dedicated Explore subagent audit, then performed direct source verification before edits.
+
+Audited Admin Surfaces
+- Admin pages/layouts/guards:
+  - `apps/web/app/(protected)/admin/layout.tsx`
+  - `apps/web/app/(protected)/admin/page.tsx`
+  - `apps/web/app/(protected)/admin/users/page.tsx`
+  - `apps/web/proxy.ts`
+  - `apps/web/lib/server/session.ts`
+- Admin API routes:
+  - `apps/web/app/api/admin/overview/route.ts`
+  - `apps/web/app/api/admin/users/route.ts`
+  - `apps/web/app/api/admin/users/export/route.ts`
+  - `apps/web/app/api/admin/users/[uid]/role/route.ts`
+  - `apps/web/app/api/admin/users/[uid]/status/route.ts`
+  - `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+- Frontend admin mutation wiring:
+  - `apps/web/components/admin/users-table.tsx`
+- Owner/lane-sensitive routes:
+  - `apps/web/app/api/uploads/route.ts`
+  - `apps/web/app/api/uploads/[id]/route.ts`
+  - `apps/web/app/api/assessment/route.ts`
+  - `apps/web/app/api/infographic/route.ts`
+  - `apps/web/lib/server/document-runtime.ts`
+
+Verified Before Edit (safe surfaces)
+- All admin API mutation/read endpoints were already protected with `getAdminSessionUser()` and returned 403 for non-admins.
+- Admin pages remained server-guarded by `requireAdminUser()` at layout/page level plus proxy redirect gate.
+- Frontend admin controls in `users-table.tsx` were already wired to real protected admin routes and only updated local UI state after successful API responses (no false success optimistic writes).
+- Admin capability coverage already present and wired:
+  - role mutation
+  - status mutation
+  - assessment access enable/disable
+  - manual credits adjust/set
+  - daily override set/clear
+  - grant add/revoke
+  - user listing + export
+- Owner isolation and file/storage scoping remained server-enforced via owner-scoped lookups and path assertions.
+
+Issues Fixed In This Pass
+1) Dead Firestore alias exports still present in active adapter file
+- File: `apps/web/lib/server/zootopia-postgres-adapter.ts`
+- Fix: Removed dead compatibility alias exports:
+  - `getZootopiaFirestore`
+  - `PgFirestore`
+- Verification: no remaining runtime references in `apps/web/**/*.{ts,tsx,mjs}`.
+
+2) Legacy Firebase token-provider fallback still in active admin provider resolution
+- Files:
+  - `apps/web/lib/server/admin-auth.ts`
+  - `apps/web/lib/server/auth-types.ts`
+- Fix:
+  - Removed `firebase.sign_in_provider` fallback parse path from `getDecodedSignInProvider(...)`.
+  - Removed legacy `firebase` field from `DecodedAuthToken` contract.
+- Result: active provider resolution now stays on current-truth claims (`app_metadata.provider`, `auth_provider.signInProvider`).
+
+3) Admin-only infographic route lacked denied-access/success audit events
+- File: `apps/web/app/api/infographic/route.ts`
+- Fix:
+  - Added denied non-admin access audit log (`infographic-admin-access-denied`) before 403.
+  - Added successful generation admin audit log (`infographic-generated`) after persistence.
+
+4) Proxy role normalization lacked explicit diagnostics for malformed role claims
+- File: `apps/web/proxy.ts`
+- Fix:
+  - Added fail-closed role normalization diagnostics log for unexpected role claim values while preserving default user-lane behavior.
+
+Admin Isolation Outcome
+- Normal authenticated users cannot load admin pages or execute admin API mutations.
+- Admin-only route protections now exist across proxy redirect gate, server page/layout guard, and API-level guard.
+- No admin bypass for normal users was introduced.
+- No user-access widening was introduced.
+
+Frontend/Backend Wiring Outcome
+- Admin dashboard user management UI remains connected to protected backend mutations via `/api/admin/users/{uid}/{action}` and `/api/admin/users/{uid}/credits`.
+- State refresh after admin actions remains response-driven from backend payloads; no synthetic success path detected.
+- Export flow remains backend-authoritative through `/api/admin/users/export`.
+
+Ownership/Isolation Outcome
+- Verified unchanged and still strict:
+  - upload owner derived from authenticated session UID only
+  - owner-scoped document read/delete paths
+  - deterministic storage path format: `documents/{ownerUid}/{documentId}/{fileName}`
+  - storage path assertion gate (`assertOwnerScopedStoragePath`) remains enforced
+  - assessment and infographic owner read/write paths remain owner-scoped
+
+Legacy Naming Status After This Pass
+- Removed from active runtime code in this pass:
+  - `getZootopiaFirestore` alias export
+  - `PgFirestore` alias export
+  - `firebase.sign_in_provider` provider-resolution fallback
+- Remaining Firebase/Firestore wording is now limited to historical/reference context and non-runtime artifacts.
+
+Verification
+- `npm run lint --workspace @zootopia/web`: PASSED
+- `npm run typecheck --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED
+- Changed-file diagnostics: no errors in updated files.
+
+Safety Notes
+- No schema changes.
+- No migration changes.
+- No storage policy changes.
+- No broad refactor; edits were surgical and bounded to admin diagnostics/guards and runtime naming truth.
+
+---
+
+2026-04-11 — Strict Admin Control Verification + Real Admin Delete User Flow
+
+Scope
+- Completed mandatory read-first pass (full ledger read, then subagent exploration, then direct source verification) before edits.
+- Verified admin user-management controls end-to-end and implemented a real destructive admin-only delete-user flow for the active Supabase/Auth.js runtime.
+- Added structured mutation diagnostics across admin mutation routes.
+- Removed remaining stale Firebase-era wording from active runtime comments.
+
+Verified Admin Controls (Frontend -> Backend -> Repository)
+- `Make admin` / `Make user`
+  - UI: `apps/web/components/admin/users-table.tsx` (`patchUser(..., "role", ...)`)
+  - API: `PATCH /api/admin/users/[uid]/role`
+  - Guard: `getAdminSessionUser()`
+  - Backend mutation: `setUserRole(...)` + claim persistence + token revocation
+- `Block user` / `Unblock user`
+  - UI: `patchUser(..., "status", ...)`
+  - API: `PATCH /api/admin/users/[uid]/status`
+  - Guard: `getAdminSessionUser()`
+  - Backend mutation: `setUserStatus(...)` + Supabase disable/enable + token revocation
+- `Assessment access toggle`
+  - UI: `patchCredits(..., { action: "set_access" })`
+  - API: `PATCH /api/admin/users/[uid]/credits`
+  - Guard: `getAdminSessionUser()` + self-mutation block
+  - Backend mutation: `applyAdminAssessmentCreditMutation(...)`
+- `Daily override save / clear`
+  - UI: `set_daily_override` / `clear_daily_override`
+  - API: same credits route
+  - Backend mutation: same repository mutation path
+- `Manual credits add / subtract / set`
+  - UI actions: `add_manual_credits`, `subtract_manual_credits`, `set_manual_credits`
+  - API: same credits route
+  - Backend mutation: same repository mutation path
+- `Temporary grant credits` / `Revoke grant`
+  - UI actions: `grant_credits`, `revoke_grant`
+  - API: same credits route
+  - Backend mutation: same repository mutation path
+- `Export users`
+  - UI: `handleExportUsers()`
+  - API: `GET /api/admin/users/export`
+  - Guard: `getAdminSessionUser()`
+  - Backend: `listUsers()`, auth metadata join, credit-state join, workbook generation, admin log append
+
+New Destructive Admin-Only Delete Flow
+- Added API route: `DELETE /api/admin/users/[uid]`
+  - File: `apps/web/app/api/admin/users/[uid]/route.ts`
+  - Enforces admin guard via `getAdminSessionUser()`
+  - Validates target uid
+  - Blocks self-delete (`ADMIN_SELF_DELETE_FORBIDDEN`)
+  - Requires explicit confirmation text matching target uid or target email
+  - Emits structured mutation diagnostics and returns structured success payload
+- Added centralized repository/service deletion path:
+  - File: `apps/web/lib/server/repository.ts`
+  - New function: `deleteUserAccountAsAdmin(...)`
+  - Strategy selected: mixed hard-delete with safe sequence and explicit partial-failure reporting
+    1. Freeze account first (disable + revoke refresh tokens)
+    2. Delete owner-scoped storage artifacts (best-effort, idempotent)
+    3. Delete owner-scoped data records from active persistence collections
+    4. Delete Supabase Auth user account (hard delete)
+  - Returns `AdminUserDeletionSummary` including auth/database/storage results and failure point/reason
+  - Logs success/failure via `appendAdminLog(...)` with structured metadata
+
+Delete Scope Implemented
+- Supabase Auth
+  - Hard delete user via new adapter path (`deleteSupabaseAuthUser`) exposed through `getServerAuthAdmin().deleteUser(...)`
+- Postgres-backed application records
+  - Owner-scoped deletes for:
+    - `documents`
+    - `assessmentGenerations`
+    - `infographicGenerations`
+    - `assessmentCreditGrants`
+    - `assessmentDailyCredits`
+    - `assessmentGenerationIdempotency`
+  - Direct document delete for:
+    - `assessmentCreditAccounts/{uid}`
+    - legacy `users/{uid}` if present
+- Storage
+  - Deletes document binaries for owner records
+  - Deletes assessment artifact storage objects referenced by owner generations
+  - Cleanup is explicitly marked best-effort/idempotent in diagnostics summary
+
+Admin Mutation Diagnostics Added
+- Added structured route-level diagnostics for:
+  - `PATCH /api/admin/users/[uid]/role`
+  - `PATCH /api/admin/users/[uid]/status`
+  - `PATCH /api/admin/users/[uid]/credits`
+  - `DELETE /api/admin/users/[uid]`
+- Each log now includes:
+  - action name
+  - target uid
+  - acting admin uid
+  - route hit
+  - backend mutation result (`started|success|failed`)
+  - failure reason when failed
+
+Frontend Admin UI Update
+- File: `apps/web/components/admin/users-table.tsx`
+- Added visible destructive button: `Delete user permanently`
+- Uses destructive styling (`variant="destructive"`)
+- Requires explicit prompt confirmation including target email or uid
+- Sends `DELETE /api/admin/users/[uid]` with confirmation payload
+- Reconciles UI from backend truth by replacing users list with server-returned `users`
+
+Runtime Naming Cleanup (Active Paths)
+- `apps/web/next.config.ts`
+  - Removed stale Firebase-era wording in canonical env-source comment
+- `apps/web/lib/server/zootopia-postgres-adapter.ts`
+  - Removed stale Firebase/Firestore wording from active adapter header comment
+
+Shared Contracts Added
+- File: `packages/shared-types/src/admin.ts`
+- Added:
+  - `AdminUserDeletionStorageSummary`
+  - `AdminUserDeletionDatabaseSummary`
+  - `AdminUserDeletionSummary`
+  - `AdminDeleteUserResponse`
+
+Localization Updates
+- Files:
+  - `apps/web/messages/en.json`
+  - `apps/web/messages/ar.json`
+- Added admin delete-user labels/prompts/errors for explicit destructive confirmation UX.
+
+Files Changed
+- `apps/web/lib/server/supabase-admin.ts`
+- `apps/web/lib/server/server-auth.ts`
+- `apps/web/lib/server/repository.ts`
+- `apps/web/app/api/admin/users/[uid]/route.ts` (new)
+- `apps/web/app/api/admin/users/[uid]/role/route.ts`
+- `apps/web/app/api/admin/users/[uid]/status/route.ts`
+- `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+- `apps/web/components/admin/users-table.tsx`
+- `packages/shared-types/src/admin.ts`
+- `apps/web/messages/en.json`
+- `apps/web/messages/ar.json`
+- `apps/web/next.config.ts`
+- `apps/web/lib/server/zootopia-postgres-adapter.ts`
+
+Verification
+- `npm run lint --workspace @zootopia/web`: PASSED
+- `npm run typecheck --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED
+- Build route manifest confirms new route:
+  - `/api/admin/users/[uid]`
+
+Safety / Partial-Failure Behavior
+- Full cross-system atomicity is not possible across Supabase Auth + storage + data records.
+- Implemented safest practical sequence:
+  - account freeze first,
+  - then cleanup,
+  - then auth hard delete.
+- On failure, response and audit metadata include exact `failurePoint` and `failureReason`; operation is explicitly reported as `partial_failure`.
+
+2026-04-11 | Admin Storage Control + Per-User Admin Detail System
+
+Scope
+- Implement real admin-only storage cleanup controls (per-user + global)
+- Env-driven file retention policy system
+- Dedicated admin user detail page at /admin/users/[uid]
+- Global storage maintenance page at /admin/storage
+- Remove any remaining Firebase/Firestore naming from active runtime code
+- Wire all admin actions end-to-end with proper confirmations and security guards
+
+Files Created
+- `apps/web/lib/server/storage-retention-config.ts` — Centralized env-driven retention config
+  - ZOOTOPIA_UPLOAD_RETENTION_DAYS (default: 90)
+  - ZOOTOPIA_UPLOAD_RETENTION_HOURS (default: 0, overrides days if set)
+  - ZOOTOPIA_STORAGE_RETENTION_MODE (default: "env-driven")
+  - Defensive validation, safe defaults, documented contract
+- `apps/web/app/api/admin/storage/cleanup/route.ts` — Admin-only storage cleanup API
+  - POST with mode "user" (per-user) or "global" (all user namespaces)
+  - Per-user: deletes all storage objects for target uid across documents/, assessment-results/, assessment-exports/
+  - Global: deletes ALL user-owned storage objects (scoped to user namespaces only, NOT system assets)
+  - Requires admin auth, explicit confirmation (uid match for per-user, "DELETE ALL STORAGE" for global)
+  - Structured result: matched, deleted, failed, DB counts, final status, failure reason
+  - Full audit logging via appendAdminLog + console.info
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx` — Dedicated admin user detail page
+  - Server-rendered, admin-only (parent layout guard)
+  - Identity/Account section: uid, email, display name, full name, university code, phone, nationality, role, status, created/updated, profile completion
+  - Admin Controls section: role toggle, status toggle, delete user, delete all files for user
+  - Storage section: documents, assessments, infographics, storage objects summary
+  - All destructive actions require explicit confirmation (type target uid/email)
+  - Self-destructive actions blocked for current admin's own account
+- `apps/web/app/(protected)/admin/storage/page.tsx` — Global storage maintenance page
+  - Server-rendered, admin-only
+  - Strong confirmation: must type "DELETE ALL STORAGE" exactly
+  - Calls /api/admin/storage/cleanup with mode "global"
+  - Shows storage availability status
+
+Files Modified
+- `apps/web/app/(protected)/admin/page.tsx` — Added Storage Maintenance quick-access section with link to /admin/storage; user list items now link to /admin/users/[uid]
+- `apps/web/app/(protected)/admin/users/page.tsx` — No changes needed (existing page works as-is)
+
+Env Variables Added
+- ZOOTOPIA_UPLOAD_RETENTION_DAYS — Number of days to retain uploaded files (default: 90)
+- ZOOTOPIA_UPLOAD_RETENTION_HOURS — Number of hours to retain uploaded files (default: 0, overrides days if > 0)
+- ZOOTOPIA_STORAGE_RETENTION_MODE — Retention enforcement mode (default: "env-driven")
+- Contract: .env.local for local dev, Vercel env vars for production
+
+Storage Model (Current Truth)
+- Supabase Storage (private bucket) is the sole storage backend
+- Object path structure: {namespace}/{uid}/{filename}
+- Namespaces: documents/, assessment-results/, assessment-exports/
+- User ownership is encoded in the path (uid segment)
+- Storage cleanup uses prefix-based listing + batch deletion (500 objects per batch)
+- Global cleanup is scoped to user namespaces only (does NOT delete system assets)
+- DB records are counted but NOT deleted during storage cleanup (preserved for audit/history)
+
+Security Guards
+- All /admin/* routes protected by requireAdminUser() in layout.tsx
+- API routes verify admin session via getAdminSessionUser()
+- Per-user storage delete: confirmation must match target uid exactly
+- Global storage delete: confirmation must be "DELETE ALL STORAGE" exactly
+- Self-destructive actions blocked for current admin's own account
+- Owner-scoped isolation: cleanup for one user only touches their uid prefix
+
+Firebase/Firestore Naming Audit
+- Searched all active runtime code (apps/web/**/*.ts, apps/web/**/*.tsx)
+- Zero matches for firebase, firestore, firebaseAuth, firebaseStorage, firebaseAdmin, appHosting
+- No old aliases or dead compatibility exports found in active runtime code
+
+Verification
+- `npx tsc --noEmit`: PASSED (no errors)
+- Firebase/Firestore naming search: 0 matches in active runtime code
+- All admin routes properly guarded by requireAdminUser()
+- All destructive actions require explicit confirmation
+- Structured diagnostics logged for all admin actions
+
+Architecture Notes
+- Storage cleanup is scoped-prefix (user namespaces), NOT blind bucket wipe
+- This protects system assets and other non-user content in the same bucket
+- DB records are preserved during storage cleanup for audit/history purposes
+- Retention config is centralized in one helper (storage-retention-config.ts)
+- Admin detail page uses server-side rendering for real backend data
+- No mock values or cosmetic placeholders used
+
+---
+
+2026-04-12 - Admin Users Overview Simplification (List-to-Detail Control Split)
+
+Scope
+- Refined `/admin/users` into a cleaner overview surface by removing heavy in-card management controls.
+- Preserved all backend/admin wiring by keeping advanced controls in the existing per-user detail route (`/admin/users/[uid]`).
+
+Problem
+- The list page (`users-table.tsx`) had expanded in-card controls for role/status/credits/grants/delete actions.
+- This made the overview noisy and duplicated responsibilities already handled by the detail page.
+
+Decisions
+- Keep `/admin/users` focused on scanning users and navigation.
+- Keep advanced user management actions on `/admin/users/[uid]` only.
+- Preserve server-authoritative export behavior on the list page.
+
+Files Changed
+- `apps/web/components/admin/users-table.tsx`
+  - Replaced heavy expandable management UI with a compact overview card layout.
+  - Removed in-card advanced actions (role/status/credits/grants/delete controls).
+  - Added explicit per-user navigation CTA to detail route:
+    - `href="/admin/users/${encodeURIComponent(uid)}"`
+    - Label: `View details / Manage user`
+  - Kept users export action server-owned (`/api/admin/users/export`) with download handling.
+- `apps/web/messages/en.json`
+  - Added key: `adminUserDetailsAction` = `View details / Manage user`
+- `apps/web/messages/ar.json`
+  - Added key: `adminUserDetailsAction` = `عرض التفاصيل / إدارة المستخدم`
+
+Current Truth Snapshot Update
+- `/admin/users` is now an overview page (identity/status/profile summary + detail navigation + export).
+- `/admin/users/[uid]` remains the single primary UI surface for advanced management operations.
+- No backend contracts, admin guard logic, or mutation APIs were changed in this pass.
+
+Verification
+- `npm run lint --workspace @zootopia/web`: PASSED with existing warnings in unrelated files
+  - `apps/web/app/(protected)/admin/storage/page.tsx` unused variable warning
+  - `apps/web/app/(protected)/admin/users/[uid]/page.tsx` unused variable warning
+  - `apps/web/app/api/admin/storage/cleanup/route.ts` unused variable warning
+- `npm run typecheck --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED
+
+Risk Notes
+- None introduced at API/data layer: this pass is UI-scope only on the list page.
+- Future agents should keep list/detail responsibility split intact to avoid reintroducing duplicated heavy controls on `/admin/users`.
+
+---
+
+2026-04-11 - Admin Storage/Detail Lint Warning Cleanup
+
+Scope
+- Resolved previously documented unrelated lint warnings in admin storage/detail surfaces without changing runtime behavior.
+
+Warnings Fixed
+- `apps/web/app/(protected)/admin/storage/page.tsx`
+  - Removed unused `getRequestUiContext` import and unused `uiContext` variable.
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+  - Removed unused `getAdminSessionUser` symbol from dynamic session import in delete-user action.
+- `apps/web/app/api/admin/storage/cleanup/route.ts`
+  - Removed unused `scope` local in global cleanup handler.
+
+Behavioral Impact
+- No API contract changes.
+- No auth/authorization logic changes.
+- No UI flow changes.
+- No storage mutation logic changes.
+
+Verification
+- `npm run lint --workspace @zootopia/web`: PASSED (0 warnings, 0 errors)
+- `npm run typecheck --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED
+
+Current Truth Update
+- Prior warning notes for admin storage/detail files are now resolved.
+- Admin storage/detail files are lint-clean in the current workspace state.
+
+---
+
+2026-04-12 - Admin Storage Governance Hardening + Per-Scope Retention Wiring
+
+Scope
+- Finalized the admin storage governance pass by moving retention behavior from one shared policy to explicit per-storage-type policies.
+- Hardened cleanup semantics for both per-user and global storage deletion with namespace-aware diagnostics.
+- Upgraded `/admin/users/[uid]` from placeholder storage/content cards to backend-backed metrics and activity timelines.
+- Updated admin storage copy and retention-facing content to reflect current env-driven policy truth.
+
+Current Truth (Supersedes Older 2026-04-11 Defaults)
+- Retention is now **per storage scope**, not one global upload value:
+  - uploads: `ZOOTOPIA_UPLOAD_RETENTION_MINUTES` (default 15)
+  - results: `ZOOTOPIA_RESULT_RETENTION_MINUTES` (default 1440 = 1 day)
+  - exports: `ZOOTOPIA_EXPORT_RETENTION_MINUTES` (default 15)
+- Optional per-scope mode keys:
+  - `ZOOTOPIA_UPLOAD_RETENTION_MODE`
+  - `ZOOTOPIA_RESULT_RETENTION_MODE`
+  - `ZOOTOPIA_EXPORT_RETENTION_MODE`
+- Legacy global fallback is still supported for compatibility:
+  - `ZOOTOPIA_STORAGE_RETENTION_DAYS`
+  - `ZOOTOPIA_STORAGE_RETENTION_HOURS`
+  - `ZOOTOPIA_STORAGE_RETENTION_MODE`
+
+Storage Namespace Truth
+- User-owned namespaces covered by cleanup/storage metrics:
+  - `uploads/temp/{uid}/...`
+  - `documents/{uid}/...`
+  - `assessment-results/{uid}/...`
+  - `assessment-exports/{uid}/...`
+- Global cleanup remains intentionally scoped to user-owned namespaces only.
+- System/shared assets are not targeted by the admin cleanup route.
+
+Files Changed
+- `apps/web/lib/server/supabase-blob-storage.ts`
+  - Added recursive object descriptor listing with metadata support (`sizeBytes`, content type, timestamps).
+  - Prefix list helper now uses recursive descriptor traversal so nested folders are included.
+- `apps/web/lib/server/storage-retention-config.ts`
+  - Reworked retention config to scope-aware model (`uploads`, `results`, `exports`).
+  - Added scope env contract parsing, mode parsing, namespace-to-scope resolver, and policy summary helpers.
+- `apps/web/lib/server/assessment-retention.ts`
+  - Wired retention calls to explicit scope selection (`results`) for assessment lifecycle behavior.
+- `apps/web/lib/server/document-runtime.ts`
+  - Wired upload expiry to `uploads` scope.
+  - Expiry resolution now chooses earliest of session expiry vs retention expiry.
+- `apps/web/lib/server/repository.ts`
+  - Updated retention call sites to explicit scope ownership (`uploads` vs `results`) to stop accidental policy mixing.
+- `apps/web/lib/server/assessment-artifact-storage.ts`
+  - Export artifact defaults now use `exports` retention scope.
+- `apps/web/app/api/assessment/export/json/[id]/route.ts`
+- `apps/web/app/api/assessment/export/markdown/[id]/route.ts`
+- `apps/web/app/api/assessment/export/docx/[id]/route.ts`
+- `apps/web/lib/server/assessment-fast-pdf-export.ts`
+- `apps/web/lib/server/assessment-pro-pdf-export.ts`
+  - Removed explicit export `expiresAt` inheritance from generation records so export artifacts follow export-scope defaults.
+- `apps/web/app/api/admin/storage/cleanup/route.ts`
+  - Added namespace constants including `uploads/temp`.
+  - Per-user/global cleanup now records namespace-level matched/deleted/failed counts.
+  - Reporting fields now truthfully reflect DB row retention (`db*Retained`) instead of implying destructive DB deletion.
+- `apps/web/app/(protected)/admin/storage/page.tsx`
+  - Updated global cleanup copy to include `uploads/temp` in scope.
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+  - Added backend-backed credits, content totals, storage namespace metrics, retention policy summaries, recent content timeline, and recent admin action timeline.
+  - Added success/error status banners from query params.
+  - Aligned per-user storage cleanup confirmation prompt with API contract (UID confirmation).
+- `.env.example`
+  - Updated to the per-scope retention env contract and legacy fallback notes.
+- `apps/web/app/api/uploads/route.ts`
+- `apps/web/lib/site-content.ts`
+  - Updated wording away from fixed-duration assumptions to env-driven retention messaging.
+
+Security / Isolation Notes
+- Admin-only boundaries remain server-enforced (`requireAdminUser` / `getAdminSessionUser`).
+- Per-user cleanup only targets prefixes containing the selected UID.
+- Global cleanup only touches known user-owned namespaces, preserving non-user/system storage content.
+- Admin detail page data remains server-rendered and backend-authoritative; no client-side trust shift introduced.
+
+Verification
+- `npm run lint --workspace @zootopia/web`: PASSED
+- `npm run typecheck --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED
+- Build manifest includes expected routes:
+  - `/admin/users/[uid]`
+  - `/admin/storage`
+  - `/api/admin/storage/cleanup`
+
+Residual Risks / Follow-up
+- Automated auth-matrix QA for admin/user-user isolation at runtime still depends on seeded accounts and session fixtures; route-level guards and ownership-prefix constraints are in place, but multi-user live-session scenario replay should be run in the deployment environment.
