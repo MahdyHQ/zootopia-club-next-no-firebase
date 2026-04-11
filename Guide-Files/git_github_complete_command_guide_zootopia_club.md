@@ -1,6 +1,6 @@
 # Git & GitHub Complete Command Guide for Zootopia Club
 
-This guide collects the Git and GitHub commands discussed in this chat, then expands them into a fuller practical reference for day-to-day use.
+This guide collects the Git and GitHub commands discussed across the chat, then expands them into a fuller practical reference for daily development, syncing Copilot changes, switching GitHub accounts, and safely managing branches.
 
 ---
 
@@ -289,6 +289,31 @@ This is safer than plain `--force`.
 
 ---
 
+### Common typo: pushing the wrong branch name
+
+```bash
+git push -u origin mainv
+```
+
+**What happens:**  
+Git returns:
+
+```text
+error: src refspec mainv does not match any
+```
+
+**Why:**  
+Because the branch `mainv` does not exist.
+
+**Fix:**
+
+```bash
+git branch -M main
+git push -u origin main
+```
+
+---
+
 ## 9) Pull, fetch, and sync
 
 ### Pull latest changes
@@ -324,6 +349,17 @@ Downloads remote updates without merging them into your working branch.
 
 ---
 
+### Fetch from origin explicitly
+
+```bash
+git fetch origin
+```
+
+**What it does:**  
+Refreshes your local knowledge of remote branches from `origin`.
+
+---
+
 ### Compare your branch with remote
 
 ```bash
@@ -333,6 +369,17 @@ git log --oneline --decorate --graph --all
 
 **What it does:**  
 Helps you understand whether you are ahead, behind, or diverged.
+
+---
+
+### Show a compact graph of recent history
+
+```bash
+git log --oneline --decorate --graph --all -20
+```
+
+**What it does:**  
+Shows the last 20 commits across branches in a compact graph.
 
 ---
 
@@ -384,6 +431,17 @@ Lists both local and remote-tracking branches.
 
 ---
 
+### Show remote branches only
+
+```bash
+git branch -r
+```
+
+**What it does:**  
+Lists remote-tracking branches only, such as `origin/main` or PR branches.
+
+---
+
 ### Create a new branch
 
 ```bash
@@ -426,6 +484,17 @@ git switch main
 
 **What it does:**  
 Changes your current working branch.
+
+---
+
+### Create a local branch from a remote branch
+
+```bash
+git checkout -b local-pr origin/copilot/fix-login-behavior-and-session-flow
+```
+
+**What it does:**  
+Creates a local branch named `local-pr` that tracks the remote Copilot branch.
 
 ---
 
@@ -907,9 +976,64 @@ it means your machine is trying to authenticate with a different GitHub account.
 - or switch to SSH
 - or reauthenticate in the browser with the correct account
 
+### After clearing old credentials, try pushing again
+
+```bash
+git push -u origin main
+```
+
+**What it does:**  
+Prompts Git to authenticate again with the new GitHub account.
+
+### Note about HTTPS on GitHub
+GitHub usually requires a **Personal Access Token (PAT)** instead of your normal password when using HTTPS.
+
 ---
 
-## 24) Useful Windows helper commands from this chat
+## 24) Sync GitHub Copilot PR changes to your local machine
+
+### Case A: PR was merged into `main`
+
+```bash
+git checkout main
+git pull origin main
+```
+
+**What it does:**  
+Updates your local `main` branch with the merged GitHub changes.
+
+---
+
+### Case B: PR is still on a separate remote branch
+
+```bash
+git fetch origin
+git branch -r
+git checkout -b local-pr origin/copilot/fix-login-behavior-and-session-flow
+```
+
+**What it does:**  
+Downloads the PR branch and creates a local branch from it.
+
+---
+
+### Safe sync workflow if you already have local edits
+
+```bash
+git status
+git stash
+git fetch origin
+git checkout main
+git pull origin main
+git stash pop
+```
+
+**What it does:**  
+Temporarily saves your local work, updates the branch, then restores your local changes.
+
+---
+
+## 25) Useful Windows helper commands from this chat
 
 ### Show Python locations
 
@@ -955,7 +1079,7 @@ Shows installed Python packages managed by winget.
 
 ---
 
-## 25) Secret handling best practices for GitHub
+## 26) Secret handling best practices for GitHub
 
 Never commit files like:
 
@@ -974,7 +1098,7 @@ Instead use:
 
 ---
 
-## 26) Suggested normal workflow for your project
+## 27) Suggested normal workflow for your project
 
 ### First push
 
@@ -1030,7 +1154,7 @@ git push
 
 ---
 
-## 27) Commands specifically mentioned in this chat
+## 28) Commands specifically mentioned in this chat
 
 These commands were explicitly used or discussed in the conversation:
 
@@ -1042,41 +1166,67 @@ git config --global --list
 git init
 git status
 git add .
+git add package.json
+git add package.json package-lock.json
 git commit -m "Initial commit"
+git commit --amend --no-edit
+git commit --amend -m "Fix secret removal and update gitignore"
 git branch -M main
+git branch
+git branch -a
+git branch -r
+git checkout main
+git checkout -b new-branch
+git checkout -b local-pr origin/copilot/fix-login-behavior-and-session-flow
+git switch -c feature-x
+git clone https://github.com/USERNAME/REPO.git
+git clone git@github.com:USERNAME/REPO.git
 git remote add origin https://github.com/USERNAME/REPO.git
 git remote -v
 git remote remove origin
+git remote set-url origin https://github.com/USERNAME/REPO.git
 git push -u origin main
 git push
+git push --force
+git push --force-with-lease
 git pull
+git pull origin main
 git fetch
+git fetch origin
 git log --oneline
-git branch
-git checkout -b new-branch
-git checkout main
-git clone https://github.com/USERNAME/REPO.git
-git clone git@github.com:USERNAME/REPO.git
-git rm --cached serviceAccountKey.json
-git commit --amend --no-edit
+git log --oneline --decorate --graph --all
+git log --oneline --decorate --graph --all -20
 git log --stat -- serviceAccountKey.json
+git rm --cached serviceAccountKey.json
+git restore --staged package.json
+git restore package.json
+git reset --hard
+git reset --hard COMMIT_HASH
+git stash
+git stash push -m "WIP admin loading fix"
+git stash list
+git stash pop
+git stash apply
+git diff
+git diff --staged
+git diff COMMIT1 COMMIT2
+git diff main..HEAD
+git merge feature-x
+git rebase main
+git rebase --continue
+git rebase --abort
+git tag v1.0.0
+git tag -a v1.0.0 -m "First release"
+git push origin --tags
 git filter-branch --force --index-filter "git rm --cached --ignore-unmatch serviceAccountKey.json" --prune-empty --tag-name-filter cat -- --all
+git filter-repo --path serviceAccountKey.json --invert-paths
 ssh-keygen -t ed25519 -C "your_email@example.com"
 ssh -T git@github.com
+where python
+py --list
+whoami /groups
+winget list python
 ```
-
----
-
-## 28) Final advice
-
-For your Zootopia Club project:
-
-- keep `.venv`, `node_modules`, secrets, and generated files out of Git
-- use feature branches for risky changes
-- commit small logical chunks
-- never push service account keys
-- prefer SSH if HTTPS account confusion happens repeatedly
-- always run `git status` before and after important commands
 
 ---
 
@@ -1112,7 +1262,7 @@ Thumbs.db
 
 ---
 
-## 30) If you want a very short cheat sheet
+## 30) Very short cheat sheet
 
 ### Setup
 ```bash
@@ -1154,6 +1304,12 @@ git merge feature-x
 ```bash
 git rm --cached serviceAccountKey.json
 git commit --amend --no-edit
+```
+
+### Sync merged PR
+```bash
+git checkout main
+git pull origin main
 ```
 
 ---

@@ -6728,7 +6728,6 @@ Change Log
       - adjusted assessment model descriptions so “default” wording reflects the new order.
     - `apps/web/components/assessment/assessment-studio.tsx`
       - updated `createInitialRequest()` fallback `modelId` from `gemini-3.1-flash-lite-preview` to `qwen3.5-flash` for deterministic UI/backend default parity.
-      - aligned model metadata chips so `qwen3.5-flash` now carries the Default tag and `gemini-3.1-flash-lite-preview` no longer advertises default status.
     - `apps/web/lib/server/ai/provider-runtime.ts`
       - introduced centralized env precedence list `QWEN_BASE_URL_ENV_KEYS`.
       - changed DashScope base URL resolution to env-only (canonical key first, then legacy aliases), returning null when unset.

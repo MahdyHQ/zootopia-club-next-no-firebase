@@ -223,6 +223,7 @@ function getAssessmentModelMeta(modelId: string, messages: AppMessages) {
   switch (modelId) {
     case "gemini-3.1-flash-lite-preview":
       return [
+        { label: messages.modelTagDefault, tone: "accent" as const },
         { label: messages.modelTagFast, tone: "muted" as const },
         { label: messages.modelProviderGoogle, tone: "muted" as const },
       ];
@@ -244,13 +245,8 @@ function getAssessmentModelMeta(modelId: string, messages: AppMessages) {
         { label: messages.modelTagBalanced, tone: "accent" as const },
         { label: messages.modelProviderGoogle, tone: "muted" as const },
       ];
-    case "qwen3.5-flash":
-      return [
-        { label: messages.modelTagDefault, tone: "accent" as const },
-        { label: messages.modelTagBalanced, tone: "muted" as const },
-        { label: messages.modelProviderQwen, tone: "muted" as const },
-      ];
     case "qwen-flash-us":
+    case "qwen3.5-flash":
       return [
         { label: messages.modelTagBalanced, tone: "accent" as const },
         { label: messages.modelProviderQwen, tone: "muted" as const },

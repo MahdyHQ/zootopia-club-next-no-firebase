@@ -1,5 +1,5 @@
 Zootopia Club Next Master Ledger
-Last refreshed: 2026-04-11 00:15:28
+Last refreshed: 2026-04-10 23:59:00
 
 Project Identity
 - Name: Zootopia Club Next
@@ -6513,35 +6513,6 @@ Change Log
     - Profile completion gating for non-admins unchanged
     - Session TTL configuration (ZOOTOPIA_SESSION_TTL_SECONDS)
     - Route protection and authorization checks across all protected paths
-    - Admin exemption policy on profile completion
-    - All 52 app routes intact and functional
-  - Final admin login contract:
-    - **UI:** 2 fields only (email/username + password with show/hide toggle)
-    - **Validation:** Identity existing + password correct + allowlist membership + active admin claim + fresh sign-in + account active
-    - **Readiness:** Supabase auth ready + allowlist configured (no extra password gate requirement)
-    - **Errors:** Clear professional messaging without exposing internal env naming
-  - Verification in this pass:
-    - `npm run lint --workspace @zootopia/web` ✅ PASSED (after removing unused imports)
-    - `npm run typecheck --workspace @zootopia/web` ✅ PASSED (next typegen + tsc --noEmit successful)
-    - `npm run build --workspace @zootopia/web` ✅ PASSED (52 routes including `/admin/login`, `/api/auth/admin/bootstrap`, `/api/auth/admin/resolve-identifier`)
-    - All admin routes present in build output
-    - No new diagnostics reported
-    - Password visibility toggle functional (Eye/EyeOff icons) ready for runtime test
-  - Verification limits / honest notes:
-    - Source-level verification completed: field removal, password toggle code paths, runtime gate removal, error handling removal all confirmed
-    - No authenticated QA browser test of the actual running admin login page was performed (would require live admin test credentials)
-    - UX verification by static analysis: eye icon toggle added with proper button structure and event handlers
-    - Security gates verification by code inspection: all 4 remaining gates present and enforced in authorizeAdminCredentials
-    - Lint/typecheck/build all passing with no warnings related to admin auth
-  - Migration notes for future agents:
-    - If admin users report issues with login after this change, the password gate is no longer part of the flow
-    - Environment variable `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` can be safely removed from deployment configs (it has no effect)
-    - If stronger admin MFA is needed in future, consider: TOTP tokens, optional hardware keys, or organization-scoped claim metadata (not environment-based gates)
-    - Password visibility toggle UX pattern is now available as a reusable model for other password fields
-  - Future roadmap implications:
-   - Phase N: If unified admin MFA is desired, refactor to per-user TOTP or organization claims
-   - Phase N: If audit logging needs reinforcement, layer in optional admin action signing
-   - Phase N: The simplified 2-field UX is now clean slate for future security enhancements
 
 - 2026-04-10 18:53:42 | ENOTFOUND db host regression fixed via Supabase pooler URL normalization
   - Mandatory-first-step compliance:
@@ -6572,7 +6543,35 @@ Change Log
     - `apps/web/.env.local`
     - `.env.example`
     - `zootopia-club-next-ledger.txt`
-
+    - Admin exemption policy on profile completion
+    - All 52 app routes intact and functional
+  - Final admin login contract:
+    - **UI:** 2 fields only (email/username + password with show/hide toggle)
+    - **Validation:** Identity existing + password correct + allowlist membership + active admin claim + fresh sign-in + account active
+    - **Readiness:** Supabase auth ready + allowlist configured (no extra password gate requirement)
+    - **Errors:** Clear professional messaging without exposing internal env naming
+  - Verification in this pass:
+    - `npm run lint --workspace @zootopia/web` ✅ PASSED (after removing unused imports)
+    - `npm run typecheck --workspace @zootopia/web` ✅ PASSED (next typegen + tsc --noEmit successful)
+    - `npm run build --workspace @zootopia/web` ✅ PASSED (52 routes including `/admin/login`, `/api/auth/admin/bootstrap`, `/api/auth/admin/resolve-identifier`)
+    - All admin routes present in build output
+    - No new diagnostics reported
+    - Password visibility toggle functional (Eye/EyeOff icons) ready for runtime test
+  - Verification limits / honest notes:
+    - Source-level verification completed: field removal, password toggle code paths, runtime gate removal, error handling removal all confirmed
+    - No authenticated QA browser test of the actual running admin login page was performed (would require live admin test credentials)
+    - UX verification by static analysis: eye icon toggle added with proper button structure and event handlers
+    - Security gates verification by code inspection: all 4 remaining gates present and enforced in authorizeAdminCredentials
+    - Lint/typecheck/build all passing with no warnings related to admin auth
+  - Migration notes for future agents:
+    - If admin users report issues with login after this change, the password gate is no longer part of the flow
+    - Environment variable `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` can be safely removed from deployment configs (it has no effect)
+    - If stronger admin MFA is needed in future, consider: TOTP tokens, optional hardware keys, or organization-scoped claim metadata (not environment-based gates)
+    - Password visibility toggle UX pattern is now available as a reusable model for other password fields
+  - Future roadmap implications:
+   - Phase N: If unified admin MFA is desired, refactor to per-user TOTP or organization claims
+   - Phase N: If audit logging needs reinforcement, layer in optional admin action signing
+   - Phase N: The simplified 2-field UX is now clean slate for future security enhancements
 - 2026-04-10 19:33:23 | Auth session bootstrap determinism fix for regular + admin login loops
   - Mandatory-first-step compliance:
     - reread `zootopia-club-next-ledger.txt` fully before code edits.
@@ -6693,70 +6692,4 @@ Change Log
   - Files changed in this pass:
     - `apps/web/messages/en.json`
     - `apps/web/messages/ar.json`
-    - `zootopia-club-next-ledger.txt`
-
-- 2026-04-10 23:42:58 | Postgres env contract repair for `postgres(...)` connection-string usage
-  - Mandatory-first-step compliance:
-    - reread `zootopia-club-next-ledger.txt` fully before applying env changes in this pass.
-  - Root issue addressed:
-    - root `.env.local` had an invalid split DB shape (`SUPABASE_DATABASE_URL` host only + separate `ports`/`database`/`user` lines), which is not a valid connection string for Node `postgres(...)` usage.
-    - this breaks flows that read `DATABASE_URL`/`SUPABASE_DATABASE_URL` expecting a single URI.
-  - What changed:
-    - updated root `.env.local` `SUPABASE_DATABASE_URL` to a valid full Postgres URI (pooler host + port + database + encoded credentials + ssl/pgbouncer query params).
-    - added/updated root `.env.local` `DATABASE_URL` alias to the same valid URI so snippet patterns using `process.env.DATABASE_URL` work without extra code changes.
-    - removed invalid standalone `ports`, `database`, and `user` env lines from root `.env.local`.
-  - Verification in this pass:
-    - executed a direct Node connectivity probe with `@next/env` + `postgres` client using `process.env.DATABASE_URL`.
-    - probe result: `DATABASE_URL_OK host=aws-0-eu-west-1.pooler.supabase.com`.
-  - Files changed in this pass:
-    - `.env.local`
-    - `zootopia-club-next-ledger.txt`
-
-- 2026-04-11 00:15:28 | Assessment default switched to Qwen 3.5 Flash + Qwen env-based OpenAI-compatible runtime wiring
-  - Mandatory-first-step compliance:
-    - re-read `zootopia-club-next-ledger.txt` before edits in this pass.
-    - completed read-only tracing first (UI selector defaults, assessment payload path, backend provider routing, Qwen env/runtime contract, and verification command paths) before patching.
-    - read relevant installed Next.js docs from `node_modules/next/dist/docs` (`01-app/01-getting-started/15-route-handlers.md` and `01-app/03-api-reference/03-file-conventions/route.md`) prior to route/runtime edits.
-  - Current-state updates after this pass:
-    - canonical assessment default is now `qwen3.5-flash` across shared config and Generate Assessment initial request fallback.
-    - backend assessment fallback remains sourced from `getDefaultModelForTool("assessment")`, now aligned with the new shared ordering.
-    - Qwen provider runtime no longer depends on a hardcoded fallback URL or fixed-endpoint equality gate.
-    - Qwen runtime readiness now requires both `DASHSCOPE_API_KEY` and at least one configured DashScope-compatible base URL env key.
-  - Surgical changes applied:
-    - `packages/shared-config/src/models.ts`
-      - moved `qwen3.5-flash` to the first assessment slot (`ASSESSMENT_MODEL_IDS` + `MODEL_CATALOG`) so shared default resolution returns Qwen.
-      - adjusted assessment model descriptions so “default” wording reflects the new order.
-    - `apps/web/components/assessment/assessment-studio.tsx`
-      - updated `createInitialRequest()` fallback `modelId` from `gemini-3.1-flash-lite-preview` to `qwen3.5-flash` for deterministic UI/backend default parity.
-      - aligned model metadata chips so `qwen3.5-flash` now carries the Default tag and `gemini-3.1-flash-lite-preview` no longer advertises default status.
-    - `apps/web/lib/server/ai/provider-runtime.ts`
-      - introduced centralized env precedence list `QWEN_BASE_URL_ENV_KEYS`.
-      - changed DashScope base URL resolution to env-only (canonical key first, then legacy aliases), returning null when unset.
-      - removed old hardcoded US URL fallback and removed `baseUrlValid`/`region` fields.
-      - updated `configured` for Qwen runtime to require both API key and resolved base URL.
-    - `apps/web/lib/server/ai/execution.ts`
-      - replaced inline Qwen fetch wiring with a dedicated OpenAI-compatible client helper (`createQwenOpenAiCompatibleClient`) so endpoint composition/request shape stay centralized.
-      - replaced fixed US-endpoint validation error with env-contract validation error listing accepted base URL keys.
-      - preserved existing response parsing, timeout mapping, and provider error-classification behavior.
-    - `apps/web/lib/server/runtime.ts`
-      - updated `hasQwenRuntime()` to require both `DASHSCOPE_API_KEY` and a configured DashScope-compatible base URL.
-    - `.env.example`
-      - documented `DASHSCOPE_BASE_URL` as canonical and clarified legacy alias compatibility.
-    - `apps/web/apphosting.yaml`
-      - clarified `DASHSCOPE_BASE_URL` as canonical required endpoint key when using `DASHSCOPE_API_KEY`.
-  - Verification in this pass:
-    - `shell: web-lint-post-polish` ✅ passed.
-    - `shell: web-typecheck-post-polish` ✅ passed.
-    - `shell: web-build-post-polish` ✅ passed (Next.js 16.2.2 production build completed successfully with postbuild normalization).
-    - targeted diagnostics check (`get_errors`) across all edited files ✅ no errors found.
-  - Verification limits / honest notes:
-    - no live external Qwen inference call was executed in this pass; provider-path validation here is static + build/runtime-contract level.
-  - Files changed in this pass:
-    - `packages/shared-config/src/models.ts`
-    - `apps/web/components/assessment/assessment-studio.tsx`
-    - `apps/web/lib/server/ai/provider-runtime.ts`
-    - `apps/web/lib/server/ai/execution.ts`
-    - `apps/web/lib/server/runtime.ts`
-    - `.env.example`
-    - `apps/web/apphosting.yaml`
     - `zootopia-club-next-ledger.txt`
