@@ -289,6 +289,14 @@ function buildSupabaseDecodedToken(input: {
     normalizeSupabaseTimestampToUnixSeconds(userRecord.last_sign_in_at) ??
     normalizeSupabaseTimestampToUnixSeconds(userRecord.updated_at) ??
     normalizeSupabaseTimestampToUnixSeconds(userRecord.created_at);
+  const resolvedAuthTimeSeconds =
+    typeof payload.auth_time === "number"
+      ? payload.auth_time
+      : typeof payload.iat === "number"
+        ? payload.iat
+        : fallbackAuthTimeSeconds;
+  const resolvedIatSeconds =
+    typeof payload.iat === "number" ? payload.iat : resolvedAuthTimeSeconds;
   /* Provider is resolved from the current JWT payload first so admin password-only
      checks reflect this sign-in token, not only account-level identity metadata. */
   const provider = mapProviderToAuthProvider(
@@ -325,16 +333,8 @@ function buildSupabaseDecodedToken(input: {
           : undefined,
     admin: adminClaim,
     role: adminClaim === true ? "admin" : "user",
-    auth_time:
-      typeof payload.auth_time === "number"
-        ? payload.auth_time
-        : typeof payload.iat === "number"
-          ? payload.iat
-          : fallbackAuthTimeSeconds,
-    iat:
-      typeof payload.iat === "number"
-        ? payload.iat
-        : fallbackAuthTimeSeconds,
+    auth_time: resolvedAuthTimeSeconds,
+    iat: resolvedIatSeconds,
     // Legacy claim shape is retained so older provider readers keep working during cleanup.
     firebase: {
       sign_in_provider: provider,

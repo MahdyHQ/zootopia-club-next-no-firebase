@@ -23,7 +23,12 @@ for (const file of files) {
   }
 
   const timestamp = match[1];
-  if (timestamp <= previous) {
+  if (timestamp === previous) {
+    console.error(`Duplicate migration timestamp: ${file}`);
+    process.exit(1);
+  }
+
+  if (timestamp < previous) {
     console.error(`Migration order violation: ${file}`);
     process.exit(1);
   }

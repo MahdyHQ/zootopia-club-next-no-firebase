@@ -6834,3 +6834,10 @@ Change Log
       - `npm run lint:web` ✅
       - `npm run typecheck:web` ✅
       - `npm run supabase:check` ✅
+  - 2026-04-11 12:03:55 | Final validation polish
+    - de-duplicated resolved auth recency timestamp composition in `supabase-admin.ts` (`resolvedAuthTimeSeconds` / `resolvedIatSeconds`).
+    - refined migration-order validator messaging to separate duplicate timestamp detection from lexical order violations.
+    - verification:
+      - `npm run lint:web` ✅
+      - `npm run typecheck:web` ✅
+      - `npm run supabase:check` ✅
