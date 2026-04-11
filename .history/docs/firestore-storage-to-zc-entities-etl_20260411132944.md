@@ -189,14 +189,14 @@ Application-level smoke checks after ETL:
 
 For this migration task, `scripts/firebase` remains in place intentionally:
 
-- It still contains active Firebase App Hosting secret-management helpers.
+- It still contains legacy Firebase App Hosting secret-management helpers used for rollback/maintenance.
 - It is referenced by operational docs/config comments.
-- Removing it during ETL work adds avoidable operational risk unrelated to runtime flag rename.
+- Removing it during ETL work adds avoidable operational risk unrelated to the data migration itself.
 
 Deprecation note (2026-04-10): `scripts/firebase` is now considered transitional and should not gain new responsibilities.
 
 Removal criteria for a dedicated cleanup pass:
 
 - A replacement App Hosting secret-management workflow is documented in the operational runbooks.
-- `apps/web/apphosting.yaml` and `Guide-Files/powershell-script-commands-guide.md` references are updated to the replacement workflow.
+- Legacy App Hosting references in operational docs (including `Guide-Files/powershell-script-commands-guide.md`) are updated to the replacement workflow.
 - One successful non-interactive secret rotation run is verified with the replacement workflow.

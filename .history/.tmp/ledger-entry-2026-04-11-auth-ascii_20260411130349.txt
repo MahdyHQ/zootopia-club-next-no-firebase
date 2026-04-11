@@ -1,0 +1,38 @@
+  - 2026-04-11 12:58:10 | Auth callback failure isolation + auth-critical Supabase-only persistence
+    - Root-cause confirmation (pre-fix runtime):
+      - callback bootstrap path hit repository user lookup and failed with SQL error `42P01 relation "zc_entities" does not exist`.
+      - failing statement was the users read in `getUserByUid(...)` through the Firestore-shaped path (previous runtime dependency before this fix):
+        - `await getZootopiaFirestore().collection("users").doc(uid).get();`
+    - Files changed:
+      - `apps/web/lib/server/auth-tracing.ts` (new)
+      - `apps/web/auth.ts`
+      - `apps/web/lib/server/repository.ts`
+      - `apps/web/lib/server/server-auth.ts`
+      - `apps/web/lib/server/admin-auth.ts`
+      - `apps/web/components/auth/auth-feedback.ts`
+      - `apps/web/messages/en.json`
+      - `apps/web/messages/ar.json`
+      - `zootopia-club-next-ledger.txt`
+    - What changed (surgical scope):
+      - added shared structured auth tracing with stage constants, trace context, error classification, and safe-redaction logging helpers.
+      - instrumented auth credentials authorize paths, JWT/session callbacks, and sign-in events with stage-level trace IDs.
+      - instrumented server-auth token verification/user lookup and admin-auth allowlist/claim checks.
+      - removed active auth-critical dependency on Firestore-shaped users storage path by moving callback/session-critical user reads+writes to Supabase Auth + app_metadata claims:
+        - `getUserByUid(...)`
+        - `upsertUserFromAuth(...)`
+        - `listUsers(...)`
+        - `setUserRole(...)`
+        - `setUserStatus(...)`
+        - `updateUserProfile(...)`
+      - fixed follow-up JWT callback crash observed after tracing rollout (`user` undefined on subsequent callback invocations), which had surfaced as `JWTSessionError`.
+      - mapped new callback/runtime failure states to user-facing auth feedback strings in EN/AR catalogs.
+    - Verification in this pass:
+      - `npm run lint --workspace @zootopia/web` PASS
+      - `npm run typecheck --workspace @zootopia/web` PASS
+      - `npm run build --workspace @zootopia/web` PASS (after stopping lock-holding Next processes)
+      - runtime repro probes (`http://127.0.0.1:3061`):
+        - admin credentials callback resolved to `/admin` and `/api/auth/me` returned authenticated admin session.
+        - user credentials callback resolved to `/upload` and `/api/auth/me` returned authenticated user session.
+    - Remaining debt (explicit honesty):
+      - non-auth repository domains still contain Firestore-shaped branches (`shouldUseFirestore()` / `getZootopiaFirestore()`), including documents, assessments, infographic, credit ledger, idempotency, and admin log paths.
+      - this pass intentionally constrained full Firestore-path removal to auth/session-critical code only to avoid broad unrelated regressions.

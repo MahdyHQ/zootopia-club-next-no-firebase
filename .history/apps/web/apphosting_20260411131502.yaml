@@ -1,7 +1,9 @@
-# App Hosting deployment config for the active monorepo app root: apps/web.
+# Legacy Firebase App Hosting rollback/reference config for apps/web.
+# Active deployment/runtime truth is Vercel + Supabase + Auth.js.
+# Keep this file only for controlled rollback validation and historical operations.
 # YAML uses indentation and "-" list items. There are no curly braces or trailing commas.
 #
-# Important: this file is deployment/runtime config, not TypeScript config.
+# Important: this file is legacy deployment/runtime config, not TypeScript config.
 # - tsconfig.json controls TypeScript checking and emit behavior.
 # - apphosting.yaml controls App Hosting build/runtime env and Cloud Run settings.
 #
@@ -18,7 +20,7 @@
 # - Do not define PORT, K_SERVICE, K_REVISION, or K_CONFIGURATION.
 # - Prefer project-specific keys (for example ZOOTOPIA_*) for custom variables.
 
-# Cloud Run service settings for this backend.
+# Legacy Cloud Run service settings for this backend.
 # See https://firebase.google.com/docs/app-hosting/configure#cloud-run
 runConfig:
   minInstances: 0
@@ -27,7 +29,7 @@ runConfig:
   # cpu: 1
   # memoryMiB: 512
 
-# Environment variables and secret references.
+# Legacy environment variables and secret references.
 # See https://firebase.google.com/docs/app-hosting/configure
 env:
   # Browser-safe Supabase auth config.

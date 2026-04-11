@@ -1,0 +1,876 @@
+Zootopia Club Next Master Ledger
+Last refreshed: 2026-04-11 00:15:28
+
+Project Identity
+- Name: Zootopia Club Next
+- Workspace root: C:\zootopia-club-next
+- Primary architecture guide: Guide-Files\Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md
+- Old-project reference: C:\zootopia_club_ai_platform
+
+Current Truth Snapshot
+- `apps/web` is the only live application runtime today.
+- `apps/api` exists as a future extraction boundary only and does not serve production traffic.
+- The repo uses npm workspaces, not pnpm workspaces or Turborepo.
+- `packages/ui` does not exist in the current repo even though the guide’s target structure leaves room for it.
+- Root `firebase.json` and `.firebaserc` are removed from the active runtime contract; deployment/runtime config is currently defined by `apps/web/apphosting.yaml` (App Hosting) and `vercel.json` (Vercel target).
+- Target Supabase Postgres schema now lives in `supabase/migrations/`, and the active repository path persists to Supabase-backed storage/contracts with server authority.
+- `apps/web/app/api/**/route.ts` is the only live backend surface today; there is no separate active root `server.ts` or root `src/*` application tree.
+- The actual architecture guide lives at `Guide-Files/Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md`; the repo-root copy referenced in some prompts and older notes is not present.
+- The App Hosting build path now depends on `apps/web/apphosting.yaml`, `apps/web/package-lock.json`, `apps/web/next.config.ts`, and `apps/web/scripts/normalize-standalone.mjs` as stable architecture files, not one-off deployment fixes; the standalone normalizer must keep copying `@sparticuz/chromium/bin/*` into the standalone bundle so the Pro PDF lane can launch packaged Chromium on Firebase App Hosting/Cloud Run.
+- `apps/web/next.config.ts` now also explicitly allowlists `127.0.0.1` in `allowedDevOrigins` so local Next.js dev assets such as `/_next/webpack-hmr` can be requested safely when the browser reaches the dev server through `127.0.0.1` instead of only `localhost`.
+- The active Firebase App Hosting backend is `zootopia-club-next-backend` at `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`, and it is wired to Firebase web app `1:38079185268:web:adcd16b5e94d3d8c52ec21`; older Firebase web apps/backends still exist in the project but are not the current repo deployment target.
+- `apps/web/next.config.ts` explicitly reloads the repo-root env contract via `@next/env` (`loadEnvConfig(workspaceRoot, ...)`) so local/runtime auth and server config read the same root `.env.local` source.
+- The current font/runtime presentation stack uses Plus Jakarta Sans, Alexandria, Amiri, and JetBrains Mono through `apps/web/app/layout.tsx`; older IBM Plex notes remain historical change-log context only.
+- Browser-side auth uses Supabase public config while server-side session, auth, and persistence authority stays in same-origin App Router Route Handlers.
+- Same-origin App Router Route Handlers plus Supabase server/admin adapters are the real server-authoritative data path.
+- `/upload` is the only tool page that renders the full `apps/web/components/upload/upload-workspace.tsx` document-intake surface.
+- `/upload` now captures a stable submitted form element reference before async upload awaits so post-success cleanup cannot throw `Cannot read properties of null (reading 'reset')` after a real durable save.
+- `/assessment` and `/infographic` now consume shared document continuity through page-specific selectors plus a compact shared document handoff card, not by embedding the full upload UI.
+- uploaded `documents` now preserve active-link semantics per owner through `isActive` / `supersededAt`, and the Assessment page preselects the owner’s active linked document instead of making the user relink it manually every time.
+- Upload normalization now runs through `apps/web/lib/server/document-markdown.ts`, which creates the truthful local markdown snapshot used by the current direct-file runtime; Datalab Convert is no longer part of the active product path or runtime capability surface.
+- `/assessment` now supports server-normalized mode selection (`question_generation` or `exam_generation`) plus question-type selection and 100%-total percentage distribution inside the existing Assessment request `options` shape, and it now stores owner-scoped result metadata including `status`, `expiresAt`, `previewRoute`, `resultRoute`, and preview/export-friendly summary fields.
+- Assessment generation now prefers the original linked PDF file for Gemini models when Storage still has the binary, then falls back safely to extracted text context for unsupported file/model combinations instead of redesigning the upload pipeline.
+- Assessment results now have two dedicated pages, `/assessment/preview/[id]` and `/assessment/results/[id]`, plus owner-scoped result/export endpoints under `/api/assessment/results/[id]`, `/api/assessment/export/pdf/pro/[id]`, `/api/assessment/export/pdf/fast/[id]`, and the existing JSON/Markdown/DOCX routes.
+- Assessment preview/result pages and the user-facing result/export APIs now resolve records through explicit owner-only repository helpers; admins no longer piggyback on the normal user artifact surfaces for cross-owner inspection.
+- `GET /api/infographic/[id]` now resolves through an explicit owner-only repository helper, so the normal user infographic readback endpoint no longer doubles as an admin cross-owner observation lane.
+- Assessment preview/result pages plus both PDF lanes now share a narrow file-surface composition helper that keeps the first-page-only logo/brand rail, the compact `https://linktr.ee/ebnabdallah` QR card, the Arabic-only final support-page descriptor, the light/dark circular seal asset mapping, and the light/dark file-background asset mapping explicit instead of scattering that logic across separate renderers.
+- `/assessment` now uses a single-column configuration studio with Assessment-scoped custom dropdown panels, history-driven preview/result quick actions, and an optional steering prompt that can be left blank when a linked document is selected.
+- `/assessment` now also shows a post-success retention reminder only after a real saved generation commit, explaining the 3-day history window plus auto-delete behavior and linking to `/history`; the reminder auto-dismisses after exactly 60 seconds and is keyed by generation id to prevent duplicate rerender spam.
+- Assessment generation now uses a server-authoritative daily credit contract for normal users only: 3 successful generations per UTC day, short-lived pre-model reservations to prevent realistic duplicate-click oversubscription, an atomic durable save plus credit-consume commit after the canonical result artifact is persisted, and admin exemption that is enforced on the server instead of in client UI.
+- Assessment generations now persist a canonical owner-scoped result artifact in Storage, and JSON/Markdown/DOCX/print-HTML export artifacts are now cached under owner-scoped Storage paths when generated through the server routes.
+- Legacy assessment and document records no longer default a missing `ownerRole` to `"user"` during normalization or persistence. Shared repository reads/writes now resolve missing owner roles from authoritative owner context only (stored role, same-owner session role when available, or the owner's user/Auth metadata), best-effort backfill resolved legacy records, and omit unresolved `ownerRole` fields from Firestore merge writes instead of silently reclassifying ambiguous admin-owned history.
+- `apps/web/lib/server/repository.ts` now also exposes `backfillLegacyOwnerRolesForOwner(ownerUid)` as the explicit owner-scoped migration helper for intentionally repairing older document/assessment histories once the server can prove the real owner role.
+- The protected shell now places the Zootopia mark in the sidebar header, groups locale plus theme controls together in the sidebar utility rail, keeps the protected sidebar theme switcher intentionally limited to visible `Light` and `Dark` choices while still tolerating older `system` cookies safely, exposes `/about` and `/contact` in the shared left sidebar for both normal users and admins, mounts a floating scroll-to-top control against the real protected scroll container, keeps the Arabic attribution seal in the page scroll flow instead of a persistent footer bar, and layers in a subtle timed bubble effect through the protected background only.
+- The protected header now also carries a compact donation CTA plus a real server-backed Assessment credit badge sourced from `/api/assessment/credits`; this badge remains intentionally Assessment-scoped so users do not mistake one tool's quota for a global wallet or billing balance.
+- `/upload` now keeps a visible active-document continuation card with a direct Assessment CTA and a safe owner-scoped active-file removal path through `DELETE /api/uploads?documentId=...`.
+- `/api/uploads/[id]` now provides an owner-validated server download path for uploaded source files so History and other protected surfaces can retrieve the original binary without exposing Storage directly.
+- Infographic is now intentionally UI-locked for non-admin users across protected nav and tool entry cards; admins retain the real Infographic studio, while non-admin users see a polished coming-soon surface on `/infographic`.
+- Public informational routes now exist at `/about`, `/contact`, `/donation`, and `/hall-of-honor`, and they share a dedicated public-site layout instead of borrowing the protected workspace shell or the login-page composition.
+- The new `/hall-of-honor` tribute page is intentionally hierarchical by design (Elmahdy as the primary featured hero, Adham as a respectful secondary honoree), and discovery is wired through both public/protected navigation plus a dedicated protected-home entry card.
+- `/donation` now presents trust-first bilingual support messaging that explicitly covers recurring operating costs, the 2022/2023 legacy angle, continuity risk if monthly costs are not covered, and direct personal WhatsApp contact at `+201124511183`.
+- `/api/contact` now provides a small server-only public contact relay that sends through Gmail SMTP runtime env vars, keeps `CONTACT_FORM_TO` off the client, and applies a silent honeypot guard instead of broad anti-spam infrastructure.
+- Assessment preview/result pages, Markdown/DOCX exports, and the print/PDF export surface now share their file-facing Arabic footer through `apps/web/lib/assessment-file-branding.ts`, using the exact export line `تمت برمجة وتطوير وتمويل هذه المنصة بكل شغف وإبداع على يد ابن عبدالله يوسف، دفعة 2022، قسم كيمياء حيوان 💻❤️` without rewriting the broader protected-shell attribution source.
+- Assessment preview/result/export surfaces now use a shared display parser that can split both multiline and inline MCQ options out of the saved `question` string, keep answer choices beneath the stem, prefer a compact 2x2 layout for four-choice sets when width allows, resolve marker-only answers into human-readable labels like `B) Ecosystem`, and annotate correct choices once so preview/result/PDF cards can share the same premium highlight treatment without rewriting the persisted assessment record.
+- The shared Assessment pipeline now supports mixed question-type composition (MCQ, True/False, Essay, Fill blanks, Short answer, Matching, Multiple response) with per-question difficulty metadata, content-language direction derivation, and type-aware rendering across detached preview/result plus print/PDF/DOCX/Markdown/text export surfaces.
+- Detached preview/result pages plus both PDF export lanes now carry the active light/dark file theme through explicit `?theme=` query params, but the assessment-specific default file mode is now `light` unless the user explicitly switches it.
+- The Pro PDF lane now launches a local Chrome/Edge executable first during integrated development and only falls back to packaged `@sparticuz/chromium` on Linux server runtimes, which preserves local developer reliability on Windows/macOS while keeping Firebase App Hosting compatible.
+- `apps/web/components/assessment/assessment-export-actions.tsx` now exposes distinct Pro and Fast PDF controls, with the Pro Puppeteer/Chromium lane rendered as the first hero CTA on preview pages and the Fast browser-print lane rendered immediately beside it as a clearly secondary path.
+- `apps/web/app/globals.css` now adds a guarded Assessment export-toolbar spacing contract that keeps lane badges readable and avoids label crowding by combining larger badge-safe trailing padding with a 640-860px single-column layout fallback; this remains CSS-only so export route ownership and action logic stay unchanged.
+- `apps/web/components/assessment/assessment-preview-shell.tsx` now owns the detached file-surface summary card used by both preview and result pages, and that shared top summary block keeps a literal `SUMMARY` badge plus theme-aware premium styling so the on-screen file header stays aligned with the Pro PDF cover treatment.
+- The Pro Assessment PDF lane now lives at `/api/assessment/export/pdf/pro/[id]`, owns the Puppeteer/Chromium download flow, keeps its own `export-pdf` artifact identity plus Pro-specific version tag, and reuses the shared file-surface HTML only as a narrow rendering foundation so future premium charts/graphs/layouts can evolve independently.
+- The Fast Assessment PDF lane now lives at `/api/assessment/export/pdf/fast/[id]`, owns the lightweight same-origin browser-print HTML flow, keeps its own `export-print-html` artifact identity plus Fast-specific version tag, and remains the speed-first fallback/quick-export path instead of hiding behind a mixed `surface=print` branch.
+- The shared Assessment export pagination contract now counts structured question-detail blocks when deciding page fallback, keeps each print page body separate from its footer row, and keeps the support/signature/footer sheet as one final owned page so the footer cannot spill into a ghost page while Pro/Fast lane separation stays intact.
+- `GET /api/assessment/export/pdf/[id]` is now compatibility-only and immediately redirects older links to the explicit Pro or Fast lane route, so the real generation logic no longer lives behind one confusing mixed contract.
+- `/history` now exists as a dedicated owner-scoped protected route that aggregates retained uploads plus generated assessments/exports from the existing repository layer instead of inventing a second backend.
+- Assessment and document retention now share one 3-day lifecycle contract with lazy cleanup: expired uploads, assessment records, canonical result files, and persisted export artifacts are removed on server read/list access instead of only being hidden in UI state.
+- `POST /api/internal/maintenance/expired-uploads` now validates the bearer secret with a timing-safe comparison, reducing token-probing signal leakage while preserving the existing secret-gated scheduler contract.
+- Regular user login and admin login are intentionally separate.
+- Both auth bootstrap edges (`/api/auth/bootstrap` and `/api/auth/admin/bootstrap`) are now server-throttled with route-scoped limits, while preserving independent regular-user versus admin sign-in contracts.
+- Admin auth bootstrap now also requires a configured server-only `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` gate as an additional factor before session issuance, and admin-login UI readiness is exposed through `runtimeFlags.adminSupabaseAuth`.
+- Admin authority is claims-first: allowlisted email plus Supabase app-metadata claim semantics (`admin` or admin role markers).
+- Session and route isolation remain request-bound on the server: `verifySessionCookie(..., true)` revalidates the session cookie on every request, admin routes and APIs still resolve through explicit admin-session helpers, and owner-facing assessment/export/history reads remain bound to `ownerUid` instead of shared mutable session state.
+- The admin dashboard now includes a server-rendered recent platform activity feed sourced from `adminActivityLogs`, and the app now records login/session, upload, assessment, export, download, and cleanup activity there for admin-safe observability.
+- `/admin` and `/admin/users` now merge the full Supabase Auth account inventory with stored server-side user metadata, so admin user visibility is no longer capped at small hydrated subsets.
+- `/admin/users` now uses compact per-user entry cards with inline expansion panels for role/status/access/credit management, replacing the previous cramped right-rail table-actions pattern while preserving the same admin-only APIs and server authority.
+- Admin block/unblock now updates both the persistent `users.status` field and Supabase Auth suspension state, then revokes refresh tokens so suspension is enforced by backend/session authority even against already-issued sessions.
+- Mandatory non-admin profile completion is enforced server-side before access to the main user workspace and now requires full name, university code, valid E.164 phone number, and nationality, while admins remain exempt. `/settings` now renders Profile Completion as the dominant full-width workflow surface, keeps Runtime Status directly below it, moves the signed-in account summary into a compact secondary rail, uses a real Egypt-default international phone input plus searchable country selectors for phone/nationality, and persists normalized phone metadata (`phoneNumber`, `phoneCountryIso2`, `phoneCountryCallingCode`) server-authoritatively through the self-only profile update path.
+- Settings phone handling now treats phone as normal profile data (no Firebase OTP/reCAPTCHA verification lane and no `POST /api/users/me/phone-verification` endpoint); non-admin completion remains blocked until the stored phone field is valid E.164.
+- Root `.env.local` is the canonical local environment source; repo-root `.env`, `cloudrun.env`, `netlify.toml`, `Dockerfile`, `cloudbuild.yaml`, `deployment/runtime-manifest.json`, and `tests/*` are not active current-repo paths.
+
+Guide Alignment Notes
+- The guide remains the main architectural reference.
+- The repo intentionally differs from the guide in a few current-state areas:
+  - `apps/api` is present but deferred.
+  - npm workspaces are used instead of pnpm or Turborepo.
+  - `packages/ui` is not currently present.
+  - The repo now aligns with the official Firebase recommendation by using App Hosting as the active deployment path for the Next.js app.
+
+Current Repo Reality Versus Older Audit Checklists
+- The current repo does not contain root `server.ts`, root `server/*`, root `src/App.tsx`, root `src/auth/*`, root `src/ai/*`, root `src/features/*`, root `src/components/*`, root `src/services/*`, or root `src/routing/*`.
+- The current repo also does not contain active root `netlify.toml`, `Dockerfile`, `cloudbuild.yaml`, `cloudrun.env`, `deployment/runtime-manifest.json`, repo-root `.env`, or `tests/*`.
+- Historical or reference-only deployment material survives under `docs/legacy-reference/*` and `Guide-Files/*`, including `docs/legacy-reference/cloudrun.reference.env`, but those files do not define the active runtime path.
+- Future agents should treat workspace-based paths under `apps/web`, `apps/api`, `packages/shared-*`, `firebase`, `docs`, and `Guide-Files` as the current source tree, and should not assume that older single-app root paths still exist.
+
+Monorepo Structure
+- Root ownership
+  - `package.json`: workspace orchestration and root scripts
+  - `package-lock.json`: canonical lockfile
+  - `tsconfig.base.json`, `tsconfig.json`: shared TypeScript baseline
+  - `eslint.config.mjs`: root lint config
+  - `.env.example`: current environment contract
+  - `vercel.json`: Vercel deployment wiring for the monorepo app target
+  - `README.md`, `docs/`, `Guide-Files/`: repo docs and reference material
+- `apps/web`
+  - `app/`: App Router pages, layouts, and Route Handlers
+  - `components/`: UI and client-side interaction components
+  - `components/ui/`: shared button/input/background primitives and local design-system utilities
+  - `lib/`: request context, preferences, auth helpers, server modules, AI orchestration, Supabase integration
+  - `messages/`: EN/AR message catalogs
+  - `public/`: static assets
+  - `proxy.ts`: optimistic request-time redirects only
+- `apps/api`
+  - Placeholder workspace package for future backend extraction
+  - Current source files only describe its deferred role
+- `packages/shared-config`
+  - App identity, route constants, env cookie keys, feature flags, and AI model catalog
+- `packages/shared-types`
+  - Shared auth, user, API, document, assessment, infographic, and admin contracts
+- `packages/shared-utils`
+  - Validation, upload policy, RTL helpers, date helpers, and small pure utilities
+- `firebase`
+  - `firestore.rules`
+  - `firestore.indexes.json`
+  - `storage.rules`
+- `scripts/firebase`
+  - Firebase env bootstrap and admin maintenance scripts
+- `docs`
+  - Active architecture notes plus legacy-reference material for migration context only
+
+Dependency And Runtime Baseline
+- Root workspace baseline
+  - Node engine: `>=20.9.0`
+  - npm workspaces across `apps/*` and `packages/*`
+  - TypeScript `^5`
+  - ESLint `^9`
+  - Tailwind CSS `^4`
+- `apps/web` application baseline
+  - Next.js `16.2.2`
+  - React `19.2.4`
+  - React DOM `19.2.4`
+  - `@supabase/ssr` `^0.10.2`
+  - `@supabase/supabase-js` `^2.103.0`
+  - `postgres` `^3.4.5`
+  - DOCX export layer: `docx` `^9.5.1`
+  - QR generation for branded file surfaces: `qrcode` `^1.5.4`
+  - UI utility layer: `@radix-ui/react-slot`, `class-variance-authority`, `clsx`, `tailwind-merge`
+  - motion layer: `framer-motion` `12.38.0` plus package-level `motion` `^12.38.0`
+  - icon layer: `lucide-react` `1.7.0`
+- Build/deploy baseline
+  - `apps/web` builds with standalone output enabled
+  - App Hosting depends on the app-local lockfile in `apps/web/package-lock.json`
+  - `apps/web/package.json` runs `postbuild` through `apps/web/scripts/normalize-standalone.mjs` so Firebase App Hosting sees the bundle structure it expects
+
+Current Visual Identity And UI System
+- `apps/web/app/globals.css` now defines the current emerald-and-gold premium scientific visual system, including glass surfaces, hover states, motion tokens, auth-state styling, and shared background/elevation utilities for both light and dark themes.
+- `apps/web/app/layout.tsx` now mounts `apps/web/components/ui/vital-background.tsx`, which provides the animated global glow/noise background layer behind the entire app shell.
+- The current font stack is loaded through `next/font` using Plus Jakarta Sans, Alexandria, Amiri, and JetBrains Mono.
+- `apps/web/app/(protected)/layout.tsx` now mounts `apps/web/components/layout/protected-workspace-background.tsx`, which keeps `apps/web/public/my-app-background.png` scoped to protected routes only and layers subtle dimming, animated grid/orb/beam ambience, texture, and a lightweight timed bubble pass without touching public auth backgrounds.
+- `apps/web/components/layout/protected-shell.tsx` and `apps/web/components/layout/shell-nav.tsx` now anchor the protected-shell toolbar/sidebar contract: logo in the sidebar header, locale plus theme controls grouped in the sidebar utilities, a floating scroll-to-top button, and a compact branded Arabic attribution seal that lives at the end of the protected scroll flow instead of in a persistent footer bar.
+- `apps/web/components/site/public-site-shell.tsx` now defines the shared premium public-info header/footer surface for `/about`, `/contact`, `/donation`, and `/hall-of-honor`, keeping those routes visually cohesive without leaking protected-shell ownership into public pages.
+- `apps/web/components/assessment/assessment-studio.tsx` now uses `apps/web/components/assessment/assessment-field-select.tsx` for Assessment-only dropdown panels and an emerald/cyan/gold studio surface that aligns with the protected shell instead of the older violet-heavy two-column layout.
+- `apps/web/components/layout/protected-signature-seal.tsx` plus `apps/web/lib/branding/protected-signature.ts` now define the shared attribution seal reused by the protected footer, Assessment preview/result surfaces, and export renderers.
+- `apps/web/lib/assessment-file-branding.ts` now defines the dedicated file-surface background/logo/footer/QR metadata used by detached Assessment preview/result pages and the print/PDF export surface, including the first-page-only premium framing rules future agents should keep aligned.
+- `apps/web/lib/site-content.ts` now holds the bilingual long-form public-site copy, including the structured Donation-page cost/continuity/WhatsApp messaging, plus the compact donation/balance labels used by the protected header, which keeps those informational strings out of the core workspace message catalog.
+- A local shared UI primitive layer now exists in `apps/web/components/ui/button.tsx`, `apps/web/components/ui/input.tsx`, and `apps/web/lib/utils.ts`.
+- The current UX direction is intentionally more visual and less text-heavy than earlier passes, with stronger CTA hierarchy, route-specific accent colors, and glassmorphic card treatments across Home, Upload, Assessment, Infographic, Settings, and Admin.
+- `apps/web/app/(public)/admin/login/page.tsx` plus `apps/web/components/auth/admin-login-panel.tsx` now keep the admin entrance on a compact copy-light auth layout (shared media copy hidden and non-essential helper text removed) so the separate admin sign-in flow stays operational with less scrolling on mobile, tablet, laptop, desktop, and ultra-wide viewports.
+- Current page-focus rule: the protected shell is shared, but each major tool page owns only its own page-scale UI. Shared document continuity appears as compact support UI only and no longer duplicates the upload page inside Assessment or Infographic.
+- Older IBM Plex-era notes remain historically accurate for earlier redesign phases in the change log, but they no longer describe the current live typography stack.
+
+Important Folders And Files
+- Root
+  - `package.json`
+  - `.env.example`
+  - `firebase.json`
+  - `zootopia-club-next-ledger.txt`
+- `apps/web/app`
+  - `globals.css`
+  - `layout.tsx`
+  - `global-error.tsx`
+  - `(site)/layout.tsx`
+  - `(site)/about/page.tsx`
+  - `(site)/contact/page.tsx`
+  - `(site)/donation/page.tsx`
+  - `(site)/hall-of-honor/page.tsx`
+  - `(public)/login/page.tsx`
+  - `(public)/admin/login/page.tsx`
+  - `(protected)/layout.tsx`
+  - `(protected)/settings/page.tsx`
+  - `(protected)/(completed)/page.tsx`
+  - `(protected)/(completed)/upload/page.tsx`
+  - `(protected)/(completed)/history/page.tsx`
+  - `(protected)/(completed)/assessment/page.tsx`
+  - `(protected)/(completed)/assessment/preview/[id]/page.tsx`
+  - `(protected)/(completed)/assessment/results/[id]/page.tsx`
+  - `(protected)/(completed)/infographic/page.tsx`
+  - `(protected)/admin/layout.tsx`
+  - `(protected)/admin/page.tsx`
+  - `(protected)/admin/users/page.tsx`
+  - `api/contact/route.ts`
+  - `api/uploads/[id]/route.ts`
+  - `api/**/route.ts`
+- `apps/web`
+  - `package.json`
+  - `package-lock.json`
+  - `next.config.ts`
+  - `apphosting.yaml`
+  - `proxy.ts`
+  - `scripts/normalize-standalone.mjs`
+  - `public/dark-file-background.png`
+  - `public/light-file-background.png`
+  - `public/favicon.svg`
+  - `public/my-app-background.png`
+- `apps/web/lib`
+  - `return-to.ts`
+  - `preferences.ts`
+  - `site-content.ts`
+  - `assessment-file-branding.ts`
+  - `assessment-question-display.ts`
+  - `branding/protected-signature.ts`
+  - `messages.ts`
+  - `assessment-preview-model.ts`
+  - `assessment-routes.ts`
+  - `utils.ts`
+  - `supabase/public-config.ts`
+  - `supabase/client.ts`
+  - `server/server-auth.ts`
+  - `server/supabase-admin.ts`
+  - `server/session.ts`
+  - `server/admin-auth.ts`
+  - `server/repository.ts`
+  - `server/document-runtime.ts`
+  - `server/document-markdown.ts`
+  - `server/owner-scope.ts`
+  - `server/assessment-linked-document.ts`
+  - `server/assessment-artifact-storage.ts`
+  - `server/assessment-file-qr.ts`
+  - `server/contact-mail.ts`
+  - `server/assessment-records.ts`
+  - `server/assessment-retention.ts`
+  - `server/assessment-preview.ts`
+  - `server/assessment-exporter.ts`
+  - `server/assessment-print-renderer.ts`
+  - `server/runtime.ts`
+  - `server/ai/execution.ts`
+  - `server/ai/provider-runtime.ts`
+- `apps/web/components`
+  - `auth/login-panel.tsx`
+  - `auth/admin-login-panel.tsx`
+  - `auth/public-auth-shell.tsx`
+  - `auth/sign-out-button.tsx`
+  - `site/public-site-shell.tsx`
+  - `site/contact-form.tsx`
+  - `assessment/assessment-field-select.tsx`
+  - `document/document-context-card.tsx`
+  - `history/history-document-actions.tsx`
+  - `assessment/assessment-export-actions.tsx`
+  - `assessment/assessment-preview-shell.tsx`
+  - `assessment/assessment-preview-theme-toggle.tsx`
+  - `assessment/assessment-result-viewer.tsx`
+  - `layout/protected-shell.tsx`
+  - `layout/protected-signature-seal.tsx`
+  - `layout/protected-workspace-background.tsx`
+  - `layout/shell-nav.tsx`
+  - `preferences/theme-toggle.tsx`
+  - `preferences/locale-toggle.tsx`
+  - `settings/profile-settings-form.tsx`
+  - `upload/upload-workspace.tsx`
+  - `assessment/assessment-studio.tsx`
+  - `infographic/infographic-studio.tsx`
+  - `admin/users-table.tsx`
+  - `ui/button.tsx`
+  - `ui/input.tsx`
+  - `ui/vital-background.tsx`
+- `apps/api`
+  - `README.md`
+  - `src/app.ts`
+  - `src/server.ts`
+- Shared packages
+  - `packages/shared-config/src/app.ts`
+  - `packages/shared-config/src/features.ts`
+  - `packages/shared-config/src/env.ts`
+  - `packages/shared-config/src/routes.ts`
+  - `packages/shared-config/src/models.ts`
+  - `packages/shared-types/src/auth.ts`
+  - `packages/shared-types/src/user.ts`
+  - `packages/shared-types/src/api.ts`
+  - `packages/shared-utils/src/validation.ts`
+- Historical/reference docs
+  - `docs/architecture.md`
+  - `docs/legacy-reference/README.md`
+  - `docs/legacy-reference/cloudrun.reference.env`
+
+Route Map
+- Public routes
+  - `/about`
+  - `/contact`
+  - `/donation`
+  - `/hall-of-honor`
+  - `/login`
+  - `/admin/login`
+- Authenticated non-admin shell
+  - `/settings`
+- Completion-required non-admin routes
+  - `/`
+  - `/upload`
+  - `/history`
+  - `/assessment`
+  - `/assessment/preview/[id]`
+  - `/assessment/results/[id]`
+  - `/infographic`
+- Admin routes
+  - `/admin`
+  - `/admin/users`
+
+Route Ownership Clarification
+- `/upload`
+  - owns the full upload and document-preparation surface through `apps/web/app/(protected)/(completed)/upload/page.tsx`
+  - is the only route that renders `apps/web/components/upload/upload-workspace.tsx`
+- `/assessment`
+  - owns assessment generation, active linked-document selection, optional prompt-driven or document-driven setup, assessment history, and preview/result quick actions through `apps/web/app/(protected)/(completed)/assessment/page.tsx` and `apps/web/components/assessment/assessment-studio.tsx`
+  - preview/result ownership is split cleanly across `apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx`, `apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx`, and the shared viewer/export components under `apps/web/components/assessment/*`
+  - does not render the full upload workspace
+- `/infographic`
+  - keeps the real infographic generation studio for admins through `apps/web/app/(protected)/(completed)/infographic/page.tsx` and `apps/web/components/infographic/infographic-studio.tsx`
+  - renders a polished non-admin coming-soon placeholder in the same route without pretending that the placeholder is the authorization boundary
+  - does not render the full upload workspace
+- `/about`, `/contact`, `/donation`, and `/hall-of-honor`
+  - share public informational layout ownership through `apps/web/app/(site)/layout.tsx` and `apps/web/components/site/public-site-shell.tsx`
+  - do not borrow protected-shell layout ownership and do not expose the private contact destination email in their client-visible UI
+- Protected shell
+  - shared layout only through `apps/web/app/(protected)/layout.tsx`, `apps/web/components/layout/protected-shell.tsx`, and `apps/web/components/layout/shell-nav.tsx`
+  - does not decide tool-page content ownership
+
+Shared State Versus Shared Page UI
+- Shared document state remains intentional and server-loaded through `listDocumentsForUser(...)` on the route page, then passed into tool studios as `initialDocuments`.
+- Shared linked-document continuity remains intentional through `documentId`, owner-scoped repository lookups, and compact page-specific UI.
+- Shared page-scale UI is intentionally constrained: only `/upload` renders `apps/web/components/upload/upload-workspace.tsx`.
+- `apps/web/components/document/document-context-card.tsx` is a compact shared support component, not a second upload page.
+
+API Map
+- Core/runtime
+  - `GET /api/health`
+- Public contact/support
+  - `POST /api/contact`
+- Session/auth
+  - `GET /api/auth/me`
+  - `POST /api/auth/bootstrap`
+  - `POST /api/auth/logout`
+- Admin auth
+  - `POST /api/auth/admin/resolve-identifier`
+  - `POST /api/auth/admin/bootstrap`
+- User protected APIs
+  - `POST /api/uploads`
+  - `DELETE /api/uploads`
+  - `GET /api/uploads/[id]`
+  - `POST /api/assessment`
+  - `GET /api/assessment/[id]`
+  - `GET /api/assessment/linked-document`
+  - `GET /api/assessment/results/[id]`
+  - `GET /api/assessment/export/json/[id]`
+  - `GET /api/assessment/export/markdown/[id]`
+  - `GET /api/assessment/export/docx/[id]`
+  - `GET /api/assessment/export/pdf/[id]`
+  - `GET /api/assessment/export/pdf/pro/[id]`
+  - `GET /api/assessment/export/pdf/fast/[id]`
+  - `POST /api/infographic`
+  - `GET /api/infographic/[id]`
+  - `PATCH /api/users/me/profile`
+- Admin APIs
+  - `GET /api/admin/overview`
+  - `GET /api/admin/users`
+  - `PATCH /api/admin/users/[uid]/role`
+  - `PATCH /api/admin/users/[uid]/status`
+
+Backend Runtime And Service Ownership
+- The active backend is the Next App Router server surface inside `apps/web/app/api`, not `apps/api`.
+- All live route handlers are pinned to the Node runtime because they rely on cookies, Firebase Admin, Firestore, Storage, and multipart uploads.
+- Server-only responsibility split
+  - `apps/web/app/api/**/route.ts`: request parsing, auth gating, response shaping
+  - `apps/web/lib/server/session.ts`: session verification and route/API guards
+  - `apps/web/lib/server/repository.ts`: Firestore-backed persistence with a local in-memory fallback when Firebase Admin runtime is unavailable, including active-document normalization plus assessment result lifecycle normalization
+  - `apps/web/lib/server/document-runtime.ts`: upload validation, direct-file markdown snapshot orchestration, Storage persistence attempts, and linked-binary reloads for direct-file Assessment generation
+  - `apps/web/lib/server/document-markdown.ts`: current local document snapshot helper for upload normalization and text-context fallback continuity
+  - `apps/web/lib/server/assessment-linked-document.ts`: Assessment-only linked-document resolution that prefers direct PDF input when the selected provider supports it
+  - `apps/web/lib/server/assessment-file-qr.ts`: server-side QR data URL generation for the branded Assessment file surfaces
+  - `apps/web/lib/server/contact-mail.ts`: server-only Gmail SMTP relay for the public Contact page that reads runtime env vars in local dev and Firebase App Hosting without exposing the admin destination or credentials to the client
+  - `apps/web/lib/server/assessment-retention.ts`: 3-day Assessment expiry window and route/lifecycle helpers
+  - `apps/web/lib/server/assessment-preview.ts`: normalized bilingual Assessment preview/result model generation
+  - `apps/web/lib/server/assessment-exporter.ts`: JSON, Markdown, and DOCX artifact generation from one normalized preview model
+  - `apps/web/lib/server/assessment-print-renderer.ts`: print-first HTML export surface used by the lightweight PDF route
+  - `apps/web/lib/server/runtime.ts`: runtime capability flags returned by inspection endpoints
+  - `apps/web/lib/server/firebase-admin.ts`: managed-credentials or service-account Admin bootstrap
+- `apps/api` remains a deliberate future extraction boundary only
+  - `apps/api/src/app.ts` describes the package as `future-extraction-target`
+  - `apps/api/src/server.ts` explicitly says Phase 1 runtime is owned by `apps/web` route handlers
+
+Auth And Session Architecture
+- Session model
+  - One secure httpOnly session cookie: `zc_session`
+  - Preference cookies: `zc_theme`, `zc_locale`
+  - Cookie names are defined in `packages/shared-config/src/env.ts`
+- User login flow
+  - Public entry point: `/login`
+  - Firebase Web SDK Google sign-in happens client-side
+  - Client auth persistence is intentionally in-memory only during bootstrap
+  - `POST /api/auth/bootstrap` verifies the Google ID token server-side, creates the session cookie, mirrors/upserts the user document, and returns the correct redirect target
+  - Client signs out its Firebase Web state after bootstrap so the session cookie remains the authoritative long-lived session
+- Admin login flow
+  - Public entry point: `/admin/login`
+  - Separate UI and separate bootstrap path
+  - Admin identifier resolution happens server-side first
+  - Real credential step is Firebase Email/Password
+  - `POST /api/auth/admin/bootstrap` verifies recent sign-in, provider `password`, the additional server-only `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` gate, allowlisted email, and `admin: true` claim before issuing the same session cookie type
+- Route protection
+  - `apps/web/proxy.ts` only checks cookie presence and redirects unauthenticated requests optimistically
+  - Real authorization stays in server code through:
+    - `getSessionSnapshot()`
+    - `requireAuthenticatedUser()`
+    - `requireCompletedUser()`
+    - `requireAdminUser()`
+- Session user source of truth
+  - `apps/web/lib/server/session.ts` verifies the session cookie through Firebase Admin Auth
+  - The decoded token is combined with the Firestore user record through `upsertUserFromAuth()`
+  - Active/suspended state comes from the Firestore mirror
+
+Admin Login Architecture
+- Only these emails may hold admin authority:
+  - `alahlyeagle@gmail.com`
+  - `elmahdy@admin.com`
+  - `alahlyeagle13@gmail.com`
+- Supported admin usernames:
+  - `elmahdy`
+  - `alahlyeagle`
+- Admin authority rule
+  - allowlisted email
+  - plus Firebase custom claim `admin === true`
+- Firestore `role` and `status` remain mirrored for UI/admin management, but they are not sufficient by themselves for privileged access
+- Key files
+  - `apps/web/lib/server/admin-auth.ts`
+  - `apps/web/app/api/auth/admin/resolve-identifier/route.ts`
+  - `apps/web/app/api/auth/admin/bootstrap/route.ts`
+  - `scripts/firebase/set-admin-claims.mjs`
+  - `scripts/firebase/set-admin-passwords.mjs`
+
+Mandatory Profile Completion Architecture
+- Applies to authenticated non-admin users only
+- Required fields
+  - `fullName`
+  - `universityCode`
+  - `phoneNumber`
+  - `nationality`
+  - `profileCompleted`
+  - `profileCompletedAt`
+- Validation rules
+  - `fullName`
+    - trim and normalize repeated whitespace
+    - normalized length 12 through 120 characters
+    - at least 4 meaningful parts
+    - Arabic and/or English letters only, with internal apostrophes or hyphens allowed
+    - each part must contain at least 2 letters after stripping apostrophes and hyphens
+  - `universityCode`
+    - exactly 7 digits
+    - first 2 digits must be a cohort prefix from `13` through `31`
+    - prefixes map to years `2013` through `2031`
+  - `phoneNumber`
+    - validated server-side as a possible international E.164 number (`+<countrycode><number>`)
+    - normalized server-side and persisted with optional phone country metadata
+  - `nationality`
+    - trim and normalize whitespace
+    - normalized length 2 through 80 characters
+    - Arabic/English letters with spaces, apostrophes, periods, or hyphens only
+- Persistence model
+  - stored on `users/{uid}`
+  - server recomputes `profileCompleted` from stored fields instead of trusting client input
+  - phone persistence is server-authoritative through self-only profile updates
+- Enforcement points
+  - bootstrap redirect shaping in `POST /api/auth/bootstrap`
+  - session helper checks in `apps/web/lib/server/session.ts`
+  - completion-only protected pages under `apps/web/app/(protected)/(completed)`
+  - protected user APIs return `PROFILE_INCOMPLETE` if the user is still gated
+- Settings save flow
+  - `PATCH /api/users/me/profile` is the only self-service save path for stored profile fields in Settings
+  - `apps/web/components/settings/profile-settings-form.tsx` provides the client UI for both normal users and admins
+- Admin policy
+  - admins are exempt from the non-admin completion gate
+  - admins still stay inside the same self-only ownership boundary in Settings; this route does not allow cross-account editing
+
+Firebase Integration
+- Firebase project: `zootopia2026`
+- Firestore database: `zootopia-club-next-database`
+- Default storage bucket: `zootopia2026.firebasestorage.app` unless overridden
+- Live Firestore collections used by the application
+  - `users`
+  - `documents`
+  - `assessmentGenerations`
+  - `infographicGenerations`
+  - `adminActivityLogs`
+- Live Storage path pattern
+  - `documents/{ownerUid}/{documentId}/{fileName}`
+- Firebase Admin bootstrap
+  - `apps/web/lib/server/firebase-admin.ts`
+  - supports canonical `FIREBASE_*` env names and older `FIREBASE_ADMIN_*` aliases
+  - binds Firestore explicitly to the named database `zootopia-club-next-database`
+- Firebase client bootstrap
+  - `apps/web/lib/firebase/client.ts`
+  - uses the modular Firebase Web SDK from `firebase/app` and `firebase/auth`
+  - requires the full public web contract:
+    - `NEXT_PUBLIC_FIREBASE_API_KEY`
+    - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+    - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+    - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+    - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+    - `NEXT_PUBLIC_FIREBASE_APP_ID`
+  - on Firebase App Hosting, `apps/web/next.config.ts` now mirrors the backend-linked build-only `FIREBASE_WEBAPP_CONFIG` into those six public env keys before Next compiles the client bundle
+  - keeps client auth persistence in-memory only during login bootstrap
+
+AI, Model, And Provider Orchestration
+- Model catalog authority
+  - `packages/shared-config/src/models.ts` defines the supported model ids, provider families, display labels, env keys, and tool scopes
+  - `apps/web/lib/ai/models.ts` re-exports the shared model catalog into the web runtime
+- Provider/runtime resolution
+  - `apps/web/lib/server/ai/provider-runtime.ts` maps model ids to provider-specific env names and reports whether Google or Qwen-style runtime credentials are configured
+  - `apps/web/lib/server/runtime.ts` exposes provider and Firebase readiness through runtime flags
+- Prompt/build flow
+  - `apps/web/lib/server/ai/prompt-orchestrator.ts` assembles prompt context for assessment and infographic generation, including the current assessment rule that tasteful educational emojis may be used sparingly and must remain preserved directly inside JSON output strings
+  - `apps/web/app/api/assessment/route.ts` and `apps/web/app/api/infographic/route.ts` attach optional document context from stored document markdown before generation
+- Current generation reality
+  - assessment generation is now provider-aware and server-side only:
+    - Google Gemini assessment models run through the Google runtime path
+    - `qwen3.5-flash` runs through the Alibaba DashScope OpenAI-compatible runtime and must use the US (Virginia) endpoint
+  - infographic generation still returns SVG fallback output while external provider-backed infographic execution remains deferred
+  - uploaded document context now comes from the local direct-file snapshot helper in `apps/web/lib/server/document-markdown.ts`, with original-file reuse preferred where the current server/runtime supports it
+
+Firestore, Storage, Rules, And Indexes Strategy
+- Firestore Rules
+  - File: `firebase/firestore.rules`
+  - Current strategy: deny all browser/client SDK access
+  - The live app uses Route Handlers plus Firebase Admin SDK for all real reads and writes
+  - Rules comments were refreshed on 2026-04-01 to document:
+    - named-database deployment through `firebase.json`
+    - Admin SDK bypass behavior
+    - server-side enforcement of auth/admin/profile-completion rules
+  - Rule logic was not changed during the 2026-04-01 audit
+- Firestore Indexes
+  - File: `firebase/firestore.indexes.json`
+  - Current composite indexes support owner/date list queries for:
+    - `documents`
+    - `assessmentGenerations`
+    - `infographicGenerations`
+  - No profile-completion-specific index is required because that flow uses direct document lookups/writes on `users/{uid}`
+- Storage Rules
+  - File: `firebase/storage.rules`
+  - Current strategy: deny all browser/client SDK access
+  - Comments document the live server-managed document binary path
+- Security model
+  - Firestore Rules and Storage Rules protect browser access only
+  - Firebase Admin SDK bypasses both by design
+  - The real trust boundary is server code, not client-side Firebase access
+
+Environment Strategy
+- Public browser-safe env vars
+  - `NEXT_PUBLIC_FIREBASE_API_KEY`
+  - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+  - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+  - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+  - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+  - `NEXT_PUBLIC_FIREBASE_APP_ID`
+- Private Firebase env vars
+  - `FIREBASE_PROJECT_ID`
+  - `FIREBASE_CLIENT_EMAIL`
+  - `FIREBASE_PRIVATE_KEY`
+  - `FIREBASE_STORAGE_BUCKET`
+  - `ZOOTOPIA_ADMIN_EMAILS`
+  - `ZOOTOPIA_ADMIN_LOGIN_PASSWORD`
+- Private contact env vars
+  - `SMTP_HOST`
+  - `SMTP_PORT`
+  - `SMTP_SECURE`
+  - `SMTP_USER`
+  - `SMTP_PASS`
+  - `EMAIL_FROM`
+  - `CONTACT_FORM_TO`
+- Private AI env vars
+  - `GOOGLE_AI_API_KEY`
+  - `DASHSCOPE_API_KEY`
+  - optional model-selection env vars referenced from `packages/shared-config/src/models.ts`
+- Important env notes
+  - `.env.example` is the canonical repo env contract
+  - root `.env.local` is the canonical local env file for both root Firebase scripts and `apps/web`
+  - `apps/web/next.config.ts` reloads the root env through `@next/env` so the live Next.js app sees the same Firebase settings as the workspace scripts
+  - `.env.example` currently includes project-specific public Firebase identifiers while keeping server-only credentials blank; it is a real contract file, not a generic neutral placeholder
+  - `.env.example` now matches the active App Hosting backend-linked Firebase web app id `1:38079185268:web:adcd16b5e94d3d8c52ec21`
+  - `.env.example` now carries the server-only Gmail SMTP contact-form contract (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `CONTACT_FORM_TO`) for the public Contact page relay and no longer advertises retired Datalab env settings
+  - repo-root `.env` is not part of the verified current repo
+  - `cloudrun.env` is not part of the verified current repo; only `docs/legacy-reference/cloudrun.reference.env` survives as historical reference
+  - `serviceAccountKeyNext.json` is local bootstrap material only and is not a runtime source of truth
+  - `apps/web` does not rely on a separate app-local `.env.local`; the root `.env.local` is the intended shared local source
+  - App Hosting user env vars are now code-managed in `apps/web/apphosting.yaml` for the active backend, including BUILD-scoped browser-safe Firebase config and RUNTIME non-secret server config; the same file now references Cloud Secret Manager secret names for sensitive values, while real secret values remain external to source control and `FIREBASE_WEBAPP_CONFIG` backfill in `apps/web/next.config.ts` remains a safety-net path when explicit `NEXT_PUBLIC_FIREBASE_*` values are absent
+  - `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` is a server-only additional admin gate value and must never be exposed in client code or public config; production should use secret-manager-backed runtime injection.
+
+Deployment Strategy
+- Current repo deployment wiring
+  - `firebase.json` deploys App Hosting from `./apps/web`
+  - `firebase.json` also deploys Firestore rules and indexes to `zootopia-club-next-database`
+  - `firebase.json` keeps Storage rules deployment at the root Firebase layer
+- Local integrated development
+  - Frontend: `apps/web`
+  - Backend: same-origin Route Handlers in `apps/web/app/api/**/route.ts`
+  - Path behavior: browser code uses relative `/api/*` requests against the same dev origin
+  - Auth/session behavior: host-scoped `zc_session` cookie, optimistic proxy redirects, and server-side session verification
+  - Env assumptions: root `.env.local` is loaded into `apps/web` through `@next/env`
+  - Local resilience note: when Firebase Admin runtime is unavailable, the repository layer can fall back to an in-memory store for development continuity; this is not a production source of truth
+- Firebase App Hosting
+  - Status: active and only canonical web deployment target
+  - Active backend verified on 2026-04-03: `zootopia-club-next-backend` at `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`
+  - Frontend: Next.js pages, layouts, static assets, and public auth surfaces from `apps/web`
+  - Backend: the same App Router Route Handlers under `apps/web/app/api/**/route.ts`, deployed in the App Hosting runtime
+  - Path behavior: same-origin frontend and backend; client code continues to use relative `/api/*` calls with `credentials: "same-origin"`
+  - Auth/session behavior: the same host-scoped session cookie and server-authoritative redirect logic as local development
+  - Firebase Auth authorized domains currently include `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`
+  - Env/deployment assumptions: root `firebase.json`, app-local `apps/web/apphosting.yaml` (including runtime secret mapping `ZOOTOPIA_ADMIN_LOGIN_PASSWORD -> zootopia-admin-login-password`), app-local `apps/web/package-lock.json`, standalone output from `apps/web/next.config.ts`, and bundle normalization in `apps/web/scripts/normalize-standalone.mjs`
+  - Root npm scripts expose `firebase:deploy` and `firebase:app:deploy` as the canonical deploy commands
+- Firebase Hosting + Cloud Run
+  - Status: historical/reference only
+  - Frontend/backend split: not actively wired in the current repo
+  - Path behavior: reference material only under `docs/legacy-reference/*`
+  - Auth/session behavior: not an active current deployment contract and should not be treated as one
+  - Relevant files: `docs/legacy-reference/firebase.hosting-cloud-run.reference.json`, `docs/legacy-reference/cloudrun.reference.env`, and related legacy-reference docs
+- Netlify frontend + Cloud Run backend
+  - Status: conceptual future option only, not a verified active path
+  - Frontend/backend split: would be cross-origin by default unless a separate proxy/rewrite layer were introduced
+  - Path behavior: the current client runtime is not wired for a checked-in cross-origin backend because it assumes relative same-origin `/api/*` requests
+  - Auth/session behavior: the current session-cookie model is same-origin oriented, so this path would require additional deployment-specific integration work
+  - Current repo evidence: there is no active `netlify.toml`, `Dockerfile`, `cloudbuild.yaml`, `cloudrun.env`, or `deployment/runtime-manifest.json`
+- Other backend-capable paths
+  - No other active backend-capable deployment path is checked into this repo today
+  - `apps/api` remains a future extraction boundary only and should not be mistaken for a deployed backend service
+
+Shared Packages And Responsibilities
+- `packages/shared-config`
+  - app identity
+  - Firebase project/database constants
+  - cookie/env keys
+  - feature flags
+  - route constants
+  - AI model catalog
+- `packages/shared-types`
+  - session/auth types
+  - user document/profile contracts
+  - API envelopes
+  - admin contracts
+  - document/assessment/infographic contracts
+- `packages/shared-utils`
+  - validation helpers
+  - upload policy
+  - RTL helpers
+  - date helpers
+  - no secrets and no server-only side effects
+
+Feature Flags And Intentional Runtime Toggles
+- `packages/shared-config/src/features.ts` currently encodes the verified product/runtime direction:
+  - `appHostingFirst: true`
+  - `enableAppsApiTraffic: false`
+  - `enableBilling: false`
+  - `enableChat: false`
+- These flags reinforce the current architecture rather than replacing it:
+  - App Hosting is primary
+  - `apps/api` traffic is intentionally disabled
+  - billing and chat remain intentionally off in the current product phase
+
+Current Feature Set
+- Theme and locale controls
+- Protected sidebar theme switcher with visible `Light` / `Dark` choices only
+- EN/AR message support
+- Regular Google sign-in
+- Separate admin Email/Password sign-in
+- Claims-first admin route/API protection
+- Mandatory non-admin profile completion gate
+- Premium scientific visual system with animated background layers and glassmorphic protected-workspace surfaces
+- Shared local UI primitive layer for buttons, inputs, and background composition
+- Upload workspace and document record creation
+- Dark-glass upload-first workspace with a click-to-browse document dropzone, recent-upload preview, truthful warning handling, and an active-document continuation card
+- Protected-shell logo/sidebar-preferences/scroll-top/scroll-flow-signature layout contract plus a lightweight timed ambient bubble effect
+- Owner-scoped active upload continuation CTA plus active-file removal
+- Direct-file upload normalization with local markdown snapshots plus original-file reuse when the active server/runtime supports it
+- Assessment generation flow
+- Assessment question counts now use `10..100` in steps of `10`, Assessment requests now carry exactly one mode (`question_generation` by default or `exam_generation`), and the same requests can also carry selected question types plus a 100%-total percentage distribution that flows through shared validation, prompt orchestration, execution fallback normalization, and saved-record normalization.
+- Admin-retained infographic generation flow plus non-admin coming-soon UI lock
+- Model/provider selection through the shared AI catalog and same-origin server orchestration
+- Admin overview and user role/status management
+- Health/runtime inspection endpoints
+
+Deferred Or Intentionally Disabled Areas
+- `apps/api` traffic
+- billing
+- chat
+- communication center
+- legacy entitlement/unlock systems
+- live voice/chatbot/video generation systems from the old platform
+
+Important Reusable Files And Modules
+- Auth and routing
+  - `apps/web/lib/server/session.ts`
+  - `apps/web/lib/server/admin-auth.ts`
+  - `apps/web/lib/return-to.ts`
+  - `apps/web/proxy.ts`
+- Persistence and data flow
+  - `apps/web/lib/server/repository.ts`
+  - `apps/web/lib/server/firebase-admin.ts`
+  - `apps/web/lib/server/document-runtime.ts`
+  - `apps/web/lib/server/document-markdown.ts`
+- AI orchestration
+  - `apps/web/lib/server/ai/execution.ts`
+  - `apps/web/lib/server/ai/provider-runtime.ts`
+  - `packages/shared-config/src/models.ts`
+- Validation and contracts
+  - `packages/shared-utils/src/validation.ts`
+  - `packages/shared-types/src/auth.ts`
+  - `packages/shared-types/src/user.ts`
+  - `packages/shared-types/src/api.ts`
+- UI shells
+  - `apps/web/app/globals.css`
+  - `apps/web/components/ui/vital-background.tsx`
+  - `apps/web/components/ui/button.tsx`
+  - `apps/web/components/ui/input.tsx`
+  - `apps/web/lib/utils.ts`
+  - `apps/web/components/layout/shell-nav.tsx`
+  - `apps/web/components/auth/login-panel.tsx`
+  - `apps/web/components/auth/admin-login-panel.tsx`
+  - `apps/web/components/settings/profile-settings-form.tsx`
+
+Important Scripts And Commands
+- Root commands
+  - `npm run dev`
+  - `npm run dev:web`
+  - `npm run build`
+  - `npm run build:web`
+  - `npm run lint`
+  - `npm run lint:web`
+  - `npm run typecheck`
+  - `npm run typecheck:web`
+  - `npm run check`
+  - `npm run check:web`
+  - `npm run clean:web`
+  - `npm run rebuild:web`
+  - `npm run start`
+  - `npm run start:web`
+- Firebase scripts
+  - `npm run firebase:admin:bootstrap-env`
+  - `npm run firebase:admin:set-claims`
+  - `npm run firebase:admin:set-passwords`
+  - `npm run firebase:rules:deploy`
+- Script files
+  - `scripts/firebase/bootstrap-admin-env.mjs`
+  - `scripts/firebase/env-utils.mjs`
+  - `scripts/firebase/set-admin-claims.mjs`
+  - `scripts/firebase/set-admin-passwords.mjs`
+
+Important Security Assumptions And Trust Boundaries
+- Firebase Admin SDK bypasses Firestore Rules and Storage Rules by design
+- Browser clients do not read or write Firestore or Storage directly in the current architecture
+- `proxy.ts` is never the final authorization layer
+- Admin authority requires both allowlisted identity and Firebase custom claim `admin: true`
+- Firestore `role` and `status` are mirrors for UX and admin operations, not the sole authority for privileged access
+- Profile completion is enforced server-side and cannot be unlocked by UI state alone
+- The session cookie is the authoritative long-lived session
+- Firebase Web SDK auth state is cleared after session bootstrap
+- Server credentials and provider keys must remain outside the client graph
+- The shared admin password model is weak and should eventually be replaced with unique credentials plus MFA
+
+Current Behavior And Boundaries
+- Anonymous user
+  - can access `/login` and `/admin/login`
+  - is redirected away from protected routes by proxy and/or server guards
+- Authenticated non-admin with incomplete profile
+  - can hold a valid session cookie
+  - is redirected to `/settings`
+  - cannot access `/`, `/assessment`, `/infographic`, or protected user APIs until completion is saved and re-read
+- Authenticated non-admin with completed profile
+  - can access the full user workspace
+  - lands on `/upload` after successful login or profile completion
+  - keeps `/` as the protected overview route rather than the primary upload landing
+  - can use uploads and assessment generation
+  - sees Infographic as a coming-soon UI-locked surface in protected navigation/cards and on `/infographic`
+- Authenticated admin
+  - must use the separate admin login flow
+  - is protected by claims-first server checks
+  - is exempt from the non-admin profile-completion gate
+  - lands in `/admin`, not `/upload`, after successful admin login
+  - retains infographic studio access in the protected user workspace
+- Suspended user
+  - cannot start or continue a valid session regardless of route intent
+
+Generated Artifacts And Non-Source-Of-Truth Paths
+- Generated build artifacts are not architectural source of truth:
+  - `.next`
+  - `apps/web/.next`
+  - `*.tsbuildinfo`
+  - `.tmp-dev-stdout.txt`
+  - `.tmp-dev-stderr.txt`
+  - `debug.log`
+- Local scratch/reference files are also not runtime source of truth:
+  - `apps/code-backup.txt`
+- These files may exist locally after builds or verification runs and should not be used to infer runtime architecture
+
+Change Log
+
+2026-04-11 - Auth callback root-cause isolation, auth-critical Supabase-only persistence, and stage tracing
+
+Root Cause (confirmed with runtime evidence)
+- Exact failing statement in the pre-fix callback path was the users read inside `getUserByUid(...)`:
+  - `await getZootopiaFirestore().collection("users").doc(uid).get();`
+  - function: `getUserByUid(...)` in `apps/web/lib/server/repository.ts`
+- Exact thrown error from direct DB probe and callback-linked path:
+  - `42P01 relation "zc_entities" does not exist`
+- Why it failed:
+  - Auth callback `authorizeAdminCredentials(...)` and `authorizeUserCredentials(...)` both call `upsertUserFromAuth(...)`.
+  - `upsertUserFromAuth(...)` called `getUserByUid(...)`, which depended on the `zc_entities` table through the Firestore-shaped Postgres adapter.
+  - Missing table caused callback-runtime exception, which was normalized to `ADMIN_BOOTSTRAP_FAILED` / `BOOTSTRAP_FAILED`, then session bootstrap ended with `SESSION_NOT_ESTABLISHED`.
+
+Files changed in this pass
+- `apps/web/lib/server/auth-tracing.ts` (new)
+- `apps/web/auth.ts`
+- `apps/web/lib/server/repository.ts`
+- `apps/web/lib/server/server-auth.ts`
+- `apps/web/lib/server/admin-auth.ts`
+
+What was changed
+- Added structured auth tracing system with safe redaction and stage logging:
+  - `createAuthTraceContext(...)`
+  - `logAuthStageStart(...)`
+  - `logAuthStageSuccess(...)`
+  - `logAuthStageFailure(...)`
+  - `classifyAuthError(...)`
+- Instrumented callback/token/session paths in `auth.ts`:
+  - runtime, token-required, token-verify, recent-signin, provider-check, admin-allowlist, admin-claim, user-upsert, status-check, jwt-callback, session-callback, signIn-event.
+- Instrumented `server-auth.ts` token verification and user lookup.
+- Instrumented `admin-auth.ts` identifier allowlist resolution and claim activation checks.
+- Removed auth-critical dependency on Firestore-shaped `zc_entities` path in `repository.ts`:
+  - `getUserByUid(...)` now resolves from Supabase Auth via `getServerAuthAdmin().getUser(...)`.
+  - `upsertUserFromAuth(...)` now persists auth-critical user metadata as Supabase app_metadata claims (`setCustomUserClaims`) through `persistAuthCriticalUserClaims(...)`.
+  - `setUserRole(...)`, `setUserStatus(...)`, and `updateUserProfile(...)` now persist auth-critical state through Supabase claims instead of `users` collection writes.
+  - `listUsers(...)` now reads from Supabase Auth inventory for admin/user visibility and no longer depends on `zc_entities`.
+
+Auth-critical persistence model after this pass
+- Auth bootstrap/session-critical reads and writes are Supabase-only in active runtime:
+  - `getUserByUid(...)` -> Supabase Auth user record + app_metadata claims
+  - `upsertUserFromAuth(...)` -> Supabase app_metadata claim persistence
+  - Role/status/profile claim synchronization for auth-critical paths -> Supabase app_metadata
+- Result:
+  - Callback no longer depends on `zc_entities` table availability.
+
+Remaining Firestore-shaped technical debt (not fully removed in this pass)
+- `apps/web/lib/server/repository.ts` still contains non-auth-critical `shouldUseFirestore()` / `getZootopiaFirestore()` branches for document, assessment, infographic, credit, idempotency, cleanup, and admin log domains.
+- Representative anchors include: lines `318`, `428`, `486`, `1223`, `1401`, `2081`, `2355`, `2762`, `3232`, `3562`, `3916`.
+- This pass intentionally limited removal to auth/session/profile-critical paths to avoid broad unrelated regressions.
+
+Verification outcomes (post-change)
+- Lint:
+  - `npm run lint --workspace @zootopia/web` -> pass
+- Typecheck:
+  - `npm run typecheck --workspace @zootopia/web` -> pass
+- Build:
+  - `npm run build --workspace @zootopia/web` -> pass
+- Admin auth repro (`.tmp/repro-admin-authjs-flow.mjs`, base `http://localhost:3061`):
+  - callback URL returned `/admin`
+  - `/api/auth/me` returned authenticated session with role `admin`
+- User auth repro (`.tmp/repro-user-authjs-flow.mjs`, base `http://localhost:3061`):
+  - callback URL returned `/upload`
+  - `/api/auth/me` returned authenticated session with role `user`
+- Callback error regression check:
+  - `/api/auth/callback/admin-credentials` no longer returns `error=Configuration` in the verified runtime.
+
+Notes for future agents
+- If callback/session regresses with `BOOTSTRAP_FAILED` or `ADMIN_BOOTSTRAP_FAILED`, inspect `[auth-trace]` events first; all critical stages now emit trace IDs and classified failures.
+- Keep auth-critical persistence on Supabase claims unless a dedicated relational user schema migration is fully planned and applied end-to-end.
