@@ -24,8 +24,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type SearchParamValue = string | string[] | undefined;
-
 type ResendRequestBody = {
   email?: unknown;
   flow?: unknown;
@@ -33,10 +31,6 @@ type ResendRequestBody = {
 };
 
 type ConfirmEmailFlow = "sign_in" | "sign_up" | "admin";
-
-function getFirstSearchParamValue(value: SearchParamValue) {
-  return typeof value === "string" ? value : Array.isArray(value) ? value[0] ?? "" : "";
-}
 
 function resolveFlow(value: unknown): ConfirmEmailFlow {
   if (value === "admin" || value === "sign_up" || value === "sign_in") {
@@ -290,13 +284,23 @@ function ensureRuntimeOrModeDisabled() {
   } as const;
 }
 
+/**
+ * GET /api/auth/confirm-email/resend?email=...
+ * Returns the current governance snapshot (cooldown state, attempt counts, etc.)
+ * for the given email address. Used by the client to poll resend availability.
+ *
+ * FIX: Was using url.searchParams.getAll("email")[0] which returns `undefined`
+ * on empty arrays, causing VERIFICATION_RESEND_INVALID_EMAIL even when the email
+ * is present in the URL. Now uses url.searchParams.get("email") directly.
+ */
 export async function GET(request: Request) {
   const runtimeState = ensureRuntimeOrModeDisabled();
 
   const url = new URL(request.url);
-  const email = normalizeVerificationResendEmail(
-    getFirstSearchParamValue(url.searchParams.getAll("email")[0]),
-  );
+
+  // FIX: Use .get() instead of .getAll()[0] — getAll() returns [] when param is
+  // absent, and [][0] is undefined, which incorrectly triggers INVALID_EMAIL.
+  const email = normalizeVerificationResendEmail(url.searchParams.get("email") ?? "");
 
   if (!email || !isValidVerificationResendEmail(email)) {
     return applyNoStore(

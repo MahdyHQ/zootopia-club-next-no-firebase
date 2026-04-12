@@ -67,12 +67,30 @@ const CALLBACK_URL_SENSITIVE_PARAM_KEYS = [
   "token_type",
 ] as const;
 
-type VerificationResendGovernanceCode =
+// ─── Backend error code registry ─────────────────────────────────────────────
+// Exhaustive list of every error code the resend API can return.
+// Keeping them as typed constants prevents silent drift when backend adds new codes.
+
+type ResendGovernanceCode =
   | "VERIFICATION_RESEND_READY"
   | "VERIFICATION_RESEND_COOLDOWN_ACTIVE"
   | "VERIFICATION_RESEND_ACCOUNT_WINDOW_EXHAUSTED"
   | "VERIFICATION_RESEND_IP_WINDOW_EXHAUSTED"
   | "VERIFICATION_RESEND_UNAVAILABLE";
+
+type ResendProviderErrorCode =
+  | "VERIFICATION_RESEND_INVALID_EMAIL"
+  | "VERIFICATION_RESEND_PROVIDER_DAILY_LIMIT_LIKELY"
+  | "VERIFICATION_RESEND_PROVIDER_MONTHLY_LIMIT_LIKELY"
+  | "VERIFICATION_RESEND_PROVIDER_RATE_LIMITED"
+  | "VERIFICATION_RESEND_PROVIDER_IDENTITY_UNVERIFIED"
+  | "VERIFICATION_RESEND_PROVIDER_NETWORK_FAILURE"
+  | "VERIFICATION_RESEND_PROVIDER_REJECTED"
+  | "INVALID_JSON";
+
+type ResendBackendCode = ResendGovernanceCode | ResendProviderErrorCode;
+
+// ─── Governance snapshot types ────────────────────────────────────────────────
 
 type VerificationResendScopeSnapshot = {
   maxAttempts: number;
@@ -84,7 +102,7 @@ type VerificationResendScopeSnapshot = {
 type VerificationResendGovernanceSnapshot = {
   mode: "provider" | "disabled";
   allowed: boolean;
-  governanceCode: VerificationResendGovernanceCode;
+  governanceCode: ResendGovernanceCode;
   retryAfterSeconds: number | null;
   cooldownRemainingSeconds: number;
   nextAllowedAt: string | null;
@@ -128,6 +146,8 @@ type ConfirmEmailFinalizePayload = {
 };
 
 type AuthBootstrapProviderId = "user-credentials" | "admin-credentials";
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 async function readApiResult<T>(response: Response, invalidCode: string) {
   try {
@@ -243,6 +263,8 @@ function resolveAuthBootstrapProvider(input: {
 
   return "user-credentials";
 }
+
+// ─── Email confirmation finalization ─────────────────────────────────────────
 
 async function finalizeEmailConfirmation(input: {
   supabase: SupabaseClient;
@@ -387,11 +409,31 @@ async function bootstrapAuthenticatedSession(input: {
   );
 }
 
+// ─── Error mapping ────────────────────────────────────────────────────────────
+//
+// DESIGN RULE: every backend error code from /api/auth/confirm-email/resend
+// must have an explicit branch here. No code should silently fall through to
+// the generic handler when a more specific message exists. Keep this list in
+// sync with the backend's error code registry whenever new codes are added.
+
 function mapConfirmEmailFailure(
   failure: NormalizedAuthFailure,
   messages: AppMessages,
 ): AuthStatusDescriptor {
-  const rawCode = (failure.rawCode ?? "").trim().toUpperCase();
+  const rawCode = (failure.rawCode ?? "").trim().toUpperCase() as ResendBackendCode | string;
+
+  // ── Governance / rate-limit codes ──────────────────────────────────────────
+  // These arrive both as POST 429 rejections and as error throws from the
+  // GET governance poll when suppressStatus is false.
+
+  if (rawCode === "VERIFICATION_RESEND_COOLDOWN_ACTIVE") {
+    return {
+      tone: "warning",
+      icon: "warning",
+      title: messages.confirmEmailRateLimitedTitle,
+      body: messages.confirmEmailRateLimitedBody,
+    };
+  }
 
   if (rawCode === "VERIFICATION_RESEND_ACCOUNT_WINDOW_EXHAUSTED") {
     return {
@@ -410,6 +452,99 @@ function mapConfirmEmailFailure(
       body: messages.confirmEmailRateLimitedIpBody,
     };
   }
+
+  if (rawCode === "VERIFICATION_RESEND_UNAVAILABLE") {
+    return {
+      tone: "danger",
+      icon: "config",
+      title: messages.confirmEmailStatusServerTitle,
+      body: messages.confirmEmailStatusServerBody,
+      live: "assertive",
+    };
+  }
+
+  // ── Input validation codes ─────────────────────────────────────────────────
+  // VERIFICATION_RESEND_INVALID_EMAIL surfaces when the GET poll fires before
+  // the email field is valid, or when the POST body is malformed.
+  // Show the email-validation message rather than a scary generic error.
+
+  if (rawCode === "VERIFICATION_RESEND_INVALID_EMAIL" || rawCode === "INVALID_JSON") {
+    return {
+      tone: "warning",
+      icon: "warning",
+      title: messages.confirmEmailInvalidEmailTitle,
+      body: messages.confirmEmailInvalidEmailBody,
+    };
+  }
+
+  // ── Provider quota codes ───────────────────────────────────────────────────
+  // Daily / monthly quota exhaustion is a server-side condition the user cannot
+  // resolve. Frame it as a temporary service issue so they don't keep retrying.
+
+  if (
+    rawCode === "VERIFICATION_RESEND_PROVIDER_DAILY_LIMIT_LIKELY"
+    || rawCode === "VERIFICATION_RESEND_PROVIDER_MONTHLY_LIMIT_LIKELY"
+  ) {
+    return {
+      tone: "warning",
+      icon: "warning",
+      title: messages.confirmEmailStatusServerTitle,
+      body: messages.confirmEmailRateLimitedBody,
+    };
+  }
+
+  // ── Provider rate limiting ─────────────────────────────────────────────────
+  // Temporary provider-side throttle — retry in a moment.
+
+  if (rawCode === "VERIFICATION_RESEND_PROVIDER_RATE_LIMITED") {
+    return {
+      tone: "warning",
+      icon: "warning",
+      title: messages.confirmEmailRateLimitedTitle,
+      body: messages.confirmEmailRateLimitedBody,
+    };
+  }
+
+  // ── Provider configuration / identity codes ────────────────────────────────
+  // Sender identity not verified — admin needs to fix this, not the user.
+
+  if (rawCode === "VERIFICATION_RESEND_PROVIDER_IDENTITY_UNVERIFIED") {
+    return {
+      tone: "danger",
+      icon: "config",
+      title: messages.confirmEmailStatusServerTitle,
+      body: messages.confirmEmailStatusServerBody,
+      live: "assertive",
+    };
+  }
+
+  // ── Provider network / connectivity codes ──────────────────────────────────
+  // Upstream network issue — transient, user can retry.
+
+  if (rawCode === "VERIFICATION_RESEND_PROVIDER_NETWORK_FAILURE") {
+    return {
+      tone: "danger",
+      icon: "danger",
+      title: messages.confirmEmailNetworkTitle,
+      body: messages.confirmEmailNetworkBody,
+      live: "assertive",
+    };
+  }
+
+  // ── Provider generic rejection ─────────────────────────────────────────────
+  // Provider accepted the request shape but rejected delivery for unknown reason.
+
+  if (rawCode === "VERIFICATION_RESEND_PROVIDER_REJECTED") {
+    return {
+      tone: "danger",
+      icon: "danger",
+      title: messages.confirmEmailGenericErrorTitle,
+      body: messages.confirmEmailGenericErrorBody,
+      live: "assertive",
+    };
+  }
+
+  // ── OTP / token lifecycle codes (from finalization path) ───────────────────
 
   if (
     rawCode === "OTP_EXPIRED"
@@ -437,6 +572,10 @@ function mapConfirmEmailFailure(
       body: messages.confirmEmailInvalidLinkBody,
     };
   }
+
+  // ── Normalized failure codes (catch-all for cross-cutting concerns) ─────────
+  // These handle codes that arrive from the auth-failure normalizer regardless
+  // of which specific backend code triggered them.
 
   switch (failure.normalizedCode) {
     case "AUTH_NETWORK_FAILURE":
@@ -474,52 +613,12 @@ function mapConfirmEmailFailure(
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readApiPayload<T>(value: unknown): ApiFailurePayload | ApiSuccessPayload<T> | null {
-  if (!isRecord(value) || typeof value.ok !== "boolean") {
-    return null;
-  }
-
-  if (value.ok === true && "data" in value) {
-    return value as ApiSuccessPayload<T>;
-  }
-
-  if (value.ok === false && isRecord(value.error)) {
-    const code = typeof value.error.code === "string" ? value.error.code : "AUTH_UNKNOWN_UPSTREAM_FAILURE";
-    const message = typeof value.error.message === "string"
-      ? value.error.message
-      : "Request failed.";
-
-    return {
-      ok: false,
-      error: {
-        code,
-        message,
-      },
-    };
-  }
-
-  return null;
-}
-
-function readGovernanceSnapshot(value: unknown): VerificationResendGovernanceSnapshot | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  if (!isRecord(value.account) || !isRecord(value.ip)) {
-    return null;
-  }
-
-  if (typeof value.governanceCode !== "string" || typeof value.allowed !== "boolean") {
-    return null;
-  }
-
-  return value as unknown as VerificationResendGovernanceSnapshot;
-}
+// ─── Governance snapshot → UI status ─────────────────────────────────────────
+//
+// Maps the governance snapshot that comes back on every GET poll or POST
+// response into a UI status descriptor. Kept consistent with mapConfirmEmailFailure
+// so the same code always produces the same tone/icon regardless of which path
+// it arrives through.
 
 function mapGovernanceSnapshotToStatus(
   governance: VerificationResendGovernanceSnapshot | null,
@@ -563,6 +662,56 @@ function mapGovernanceSnapshotToStatus(
       return null;
   }
 }
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readApiPayload<T>(value: unknown): ApiFailurePayload | ApiSuccessPayload<T> | null {
+  if (!isRecord(value) || typeof value.ok !== "boolean") {
+    return null;
+  }
+
+  if (value.ok === true && "data" in value) {
+    return value as ApiSuccessPayload<T>;
+  }
+
+  if (value.ok === false && isRecord(value.error)) {
+    const code = typeof value.error.code === "string"
+      ? value.error.code
+      : "AUTH_UNKNOWN_UPSTREAM_FAILURE";
+    const message = typeof value.error.message === "string"
+      ? value.error.message
+      : "Request failed.";
+
+    return {
+      ok: false,
+      error: { code, message },
+    };
+  }
+
+  return null;
+}
+
+function readGovernanceSnapshot(value: unknown): VerificationResendGovernanceSnapshot | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (!isRecord(value.account) || !isRecord(value.ip)) {
+    return null;
+  }
+
+  if (typeof value.governanceCode !== "string" || typeof value.allowed !== "boolean") {
+    return null;
+  }
+
+  return value as unknown as VerificationResendGovernanceSnapshot;
+}
+
+// ─── Network calls ────────────────────────────────────────────────────────────
 
 async function readResendGovernanceSnapshot(email: string) {
   const url = new URL(CONFIRM_EMAIL_RESEND_API_ROUTE, window.location.origin);
@@ -661,6 +810,8 @@ async function submitVerificationResend(input: {
   };
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function ConfirmEmailPanel({
   messages,
   supabaseAuthReady,
@@ -714,6 +865,8 @@ export function ConfirmEmailPanel({
         return null;
       }
 
+      // Background polls always suppress status so they never flash an error
+      // banner while the user is typing or waiting for a cooldown to expire.
       if (options?.suppressStatus) {
         return null;
       }
@@ -731,6 +884,7 @@ export function ConfirmEmailPanel({
         uxAction: "show_error",
       });
 
+      // All backend codes now have explicit mappings — no silent fallthrough.
       setStatus(mapConfirmEmailFailure(failure, messages));
       return null;
     } finally {
@@ -950,6 +1104,7 @@ export function ConfirmEmailPanel({
   const governanceStatus = status
     ? null
     : mapGovernanceSnapshotToStatus(governance, messages);
+
   const disabled =
     !supabaseConfigured
     || !supabaseAuthReady
@@ -962,22 +1117,22 @@ export function ConfirmEmailPanel({
     status
       ? null
       : !supabaseConfigured
-      ? {
-          tone: "warning" as const,
-          icon: "config" as const,
-          title: messages.confirmEmailStatusConfigTitle,
-          body: messages.confirmEmailStatusConfigBody,
-          live: "off" as const,
-        }
-      : !supabaseAuthReady
         ? {
             tone: "warning" as const,
             icon: "config" as const,
-            title: messages.confirmEmailStatusServerTitle,
-            body: messages.confirmEmailStatusServerBody,
+            title: messages.confirmEmailStatusConfigTitle,
+            body: messages.confirmEmailStatusConfigBody,
             live: "off" as const,
           }
-        : null;
+        : !supabaseAuthReady
+          ? {
+              tone: "warning" as const,
+              icon: "config" as const,
+              title: messages.confirmEmailStatusServerTitle,
+              body: messages.confirmEmailStatusServerBody,
+              live: "off" as const,
+            }
+          : null;
 
   const idleStatus: AuthStatusDescriptor = {
     tone: "neutral",
@@ -988,16 +1143,17 @@ export function ConfirmEmailPanel({
   };
 
   const visibleStatus = status ?? governanceStatus ?? blockingStatus ?? idleStatus;
+
   const resendLabel =
     isFinalizing
       ? messages.confirmEmailFinalizingButton
       : isSending || isGovernanceLoading
-      ? messages.confirmEmailResendWorking
-      : governance?.governanceCode === "VERIFICATION_RESEND_COOLDOWN_ACTIVE" && cooldownSeconds > 0
-        ? `${messages.confirmEmailResendCooldownPrefix} ${cooldownSeconds}s`
-        : hasAcceptedSend
-          ? messages.confirmEmailResendAction
-          : messages.confirmEmailSendAction;
+        ? messages.confirmEmailResendWorking
+        : governance?.governanceCode === "VERIFICATION_RESEND_COOLDOWN_ACTIVE" && cooldownSeconds > 0
+          ? `${messages.confirmEmailResendCooldownPrefix} ${cooldownSeconds}s`
+          : hasAcceptedSend
+            ? messages.confirmEmailResendAction
+            : messages.confirmEmailSendAction;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
