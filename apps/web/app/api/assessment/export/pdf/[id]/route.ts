@@ -25,7 +25,8 @@ export async function GET(
      while all real generation logic lives in the explicit Pro and Fast lane routes above. */
   requestUrl.searchParams.delete("surface");
   /* SECURITY: Build redirects from server-owned runtime origin instead of request origin so
-     untrusted host headers cannot turn this compatibility route into an open redirect surface. */
+     untrusted host headers cannot turn this compatibility route into an open redirect surface
+     and proxy/preview host drift cannot silently move exports onto the wrong origin. */
   const redirectUrl = new URL(targetPath, getServerRuntimeOrigin());
   redirectUrl.search = requestUrl.searchParams.toString();
 

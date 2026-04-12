@@ -4,7 +4,15 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
 
-function normalizeRuntimeBaseUrlCandidate(value: string | undefined) {
+const LOCALHOST_PATTERN =
+  /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i;
+
+/**
+ * Parse and normalize runtime base URL candidates from environment variables.
+ * Accepts raw hostnames with or without protocol, applies secure defaults
+ * (https except localhost-family hosts), and returns a trimmed absolute URL.
+ */
+function parseRuntimeBaseUrl(value: string | undefined) {
   const trimmed = value?.trim() ?? "";
   if (!trimmed) {
     return null;
@@ -12,7 +20,7 @@ function normalizeRuntimeBaseUrlCandidate(value: string | undefined) {
 
   const withProtocol = /^https?:\/\//i.test(trimmed)
     ? trimmed
-    : /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(trimmed)
+    : LOCALHOST_PATTERN.test(trimmed)
       ? `http://${trimmed}`
       : `https://${trimmed}`;
 
@@ -34,17 +42,17 @@ function normalizeRuntimeBaseUrlCandidate(value: string | undefined) {
  * is unset by falling back to NEXTAUTH_URL or VERCEL_URL before localhost.
  */
 export function getServerRuntimeBaseUrl() {
-  const configuredBaseUrl = normalizeRuntimeBaseUrlCandidate(process.env.NEXT_PUBLIC_BASE_URL);
+  const configuredBaseUrl = parseRuntimeBaseUrl(process.env.NEXT_PUBLIC_BASE_URL);
   if (configuredBaseUrl) {
     return configuredBaseUrl;
   }
 
-  const authBaseUrl = normalizeRuntimeBaseUrlCandidate(process.env.NEXTAUTH_URL);
+  const authBaseUrl = parseRuntimeBaseUrl(process.env.NEXTAUTH_URL);
   if (authBaseUrl) {
     return authBaseUrl;
   }
 
-  const vercelUrl = normalizeRuntimeBaseUrlCandidate(process.env.VERCEL_URL);
+  const vercelUrl = parseRuntimeBaseUrl(process.env.VERCEL_URL);
   if (vercelUrl) {
     return vercelUrl;
   }
