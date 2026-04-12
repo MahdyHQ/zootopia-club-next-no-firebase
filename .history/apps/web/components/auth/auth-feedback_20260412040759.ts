@@ -78,6 +78,21 @@ export function getAuthFlowErrorCode(error: unknown) {
   return null;
 }
 
+function isNetworkLikeError(error: unknown) {
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  const code = getAuthFlowErrorCode(error);
+  return (
+    code === "auth/network-request-failed" ||
+    code === "BOOTSTRAP_TIMEOUT" ||
+    code === "BOOTSTRAP_RESPONSE_INVALID" ||
+    code === "IDENTIFIER_RESPONSE_INVALID" ||
+    code === "ADMIN_BOOTSTRAP_RESPONSE_INVALID"
+  );
+}
+
 /* Popup-first must remain the default auth entry path.
    This helper intentionally limits redirect fallback to popup failure modes that browsers
    commonly trigger (blocked popup, unsupported popup, or immediate policy-driven close).

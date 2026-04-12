@@ -62,8 +62,6 @@ function mapSupabaseAdminError(input: {
   };
   routePath: string;
 }) {
-  /* Admin sign-in keeps provider-level errors in one mapper so classification, diagnostics,
-     and UX behavior stay aligned with the shared auth taxonomy. */
   const providerCode = (input.error.code || "").trim().toLowerCase();
   let code = "ADMIN_SIGNIN_FAILED";
 
@@ -190,8 +188,6 @@ async function completeAdminAuthJsSignIn(input: {
       || (meResponse.status >= 500 && meResponse.status < 600);
 
     if (!isTransientBootstrapState) {
-      /* Non-transient `/api/auth/me` failures indicate session hydration ownership issues,
-         so they are escalated with stage-E context for deterministic diagnostics. */
       const code = responseErrorCode || "ADMIN_BOOTSTRAP_FAILED";
       const failure = normalizeAuthFailure({
         error: createAuthFlowError(code),
@@ -411,8 +407,6 @@ export function AdminLoginPanel({
 
       const confirmationEmail = resolvedEmail ?? (identifier.includes("@") ? identifier.trim() : "");
       if (isEmailConfirmationFailure(failure) && confirmationEmail.length > 0) {
-        /* Admin identities can also be email-unconfirmed; direct them to the same confirmation
-           workflow while preserving admin return routing after verification. */
         const confirmRoute = buildConfirmEmailRoute({
           email: confirmationEmail,
           flow: "admin",

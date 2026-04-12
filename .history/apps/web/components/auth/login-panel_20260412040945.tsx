@@ -383,7 +383,7 @@ export function LoginPanel({
       uxAction: "retry",
     });
 
-    if (!supabaseConfigured || !supabaseAuthReady || isBusy) {
+    if (!supabaseConfigured || isBusy) {
       return;
     }
 
@@ -438,8 +438,6 @@ export function LoginPanel({
         }
 
         if (!data.session?.access_token) {
-          /* Supabase sign-up may intentionally omit a session until email confirmation is complete.
-             Route the user to the dedicated confirmation surface instead of mislabeling this as a refresh/session bug. */
           const confirmRoute = buildConfirmEmailRoute({
             email: email.trim(),
             flow: "sign_up",
@@ -512,8 +510,6 @@ export function LoginPanel({
       });
 
       if (isEmailConfirmationFailure(failure) && email.trim().length > 0) {
-        /* When provider/auth traces point to unconfirmed email, preserve diagnosis fidelity by
-           redirecting to confirmation guidance instead of showing generic session refresh messaging. */
         const confirmRoute = buildConfirmEmailRoute({
           email: email.trim(),
           flow: "sign_in",

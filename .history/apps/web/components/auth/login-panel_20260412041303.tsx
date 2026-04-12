@@ -383,7 +383,7 @@ export function LoginPanel({
       uxAction: "retry",
     });
 
-    if (!supabaseConfigured || !supabaseAuthReady || isBusy) {
+    if (!supabaseConfigured || isBusy) {
       return;
     }
 

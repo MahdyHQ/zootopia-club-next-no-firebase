@@ -313,7 +313,6 @@ export function LoginPanel({
           completeAuthJsCredentialsSignIn({
             providerId: "user-credentials",
             idToken,
-            routePath: APP_ROUTES.login,
           }),
           new Promise<SessionUser>((_, reject) => {
             controller.signal.addEventListener(
@@ -342,16 +341,7 @@ export function LoginPanel({
         router.refresh();
       } catch (nextError) {
         if (nextError instanceof DOMException && nextError.name === "AbortError") {
-          const failure = normalizeAuthFailure({
-            error: createAuthFlowError("AUTH_SESSION_CREATION_FAILED", "Timed out while waiting for session hydration."),
-            flow: "user",
-            stage: "AUTH_STAGE_E_SESSION_HYDRATION",
-            routePath: APP_ROUTES.login,
-            sessionCreationAttempted: true,
-          });
-          throw createAuthFlowErrorWithDetails(failure.normalizedCode, failure.safeProviderMessage ?? undefined, {
-            failure,
-          });
+          throw createAuthFlowError("BOOTSTRAP_TIMEOUT");
         }
 
         throw nextError;
@@ -372,18 +362,7 @@ export function LoginPanel({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    logAuthDiagnosis({
-      failure: normalizeAuthFailure({
-        error: createAuthFlowError("AUTH_UNKNOWN_UPSTREAM_FAILURE", "Credentials were submitted from login panel."),
-        flow: "user",
-        stage: "AUTH_STAGE_A_CREDENTIALS_SUBMITTED",
-        routePath: APP_ROUTES.login,
-        sessionCreationAttempted: false,
-      }),
-      uxAction: "retry",
-    });
-
-    if (!supabaseConfigured || !supabaseAuthReady || isBusy) {
+    if (!supabaseConfigured || isBusy) {
       return;
     }
 
@@ -412,17 +391,6 @@ export function LoginPanel({
     try {
       const supabase = await getEphemeralSupabaseClient();
 
-      logAuthDiagnosis({
-        failure: normalizeAuthFailure({
-          error: createAuthFlowError("AUTH_UNKNOWN_UPSTREAM_FAILURE", "Submitting credentials to Supabase password auth."),
-          flow: "user",
-          stage: "AUTH_STAGE_B_SUPABASE_ATTEMPT",
-          routePath: APP_ROUTES.login,
-          sessionCreationAttempted: false,
-        }),
-        uxAction: "retry",
-      });
-
       if (mode === "sign_up") {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
@@ -430,34 +398,10 @@ export function LoginPanel({
         });
 
         if (error) {
-          throw mapSupabaseBrowserError({
-            error,
-            mode,
-            routePath: APP_ROUTES.login,
-          });
+          throw mapSupabaseBrowserError(error, mode);
         }
 
         if (!data.session?.access_token) {
-          /* Supabase sign-up may intentionally omit a session until email confirmation is complete.
-             Route the user to the dedicated confirmation surface instead of mislabeling this as a refresh/session bug. */
-          const confirmRoute = buildConfirmEmailRoute({
-            email: email.trim(),
-            flow: "sign_up",
-            fromRoute: APP_ROUTES.login,
-          });
-
-          logAuthDiagnosis({
-            failure: normalizeAuthFailure({
-              error: createAuthFlowError("AUTH_EMAIL_NOT_CONFIRMED", "Signup completed but email confirmation is required."),
-              flow: "user",
-              stage: "AUTH_STAGE_C_PROVIDER_RESPONSE",
-              routePath: APP_ROUTES.login,
-              sessionCreationAttempted: false,
-            }),
-            uxAction: "redirect_confirm_email",
-            redirectedToConfirmation: true,
-          });
-
           setPhase("idle");
           setStatus({
             tone: "success",
@@ -467,7 +411,6 @@ export function LoginPanel({
           });
           setMode("sign_in");
           setConfirmPassword("");
-          router.push(confirmRoute);
           return;
         }
 
@@ -481,72 +424,22 @@ export function LoginPanel({
       });
 
       if (error) {
-        throw mapSupabaseBrowserError({
-          error,
-          mode,
-          routePath: APP_ROUTES.login,
-        });
+        throw mapSupabaseBrowserError(error, mode);
       }
 
       if (!data.session?.access_token) {
-        const failure = normalizeAuthFailure({
-          error: createAuthFlowError("AUTH_UNKNOWN_UPSTREAM_FAILURE", "Supabase password sign-in succeeded without an access token."),
-          flow: "user",
-          stage: "AUTH_STAGE_C_PROVIDER_RESPONSE",
-          routePath: APP_ROUTES.login,
-          sessionCreationAttempted: false,
-        });
-        throw createAuthFlowErrorWithDetails(failure.normalizedCode, failure.safeProviderMessage ?? undefined, {
-          failure,
-        });
+        throw createAuthFlowError("SIGNIN_FAILED", "Missing Supabase access token.");
       }
 
       await bootstrapSession(data.session.access_token);
     } catch (nextError) {
-      const failure = normalizeAuthFailure({
-        error: nextError,
-        flow: "user",
-        stage: "AUTH_STAGE_E_SESSION_HYDRATION",
-        routePath: APP_ROUTES.login,
-        sessionCreationAttempted: true,
-      });
-
-      if (isEmailConfirmationFailure(failure) && email.trim().length > 0) {
-        /* When provider/auth traces point to unconfirmed email, preserve diagnosis fidelity by
-           redirecting to confirmation guidance instead of showing generic session refresh messaging. */
-        const confirmRoute = buildConfirmEmailRoute({
-          email: email.trim(),
-          flow: "sign_in",
-          fromRoute: APP_ROUTES.login,
-        });
-
-        logAuthDiagnosis({
-          failure,
-          uxAction: "redirect_confirm_email",
-          redirectedToConfirmation: true,
-        });
-
-        await clearClientSession();
-        setPhase("idle");
-        router.push(confirmRoute);
-        return;
-      }
-
-      logAuthDiagnosis({
-        failure,
-        uxAction:
-          failure.normalizedCode === "AUTH_SESSION_REFRESH_REQUIRED"
-            ? "refresh_session"
-            : "show_error",
-      });
-
       await clearClientSession();
       setPhase("idle");
       setStatus(mapRegularLoginError(nextError, messages));
     }
   }
 
-  const disabled = !supabaseConfigured || !supabaseAuthReady || isBusy;
+  const disabled = !supabaseConfigured || isBusy;
   const blockingStatus =
     !supabaseConfigured
       ? {
