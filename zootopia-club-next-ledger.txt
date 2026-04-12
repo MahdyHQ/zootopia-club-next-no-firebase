@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-12 (End of Day Consolidation)
+Last Updated: 2026-04-12 (Runtime origin hardening + admin-boundary audit)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 4cce676f2840b5fb40ded30b9d88d61b4a521a37
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -288,6 +288,8 @@ Environment Variables (from .env.example):
 
 Required:
 - AUTH_SECRET: Auth.js session crypto (generate with: npx auth secret)
+- NEXT_PUBLIC_BASE_URL: Canonical app origin for server callbacks/internal fetches
+- NEXTAUTH_URL: Optional Auth.js origin fallback when canonical base URL is unset
 - NEXT_PUBLIC_SUPABASE_URL: Supabase project URL (browser + server)
 - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: Supabase anon key (browser)
 - NEXT_PUBLIC_SUPABASE_ANON_KEY: Browser auth alias (compatibility)
@@ -826,6 +828,13 @@ Auth Flow Redirects:
 - Admin login → admin default redirect
 - Email confirmation → user default redirect
 
+Runtime-Origin Authority (2026-04-12 hardening):
+- Server-only redirects/callback URLs now use getServerRuntimeOrigin() instead of request origin
+- Canonical resolution order: NEXT_PUBLIC_BASE_URL → NEXTAUTH_URL → VERCEL_URL → localhost
+- Protocol-less env values are normalized (https by default, http for localhost variants)
+- Confirm-email resend callback and PDF export compatibility redirect no longer trust request host
+- Pro PDF Puppeteer asset base URL now uses canonical runtime origin (host-header spoof resistant)
+
 ================================================================================
 21. EMAIL VERIFICATION & RESEND GOVERNANCE
 ================================================================================
@@ -1126,7 +1135,89 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
-2026-04-12 — End of Day Ledger Consolidation (Current)
+2026-04-12 — Runtime Origin Hardening + Admin Boundary Verification (Current)
+=======================================================================
+Type: Security Hardening / Runtime Debugging / Documentation Alignment
+Scope: Runtime origin handling, redirect/callback safety, admin-boundary verification
+
+Summary:
+- Spawned parallel subagents for:
+  1. ledger + current-truth architecture tracing
+  2. server-components runtime error tracing
+  3. auth/session/admin-boundary tracing
+  4. origin/host/redirect/allowed-origin tracing
+  5. admin route + admin API tracing
+  6. repository/data-access/admin privilege tracing
+  7. build/lint/typecheck baseline verification
+- Consolidated findings before edits and verified current runtime truth directly in code.
+- Implemented canonical runtime-origin hardening at minimal insertion points.
+- Preserved existing backend-authoritative admin guards and verified admin profile-gating exemption behavior remains role-scoped and server enforced.
+
+Root Cause Findings (code-verified):
+- Request-origin derived URL construction created brittle runtime behavior and security risk surfaces:
+  - confirm-email resend callback URL used request-derived origin
+  - PDF compatibility redirect used request-derived origin
+  - Pro PDF document base URL used request-derived origin
+  - export route context parsed request.url without canonical base fallback
+- These paths could drift across proxy/host contexts and contribute to provider callback "origin not allowed" failures, plus host-header influenced redirect/origin behavior.
+
+Files Changed:
+- .env.example
+- apps/web/lib/server/runtime-base-url.ts
+- apps/web/lib/server/assessment-export-route-context.ts
+- apps/web/lib/server/assessment-pro-pdf-export.ts
+- apps/web/app/api/assessment/export/pdf/[id]/route.ts
+- apps/web/app/api/auth/confirm-email/resend/route.ts
+
+Security/Runtime Changes:
+- Added runtime URL normalization in runtime-base-url.ts:
+  - supports protocol-less env values safely
+  - exports getServerRuntimeOrigin()
+  - exports resolveRequestUrlWithServerBase()
+- confirm-email resend callback now pins redirect origin to canonical server runtime origin.
+- assessment export compatibility redirect now builds redirect target from canonical server runtime origin.
+- Pro PDF lane now uses canonical runtime origin for documentBaseUrl during Puppeteer rendering.
+- export route context now uses resilient URL parsing with canonical base fallback.
+
+Admin Boundary Verification (no widening of privileges):
+- Admin routes remain server-protected via requireAdminUser()/getAdminSessionUser().
+- Admin APIs under /api/admin/** remain server-gated and normal users remain 403-blocked.
+- Profile completion gating remains user-only (isProfileCompletionRequired: role !== admin).
+- No changes made that grant admin powers to non-admin users.
+- No owner-scope protections for normal users were removed.
+
+Verification:
+- npm run check:web
+  - lint: pass
+  - typecheck: pass
+  - build: fail (pre-existing environment/network issue fetching Google Fonts in sandbox)
+- Build failure remains unrelated to this change set and matches prior baseline behavior.
+
+Environment Path Clarification:
+- Local integrated development:
+  - Frontend: Next app pages/components
+  - Backend: Next route handlers + server libs
+  - Provider-managed: Supabase Auth/Postgres/Storage
+  - Origin authority: localhost fallback if no canonical env URL configured
+- Vercel production runtime:
+  - Frontend/backend co-hosted on Vercel
+  - Origin authority: NEXT_PUBLIC_BASE_URL preferred, then NEXTAUTH_URL, then VERCEL_URL
+  - Request host is no longer the callback/redirect authority for hardened paths
+- Supabase runtime:
+  - Auth provider callback URLs now derive from canonical server runtime origin
+  - Reduces callback-origin mismatch drift versus request-derived host reconstruction
+- Legacy/reference-only assumptions:
+  - Firebase-era assumptions remain legacy only; no runtime restoration was introduced
+
+Risks / Unverified Edge Cases:
+- Full live Vercel + Supabase redirect allowlist verification cannot be completed in this sandbox.
+- Deploy-time env correctness remains critical:
+  - NEXT_PUBLIC_BASE_URL should match intended canonical deployment origin.
+  - Supabase redirect allowlist must include intended callback origin(s).
+
+---
+
+2026-04-12 — End of Day Ledger Consolidation
 ======================================================
 Type: Documentation / Architecture Maintenance
 Scope: zootopia-club-next-ledger.txt (full rebuild from empty state)
