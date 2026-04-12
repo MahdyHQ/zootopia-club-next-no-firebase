@@ -23,7 +23,24 @@ type ConfirmEmailPageProps = {
 };
 
 function getFirstSearchParamValue(value: SearchParamValue) {
-  return typeof value === "string" ? value : Array.isArray(value) ? value[0] ?? "" : "";
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  /* Keep callback/query parsing resilient when upstream links duplicate keys
+     (for example email=&email=user@example.com). Prefer the first non-empty
+     value so a leading empty placeholder never drops a valid trailing value. */
+  for (const candidate of value) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate;
+    }
+  }
+
+  return value[0] ?? "";
 }
 
 function resolveFlow(value: string): ConfirmEmailFlow {

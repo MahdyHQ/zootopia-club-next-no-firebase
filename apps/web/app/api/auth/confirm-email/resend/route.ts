@@ -298,9 +298,15 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
 
-  // FIX: Use .get() instead of .getAll()[0] — getAll() returns [] when param is
-  // absent, and [][0] is undefined, which incorrectly triggers INVALID_EMAIL.
-  const email = normalizeVerificationResendEmail(url.searchParams.get("email") ?? "");
+  /* Some callback chains can produce duplicate email params where the first is
+     blank and a later value is valid (email=&email=user@example.com). Use the
+     first non-empty candidate so valid links are not misclassified as invalid. */
+  const rawEmail =
+    url.searchParams
+      .getAll("email")
+      .find((candidate) => normalizeVerificationResendEmail(candidate).length > 0)
+    ?? "";
+  const email = normalizeVerificationResendEmail(rawEmail);
 
   if (!email || !isValidVerificationResendEmail(email)) {
     return applyNoStore(

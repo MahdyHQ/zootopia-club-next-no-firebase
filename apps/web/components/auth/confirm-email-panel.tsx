@@ -858,7 +858,10 @@ export function ConfirmEmailPanel({
 
       setGovernance(nextGovernance);
       setCooldownSeconds(nextGovernance.cooldownRemainingSeconds);
-      setHasAcceptedSend(nextGovernance.hasAcceptedSend);
+      /* Preserve confirmed-send UI state once this browser session has observed
+        provider acceptance for the current email. This prevents a transient
+        polling snapshot from regressing the action label back to first-send. */
+      setHasAcceptedSend((previous) => previous || nextGovernance.hasAcceptedSend);
       return nextGovernance;
     } catch (nextError) {
       if (requestToken !== governanceRequestTokenRef.current) {

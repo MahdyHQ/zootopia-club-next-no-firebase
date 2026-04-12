@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-12 (Auth redirect/runtime hardening; verification pass)
+Last Updated: 2026-04-12 (Confirm-email duplicate-param parsing + resend label truth hardening)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 79e2ebd3950a82c77a14fa224660bc73e8e9c81c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -853,7 +853,14 @@ Verification Resend Governance:
 - Hash salt: ZOOTOPIA_EMAIL_VERIFICATION_HASH_SALT
 
 API Endpoint:
+- GET /api/auth/confirm-email/resend?email=... — Return governance snapshot for resend availability polling
 - POST /api/auth/confirm-email/resend — Trigger resend with governance
+
+Confirm-Email Query/UX Hardening (2026-04-12):
+- Confirm-email page now resolves duplicate query keys using first non-empty value (for example email=&email=user@example.com)
+- Resend GET route now resolves duplicate email params using first non-empty value before validation
+- Resend action label remains truthful per email session: starts as "Send verification email" and only flips to
+  "Resend verification email" after a real provider-accepted send has been observed
 
 Email Templates:
 - docs/auth-email/templates/zootopia-confirm-email-template-supabase.html
@@ -1470,6 +1477,57 @@ Verification:
 Risks / Notes:
 - Local env files are gitignored; values were changed in-place for this workstation only.
 - During the edit pass, malformed intermediate local values were detected and immediately restored from `Guide-Files/env-backup.txt` before final validation.
+
+---
+
+2026-04-12 — Confirm-Email Resend False Invalid-Email Fix (Duplicate Param Parsing)
+==============================================================================
+Type: Auth UX Correctness / Query Parsing Hardening / Minimal Backward-Compatible Fix
+Scope: /confirm-email page searchParam hydration, /api/auth/confirm-email/resend GET parser, resend CTA label resilience
+
+Summary:
+- Fixed a reproducible false-negative path where valid links containing duplicate email params
+  (for example `email=&email=user@example.com`) were treated as invalid because only the first value was used.
+- Hardened page-level query hydration and backend GET parsing to resolve the first non-empty email candidate.
+- Preserved truthful CTA wording after a real successful send by making local `hasAcceptedSend` session state sticky
+  for the current email even if a subsequent governance poll reports a transient stale snapshot.
+
+Root Cause (code + runtime verified):
+- `apps/web/app/(public)/confirm-email/page.tsx` selected the first array value for duplicate params,
+  so `email=&email=valid@example.com` hydrated as empty.
+- `apps/web/app/api/auth/confirm-email/resend/route.ts` GET used the first email value from query parsing,
+  so the same duplicate pattern returned `VERIFICATION_RESEND_INVALID_EMAIL` (HTTP 400) despite a valid trailing value.
+- `apps/web/components/auth/confirm-email-panel.tsx` could regress CTA wording after success if a later poll snapshot
+  returned `hasAcceptedSend=false` transiently.
+
+Files Changed:
+- apps/web/app/(public)/confirm-email/page.tsx
+- apps/web/app/api/auth/confirm-email/resend/route.ts
+- apps/web/components/auth/confirm-email-panel.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Confirm-email page search-param helper now picks the first non-empty string in duplicate-value arrays,
+  then falls back to the first raw value only when all candidates are empty.
+- Resend GET route now scans duplicate `email` params and normalizes the first non-empty candidate before validation.
+- Resend panel governance-sync path now keeps `hasAcceptedSend` as `previous || snapshot.hasAcceptedSend`
+  so successful send state is not lost by transient polls for the same email.
+
+Verification:
+- web-lint-post-polish: pass (1 pre-existing warning in apps/web/lib/server/zootopia-postgres-adapter.ts)
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+- Runtime probe (3026):
+  - GET `/api/auth/confirm-email/resend?email=&email=elmahdyabdulla208%40gmail.com` now returns HTTP 200 with governance payload
+  - Page probe `/confirm-email?...&email=&email=...` now hydrates input with the valid email value
+- Mocked browser resend-flow probe:
+  - Before submit label: "Send verification email"
+  - After mocked provider-accepted submit + follow-up governance poll: "Resend verification email"
+
+Risks / Notes:
+- Existing governance throttling/limits, cooldown windows, and backend authority are unchanged.
+- No secret handling, auth boundary, or provider credentials flow was altered.
+- Start task argument behavior remains unchanged (`npm run start --workspace @zootopia/web -- --hostname ... --port ...` still routes to the known script limitation).
 
 ---
 

@@ -11,9 +11,19 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+/**
+ * Admin-only operational endpoint for inspecting and clearing
+ * verification resend governance state for a specific email.
+ * This route must remain backend-only and admin-restricted.
+ */
 function readTargetEmailFromRequest(request: Request) {
   const url = new URL(request.url);
-  const normalizedEmail = normalizeVerificationResendEmail(url.searchParams.get("email") ?? "");
+
+  const normalizedEmail =
+    url.searchParams
+      .getAll("email")
+      .map((value) => normalizeVerificationResendEmail(value))
+      .find((value): value is string => Boolean(value)) ?? null;
 
   if (!normalizedEmail || !isValidVerificationResendEmail(normalizedEmail)) {
     return null;
@@ -22,28 +32,48 @@ function readTargetEmailFromRequest(request: Request) {
   return normalizedEmail;
 }
 
-export async function GET(request: Request) {
+async function requireAdminAndTargetEmail(request: Request) {
   const user = await getAdminSessionUser();
   if (!user) {
-    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
+    return {
+      error: applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403)),
+    };
   }
 
   const email = readTargetEmailFromRequest(request);
   if (!email) {
-    return applyNoStore(
-      apiError(
-        "VERIFICATION_RESEND_INVALID_EMAIL",
-        "A valid account email query parameter is required.",
-        400,
+    return {
+      error: applyNoStore(
+        apiError(
+          "VERIFICATION_RESEND_INVALID_EMAIL",
+          "A valid account email query parameter is required.",
+          400,
+        ),
       ),
-    );
+    };
   }
+
+  return { user, email };
+}
+
+export async function GET(request: Request) {
+  const context = await requireAdminAndTargetEmail(request);
+  if ("error" in context) {
+    return context.error;
+  }
+
+  const { user, email } = context;
 
   try {
     const snapshot = await readVerificationResendAccountGovernanceByEmail({ email });
 
-    /* Expose internal resend-governance state through an admin-only backend route so
-       operational support can inspect throttling truth without relaxing browser table policies. */
+    console.info("[admin-verification-resend-governance] read", {
+      adminUid: user.uid,
+      email,
+      hasAccountRecord: Boolean(snapshot.accountRecord),
+      mode: snapshot.mode,
+    });
+
     return applyNoStore(
       apiSuccess({
         email,
@@ -53,7 +83,12 @@ export async function GET(request: Request) {
       }),
     );
   } catch (error) {
-    console.error("[admin-verification-resend-governance] read failed", error);
+    console.error("[admin-verification-resend-governance] read failed", {
+      adminUid: user.uid,
+      email,
+      error,
+    });
+
     return applyNoStore(
       apiError(
         "VERIFICATION_RESEND_UNAVAILABLE",
@@ -65,26 +100,25 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const user = await getAdminSessionUser();
-  if (!user) {
-    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
+  const context = await requireAdminAndTargetEmail(request);
+  if ("error" in context) {
+    return context.error;
   }
 
-  const email = readTargetEmailFromRequest(request);
-  if (!email) {
-    return applyNoStore(
-      apiError(
-        "VERIFICATION_RESEND_INVALID_EMAIL",
-        "A valid account email query parameter is required.",
-        400,
-      ),
-    );
-  }
+  const { user, email } = context;
 
   try {
     const before = await readVerificationResendAccountGovernanceByEmail({ email });
     const clearResult = await clearVerificationResendAccountGovernanceByEmail({ email });
     const after = await readVerificationResendAccountGovernanceByEmail({ email });
+
+    console.info("[admin-verification-resend-governance] cleared", {
+      adminUid: user.uid,
+      email,
+      existedBefore: Boolean(before.accountRecord),
+      cleared: clearResult.deleted,
+      mode: clearResult.mode,
+    });
 
     return applyNoStore(
       apiSuccess({
@@ -97,7 +131,12 @@ export async function DELETE(request: Request) {
       }),
     );
   } catch (error) {
-    console.error("[admin-verification-resend-governance] clear failed", error);
+    console.error("[admin-verification-resend-governance] clear failed", {
+      adminUid: user.uid,
+      email,
+      error,
+    });
+
     return applyNoStore(
       apiError(
         "VERIFICATION_RESEND_UNAVAILABLE",
