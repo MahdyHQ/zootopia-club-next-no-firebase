@@ -10,11 +10,13 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "npm run dev --workspace=@zootopia/web",
+    "dev": "npm run dev:local",
+    "dev:local": "npm run dev --workspace=@zootopia/web",
     "dev:web": "npm run dev --workspace=@zootopia/web",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build:local",
+    "build:local": "npm run build --workspaces --if-present",
     "build:web": "npm run build --workspace=@zootopia/web",
-    "build:vercel": "next build",
+    "build:vercel": "npm run build:vercel --workspace=@zootopia/web",
     "lint": "npm run lint --workspaces --if-present",
     "lint:web": "npm run lint --workspace=@zootopia/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -28,8 +30,10 @@
     "supabase:check": "npm run supabase:migrations:validate && npm run supabase:migrations:list",
     "db:apply": "node scripts/supabase/apply-migrations.mjs",
     "db:apply:dry": "node scripts/supabase/apply-migrations.mjs --dry",
-    "start": "npm run start --workspace=@zootopia/web",
-    "start:web": "npm run start --workspace=@zootopia/web"
+    "start": "npm run start:local",
+    "start:local": "npm run start --workspace=@zootopia/web",
+    "start:web": "npm run start --workspace=@zootopia/web",
+    "start:vercel": "npm run start:vercel --workspace=@zootopia/web"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

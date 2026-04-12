@@ -1180,3 +1180,132 @@ Verification
 
 Risk / Compatibility Note
 - Any external/admin clients that previously sent UID/email as delete confirmation to `DELETE /api/admin/users/[uid]` must now send `DELETE USER` exactly.
+
+---
+
+2026-04-12 - Vercel Build Command Separation via Package Scripts (No vercel.json)
+
+Scope
+- Completed a read-first deployment script audit before edits (full ledger read, subagent exploration, and direct source verification).
+- Implemented a surgical command-lane separation pass so local development/build and Vercel build paths are explicit and independent.
+- Removed vercel.json entirely, per deployment policy for this pass.
+
+Pre-change Audit Truth
+- Root `package.json` script model:
+  - `build` ran workspace builds (`npm run build --workspaces --if-present`).
+  - `build:web` delegated to `@zootopia/web` build.
+  - `build:vercel` incorrectly ran plain `next build` at root.
+- `apps/web/package.json` script model:
+  - `build` used a local heap-tuned Node wrapper (`--max-old-space-size=16384`) for Next build.
+  - `build:vercel` used plain `next build`.
+  - `postbuild` normalized standalone output.
+- `vercel.json` existed and enforced `rootDirectory: apps/web` with root-level `cd ../..` command indirection for install/build.
+- Build lane likely tied to web workspace build through root command delegation when vercel.json was active.
+
+Files Changed
+- `package.json`
+  - Added explicit local aliases:
+    - `dev:local`, `build:local`, `start:local`
+  - Repointed default lanes to local aliases:
+    - `dev` -> `dev:local`
+    - `build` -> `build:local`
+    - `start` -> `start:local`
+  - Replaced root Vercel lane:
+    - `build:vercel` now delegates to web workspace (`npm run build:vercel --workspace=@zootopia/web`)
+  - Added explicit `start:vercel` workspace delegate.
+- `apps/web/package.json`
+  - Added explicit local aliases:
+    - `dev:local`, `build:local`, `start:local`
+  - Repointed defaults:
+    - `dev` -> `dev:local`
+    - `build` -> `build:local`
+    - `start` -> `start:local`
+  - Kept dedicated Vercel lane:
+    - `build:vercel` remains plain `next build`.
+  - Added explicit `start:vercel`.
+- `vercel.json`
+  - Removed from repository.
+
+Command Lane Intent (Current Truth)
+- Local development:
+  - Root: `npm run dev` (alias to local lane)
+  - Web workspace: `npm run dev` / `npm run dev:local`
+- Local build:
+  - Root all-workspaces local lane: `npm run build`
+  - Web-only local lane: `npm run build:web` (uses heap-tuned wrapper + `postbuild`)
+  - Web workspace local lane: `npm run build` / `npm run build:local`
+- Vercel build:
+  - Root-safe lane: `npm run build:vercel` (delegates to `@zootopia/web` `build:vercel`)
+  - Web workspace lane: `npm run build:vercel` (plain `next build`, no local wrapper coupling)
+- Production start:
+  - Root: `npm run start` / `npm run start:vercel`
+  - Web workspace: `npm run start` / `npm run start:vercel`
+
+Vercel Operational Note
+- With `vercel.json` removed, Vercel Dashboard settings are now authoritative for root directory and build command.
+- Recommended build command lane: `npm run build:vercel`.
+
+Import / Module Resolution Findings
+- No new `Module not found` or case-sensitivity defects were introduced by this pass.
+- No runtime import path changes were required.
+
+Verification
+- `npm run lint:web`: PASSED
+- `npm run typecheck:web`: PASSED
+- `npm run build:vercel`: PASSED
+- `npm run build:web`: PASSED
+- `npm run build:local`: PASSED
+
+Hard Rule Confirmation
+- `vercel.json` was not created.
+- Existing `vercel.json` was removed.
+
+---
+
+2026-04-12 - Build Script Separation Re-Validation Pass (No Additional Script Mutation Needed)
+
+Scope
+- Executed mandatory read-first workflow again (full ledger read, subagent exploration, direct source verification).
+- Re-audited root/workspace script lanes after external file changes were reported.
+- Verified local and Vercel build paths end-to-end without relying on `vercel.json`.
+
+Current Script Model (Re-verified)
+- Root `package.json` provides explicit local and Vercel lanes:
+  - `dev` -> `dev:local`
+  - `build` -> `build:local`
+  - `build:vercel` -> delegates to `@zootopia/web` `build:vercel`
+  - `start` -> `start:local`
+  - `start:vercel` -> delegates to `@zootopia/web` `start:vercel`
+- `apps/web/package.json` keeps strict lane separation:
+  - local heavy wrapper preserved exactly under `build:local`
+  - `build` -> `build:local` (local ergonomics preserved)
+  - `build:vercel` remains plain `next build` (clean Vercel lane)
+  - `postbuild` standalone normalization remains intact
+
+Local Heavy-Memory Wrapper Preservation
+- Confirmed unchanged exact local command remains available:
+  - `node --max-old-space-size=16384 -e "const{spawnSync}=require('node:child_process');const nextBin=require.resolve('next/dist/bin/next');const result=spawnSync(process.execPath,[nextBin,'build'],{stdio:'inherit'});process.exit(result.status??1);"`
+
+Vercel Root/Build Path Truth
+- No `vercel.json` exists in repo; deployment root/build command are controlled by Vercel project dashboard settings.
+- Package-script lane for Vercel is present and valid from monorepo root:
+  - `npm run build:vercel`
+- If Vercel dashboard root is set to `apps/web`, workspace-local `build:vercel` is also valid.
+
+Failure Cause Check (This Pass)
+- No module-resolution, import-case, or server/client-boundary errors surfaced in this pass.
+- Script/workspace wiring is healthy for both local and Vercel lanes.
+
+Files Changed
+- `zootopia-club-next-ledger.txt` only.
+- No additional package-script mutation was required because current state already meets separation requirements.
+
+Verification
+- `npm run lint:web`: PASSED
+- `npm run typecheck:web`: PASSED
+- `npm run build:vercel`: PASSED
+- `npm run build:local`: PASSED
+
+Hard Rule Confirmation
+- `vercel.json` was not created.
+- `vercel.json` remains removed.

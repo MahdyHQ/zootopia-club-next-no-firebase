@@ -4,11 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "node --max-old-space-size=16384 -e \"const{spawnSync}=require('node:child_process');const nextBin=require.resolve('next/dist/bin/next');const result=spawnSync(process.execPath,[nextBin,'build'],{stdio:'inherit'});process.exit(result.status??1);\"",
+    "dev": "npm run dev:local",
+    "dev:local": "next dev --turbopack",
+    "build": "npm run build:local",
+    "build:local": "node --max-old-space-size=16384 -e \"const{spawnSync}=require('node:child_process');const nextBin=require.resolve('next/dist/bin/next');const result=spawnSync(process.execPath,[nextBin,'build'],{stdio:'inherit'});process.exit(result.status??1);\"",
     "postbuild": "node ./scripts/normalize-standalone.mjs",
     "build:vercel": "next build",
-    "start": "next start",
+    "start": "npm run start:local",
+    "start:local": "next start",
+    "start:vercel": "next start",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc -p tsconfig.json --noEmit"
   },
