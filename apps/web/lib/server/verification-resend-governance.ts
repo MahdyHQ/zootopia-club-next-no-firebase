@@ -94,7 +94,10 @@ type MutableScopeWindow = {
 
 type GovernanceSubjectKeys = {
   accountKeyHash: string;
-  ipKeyHash: string;
+  /** null when client IP could not be determined from request headers */
+  ipKeyHash: string | null;
+  /** false when IP was undetectable — callers skip IP-scope rate limiting */
+  ipDetected: boolean;
 };
 
 const DEFAULT_VERIFICATION_RESEND_COOLDOWN_SECONDS = 30;
@@ -323,13 +326,30 @@ function normalizeIpCandidate(value: string) {
   return trimmed.replace(/:\d+$/, "");
 }
 
-function getRequestIp(request: Request) {
-  const ip =
-    normalizeIpCandidate(getForwardedIp(request.headers.get("x-forwarded-for")))
-    || normalizeIpCandidate(request.headers.get("x-real-ip") ?? "")
-    || "unknown-ip";
+/**
+ * Extracts the real client IP from request headers.
+ * Returns null when IP cannot be reliably determined — callers must skip
+ * IP-based rate limiting in that case to avoid a shared "unknown" bucket
+ * that would rate-limit ALL users once it exhausts.
+ *
+ * Header priority:
+ *  1. x-real-ip                  — single clean value (Nginx, most proxies)
+ *  2. x-forwarded-for            — comma list; first entry is the original client
+ *  3. x-vercel-forwarded-for     — Vercel's own single-value equivalent
+ *  4. cf-connecting-ip           — Cloudflare equivalent
+ */
+function getRequestIp(request: Request): string | null {
+  const raw =
+    normalizeIpCandidate(request.headers.get("x-real-ip") ?? "")
+    || normalizeIpCandidate(getForwardedIp(request.headers.get("x-forwarded-for")))
+    || normalizeIpCandidate(request.headers.get("x-vercel-forwarded-for") ?? "")
+    || normalizeIpCandidate(request.headers.get("cf-connecting-ip") ?? "");
 
-  return ip.slice(0, 120);
+  if (!raw) {
+    return null;
+  }
+
+  return raw.slice(0, 120);
 }
 
 function hashGovernanceSubject(input: {
@@ -431,10 +451,16 @@ function toScopeSnapshot(input: {
   };
 }
 
+/**
+ * FIX: ipDetected param added.
+ * When IP is undetectable, IP-scope limiting is skipped entirely (ipRemaining = Infinity).
+ * This prevents a shared "unknown-ip" bucket from exhausting and blocking ALL users globally.
+ */
 function resolveGovernanceBlockingState(input: {
   config: VerificationResendGovernanceConfig;
   accountWindow: MutableScopeWindow;
   ipWindow: MutableScopeWindow;
+  ipDetected: boolean;
   nowMs: number;
 }) {
   if (input.config.mode === "disabled") {
@@ -450,11 +476,16 @@ function resolveGovernanceBlockingState(input: {
     0,
     input.config.accountMaxAttempts - input.accountWindow.attemptCount,
   );
-  const ipRemaining = Math.max(0, input.config.ipMaxAttempts - input.ipWindow.attemptCount);
+
+  // When IP is undetectable, skip IP-scope limiting entirely.
+  // Using Infinity prevents a shared "unknown-ip" bucket from blocking all users.
+  const ipRemaining = input.ipDetected
+    ? Math.max(0, input.config.ipMaxAttempts - input.ipWindow.attemptCount)
+    : Infinity;
 
   const cooldownTargetMs = Math.max(
     input.accountWindow.cooldownUntilMs ?? 0,
-    input.ipWindow.cooldownUntilMs ?? 0,
+    input.ipDetected ? (input.ipWindow.cooldownUntilMs ?? 0) : 0,
   );
   const cooldownRemainingSeconds = Math.max(
     0,
@@ -508,6 +539,7 @@ function buildGovernanceSnapshot(input: {
   config: VerificationResendGovernanceConfig;
   accountWindow: MutableScopeWindow;
   ipWindow: MutableScopeWindow;
+  ipDetected: boolean;
   nowMs: number;
 }): VerificationResendGovernanceSnapshot {
   const account = toScopeSnapshot({
@@ -521,7 +553,7 @@ function buildGovernanceSnapshot(input: {
 
   const cooldownTargetMs = Math.max(
     input.accountWindow.cooldownUntilMs ?? 0,
-    input.ipWindow.cooldownUntilMs ?? 0,
+    input.ipDetected ? (input.ipWindow.cooldownUntilMs ?? 0) : 0,
   );
   const cooldownRemainingSeconds = Math.max(
     0,
@@ -532,6 +564,7 @@ function buildGovernanceSnapshot(input: {
     config: input.config,
     accountWindow: input.accountWindow,
     ipWindow: input.ipWindow,
+    ipDetected: input.ipDetected,
     nowMs: input.nowMs,
   });
 
@@ -576,6 +609,11 @@ function buildUnavailableSnapshot(config: VerificationResendGovernanceConfig) {
   } satisfies VerificationResendGovernanceSnapshot;
 }
 
+/**
+ * FIX: Returns null ipKeyHash when IP is undetectable instead of falling back
+ * to a shared "unknown-ip" string that would exhaust a single global bucket
+ * and block all users after just 20 combined resend attempts.
+ */
 function buildSubjectKeys(input: {
   request: Request;
   email: string;
@@ -583,6 +621,15 @@ function buildSubjectKeys(input: {
 }): GovernanceSubjectKeys {
   const normalizedEmail = normalizeVerificationResendEmail(input.email);
   const ipAddress = getRequestIp(input.request);
+  const ipDetected = ipAddress !== null;
+
+  if (!ipDetected) {
+    console.warn(
+      "[verification-resend-governance] Client IP undetectable from request headers. " +
+        "IP-based rate limiting will be skipped for this request to prevent a shared " +
+        "'unknown-ip' bucket from blocking all users.",
+    );
+  }
 
   return {
     accountKeyHash: hashGovernanceSubject({
@@ -590,11 +637,14 @@ function buildSubjectKeys(input: {
       value: normalizedEmail,
       salt: input.config.hashSalt,
     }),
-    ipKeyHash: hashGovernanceSubject({
-      scope: "ip",
-      value: ipAddress,
-      salt: input.config.hashSalt,
-    }),
+    ipKeyHash: ipDetected
+      ? hashGovernanceSubject({
+          scope: "ip",
+          value: ipAddress!,
+          salt: input.config.hashSalt,
+        })
+      : null,
+    ipDetected,
   };
 }
 
@@ -627,7 +677,7 @@ async function loadScopeWindowForUpdate(input: {
   windowMs: number;
 }) {
   const rows = await input.sql`
-    select
+    SELECT
       key_scope,
       key_hash,
       window_starts_at,
@@ -635,9 +685,9 @@ async function loadScopeWindowForUpdate(input: {
       attempt_count,
       cooldown_until,
       last_provider_accepted_at
-    from public.email_verification_resend_governance
-    where key_scope = ${input.scope} and key_hash = ${input.keyHash}
-    for update
+    FROM public.email_verification_resend_governance
+    WHERE key_scope = ${input.scope} AND key_hash = ${input.keyHash}
+    FOR UPDATE
   `;
 
   const row = rows[0] as GovernanceRow | undefined;
@@ -662,7 +712,7 @@ async function persistScopeWindow(input: {
       : null;
 
   await input.sql`
-    insert into public.email_verification_resend_governance (
+    INSERT INTO public.email_verification_resend_governance (
       key_scope,
       key_hash,
       window_starts_at,
@@ -673,7 +723,7 @@ async function persistScopeWindow(input: {
       created_at,
       updated_at
     )
-    values (
+    VALUES (
       ${input.window.scope},
       ${input.window.keyHash},
       ${startsAtIso},
@@ -681,23 +731,33 @@ async function persistScopeWindow(input: {
       ${input.window.attemptCount},
       ${cooldownUntilIso},
       ${input.window.lastProviderAcceptedAt},
-      now(),
-      now()
+      NOW(),
+      NOW()
     )
-    on conflict (key_scope, key_hash)
-    do update set
-      window_starts_at = excluded.window_starts_at,
-      window_expires_at = excluded.window_expires_at,
-      attempt_count = excluded.attempt_count,
-      cooldown_until = excluded.cooldown_until,
-      last_provider_accepted_at = coalesce(
-        excluded.last_provider_accepted_at,
+    ON CONFLICT (key_scope, key_hash)
+    DO UPDATE SET
+      window_starts_at          = EXCLUDED.window_starts_at,
+      window_expires_at         = EXCLUDED.window_expires_at,
+      attempt_count             = EXCLUDED.attempt_count,
+      cooldown_until            = EXCLUDED.cooldown_until,
+      last_provider_accepted_at = COALESCE(
+        EXCLUDED.last_provider_accepted_at,
         public.email_verification_resend_governance.last_provider_accepted_at
       ),
-      updated_at = now()
+      updated_at = NOW()
   `;
 }
 
+/**
+ * Read-only governance snapshot.
+ *
+ * FIX: Removed the unnecessary sql.begin() + FOR UPDATE that the original used.
+ * This was a read-only path that never mutated any rows, yet it held a
+ * transaction-scoped connection lock on every GET poll, wasting pool slots
+ * and contributing to MaxClientsInSessionMode exhaustion.
+ *
+ * Now uses parallel plain SELECTs with no transaction and no row locks.
+ */
 export async function readVerificationResendGovernanceSnapshot(input: {
   request: Request;
   email: string;
@@ -717,34 +777,75 @@ export async function readVerificationResendGovernanceSnapshot(input: {
 
   const sql = getZootopiaSql();
 
-  return sql.begin(async (tx) => {
-    const txSql = tx as unknown as ReturnType<typeof getZootopiaSql>;
+  // Load both windows in parallel — plain reads, no locking needed for a snapshot.
+  const [accountRow, ipRow] = await Promise.all([
+    sql`
+      SELECT
+        key_scope,
+        key_hash,
+        window_starts_at,
+        window_expires_at,
+        attempt_count,
+        cooldown_until,
+        last_provider_accepted_at
+      FROM public.email_verification_resend_governance
+      WHERE key_scope = 'account'
+        AND key_hash  = ${subjectKeys.accountKeyHash}
+      LIMIT 1
+    `.then((rows) => rows[0] as GovernanceRow | undefined),
 
-    const accountWindow = await loadScopeWindowForUpdate({
-      sql: txSql,
-      scope: "account",
-      keyHash: subjectKeys.accountKeyHash,
-      nowMs,
-      windowMs: config.accountWindowSeconds * 1000,
-    });
+    subjectKeys.ipKeyHash !== null
+      ? sql`
+          SELECT
+            key_scope,
+            key_hash,
+            window_starts_at,
+            window_expires_at,
+            attempt_count,
+            cooldown_until,
+            last_provider_accepted_at
+          FROM public.email_verification_resend_governance
+          WHERE key_scope = 'ip'
+            AND key_hash  = ${subjectKeys.ipKeyHash}
+          LIMIT 1
+        `.then((rows) => rows[0] as GovernanceRow | undefined)
+      : Promise.resolve(undefined),
+  ]);
 
-    const ipWindow = await loadScopeWindowForUpdate({
-      sql: txSql,
-      scope: "ip",
-      keyHash: subjectKeys.ipKeyHash,
-      nowMs,
-      windowMs: config.ipWindowSeconds * 1000,
-    });
+  const accountWindow = hydrateScopeWindow({
+    scope: "account",
+    keyHash: subjectKeys.accountKeyHash,
+    row: accountRow,
+    nowMs,
+    windowMs: config.accountWindowSeconds * 1000,
+  });
 
-    return buildGovernanceSnapshot({
-      config,
-      accountWindow,
-      ipWindow,
-      nowMs,
-    });
-  }) as Promise<VerificationResendGovernanceSnapshot>;
+  // Build a synthetic fresh IP window when IP is undetected (never persisted).
+  const ipKeyHash = subjectKeys.ipKeyHash ?? "undetected";
+  const ipWindow = hydrateScopeWindow({
+    scope: "ip",
+    keyHash: ipKeyHash,
+    row: ipRow,
+    nowMs,
+    windowMs: config.ipWindowSeconds * 1000,
+  });
+
+  return buildGovernanceSnapshot({
+    config,
+    accountWindow,
+    ipWindow,
+    ipDetected: subjectKeys.ipDetected,
+    nowMs,
+  });
 }
 
+/**
+ * Reserve a resend attempt inside a serialized transaction.
+ *
+ * FIX: IP window is only loaded, locked, incremented, and persisted when a
+ * real IP was actually detected. When IP is undetectable the account-scope
+ * window is still enforced, keeping per-user limits intact.
+ */
 export async function reserveVerificationResendAttempt(input: {
   request: Request;
   email: string;
@@ -776,18 +877,28 @@ export async function reserveVerificationResendAttempt(input: {
       windowMs: config.accountWindowSeconds * 1000,
     });
 
-    const ipWindow = await loadScopeWindowForUpdate({
-      sql: txSql,
-      scope: "ip",
-      keyHash: subjectKeys.ipKeyHash,
-      nowMs,
-      windowMs: config.ipWindowSeconds * 1000,
-    });
+    // Only load and lock the IP window when we have a reliably detected IP.
+    const ipKeyHash = subjectKeys.ipKeyHash ?? "undetected";
+    const ipWindow = subjectKeys.ipDetected
+      ? await loadScopeWindowForUpdate({
+          sql: txSql,
+          scope: "ip",
+          keyHash: ipKeyHash,
+          nowMs,
+          windowMs: config.ipWindowSeconds * 1000,
+        })
+      : buildFreshWindow({
+          scope: "ip",
+          keyHash: ipKeyHash,
+          nowMs,
+          windowMs: config.ipWindowSeconds * 1000,
+        });
 
     const blocking = resolveGovernanceBlockingState({
       config,
       accountWindow,
       ipWindow,
+      ipDetected: subjectKeys.ipDetected,
       nowMs,
     });
 
@@ -796,29 +907,28 @@ export async function reserveVerificationResendAttempt(input: {
         config,
         accountWindow,
         ipWindow,
+        ipDetected: subjectKeys.ipDetected,
         nowMs,
       });
     }
 
+    // Always increment the account-scope window.
     accountWindow.attemptCount += 1;
     accountWindow.cooldownUntilMs = cooldownUntilMs;
+    await persistScopeWindow({ sql: txSql, window: accountWindow });
 
-    ipWindow.attemptCount += 1;
-    ipWindow.cooldownUntilMs = cooldownUntilMs;
-
-    await persistScopeWindow({
-      sql: txSql,
-      window: accountWindow,
-    });
-    await persistScopeWindow({
-      sql: txSql,
-      window: ipWindow,
-    });
+    // Only increment and persist the IP-scope window when IP was reliably detected.
+    if (subjectKeys.ipDetected) {
+      ipWindow.attemptCount += 1;
+      ipWindow.cooldownUntilMs = cooldownUntilMs;
+      await persistScopeWindow({ sql: txSql, window: ipWindow });
+    }
 
     return buildGovernanceSnapshot({
       config,
       accountWindow,
       ipWindow,
+      ipDetected: subjectKeys.ipDetected,
       nowMs,
     });
   }) as Promise<VerificationResendGovernanceSnapshot>;
@@ -836,11 +946,11 @@ export async function markVerificationResendProviderAccepted(input: {
 
   const sql = getZootopiaSql();
   await sql`
-    update public.email_verification_resend_governance
-    set
-      last_provider_accepted_at = now(),
-      updated_at = now()
-    where key_scope = 'account' and key_hash = ${accountKeyHash}
+    UPDATE public.email_verification_resend_governance
+    SET
+      last_provider_accepted_at = NOW(),
+      updated_at                = NOW()
+    WHERE key_scope = 'account' AND key_hash = ${accountKeyHash}
   `;
 }
 
@@ -852,7 +962,7 @@ export async function readVerificationResendAccountGovernanceByEmail(input: {
 
   const sql = getZootopiaSql();
   const rows = await sql`
-    select
+    SELECT
       key_scope,
       key_hash,
       window_starts_at,
@@ -861,9 +971,9 @@ export async function readVerificationResendAccountGovernanceByEmail(input: {
       cooldown_until,
       last_provider_accepted_at,
       updated_at
-    from public.email_verification_resend_governance
-    where key_scope = 'account' and key_hash = ${accountKeyHash}
-    limit 1
+    FROM public.email_verification_resend_governance
+    WHERE key_scope = 'account' AND key_hash = ${accountKeyHash}
+    LIMIT 1
   `;
 
   const row = rows[0] as GovernanceAdminRow | undefined;
@@ -883,9 +993,9 @@ export async function clearVerificationResendAccountGovernanceByEmail(input: {
 
   const sql = getZootopiaSql();
   const deletedRows = await sql`
-    delete from public.email_verification_resend_governance
-    where key_scope = 'account' and key_hash = ${accountKeyHash}
-    returning key_hash
+    DELETE FROM public.email_verification_resend_governance
+    WHERE key_scope = 'account' AND key_hash = ${accountKeyHash}
+    RETURNING key_hash
   `;
 
   return {
