@@ -1,0 +1,236 @@
+Spawn multiple subagents to explore this repo in parallel.
+
+Use separate subagents for:
+1. architecture and file-ownership tracing
+2. frontend/UI and route inventory tracing
+3. backend/API/runtime/service tracing
+4. auth/session/admin-boundary/environment/deployment tracing
+5. database/storage/schema/migrations tracing
+6. AI/model/provider/tooling tracing
+7. documentation/ledger consolidation verification
+
+Then consolidate findings before making changes.
+
+Analyze the current codebase first before making any changes.
+
+Important:
+This is an existing production-style project. Do not rebuild from scratch. Do not redesign the architecture unless explicitly requested. Do not change unrelated runtime logic. This task is specifically about updating, restructuring, enriching, and truth-aligning the project ledger as the authoritative long-form project memory and structural description.
+
+Mandatory documentation rule:
+Read `zootopia-club-next-ledger.txt` first, in full, before making any edits.
+Treat it as the primary historical memory of the project.
+Do not overwrite history.
+Do not delete real information.
+Do not remove valid older entries.
+Do not flatten or destroy chronological change history.
+
+Task type:
+Hybrid / architecture-sensitive documentation maintenance
+
+Goal:
+Update and professionally restructure `zootopia-club-next-ledger.txt` so it becomes a deeply accurate, current, comprehensive, future-developer-friendly encyclopedia of the project and platform at the end of the current development day.
+
+Core intent:
+This file is the master project memory and should describe the full truth of the platform, including:
+- project identity
+- project purpose
+- product direction
+- high-level architecture
+- current verified runtime/deployment model
+- frontend/backend ownership
+- route ownership and boundaries
+- auth/session/admin flow
+- admin privilege model
+- document/upload/runtime flow
+- assessment flow
+- infographic flow
+- storage/data/migrations/runtime persistence
+- Supabase/Auth.js/Vercel integration
+- AI/model/provider orchestration
+- governance/limits/internal operational systems
+- sensitive files and high-risk boundaries
+- environment strategy
+- deployment strategy
+- compatibility rules
+- important historical changes and architecture evolution
+
+Critical preservation rules:
+- Do not delete any true historical information
+- Do not erase older valid entries
+- Do not rewrite the ledger from scratch unless the file is clearly corrupted and unrecoverable
+- Do not collapse the change history into a short summary
+- Do not remove prior dated entries
+- Preserve all real historical knowledge unless it is clearly false and contradicted by the current verified codebase
+- If an older note is outdated, preserve it historically but clearly mark it as superseded, legacy, deprecated, or reference-only where appropriate
+- Append and refine professionally; do not destroy project memory
+
+Required work:
+1. Re-read and verify the current live codebase against the existing ledger.
+2. Expand and restructure the ledger so it accurately reflects the current project state.
+3. Ensure the ledger includes all major project dimensions, including:
+   - project identity and purpose
+   - current architecture style
+   - current verified runtime/deployment model
+   - frontend/backend separation
+   - same-origin versus provider-managed boundaries
+   - key ownership boundaries
+   - feature inventory
+   - key routes and route ownership
+   - auth/session/admin architecture
+   - profile-completion gating rules
+   - redirect rules and environment-controlled redirect behavior
+   - document/upload/runtime/storage flow
+   - assessment generation/result/export flow
+   - infographic flow
+   - admin/governance/operational tooling
+   - Supabase schema/migrations/storage/runtime persistence
+   - AI/model/provider orchestration
+   - key files and sensitive files
+   - environment/config/deployment files
+   - supported deployment targets
+   - guidance for future agents/developers
+4. Refresh any “Current Truth Snapshot” style sections so they accurately reflect the present codebase.
+5. Append a new dated end-of-day change entry for the current work.
+6. Keep the ledger structured, professional, historically safe, and very useful for future AI agents and human developers.
+
+Mandatory environment-specific requirement:
+When updating the ledger, explicitly preserve or clarify the separation between:
+
+1. Local integrated development
+2. Vercel production runtime
+3. Supabase provider-managed runtime responsibilities
+4. Resend / SMTP provider-managed email behavior where relevant
+5. Any legacy/reference-only deployment/runtime assumptions still present in docs
+
+For each relevant runtime path, make sure the ledger clearly reflects:
+- what part is frontend
+- what part is backend
+- what part is provider-managed
+- what route/API behavior is used
+- what auth/session behavior applies
+- what env/deployment assumptions matter
+- what is same-origin vs cross-origin/provider-managed
+- what is active current truth vs legacy/reference-only
+- what is path-specific vs shared
+
+Required audit scope:
+Inspect and reconcile the ledger against at minimum:
+- `package.json`
+- `package-lock.json`
+- `.env.example`
+- root `.env.local` if present
+- `vercel.json` if present
+- `README.md`
+- `docs/**`
+- `Guide-Files/**` only as legacy/reference-aware context, not as unquestioned active truth
+- `supabase/migrations/*.sql`
+- `apps/web/package.json`
+- `apps/web/app/**`
+- `apps/web/components/**`
+- `apps/web/lib/**`
+- `apps/web/auth.ts`
+- `apps/web/proxy.ts`
+- `apps/web/messages/**`
+- `apps/web/public/**`
+- `apps/web/next.config.ts`
+- `apps/api/**` only to document its real current role, if any
+- `packages/shared-config/**`
+- `packages/shared-types/**`
+- `packages/shared-utils/**`
+- any email template docs or auth-email docs if present
+- runtime and deployment helper files
+- admin/internal routes and governance helpers where relevant
+
+Explicit current-repo alignment rule:
+Do not assume old single-app layout files such as:
+- `server.ts`
+- `server/*`
+- `src/*`
+- `firebase.json`
+- `netlify.toml`
+- `cloudrun.env`
+- `Dockerfile`
+- `cloudbuild.yaml`
+- `deployment/runtime-manifest.json`
+exist or are active unless they are actually present in the current repo.
+If older references to such files exist historically, preserve them only as historical context and clarify whether they are active, missing, deprecated, or legacy/reference-only.
+
+Ledger quality requirements:
+- Keep it long-form and rich, not shallow
+- Keep it technically accurate
+- Keep it organized by sections
+- Keep both high-level explanation and precise file/path references
+- Keep it useful for future AI agents and human developers
+- Preserve chronology
+- Add missing sections if clearly needed
+- Clarify outdated areas without deleting historical truth
+- Note important risks, sensitive files, and architecture boundaries
+- Preserve and improve readability
+- Make the file feel like a professional internal architecture/source-of-truth handbook
+
+Recommended section structure to preserve or improve:
+- Project Identity
+- Current Truth Snapshot
+- Project Purpose / Platform Direction
+- Architecture Style
+- Monorepo Structure
+- Dependency / Runtime Baseline
+- Active Deployment Model
+- Environment Strategy
+- Route Map
+- Route Ownership Clarification
+- Backend Runtime And Service Ownership
+- Auth And Session Architecture
+- Admin Authority Model
+- Profile Completion / User Gating Model
+- Upload / Document / Storage Flow
+- Assessment Runtime / Result / Export Flow
+- Infographic Flow
+- Database / Migrations / Storage / Persistence Notes
+- AI / Model / Provider Orchestration
+- Redirect / Callback / Confirmation Behavior
+- Security Assumptions / Trust Boundaries
+- Important Folders And Files
+- Sensitive / High-Risk Files
+- Important Commands / Scripts
+- Current Feature Set
+- Deferred / Disabled / Legacy Areas
+- Future Agent Guidance
+- Historical Change Log
+
+Do not:
+- do not delete genuine historical entries
+- do not summarize the entire project into a tiny note
+- do not remove meaningful file references
+- do not invent architecture or features that do not exist
+- do not change code just to make the ledger easier
+- do not mix test-only code into production architecture descriptions unless clearly labeled
+- do not expose secrets from `.env.local`, `.env`, or private keys
+- do not write fake verification claims
+- do not treat deprecated guides as active truth unless the code proves they are current
+
+Verification requirements:
+After updating the ledger:
+1. Confirm which major sections were refreshed
+2. Confirm which new verified architectural facts were added
+3. Confirm which older sections and historical entries were preserved
+4. Clearly identify any older notes that were kept historically but superseded by newer verified state
+5. If only the ledger was edited, state clearly that runtime code was left untouched
+6. If any structured files besides the ledger were changed, state exactly which and why
+7. Be honest about unresolved ambiguity where the codebase does not fully prove a claim
+
+Output requirements:
+After the work, report clearly:
+1. whether the ledger was expanded, corrected, restructured, or all three
+2. which sections were updated or added
+3. whether historical entries were preserved
+4. what new verified project/platform facts were added
+5. what outdated assumptions were clarified
+6. what was intentionally left untouched
+7. whether only the ledger changed or other files too
+8. whether any unresolved ambiguity remains in the project description
+
+Final instruction:
+Treat `zootopia-club-next-ledger.txt` as the authoritative encyclopedia of the entire platform.
+The goal is not just to append one short log entry.
+The goal is to continuously evolve it into the best possible master memory for the project, including full platform truth, architecture, product direction, deployment reality, security boundaries, major systems, and development history, without losing any real historical information.
