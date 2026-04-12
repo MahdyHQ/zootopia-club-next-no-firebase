@@ -8,6 +8,7 @@ import {
   type AuthEmailDeliveryDiagnosticConfidence,
 } from "@/lib/server/auth-email-delivery-diagnostics";
 import { hasSupabaseAdminRuntime, getSupabaseAdminClient } from "@/lib/server/supabase-admin";
+import { getServerRuntimeOrigin } from "@/lib/server/runtime-base-url";
 import {
   getVerificationResendGovernanceConfig,
   isValidVerificationResendEmail,
@@ -251,13 +252,14 @@ function mapProviderFailureToApiError(input: {
 }
 
 function buildConfirmationRedirectUrl(input: {
-  request: Request;
   email: string;
   flow: ConfirmEmailFlow;
   fromRoute: string;
 }) {
-  const requestUrl = new URL(input.request.url);
-  const redirectUrl = new URL(APP_ROUTES.confirmEmail, requestUrl.origin);
+  /* Keep Supabase email callback links pinned to server-derived runtime origin instead of
+     request-origin reconstruction, which can drift across proxies/previews and trigger
+     provider-side "origin not allowed" rejections or host-header based open redirects. */
+  const redirectUrl = new URL(APP_ROUTES.confirmEmail, getServerRuntimeOrigin());
   redirectUrl.searchParams.set("flow", input.flow);
   redirectUrl.searchParams.set("from", input.fromRoute);
   redirectUrl.searchParams.set("email", input.email);
@@ -409,7 +411,6 @@ export async function POST(request: Request) {
   }
 
   const emailRedirectTo = buildConfirmationRedirectUrl({
-    request,
     email,
     flow,
     fromRoute,
