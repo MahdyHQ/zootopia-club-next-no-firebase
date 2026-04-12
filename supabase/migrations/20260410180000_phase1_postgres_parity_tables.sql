@@ -1,23 +1,22 @@
--- Phase 1 (Firebase → Supabase migration): target Postgres schema
+-- Phase 1 Postgres domain schema bootstrap.
 -- -----------------------------------------------------------------------------
--- Source of truth for shapes: apps/web/lib/server/repository.ts + packages/shared-types
--- Firestore collection names are preserved as table comments for traceability.
+-- Source of truth for shapes: apps/web/lib/server/repository.ts + packages/shared-types.
+-- This migration establishes canonical relational tables for application entities.
 --
 -- Security model (Phase 1):
 -- - RLS is ENABLED on every table. No policies are defined for `anon` / `authenticated`,
 --   so direct PostgREST access from browsers is denied.
--- - The Next.js app continues to use Firebase/Firestore until a later phase; this file is
---   the auditable schema contract for Supabase Postgres. Application code does not read
---   these tables yet.
--- - Supabase `service_role` bypasses RLS (server-only key — never expose to the client).
+-- - The Next.js app remains backend-authoritative while repository rewiring proceeds;
+--   this file defines the audited schema contract for Supabase Postgres.
+-- - Supabase `service_role` bypasses RLS (server-only key -- never expose to the client).
 --
--- Future phases: add RLS policies aligned with auth.uid(), storage migration, and
+-- Future phases: add RLS policies aligned with auth.uid(), storage alignment, and
 -- repository.ts rewiring. Do not grant broad table privileges to `authenticated` until
 -- policies exist (Supabase security guidance).
 -- -----------------------------------------------------------------------------
 
 -- -----------------------------------------------------------------------------
--- users (Firestore: `users`) — app profile row keyed by auth provider uid string
+-- user_profiles -- app profile row keyed by auth provider uid string
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.user_profiles (
   uid text PRIMARY KEY,
@@ -39,14 +38,14 @@ CREATE TABLE public.user_profiles (
   updated_at timestamptz NOT NULL
 );
 
-COMMENT ON TABLE public.user_profiles IS 'Firestore collection: users — workspace profile + role/status (server-authoritative).';
+COMMENT ON TABLE public.user_profiles IS 'Application user profile + role/status row (server-authoritative).';
 
 CREATE INDEX user_profiles_email_lower_idx ON public.user_profiles (lower(email));
 
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- documents (Firestore: `documents`)
+-- documents
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.documents (
   id text PRIMARY KEY,
@@ -66,14 +65,14 @@ CREATE TABLE public.documents (
   updated_at timestamptz NOT NULL
 );
 
-COMMENT ON TABLE public.documents IS 'Firestore collection: documents — upload metadata + retention (binary in object storage).';
+COMMENT ON TABLE public.documents IS 'Upload metadata + retention controls (binary payload in object storage).';
 
 CREATE INDEX documents_owner_uid_created_at_idx ON public.documents (owner_uid, created_at DESC);
 
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- assessment_generations (Firestore: `assessmentGenerations`)
+-- assessment_generations
 -- Full generation payload kept as JSONB to match nested AssessmentGeneration types.
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.assessment_generations (
@@ -85,7 +84,7 @@ CREATE TABLE public.assessment_generations (
   expires_at timestamptz NOT NULL
 );
 
-COMMENT ON TABLE public.assessment_generations IS 'Firestore collection: assessmentGenerations — record column mirrors persisted Firestore document JSON.';
+COMMENT ON TABLE public.assessment_generations IS 'Assessment generation payload snapshot stored as JSONB.';
 
 CREATE INDEX assessment_generations_owner_uid_created_idx
   ON public.assessment_generations (owner_uid, created_at DESC);
@@ -93,7 +92,7 @@ CREATE INDEX assessment_generations_owner_uid_created_idx
 ALTER TABLE public.assessment_generations ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- infographic_generations (Firestore: `infographicGenerations`)
+-- infographic_generations
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.infographic_generations (
   id text PRIMARY KEY,
@@ -103,7 +102,7 @@ CREATE TABLE public.infographic_generations (
   updated_at timestamptz NOT NULL
 );
 
-COMMENT ON TABLE public.infographic_generations IS 'Firestore collection: infographicGenerations — includes inline SVG in JSON payload.';
+COMMENT ON TABLE public.infographic_generations IS 'Infographic generation payload snapshot, including inline SVG content.';
 
 CREATE INDEX infographic_generations_owner_uid_created_idx
   ON public.infographic_generations (owner_uid, created_at DESC);
@@ -111,7 +110,7 @@ CREATE INDEX infographic_generations_owner_uid_created_idx
 ALTER TABLE public.infographic_generations ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- admin_activity_logs (Firestore: `adminActivityLogs`)
+-- admin_activity_logs
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.admin_activity_logs (
   id text PRIMARY KEY,
@@ -128,15 +127,15 @@ CREATE TABLE public.admin_activity_logs (
   created_at timestamptz NOT NULL
 );
 
-COMMENT ON TABLE public.admin_activity_logs IS 'Firestore collection: adminActivityLogs — append-only admin audit trail.';
+COMMENT ON TABLE public.admin_activity_logs IS 'Append-only admin audit trail.';
 
 CREATE INDEX admin_activity_logs_created_at_idx ON public.admin_activity_logs (created_at DESC);
 
 ALTER TABLE public.admin_activity_logs ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- assessment_generation_idempotency (Firestore: `assessmentGenerationIdempotency`)
--- Document id in Firestore: `${ownerUid}_${idempotencyKeyHash}`
+-- assessment_generation_idempotency
+-- Identifier format convention: ${ownerUid}_${idempotencyKeyHash}
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.assessment_generation_idempotency (
   id text PRIMARY KEY,
@@ -150,7 +149,7 @@ CREATE TABLE public.assessment_generation_idempotency (
   expires_at timestamptz NOT NULL
 );
 
-COMMENT ON TABLE public.assessment_generation_idempotency IS 'Firestore collection: assessmentGenerationIdempotency — duplicate-click protection for assessment POST.';
+COMMENT ON TABLE public.assessment_generation_idempotency IS 'Duplicate-request protection for assessment generation create calls.';
 
 CREATE INDEX assessment_generation_idempotency_owner_uid_idx
   ON public.assessment_generation_idempotency (owner_uid);
@@ -158,8 +157,8 @@ CREATE INDEX assessment_generation_idempotency_owner_uid_idx
 ALTER TABLE public.assessment_generation_idempotency ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- assessment_daily_credits (Firestore: `assessmentDailyCredits`)
--- Document id in Firestore: `${ownerUid}__${dayKey}`
+-- assessment_daily_credits
+-- Identifier format convention: ${ownerUid}__${dayKey}
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.assessment_daily_credits (
   id text PRIMARY KEY,
@@ -172,7 +171,7 @@ CREATE TABLE public.assessment_daily_credits (
   updated_at timestamptz NOT NULL
 );
 
-COMMENT ON TABLE public.assessment_daily_credits IS 'Firestore collection: assessmentDailyCredits — UTC day ledger + reservations.';
+COMMENT ON TABLE public.assessment_daily_credits IS 'UTC day credit ledger with pending reservation tracking.';
 
 CREATE INDEX assessment_daily_credits_owner_uid_day_key_idx
   ON public.assessment_daily_credits (owner_uid, day_key);
@@ -180,8 +179,8 @@ CREATE INDEX assessment_daily_credits_owner_uid_day_key_idx
 ALTER TABLE public.assessment_daily_credits ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- assessment_credit_accounts (Firestore: `assessmentCreditAccounts`)
--- Firestore document id == ownerUid
+-- assessment_credit_accounts
+-- owner_uid is the account identifier.
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.assessment_credit_accounts (
   owner_uid text PRIMARY KEY,
@@ -192,12 +191,12 @@ CREATE TABLE public.assessment_credit_accounts (
   updated_at timestamptz NOT NULL
 );
 
-COMMENT ON TABLE public.assessment_credit_accounts IS 'Firestore collection: assessmentCreditAccounts — per-user assessment credit wallet settings.';
+COMMENT ON TABLE public.assessment_credit_accounts IS 'Per-user assessment credit account settings.';
 
 ALTER TABLE public.assessment_credit_accounts ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
--- assessment_credit_grants (Firestore: `assessmentCreditGrants`)
+-- assessment_credit_grants
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.assessment_credit_grants (
   id text PRIMARY KEY,
@@ -217,7 +216,7 @@ CREATE TABLE public.assessment_credit_grants (
   revoke_reason text
 );
 
-COMMENT ON TABLE public.assessment_credit_grants IS 'Firestore collection: assessmentCreditGrants — time-bounded admin grants.';
+COMMENT ON TABLE public.assessment_credit_grants IS 'Time-bounded assessment credit grants managed by admins.';
 
 CREATE INDEX assessment_credit_grants_owner_uid_idx ON public.assessment_credit_grants (owner_uid);
 
