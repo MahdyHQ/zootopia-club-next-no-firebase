@@ -16,7 +16,6 @@
     "build": "npm run build:local",
     "build:local": "npm run build --workspaces --if-present",
     "build:web": "npm run build --workspace=@zootopia/web",
-    "build:vercel": "npm run build:vercel --workspace=@zootopia/web",
     "lint": "npm run lint --workspaces --if-present",
     "lint:web": "npm run lint --workspace=@zootopia/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
