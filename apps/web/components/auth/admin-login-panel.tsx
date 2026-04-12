@@ -1,7 +1,11 @@
 "use client";
 
 import { APP_ROUTES } from "@zootopia/shared-config";
-import type { ApiResult, AdminIdentifierResolution } from "@zootopia/shared-types";
+import type {
+  ApiResult,
+  AdminIdentifierResolution,
+  SessionUser,
+} from "@zootopia/shared-types";
 import { Eye, EyeOff, GraduationCap, LoaderCircle } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
@@ -22,6 +26,7 @@ import {
   logAuthDiagnosis,
   normalizeAuthFailure,
 } from "@/lib/auth-failure";
+import { resolveAuthenticatedUserRedirectPath } from "@/lib/return-to";
 
 import {
   getEphemeralSupabaseClient,
@@ -170,7 +175,7 @@ async function completeAdminAuthJsSignIn(input: {
     const mePayload = await readApiResult<{
       session: {
         authenticated: boolean;
-        user: { role: "admin" | "user" } | null;
+        user: SessionUser | null;
       };
     }>(meResponse, "ADMIN_BOOTSTRAP_RESPONSE_INVALID");
 
@@ -191,7 +196,7 @@ async function completeAdminAuthJsSignIn(input: {
           failure,
         });
       }
-      return;
+      return mePayload.data.session.user;
     }
 
     const responseErrorCode = mePayload.ok ? null : mePayload.error.code;
@@ -319,7 +324,7 @@ export function AdminLoginPanel({
       body: messages.adminLoginStatusOpeningBody,
     });
 
-    await completeAdminAuthJsSignIn({
+    const sessionUser = await completeAdminAuthJsSignIn({
       idToken: input.idToken,
       deviceLabel: input.deviceLabel,
       deviceLabelSource: input.deviceLabelSource,
@@ -328,7 +333,12 @@ export function AdminLoginPanel({
       routePath: APP_ROUTES.adminLogin,
     });
 
-    return APP_ROUTES.admin;
+    /* Route admin handoff through the shared redirect resolver so env-driven admin defaults
+       stay consistent with proxy and server-side auth entrypoints. */
+    return resolveAuthenticatedUserRedirectPath({
+      role: sessionUser.role,
+      profileCompleted: sessionUser.profileCompleted,
+    }).path;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

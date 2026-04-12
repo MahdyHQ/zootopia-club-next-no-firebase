@@ -26,6 +26,31 @@ type ProxySessionUser = {
   profileCompleted?: unknown;
 };
 
+function readBooleanEnvFlag(value: string | undefined) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function hasDurableSessionRuntime() {
+  const isProduction = String(process.env.NODE_ENV ?? "").trim().toLowerCase() === "production";
+  const allowMemoryFallback = readBooleanEnvFlag(
+    process.env.ZOOTOPIA_ALLOW_PRODUCTION_MEMORY_FALLBACK,
+  );
+  const requiresDurable = isProduction && !allowMemoryFallback;
+  if (!requiresDurable) {
+    return true;
+  }
+
+  const hasDatabaseUrl = Boolean(
+    process.env.SUPABASE_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim(),
+  );
+  const hasSupabaseAdminRuntime = Boolean(
+    process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
+  );
+
+  return hasDatabaseUrl && hasSupabaseAdminRuntime;
+}
+
 function matchesRoute(pathname: string, routes: readonly string[]) {
   return routes.some((route) =>
     route === "/"
@@ -35,6 +60,7 @@ function matchesRoute(pathname: string, routes: readonly string[]) {
 }
 
 function proxyHandler(request: NextRequest) {
+  const sessionRuntimeReady = hasDurableSessionRuntime();
   const authSession = (request as NextRequest & {
     auth?: { user?: ProxySessionUser } | null;
   }).auth;
@@ -49,7 +75,9 @@ function proxyHandler(request: NextRequest) {
   const role = rawRole === "admin" ? "admin" : "user";
   const status = authUser?.status === "suspended" ? "suspended" : "active";
   const profileCompleted = Boolean(authUser?.profileCompleted);
-  const hasActiveSession = Boolean(uid) && status === "active";
+  // Keep proxy auth fail-closed when production requires durable persistence but critical
+  // runtime bindings are absent; this avoids login<->protected redirect loops with stale cookies.
+  const hasActiveSession = sessionRuntimeReady && Boolean(uid) && status === "active";
   const redirectDecision = resolveAuthenticatedUserRedirectPath({
     role,
     profileCompleted,

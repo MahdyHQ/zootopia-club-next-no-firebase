@@ -47,6 +47,7 @@ import { checkRequestRateLimit } from "@/lib/server/request-rate-limit";
 import { getServerAuthAdmin } from "@/lib/server/server-auth";
 import { getSessionTtlSeconds } from "@/lib/server/session-config";
 import { hasSupabaseAdminRuntime } from "@/lib/server/supabase-admin";
+import { getZootopiaPersistenceRuntimeState } from "@/lib/server/zootopia-postgres-adapter";
 
 type AuthProviderMode = "user" | "admin";
 
@@ -497,6 +498,19 @@ function assertAuthRuntime() {
       "Admin allowlist is not configured for this runtime.",
     );
   }
+
+  /* Keep auth bootstrap fail-closed in production when durable persistence is required.
+     This prevents creating sessions that would immediately fail on protected data routes. */
+  const persistenceRuntime = getZootopiaPersistenceRuntimeState();
+  if (
+    persistenceRuntime.requiresDurablePersistence
+    && !persistenceRuntime.usingPostgres
+  ) {
+    throwAuthCode(
+      "DB_REPOSITORY_UNAVAILABLE",
+      "Sign-in reached identity verification, but durable profile storage is unavailable.",
+    );
+  }
 }
 
 async function verifySessionToken(
@@ -895,20 +909,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       const authUser = (user as Partial<AuthorizedUser> | undefined) ?? {};
+      const tokenClaims = token as Record<string, unknown>;
+      const userUid = normalizeString(authUser.uid ?? authUser.id);
+      const tokenUid = normalizeString(tokenClaims.uid);
+      const userEmail = normalizeString(authUser.email);
+      const tokenEmail = normalizeString(tokenClaims.email);
+      const resolvedRole = user
+        ? normalizeRole(authUser.role)
+        : normalizeRole(tokenClaims.role);
+      const resolvedProvider =
+        resolvedRole === "admin" ? "admin-credentials" : "user-credentials";
       const traceContext = createAuthTraceContext({
-        flow: normalizeRole(authUser.role) === "admin" ? "admin" : "user",
-        provider:
-          normalizeRole(authUser.role) === "admin"
-            ? "admin-credentials"
-            : "user-credentials",
+        flow: resolvedRole === "admin" ? "admin" : "user",
+        provider: resolvedProvider,
         traceId: typeof authUser.traceId === "string" ? authUser.traceId : null,
-        uid: normalizeString(authUser.uid ?? authUser.id),
-        email: normalizeString(authUser.email),
+        uid: userUid ?? tokenUid,
+        email: userEmail ?? tokenEmail,
       });
       logAuthStageStart(traceContext, AUTH_STAGE_JWT_CALLBACK);
 
       if (user) {
-        const claims = token as Record<string, unknown>;
+        const claims = tokenClaims;
 
         /* SESSION OWNERSHIP BINDING (Auth.js JWT Callback):
            

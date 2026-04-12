@@ -173,3 +173,9 @@ CONTACT_FORM_TO=alahlyeagle13@gmail.com
 # Local Pro PDF executable overrides (optional).
 ASSESSMENT_PDF_BROWSER_EXECUTABLE_PATH=
 PUPPETEER_EXECUTABLE_PATH=
+
+# Auth redirect defaults after successful login/bootstrap and confirm-email finalization.
+# Keep these values as internal relative paths only (for example "/", "/upload", "/admin").
+# Using NEXT_PUBLIC keys keeps server and client redirect decisions aligned in Next App Router.
+NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT=/
+NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT=/

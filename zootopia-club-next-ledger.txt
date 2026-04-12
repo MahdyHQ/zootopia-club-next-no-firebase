@@ -3,9 +3,9 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-12 (Runtime origin hardening + admin-boundary audit)
+Last Updated: 2026-04-12 (Auth redirect/runtime hardening; verification pass)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
-Current Commit: 4cce676f2840b5fb40ded30b9d88d61b4a521a37
+Current Commit: 79e2ebd3950a82c77a14fa224660bc73e8e9c81c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
 Runtime: Node.js >= 20.9.0
 
@@ -406,8 +406,8 @@ API Routes:
   /api/assessments            → GET: List user assessments
   /api/documents              → GET: List user documents
   /api/documents/[id]         → GET/DELETE: Document operations
-  /api/upload                 → POST: File upload
-  /api/upload/[id]            → GET/DELETE: Upload operations
+  /api/uploads                → POST: File upload
+  /api/uploads/[id]           → GET/DELETE: Upload operations
   /api/infographic            → POST: Generate infographic
   /api/admin/users            → GET: List users (admin)
   /api/admin/users/[uid]      → GET/PATCH: User management (admin)
@@ -441,7 +441,7 @@ Backend-Owned (API Routes):
 - apps/web/app/api/assessment/** — Assessment CRUD and export
 - apps/web/app/api/assessments — Assessment listing
 - apps/web/app/api/documents/** — Document operations
-- apps/web/app/api/upload/** — Upload operations
+- apps/web/app/api/uploads/** — Upload operations
 - apps/web/app/api/infographic — Infographic generation
 - apps/web/app/api/admin/** — Admin operations
 - apps/web/app/api/contact — Contact form relay
@@ -624,7 +624,7 @@ Implementation:
 Upload Flow:
 1. User selects file on /upload page
 2. Client validates file type and size
-3. File sent to POST /api/upload
+3. File sent to POST /api/uploads
 4. Server validates file, extracts metadata
 5. File stored in Supabase Storage bucket
 6. Metadata saved to Postgres via repository
@@ -959,7 +959,7 @@ Critical Secret Files:
 High-Risk API Routes:
 - /api/admin/** — Admin operations (user management, storage cleanup)
 - /api/assessment — Assessment generation (credit consumption)
-- /api/upload — File upload (storage consumption)
+- /api/uploads — File upload (storage consumption)
 - /api/auth/confirm-email/resend — Email resend (rate-limited)
 
 High-Risk Server Files:
@@ -1135,7 +1135,81 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
-2026-04-12 — Runtime Origin Hardening + Admin Boundary Verification (Current)
+2026-04-12 — Verification Baseline Reconfirm (Current)
+=======================================================
+Type: Verification / Ledger refresh
+Scope: lint, typecheck, build, commit metadata, runtime-origin hardening re-validation
+
+Summary:
+- Re-read the full ledger and revalidated current source for runtime-origin hardening paths.
+- Confirmed canonical-origin routing is already present in:
+  - apps/web/app/api/auth/confirm-email/resend/route.ts
+  - apps/web/app/api/assessment/export/pdf/[id]/route.ts
+  - apps/web/lib/server/runtime-base-url.ts
+- Ran workspace verification tasks:
+  - web-lint-post-polish: pass
+  - web-typecheck-post-polish: pass
+  - web-build-post-polish: pass
+- No source code changes were required.
+- Updated ledger commit metadata to current HEAD.
+
+Notes:
+- task shell:web-start-3025 is currently misconfigured (passes positional args to
+  next start and fails on invalid project directory). It was not changed in this
+  verification-only pass because runtime code changes were not required.
+
+Files Changed:
+- zootopia-club-next-ledger.txt
+
+Files NOT Changed:
+- All application/runtime source files.
+- No migrations or environment templates.
+
+---
+
+2026-04-12 — Redirect Authority + Auth Runtime Hardening
+=========================================================
+Type: Security hardening / auth flow consistency / production guardrails
+Scope: redirect decision consistency, auth bootstrap runtime gating, proxy fail-closed behavior, auth tracing clarity
+
+Summary:
+- Consolidated parallel auth/runtime/admin traces against current source before edits.
+- Fixed redirect authority drift by routing login handoff through the centralized resolver.
+- Hardened auth bootstrap to fail closed when production requires durable persistence but Postgres runtime is unavailable.
+- Hardened proxy active-session classification with durable-runtime readiness checks to reduce stale-session protected-route loops.
+- Improved Auth.js JWT trace context labeling so existing admin sessions are no longer mislabeled as user-credentials flow in callback logs.
+
+Key Findings Captured:
+- Redirect decisions were already centralized in apps/web/lib/return-to.ts, but two login handoff paths still used hardcoded destinations.
+- Production 500 risk remains strongly environment-coupled where durable persistence prerequisites are missing or degraded.
+- Auth trace logs on admin paths could show flow=user/provider=user-credentials for callback refresh cycles because JWT trace context defaulted from transient user payload instead of persisted token claims.
+
+Files Changed:
+- apps/web/components/auth/login-panel.tsx
+- apps/web/components/auth/admin-login-panel.tsx
+- apps/web/auth.ts
+- apps/web/proxy.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Login panel now resolves final destination via resolveAuthenticatedUserRedirectPath(...), preserving env-driven post-auth redirect authority.
+- Admin login panel now resolves final destination via resolveAuthenticatedUserRedirectPath(...), preserving centralized admin lane semantics.
+- Auth bootstrap now blocks early with DB_REPOSITORY_UNAVAILABLE when durable persistence is required and Postgres runtime is not active.
+- Proxy now treats active sessions as valid only when durable-runtime prerequisites are satisfied in production fail-closed mode.
+- JWT callback tracing now infers flow/provider from persisted token claims when user payload is absent, improving admin-path observability fidelity.
+
+Verification:
+- web-lint-post-polish: pass
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- This change set improves guardrails and consistency but cannot repair deployment environments with invalid/missing DB connectivity; Vercel env correctness remains required.
+- Existing stale browser sessions may still require re-authentication after runtime/env corrections.
+
+---
+
+2026-04-12 — Runtime Origin Hardening + Admin Boundary Verification (Historical)
 =======================================================================
 Type: Security Hardening / Runtime Debugging / Documentation Alignment
 Scope: Runtime origin handling, redirect/callback safety, admin-boundary verification

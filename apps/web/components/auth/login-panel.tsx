@@ -27,6 +27,7 @@ import {
   logAuthDiagnosis,
   normalizeAuthFailure,
 } from "@/lib/auth-failure";
+import { resolveAuthenticatedUserRedirectPath } from "@/lib/return-to";
 import {
   getEphemeralSupabaseClient,
   getSupabaseClient,
@@ -355,11 +356,13 @@ export function LoginPanel({
         });
         await clearClientSession();
 
-        const redirectTo = settled.role === "admin"
-          ? APP_ROUTES.admin
-          : settled.profileCompleted
-            ? APP_ROUTES.upload
-            : APP_ROUTES.settings;
+        /* Keep post-bootstrap handoff aligned with centralized role/profile redirect policy
+           so NEXT_PUBLIC_ZOOTOPIA_AUTH_* defaults remain authoritative for login completion. */
+        const redirectDecision = resolveAuthenticatedUserRedirectPath({
+          role: settled.role,
+          profileCompleted: settled.profileCompleted,
+        });
+        const redirectTo = redirectDecision.path;
         router.replace(redirectTo);
         router.refresh();
       } catch (nextError) {
