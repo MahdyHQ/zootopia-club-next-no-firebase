@@ -14,6 +14,7 @@ import {
   buildAssessmentPrintHtml,
 } from "@/lib/server/assessment-print-renderer";
 import { appendAdminLog, saveAssessmentGeneration } from "@/lib/server/repository";
+import { getServerRuntimeOrigin } from "@/lib/server/runtime-base-url";
 
 export const ASSESSMENT_PRO_PDF_LANE_VERSION = `pro-${ASSESSMENT_PRINT_LAYOUT_VERSION}`;
 
@@ -39,6 +40,7 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
 
   if (!canReuseExistingArtifact) {
     const qrCodeDataUrl = await buildAssessmentFileQrDataUrl();
+    const documentBaseUrl = getServerRuntimeOrigin();
     const html = buildAssessmentPrintHtml({
       preview: input.preview,
       themeMode: input.themeMode,
@@ -46,8 +48,9 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
       autoPrint: false,
       pageNumberMode: "static-sections",
       /* The Pro lane renders through Puppeteer/Chromium, so public assets need an absolute base
-         URL at capture time. Keep this lane-specific concern out of the Fast browser-print lane. */
-      documentBaseUrl: input.requestUrl.origin,
+         URL at capture time. Keep this lane-specific concern out of the Fast browser-print lane.
+         Use the canonical runtime origin so host-header spoofing cannot influence Puppeteer fetches. */
+      documentBaseUrl,
     });
     const pdfBuffer = await buildAssessmentPdfBuffer({
       html,

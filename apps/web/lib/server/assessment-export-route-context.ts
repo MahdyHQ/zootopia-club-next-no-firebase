@@ -9,6 +9,7 @@ import { apiError } from "@/lib/server/api";
 import { buildAssessmentPreview } from "@/lib/server/assessment-preview";
 import { getAssessmentGenerationForOwner } from "@/lib/server/repository";
 import { getRequestUiContext } from "@/lib/server/request-context";
+import { resolveRequestUrlWithServerBase } from "@/lib/server/runtime-base-url";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
 export type AssessmentExportRouteContext = {
@@ -59,7 +60,7 @@ export async function buildAssessmentExportRouteContext(request: Request, id: st
   }
 
   const uiContext = await getRequestUiContext();
-  const requestUrl = new URL(request.url);
+  const requestUrl = resolveRequestUrlWithServerBase(request);
   const themeMode = resolveAssessmentFileThemeMode(
     requestUrl.searchParams.get("theme"),
     /* Assessment preview/export surfaces intentionally default to the light file theme even when
