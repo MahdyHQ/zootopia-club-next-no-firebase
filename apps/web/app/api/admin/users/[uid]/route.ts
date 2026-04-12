@@ -4,7 +4,7 @@ import type {
   ApiFieldErrors,
 } from "@zootopia/shared-types";
 
-import { apiError, apiSuccess } from "@/lib/server/api";
+import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import {
   appendAdminLog,
   deleteUserAccountAsAdmin,
@@ -97,49 +97,55 @@ export async function DELETE(
 ) {
   const admin = await getAdminSessionUser();
   if (!admin) {
-    return apiError("FORBIDDEN", "Admin access is required.", 403);
+    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
   }
 
   const { uid } = await context.params;
   const targetUid = String(uid || "").trim();
   if (!targetUid) {
-    return apiError("USER_UID_REQUIRED", "A target user uid is required.", 400);
+    return applyNoStore(apiError("USER_UID_REQUIRED", "A target user uid is required.", 400));
   }
 
   if (targetUid === admin.uid) {
-    return apiError(
-      "ADMIN_SELF_DELETE_FORBIDDEN",
-      "Admins cannot delete their own account from this route.",
-      400,
+    return applyNoStore(
+      apiError(
+        "ADMIN_SELF_DELETE_FORBIDDEN",
+        "Admins cannot delete their own account from this route.",
+        400,
+      ),
     );
   }
 
   const targetUser = await getUserByUid(targetUid);
   if (!targetUser) {
-    return apiError("USER_NOT_FOUND", "The selected user was not found.", 404);
+    return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
   }
 
   let body: { confirmation?: string };
   try {
     body = (await request.json()) as { confirmation?: string };
   } catch {
-    return apiError("INVALID_JSON", "Request body must be valid JSON.", 400);
+    return applyNoStore(apiError("INVALID_JSON", "Request body must be valid JSON.", 400));
   }
 
   const confirmation = String(body.confirmation || "").trim();
   if (!confirmation) {
-    return apiError(
-      "DELETE_CONFIRMATION_REQUIRED",
-      `Deletion confirmation is required. Type "${DELETE_USER_CONFIRMATION_PHRASE}" exactly.`,
-      400,
+    return applyNoStore(
+      apiError(
+        "DELETE_CONFIRMATION_REQUIRED",
+        `Deletion confirmation is required. Type "${DELETE_USER_CONFIRMATION_PHRASE}" exactly.`,
+        400,
+      ),
     );
   }
 
   if (confirmation !== DELETE_USER_CONFIRMATION_PHRASE) {
-    return apiError(
-      "DELETE_CONFIRMATION_MISMATCH",
-      `Confirmation must match "${DELETE_USER_CONFIRMATION_PHRASE}" exactly.`,
-      400,
+    return applyNoStore(
+      apiError(
+        "DELETE_CONFIRMATION_MISMATCH",
+        `Confirmation must match "${DELETE_USER_CONFIRMATION_PHRASE}" exactly.`,
+        400,
+      ),
     );
   }
 
@@ -191,11 +197,13 @@ export async function DELETE(
       failureReason: summary.failureReason,
     });
 
-    return apiSuccess<AdminDeleteUserResponse>({
-      deletedUid: targetUid,
-      users,
-      summary,
-    });
+    return applyNoStore(
+      apiSuccess<AdminDeleteUserResponse>({
+        deletedUid: targetUid,
+        users,
+        summary,
+      }),
+    );
   } catch (error) {
     const mapped = mapDeleteUserError(error);
 
@@ -210,6 +218,6 @@ export async function DELETE(
       failureCode: mapped.code,
     });
 
-    return apiError(mapped.code, mapped.message, mapped.status, mapped.fieldErrors);
+    return applyNoStore(apiError(mapped.code, mapped.message, mapped.status, mapped.fieldErrors));
   }
 }

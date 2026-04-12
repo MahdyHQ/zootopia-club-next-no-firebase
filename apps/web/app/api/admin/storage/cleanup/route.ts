@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SessionUser } from "@zootopia/shared-types";
 
-import { apiError, apiSuccess } from "@/lib/server/api";
+import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import {
   listDocumentsForUser,
   listAssessmentGenerationsForUser,
@@ -72,7 +72,7 @@ async function deleteNamespaceObjectsInBatches(input: {
 export async function POST(request: Request) {
   const admin = await getAdminSessionUser();
   if (!admin) {
-    return apiError("FORBIDDEN", "Admin access is required.", 403);
+    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
   }
 
   let body: {
@@ -84,23 +84,27 @@ export async function POST(request: Request) {
   try {
     body = (await request.json()) as typeof body;
   } catch {
-    return apiError("INVALID_JSON", "Request body must be valid JSON.", 400);
+    return applyNoStore(apiError("INVALID_JSON", "Request body must be valid JSON.", 400));
   }
 
   const mode = String(body.mode || "").trim();
   if (mode !== "user" && mode !== "global") {
-    return apiError(
-      "INVALID_MODE",
-      "Mode must be 'user' (per-user cleanup) or 'global' (all storage cleanup).",
-      400,
+    return applyNoStore(
+      apiError(
+        "INVALID_MODE",
+        "Mode must be 'user' (per-user cleanup) or 'global' (all storage cleanup).",
+        400,
+      ),
     );
   }
 
   if (!hasRemoteBlobStorage()) {
-    return apiError(
-      "STORAGE_UNAVAILABLE",
-      "Remote storage is not available in this runtime.",
-      503,
+    return applyNoStore(
+      apiError(
+        "STORAGE_UNAVAILABLE",
+        "Remote storage is not available in this runtime.",
+        503,
+      ),
     );
   }
 
@@ -122,29 +126,35 @@ export async function POST(request: Request) {
 async function handleUserCleanup(admin: SessionUser, body: Record<string, unknown>) {
   const targetUid = String(body.targetUid || "").trim();
   if (!targetUid) {
-    return apiError("TARGET_UID_REQUIRED", "A target user uid is required for per-user cleanup.", 400);
+    return applyNoStore(
+      apiError("TARGET_UID_REQUIRED", "A target user uid is required for per-user cleanup.", 400),
+    );
   }
 
   const confirmation = String(body.confirmation || "").trim();
   if (!confirmation) {
-    return apiError(
-      "CONFIRMATION_REQUIRED",
-      "Confirmation is required. Type the target user uid to confirm.",
-      400,
+    return applyNoStore(
+      apiError(
+        "CONFIRMATION_REQUIRED",
+        "Confirmation is required. Type the target user uid to confirm.",
+        400,
+      ),
     );
   }
 
   if (confirmation !== targetUid) {
-    return apiError(
-      "CONFIRMATION_MISMATCH",
-      "Confirmation must match the target user uid exactly.",
-      400,
+    return applyNoStore(
+      apiError(
+        "CONFIRMATION_MISMATCH",
+        "Confirmation must match the target user uid exactly.",
+        400,
+      ),
     );
   }
 
   const targetUser = await getUserByUid(targetUid);
   if (!targetUser) {
-    return apiError("USER_NOT_FOUND", "The target user was not found.", 404);
+    return applyNoStore(apiError("USER_NOT_FOUND", "The target user was not found.", 404));
   }
 
   console.info("[admin-storage-cleanup]", {
@@ -269,7 +279,7 @@ async function handleUserCleanup(admin: SessionUser, body: Record<string, unknow
       dbInfographicsRetained: result.dbInfographicsRetained,
     });
 
-    return apiSuccess(result);
+    return applyNoStore(apiSuccess(result));
   } catch (error) {
     result.finalResult = "failure";
     result.failureReason = error instanceof Error ? error.message : "UNKNOWN_FAILURE";
@@ -305,7 +315,9 @@ async function handleUserCleanup(admin: SessionUser, body: Record<string, unknow
       failureReason: result.failureReason,
     });
 
-    return apiError("STORAGE_CLEANUP_FAILED", `Storage cleanup failed: ${result.failureReason}`, 500);
+    return applyNoStore(
+      apiError("STORAGE_CLEANUP_FAILED", `Storage cleanup failed: ${result.failureReason}`, 500),
+    );
   }
 }
 
@@ -323,10 +335,12 @@ async function handleGlobalCleanup(admin: SessionUser, body: Record<string, unkn
   // Stronger confirmation: must type "DELETE ALL STORAGE"
   const REQUIRED_PHRASE = "DELETE ALL STORAGE";
   if (confirmation !== REQUIRED_PHRASE) {
-    return apiError(
-      "CONFIRMATION_REQUIRED",
-      `You must type "${REQUIRED_PHRASE}" exactly to confirm global storage cleanup.`,
-      400,
+    return applyNoStore(
+      apiError(
+        "CONFIRMATION_REQUIRED",
+        `You must type "${REQUIRED_PHRASE}" exactly to confirm global storage cleanup.`,
+        400,
+      ),
     );
   }
 
@@ -408,7 +422,7 @@ async function handleGlobalCleanup(admin: SessionUser, body: Record<string, unkn
       storageObjectsFailed: result.storageObjectsFailed,
     });
 
-    return apiSuccess(result);
+    return applyNoStore(apiSuccess(result));
   } catch (error) {
     result.finalResult = "failure";
     result.failureReason = error instanceof Error ? error.message : "UNKNOWN_FAILURE";
@@ -438,6 +452,8 @@ async function handleGlobalCleanup(admin: SessionUser, body: Record<string, unkn
       failureReason: result.failureReason,
     });
 
-    return apiError("STORAGE_CLEANUP_FAILED", `Global storage cleanup failed: ${result.failureReason}`, 500);
+    return applyNoStore(
+      apiError("STORAGE_CLEANUP_FAILED", `Global storage cleanup failed: ${result.failureReason}`, 500),
+    );
   }
 }

@@ -56,7 +56,7 @@ function getDatabaseUrl() {
 
 async function ensureMigrationHistoryTable(sql) {
   await sql`
-    create table if not exists _migration_history (
+    create table if not exists public._migration_history (
       migration_name text primary key,
       applied_at timestamptz not null default now()
     );
@@ -66,7 +66,7 @@ async function ensureMigrationHistoryTable(sql) {
 async function getAppliedMigrations(sql) {
   return await sql`
     select migration_name, applied_at
-    from _migration_history
+    from public._migration_history
     order by applied_at asc, migration_name asc
   `;
 }
@@ -117,7 +117,7 @@ async function syncCanonicalHistoryAliases(sql, appliedRows, canonicalByTimestam
     }
 
     await sql`
-      insert into _migration_history (migration_name, applied_at)
+      insert into public._migration_history (migration_name, applied_at)
       values (${canonicalName}, ${row.applied_at})
       on conflict (migration_name) do nothing
     `;
@@ -224,7 +224,7 @@ async function main() {
       try {
         await sql.begin(async (tx) => {
           await tx.unsafe(migrationSql);
-          await tx`insert into _migration_history (migration_name) values (${migrationFile})`;
+          await tx`insert into public._migration_history (migration_name) values (${migrationFile})`;
         });
         console.log(`  ✓ ${migrationFile} applied successfully.\n`);
       } catch (err) {

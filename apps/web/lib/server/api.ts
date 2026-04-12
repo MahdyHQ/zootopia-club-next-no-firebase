@@ -2,8 +2,8 @@ import type { ApiFailure, ApiFieldErrors, ApiSuccess } from "@zootopia/shared-ty
 import { NextResponse } from "next/server";
 
 export function applyNoStore<T extends NextResponse>(response: T): T {
-  /* Auth/session JSON payloads must never be cached by intermediary layers.
-     This helper is applied selectively by auth route handlers. */
+  /* Auth/session/admin-sensitive JSON payloads must never be cached by intermediary layers.
+     This helper is applied selectively by server route handlers that return protected data. */
   response.headers.set("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.headers.set("Pragma", "no-cache");
   response.headers.set("Expires", "0");

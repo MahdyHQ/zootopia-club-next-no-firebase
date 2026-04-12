@@ -3,7 +3,7 @@ import type {
   AdminUserAssessmentCreditsResponse,
 } from "@zootopia/shared-types";
 
-import { apiError, apiSuccess } from "@/lib/server/api";
+import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import {
   appendAdminLog,
   applyAdminAssessmentCreditMutation,
@@ -80,28 +80,32 @@ export async function GET(
      server-side so only claim-verified admins can inspect or mutate account credit state. */
   const admin = await getAdminSessionUser();
   if (!admin) {
-    return apiError("FORBIDDEN", "Admin access is required.", 403);
+    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
   }
 
   const { uid } = await context.params;
   const user = await getUserByUid(uid);
   if (!user) {
-    return apiError("USER_NOT_FOUND", "The selected user was not found.", 404);
+    return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
   }
 
   const state = await getAdminAssessmentCreditStateForUser(uid);
   if (!state) {
-    return apiError(
-      "ASSESSMENT_CREDIT_STATE_UNAVAILABLE",
-      "Unable to load assessment credit state for this user.",
-      500,
+    return applyNoStore(
+      apiError(
+        "ASSESSMENT_CREDIT_STATE_UNAVAILABLE",
+        "Unable to load assessment credit state for this user.",
+        500,
+      ),
     );
   }
 
-  return apiSuccess<AdminUserAssessmentCreditsResponse>({
-    user,
-    state,
-  });
+  return applyNoStore(
+    apiSuccess<AdminUserAssessmentCreditsResponse>({
+      user,
+      state,
+    }),
+  );
 }
 
 export async function PATCH(
@@ -112,15 +116,17 @@ export async function PATCH(
      manual credits, overrides, and grants authoritative in one backend path. */
   const admin = await getAdminSessionUser();
   if (!admin) {
-    return apiError("FORBIDDEN", "Admin access is required.", 403);
+    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
   }
 
   const { uid } = await context.params;
   if (uid === admin.uid) {
-    return apiError(
-      "ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN",
-      "Admins cannot mutate their own assessment credit balances.",
-      403,
+    return applyNoStore(
+      apiError(
+        "ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN",
+        "Admins cannot mutate their own assessment credit balances.",
+        403,
+      ),
     );
   }
 
@@ -128,7 +134,7 @@ export async function PATCH(
   try {
     body = (await request.json()) as AdminAssessmentCreditMutationInput;
   } catch {
-    return apiError("INVALID_JSON", "Request body must be valid JSON.", 400);
+    return applyNoStore(apiError("INVALID_JSON", "Request body must be valid JSON.", 400));
   }
 
   console.info("[admin-users-mutation]", {
@@ -150,7 +156,7 @@ export async function PATCH(
     });
     const user = await getUserByUid(uid);
     if (!user) {
-      return apiError("USER_NOT_FOUND", "The selected user was not found.", 404);
+      return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
     }
 
     await appendAdminLog({
@@ -184,10 +190,12 @@ export async function PATCH(
       backendMutationResult: "success",
     });
 
-    return apiSuccess<AdminUserAssessmentCreditsResponse>({
-      user,
-      state,
-    });
+    return applyNoStore(
+      apiSuccess<AdminUserAssessmentCreditsResponse>({
+        user,
+        state,
+      }),
+    );
   } catch (error) {
     console.warn("[admin-users-mutation]", {
       action: `assessment-credits:${body.action}`,
@@ -199,6 +207,6 @@ export async function PATCH(
     });
 
     const mapped = mapCreditMutationError(error);
-    return apiError(mapped.code, mapped.message, mapped.status);
+    return applyNoStore(apiError(mapped.code, mapped.message, mapped.status));
   }
 }

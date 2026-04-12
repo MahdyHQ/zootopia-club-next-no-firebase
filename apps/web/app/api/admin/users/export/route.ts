@@ -1,4 +1,4 @@
-import { apiError } from "@/lib/server/api";
+import { apiError, applyNoStore } from "@/lib/server/api";
 import {
   buildAdminUsersExportFileName,
   buildAdminUsersWorkbookBuffer,
@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 export async function GET() {
   const adminUser = await getAdminSessionUser();
   if (!adminUser) {
-    return apiError("FORBIDDEN", "Admin access is required.", 403);
+    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
   }
 
   try {
@@ -74,12 +74,14 @@ export async function GET() {
       },
     });
   } catch (error) {
-    return apiError(
-      "ADMIN_USERS_EXPORT_FAILED",
-      error instanceof Error
-        ? error.message
-        : "Unable to generate the users export workbook.",
-      500,
+    return applyNoStore(
+      apiError(
+        "ADMIN_USERS_EXPORT_FAILED",
+        error instanceof Error
+          ? error.message
+          : "Unable to generate the users export workbook.",
+        500,
+      ),
     );
   }
 }

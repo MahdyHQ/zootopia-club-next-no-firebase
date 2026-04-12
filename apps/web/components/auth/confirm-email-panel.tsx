@@ -680,6 +680,7 @@ export function ConfirmEmailPanel({
   const [hasAcceptedSend, setHasAcceptedSend] = useState(false);
   const governanceRequestTokenRef = useRef(0);
   const previousCooldownRef = useRef(0);
+  const submitInFlightRef = useRef(false);
   const finalizationStartedRef = useRef(false);
   const redirectStartedRef = useRef(false);
   const supabaseConfigured = isSupabaseWebConfigured();
@@ -701,19 +702,20 @@ export function ConfirmEmailPanel({
     try {
       const nextGovernance = await readResendGovernanceSnapshot(targetEmail);
       if (requestToken !== governanceRequestTokenRef.current) {
-        return;
+        return null;
       }
 
       setGovernance(nextGovernance);
       setCooldownSeconds(nextGovernance.cooldownRemainingSeconds);
       setHasAcceptedSend(nextGovernance.hasAcceptedSend);
+      return nextGovernance;
     } catch (nextError) {
       if (requestToken !== governanceRequestTokenRef.current) {
-        return;
+        return null;
       }
 
       if (options?.suppressStatus) {
-        return;
+        return null;
       }
 
       const failure = normalizeAuthFailure({
@@ -730,6 +732,7 @@ export function ConfirmEmailPanel({
       });
 
       setStatus(mapConfirmEmailFailure(failure, messages));
+      return null;
     } finally {
       if (requestToken === governanceRequestTokenRef.current) {
         setIsGovernanceLoading(false);
@@ -947,15 +950,13 @@ export function ConfirmEmailPanel({
   const governanceStatus = status
     ? null
     : mapGovernanceSnapshotToStatus(governance, messages);
-  const governanceBlocksSubmission = governance ? !governance.allowed : false;
   const disabled =
     !supabaseConfigured
     || !supabaseAuthReady
     || isSending
     || isFinalizing
     || isGovernanceLoading
-    || !hasValidEmail
-    || governanceBlocksSubmission;
+    || !hasValidEmail;
 
   const blockingStatus =
     status
@@ -990,7 +991,7 @@ export function ConfirmEmailPanel({
   const resendLabel =
     isFinalizing
       ? messages.confirmEmailFinalizingButton
-      : isSending
+      : isSending || isGovernanceLoading
       ? messages.confirmEmailResendWorking
       : governance?.governanceCode === "VERIFICATION_RESEND_COOLDOWN_ACTIVE" && cooldownSeconds > 0
         ? `${messages.confirmEmailResendCooldownPrefix} ${cooldownSeconds}s`
@@ -1001,6 +1002,10 @@ export function ConfirmEmailPanel({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (submitInFlightRef.current) {
+      return;
+    }
+
     if (disabled) {
       if (!hasValidEmail) {
         setStatus({
@@ -1009,12 +1014,37 @@ export function ConfirmEmailPanel({
           title: messages.confirmEmailInvalidEmailTitle,
           body: messages.confirmEmailInvalidEmailBody,
         });
-      } else if (governance && !governance.allowed) {
-        setStatus(mapGovernanceSnapshotToStatus(governance, messages));
       }
       return;
     }
 
+    let nextGovernance = governance;
+
+    if (nextGovernance && !nextGovernance.allowed) {
+      /* Re-read governance right before submit so the first click cannot be blocked by
+         a stale snapshot that was fetched during prior route history or cooldown drift. */
+      const refreshedGovernance = await syncGovernanceState(normalizedEmail, {
+        suppressStatus: true,
+      });
+
+      if (refreshedGovernance) {
+        nextGovernance = refreshedGovernance;
+      }
+
+      if (nextGovernance && !nextGovernance.allowed) {
+        setStatus(
+          mapGovernanceSnapshotToStatus(nextGovernance, messages) ?? {
+            tone: "warning",
+            icon: "warning",
+            title: messages.confirmEmailRateLimitedTitle,
+            body: messages.confirmEmailRateLimitedBody,
+          },
+        );
+        return;
+      }
+    }
+
+    submitInFlightRef.current = true;
     setIsSending(true);
     setStatus({
       tone: "info",
@@ -1066,6 +1096,7 @@ export function ConfirmEmailPanel({
       setStatus(mapConfirmEmailFailure(failure, messages));
     } finally {
       setIsSending(false);
+      submitInFlightRef.current = false;
 
       if (hasValidEmail && supabaseConfigured && supabaseAuthReady) {
         void syncGovernanceState(normalizedEmail, { suppressStatus: true });

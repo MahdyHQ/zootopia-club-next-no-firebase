@@ -79,3 +79,97 @@ CONTACT_FORM_TO=alahlyeagle13@gmail.com
 # Never store the shared admin password in .env.local or any checked-in file.
 # Set or rotate Firebase Auth passwords with:
 # npm run firebase:admin:set-passwords -- --password "replace-me"
+# Environment template for local development.
+# Copy to .env.local and fill required values. Never commit real secrets.
+# This template targets the repo-root .env.local used by local Next runtime and root scripts.
+
+# Public browser auth config (required).
+# Used by apps/web/lib/supabase/client.ts.
+NEXT_PUBLIC_SUPABASE_URL=https://hupnopyuygpmtkkbmjtu.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ghJvckXzAARu98Kmg50yMQ_wfIwrAQY
+# Optional browser auth alias kept for compatibility with Supabase key naming.
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1cG5vcHl1eWdwbXRra2JtanR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NTc5OTMsImV4cCI6MjA5MTMzMzk5M30.EUb9pdezJmAx0-yTw4KR_ZxQWR0lkP1RLGSIeCH6AOU
+
+# Server auth config (required for /api/auth/* runtime).
+# SUPABASE_URL can reuse NEXT_PUBLIC_SUPABASE_URL.
+SUPABASE_URL=https://hupnopyuygpmtkkbmjtu.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1cG5vcHl1eWdwbXRra2JtanR1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTc1Nzk5MywiZXhwIjoyMDkxMzMzOTkzfQ.oKsYrNntrn5rdK-4p1cUBVhHqdsqQ7G_MTsZKGazR_0
+
+# Server-only Postgres connection string (Supabase Dashboard → Connect → Transaction pooler or direct).
+# Required with SUPABASE_SERVICE_ROLE_KEY for durable app data (replaces former Firestore).
+SUPABASE_DATABASE_URL=postgresql://postgres.hupnopyuygpmtkkbmjtu:SyF9ygkhc80kZrvK@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
+# Optional alias some tools use for Postgres URLs.
+DATABASE_URL=postgresql://postgres.hupnopyuygpmtkkbmjtu:SyF9ygkhc80kZrvK@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
+# These are not used by the current Supabase app runtime, but retained scripts still read them
+# from the repo-root .env.local during migration fallback and historical QA workflows.
+# FIREBASE_PROJECT_ID=
+# FIREBASE_STORAGE_BUCKET=
+# FIREBASE_CLIENT_EMAIL=
+# FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# NEXT_PUBLIC_FIREBASE_API_KEY=
+# NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+# FIREBASE_ADMIN_PROJECT_ID=
+# FIREBASE_ADMIN_CLIENT_EMAIL=
+# FIREBASE_ADMIN_PRIVATE_KEY=
+
+# Admin allowlist used by server auth guards.
+ZOOTOPIA_ADMIN_EMAILS=alahlyeagle@gmail.com,elmahdy@admin.com,alahlyeagle13@gmail.com
+
+# Additional server-side admin login gate (required for /admin/login bootstrap).
+# This is an extra factor and never replaces allowlist + claim + recent-sign-in checks.
+ZOOTOPIA_ADMIN_LOGIN_PASSWORD=elmahdy132%
+
+# Session and assessment credit controls.
+ZOOTOPIA_SESSION_TTL_SECONDS=3600
+ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS=3
+
+# Storage retention policy (per storage type).
+# Defaults if unset:
+# - uploads/documents: 15 minutes
+# - generated results: 1440 minutes (1 day)
+# - exports: 15 minutes
+# Set mode to "none" for a scope only when you intentionally want no automatic expiry.
+ZOOTOPIA_UPLOAD_RETENTION_MINUTES=15
+ZOOTOPIA_RESULT_RETENTION_MINUTES=1440
+ZOOTOPIA_EXPORT_RETENTION_MINUTES=15
+ZOOTOPIA_UPLOAD_RETENTION_MODE=expiry
+ZOOTOPIA_RESULT_RETENTION_MODE=expiry
+ZOOTOPIA_EXPORT_RETENTION_MODE=expiry
+# Email verification resend governance (server-authoritative).
+# Canonical keys use the ZOOTOPIA_EMAIL_VERIFICATION_* prefix.
+# Defaults if unset:
+# - cooldown: 30 seconds
+# - account max attempts: 5
+# - account window: 60 minutes
+# - IP max attempts: 20
+# - IP window: 60 minutes
+ZOOTOPIA_EMAIL_VERIFICATION_RESEND_MODE=provider
+ZOOTOPIA_EMAIL_VERIFICATION_COOLDOWN_SECONDS=30
+ZOOTOPIA_EMAIL_VERIFICATION_MAX_ATTEMPTS=5
+ZOOTOPIA_EMAIL_VERIFICATION_WINDOW_MINUTES=60
+ZOOTOPIA_EMAIL_VERIFICATION_IP_MAX_ATTEMPTS=20
+ZOOTOPIA_EMAIL_VERIFICATION_IP_WINDOW_MINUTES=60
+ZOOTOPIA_EMAIL_VERIFICATION_HASH_SALT=
+
+# Optional maintenance endpoint secret.
+ZOOTOPIA_MAINTENANCE_SECRET=
+# Auth.js session crypto secret (required).
+# Generate with: npx auth secret
+AUTH_SECRET=81ad1764c97c06c2ca36ea74f25c29ab5989625270a324643141711494a76012
+# AI provider runtime secrets (at least one provider key is required for generation).
+GOOGLE_AI_API_KEY=AIzaSyA-__Gqo6rQF6JjOTS7LjarxhWkU7kFmaM
+DASHSCOPE_API_KEY=sk-8c3bcf0262ba477eb2ae23b1b8f2b380
+# Optional AI runtime tuning.
+DASHSCOPE_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+
+# Contact relay runtime (required only when /api/contact is enabled).
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=alahlyeagle13@gmail.com
+SMTP_PASS=ptjxdaqmpedufmgm
+EMAIL_FROM=Zootopia Club <alahlyeagle13@gmail.com>
+CONTACT_FORM_TO=alahlyeagle13@gmail.com
+# Local Pro PDF executable overrides (optional).
+ASSESSMENT_PDF_BROWSER_EXECUTABLE_PATH=
+PUPPETEER_EXECUTABLE_PATH=

@@ -110,7 +110,7 @@ function proxyHandler(request: NextRequest) {
   }
 
   if (hasActiveSession && pathname === APP_ROUTES.adminLogin && role === "admin") {
-    return NextResponse.redirect(new URL(APP_ROUTES.admin, request.url));
+    return NextResponse.redirect(new URL(redirectDecision.path, request.url));
   }
 
   if (hasActiveSession && pathname === APP_ROUTES.adminLogin && role !== "admin") {

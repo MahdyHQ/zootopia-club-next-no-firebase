@@ -55,6 +55,33 @@ type GovernanceRow = {
   last_provider_accepted_at: string | null;
 };
 
+type GovernanceAdminRow = GovernanceRow & {
+  updated_at: string;
+};
+
+export type VerificationResendGovernanceAdminRecord = {
+  keyScope: "account" | "ip";
+  keyHash: string;
+  windowStartsAt: string;
+  windowExpiresAt: string;
+  attemptCount: number;
+  cooldownUntil: string | null;
+  lastProviderAcceptedAt: string | null;
+  updatedAt: string;
+};
+
+export type VerificationResendGovernanceAdminLookup = {
+  mode: VerificationResendMode;
+  accountKeyHash: string;
+  accountRecord: VerificationResendGovernanceAdminRecord | null;
+};
+
+export type VerificationResendGovernanceAdminClearResult = {
+  mode: VerificationResendMode;
+  accountKeyHash: string;
+  deleted: boolean;
+};
+
 type MutableScopeWindow = {
   scope: GovernanceScope;
   keyHash: string;
@@ -571,6 +598,27 @@ function buildSubjectKeys(input: {
   };
 }
 
+function buildAccountKeyHash(email: string, config: VerificationResendGovernanceConfig) {
+  return hashGovernanceSubject({
+    scope: "account",
+    value: normalizeVerificationResendEmail(email),
+    salt: config.hashSalt,
+  });
+}
+
+function mapGovernanceAdminRow(row: GovernanceAdminRow): VerificationResendGovernanceAdminRecord {
+  return {
+    keyScope: row.key_scope,
+    keyHash: row.key_hash,
+    windowStartsAt: row.window_starts_at,
+    windowExpiresAt: row.window_expires_at,
+    attemptCount: Math.max(0, Number(row.attempt_count) || 0),
+    cooldownUntil: row.cooldown_until,
+    lastProviderAcceptedAt: row.last_provider_accepted_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 async function loadScopeWindowForUpdate(input: {
   sql: ReturnType<typeof getZootopiaSql>;
   scope: GovernanceScope;
@@ -784,11 +832,7 @@ export async function markVerificationResendProviderAccepted(input: {
     return;
   }
 
-  const accountKeyHash = hashGovernanceSubject({
-    scope: "account",
-    value: normalizeVerificationResendEmail(input.email),
-    salt: config.hashSalt,
-  });
+  const accountKeyHash = buildAccountKeyHash(input.email, config);
 
   const sql = getZootopiaSql();
   await sql`
@@ -798,4 +842,55 @@ export async function markVerificationResendProviderAccepted(input: {
       updated_at = now()
     where key_scope = 'account' and key_hash = ${accountKeyHash}
   `;
+}
+
+export async function readVerificationResendAccountGovernanceByEmail(input: {
+  email: string;
+}): Promise<VerificationResendGovernanceAdminLookup> {
+  const config = getVerificationResendGovernanceConfig();
+  const accountKeyHash = buildAccountKeyHash(input.email, config);
+
+  const sql = getZootopiaSql();
+  const rows = await sql`
+    select
+      key_scope,
+      key_hash,
+      window_starts_at,
+      window_expires_at,
+      attempt_count,
+      cooldown_until,
+      last_provider_accepted_at,
+      updated_at
+    from public.email_verification_resend_governance
+    where key_scope = 'account' and key_hash = ${accountKeyHash}
+    limit 1
+  `;
+
+  const row = rows[0] as GovernanceAdminRow | undefined;
+
+  return {
+    mode: config.mode,
+    accountKeyHash,
+    accountRecord: row ? mapGovernanceAdminRow(row) : null,
+  };
+}
+
+export async function clearVerificationResendAccountGovernanceByEmail(input: {
+  email: string;
+}): Promise<VerificationResendGovernanceAdminClearResult> {
+  const config = getVerificationResendGovernanceConfig();
+  const accountKeyHash = buildAccountKeyHash(input.email, config);
+
+  const sql = getZootopiaSql();
+  const deletedRows = await sql`
+    delete from public.email_verification_resend_governance
+    where key_scope = 'account' and key_hash = ${accountKeyHash}
+    returning key_hash
+  `;
+
+  return {
+    mode: config.mode,
+    accountKeyHash,
+    deleted: deletedRows.length > 0,
+  };
 }

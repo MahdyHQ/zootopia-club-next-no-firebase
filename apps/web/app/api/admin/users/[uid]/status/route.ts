@@ -1,6 +1,6 @@
 import type { UserStatus } from "@zootopia/shared-types";
 
-import { apiError, apiSuccess } from "@/lib/server/api";
+import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import { appendAdminLog, setUserStatus } from "@/lib/server/repository";
 import { getAdminSessionUser } from "@/lib/server/session";
 
@@ -15,15 +15,17 @@ export async function PATCH(
   // request a change, but the repository layer owns the persisted status plus Supabase Auth sync.
   const admin = await getAdminSessionUser();
   if (!admin) {
-    return apiError("FORBIDDEN", "Admin access is required.", 403);
+    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
   }
 
   const { uid } = await context.params;
   if (uid === admin.uid) {
-    return apiError(
-      "SELF_UPDATE_BLOCKED",
-      "Admins cannot change their own status here.",
-      400,
+    return applyNoStore(
+      apiError(
+        "SELF_UPDATE_BLOCKED",
+        "Admins cannot change their own status here.",
+        400,
+      ),
     );
   }
 
@@ -32,14 +34,16 @@ export async function PATCH(
   try {
     body = (await request.json()) as { status?: UserStatus };
   } catch {
-    return apiError("INVALID_JSON", "Request body must be valid JSON.", 400);
+    return applyNoStore(apiError("INVALID_JSON", "Request body must be valid JSON.", 400));
   }
 
   if (body.status !== "active" && body.status !== "suspended") {
-    return apiError(
-      "STATUS_INVALID",
-      "Status must be either active or suspended.",
-      400,
+    return applyNoStore(
+      apiError(
+        "STATUS_INVALID",
+        "Status must be either active or suspended.",
+        400,
+      ),
     );
   }
 
@@ -69,7 +73,7 @@ export async function PATCH(
       backendMutationResult: "success",
     });
 
-    return apiSuccess({ user });
+    return applyNoStore(apiSuccess({ user }));
   } catch (error) {
     console.warn("[admin-users-mutation]", {
       action: "set-status",
@@ -81,10 +85,12 @@ export async function PATCH(
       failureReason: error instanceof Error ? error.message : "STATUS_UPDATE_FAILED",
     });
 
-    return apiError(
-      "STATUS_UPDATE_FAILED",
-      error instanceof Error ? error.message : "Unable to update status.",
-      400,
+    return applyNoStore(
+      apiError(
+        "STATUS_UPDATE_FAILED",
+        error instanceof Error ? error.message : "Unable to update status.",
+        400,
+      ),
     );
   }
 }

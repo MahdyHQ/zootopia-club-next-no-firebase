@@ -1,6 +1,6 @@
 import type { UserRole } from "@zootopia/shared-types";
 
-import { apiError, apiSuccess } from "@/lib/server/api";
+import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import { appendAdminLog, setUserRole } from "@/lib/server/repository";
 import { getAdminSessionUser } from "@/lib/server/session";
 
@@ -15,12 +15,14 @@ export async function PATCH(
   // hidden client UI state or become reachable from regular user routes.
   const admin = await getAdminSessionUser();
   if (!admin) {
-    return apiError("FORBIDDEN", "Admin access is required.", 403);
+    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
   }
 
   const { uid } = await context.params;
   if (uid === admin.uid) {
-    return apiError("SELF_UPDATE_BLOCKED", "Admins cannot change their own role here.", 400);
+    return applyNoStore(
+      apiError("SELF_UPDATE_BLOCKED", "Admins cannot change their own role here.", 400),
+    );
   }
 
   let body: { role?: UserRole };
@@ -28,11 +30,11 @@ export async function PATCH(
   try {
     body = (await request.json()) as { role?: UserRole };
   } catch {
-    return apiError("INVALID_JSON", "Request body must be valid JSON.", 400);
+    return applyNoStore(apiError("INVALID_JSON", "Request body must be valid JSON.", 400));
   }
 
   if (body.role !== "admin" && body.role !== "user") {
-    return apiError("ROLE_INVALID", "Role must be either admin or user.", 400);
+    return applyNoStore(apiError("ROLE_INVALID", "Role must be either admin or user.", 400));
   }
 
   console.info("[admin-users-mutation]", {
@@ -61,7 +63,7 @@ export async function PATCH(
       backendMutationResult: "success",
     });
 
-    return apiSuccess({ user });
+    return applyNoStore(apiSuccess({ user }));
   } catch (error) {
     console.warn("[admin-users-mutation]", {
       action: "set-role",
@@ -73,10 +75,12 @@ export async function PATCH(
       failureReason: error instanceof Error ? error.message : "ROLE_UPDATE_FAILED",
     });
 
-    return apiError(
-      "ROLE_UPDATE_FAILED",
-      error instanceof Error ? error.message : "Unable to update role.",
-      400,
+    return applyNoStore(
+      apiError(
+        "ROLE_UPDATE_FAILED",
+        error instanceof Error ? error.message : "Unable to update role.",
+        400,
+      ),
     );
   }
 }

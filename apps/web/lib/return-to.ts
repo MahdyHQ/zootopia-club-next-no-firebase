@@ -9,12 +9,63 @@ const USER_RETURN_MATCHERS = [
   APP_ROUTES.settings,
 ] as const;
 
+const ADMIN_RETURN_MATCHERS = [
+  APP_ROUTES.home,
+  APP_ROUTES.admin,
+  APP_ROUTES.adminUsers,
+] as const;
+
+const AUTH_REDIRECT_ENV_KEYS = {
+  user: "NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT",
+  admin: "NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT",
+} as const;
+
 function matchesRoute(pathname: string, routes: readonly string[]) {
   return routes.some((route) =>
     route === "/"
       ? pathname === "/"
       : pathname === route || pathname.startsWith(`${route}/`),
   );
+}
+
+function sanitizeConfiguredRedirectPath(input: {
+  value: string | undefined;
+  fallback: string;
+  allowedRoutes: readonly string[];
+}) {
+  const raw = String(input.value ?? "").trim();
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
+    return input.fallback;
+  }
+
+  const url = new URL(raw, "https://zootopia.local");
+  if (
+    !matchesRoute(url.pathname, input.allowedRoutes)
+    || url.pathname === APP_ROUTES.login
+    || url.pathname === APP_ROUTES.adminLogin
+  ) {
+    return input.fallback;
+  }
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function readConfiguredAuthenticatedRedirectPath(role: "admin" | "user") {
+  /* Keep post-auth redirects centralized and fail-closed to vetted internal routes only,
+     so environment overrides stay Vercel-safe and cannot become open redirects. */
+  if (role === "admin") {
+    return sanitizeConfiguredRedirectPath({
+      value: process.env[AUTH_REDIRECT_ENV_KEYS.admin],
+      fallback: APP_ROUTES.home,
+      allowedRoutes: ADMIN_RETURN_MATCHERS,
+    });
+  }
+
+  return sanitizeConfiguredRedirectPath({
+    value: process.env[AUTH_REDIRECT_ENV_KEYS.user],
+    fallback: APP_ROUTES.home,
+    allowedRoutes: USER_RETURN_MATCHERS,
+  });
 }
 
 export function sanitizeUserReturnTo(value: string | null | undefined) {
@@ -66,7 +117,7 @@ export function resolveAuthenticatedUserRedirectPath(
 ): AuthenticatedUserRedirectDecision {
   if (user.role === "admin") {
     return {
-      path: APP_ROUTES.admin,
+      path: readConfiguredAuthenticatedRedirectPath("admin"),
       reason: "admin_lane",
     };
   }
@@ -79,7 +130,7 @@ export function resolveAuthenticatedUserRedirectPath(
   }
 
   return {
-    path: APP_ROUTES.upload,
+    path: readConfiguredAuthenticatedRedirectPath("user"),
     reason: "profile_complete",
   };
 }
