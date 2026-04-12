@@ -1,11 +1,16 @@
 "use client";
 
 import { APP_ROUTES } from "@zootopia/shared-config";
+import type { EmailOtpType, SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AuthStatus } from "@/components/auth/auth-status";
+import {
+  createAuthFlowError,
+  type AuthStatusDescriptor,
+} from "@/components/auth/auth-feedback";
 import {
   logAuthDiagnosis,
   normalizeAuthFailure,
@@ -17,9 +22,18 @@ import {
   isSupabaseWebConfigured,
   primeEphemeralSupabaseClient,
 } from "@/lib/supabase/client";
-import type { AuthStatusDescriptor } from "@/components/auth/auth-feedback";
 
 export type ConfirmEmailFlow = "sign_in" | "sign_up" | "admin";
+
+export type ConfirmEmailFinalizeParams = {
+  authCode: string;
+  tokenHash: string;
+  verificationType: string;
+  errorCode: string;
+  errorDescription: string;
+  accessToken: string;
+  refreshToken: string;
+};
 
 type ConfirmEmailPanelProps = {
   messages: AppMessages;
@@ -27,9 +41,33 @@ type ConfirmEmailPanelProps = {
   initialEmail: string;
   flow: ConfirmEmailFlow;
   fromRoute: string;
+  initialFinalize: ConfirmEmailFinalizeParams;
 };
 
 const RESEND_COOLDOWN_SECONDS = 30;
+const CALLBACK_URL_SENSITIVE_PARAM_KEYS = [
+  "code",
+  "token_hash",
+  "type",
+  "error",
+  "error_code",
+  "error_description",
+  "access_token",
+  "refresh_token",
+  "expires_at",
+  "expires_in",
+  "token_type",
+] as const;
+
+type ConfirmEmailFinalizePayload = {
+  authCode: string | null;
+  tokenHash: string | null;
+  verificationType: string | null;
+  errorCode: string | null;
+  errorDescription: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+};
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -43,10 +81,186 @@ function resolveReturnRoute(flow: ConfirmEmailFlow, fromRoute: string) {
   return APP_ROUTES.login;
 }
 
+function toOptionalString(value: string | null | undefined) {
+  const normalized = value?.trim() ?? "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeVerificationType(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const token = value.trim().toLowerCase();
+
+  if (
+    token === "email"
+    || token === "signup"
+    || token === "magiclink"
+    || token === "invite"
+    || token === "recovery"
+    || token === "email_change"
+  ) {
+    return token;
+  }
+
+  return null;
+}
+
+function readHashFinalizePayload(hash: string): ConfirmEmailFinalizePayload {
+  const normalizedHash = hash.startsWith("#") ? hash.slice(1) : hash;
+  const params = new URLSearchParams(normalizedHash);
+
+  return {
+    authCode: toOptionalString(params.get("code")),
+    tokenHash: toOptionalString(params.get("token_hash")),
+    verificationType: normalizeVerificationType(toOptionalString(params.get("type"))),
+    errorCode: toOptionalString(params.get("error_code")) ?? toOptionalString(params.get("error")),
+    errorDescription: toOptionalString(params.get("error_description")),
+    accessToken: toOptionalString(params.get("access_token")),
+    refreshToken: toOptionalString(params.get("refresh_token")),
+  };
+}
+
+function mergeFinalizePayload(
+  initialFinalize: ConfirmEmailFinalizeParams,
+  hashPayload: ConfirmEmailFinalizePayload,
+): ConfirmEmailFinalizePayload {
+  return {
+    authCode: toOptionalString(initialFinalize.authCode) ?? hashPayload.authCode,
+    tokenHash: toOptionalString(initialFinalize.tokenHash) ?? hashPayload.tokenHash,
+    verificationType:
+      normalizeVerificationType(toOptionalString(initialFinalize.verificationType))
+      ?? hashPayload.verificationType,
+    errorCode: toOptionalString(initialFinalize.errorCode) ?? hashPayload.errorCode,
+    errorDescription: toOptionalString(initialFinalize.errorDescription) ?? hashPayload.errorDescription,
+    accessToken: toOptionalString(initialFinalize.accessToken) ?? hashPayload.accessToken,
+    refreshToken: toOptionalString(initialFinalize.refreshToken) ?? hashPayload.refreshToken,
+  };
+}
+
+function hasFinalizePayload(payload: ConfirmEmailFinalizePayload) {
+  return Boolean(
+    payload.errorCode
+    || payload.authCode
+    || (payload.tokenHash && payload.verificationType)
+    || (payload.accessToken && payload.refreshToken),
+  );
+}
+
+function cleanupConfirmationCallbackUrl() {
+  const url = new URL(window.location.href);
+
+  for (const key of CALLBACK_URL_SENSITIVE_PARAM_KEYS) {
+    url.searchParams.delete(key);
+  }
+
+  const hashParams = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
+  for (const key of CALLBACK_URL_SENSITIVE_PARAM_KEYS) {
+    hashParams.delete(key);
+  }
+
+  const nextHash = hashParams.toString();
+  const nextUrl = `${url.pathname}${url.search}${nextHash ? `#${nextHash}` : ""}`;
+  window.history.replaceState({}, "", nextUrl);
+}
+
+function buildConfirmationRedirectUrl(input: {
+  origin: string;
+  email: string;
+  flow: ConfirmEmailFlow;
+  fromRoute: string;
+}) {
+  const redirectUrl = new URL(APP_ROUTES.confirmEmail, input.origin);
+  redirectUrl.searchParams.set("flow", input.flow);
+  redirectUrl.searchParams.set("from", input.fromRoute);
+  redirectUrl.searchParams.set("email", input.email);
+  return redirectUrl.toString();
+}
+
+async function finalizeEmailConfirmation(input: {
+  supabase: SupabaseClient;
+  payload: ConfirmEmailFinalizePayload;
+}) {
+  if (input.payload.errorCode) {
+    throw createAuthFlowError(input.payload.errorCode, input.payload.errorDescription ?? undefined);
+  }
+
+  if (input.payload.tokenHash && input.payload.verificationType) {
+    const { error } = await input.supabase.auth.verifyOtp({
+      token_hash: input.payload.tokenHash,
+      type: input.payload.verificationType as EmailOtpType,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return "token_hash" as const;
+  }
+
+  if (input.payload.authCode) {
+    const { error } = await input.supabase.auth.exchangeCodeForSession(input.payload.authCode);
+
+    if (error) {
+      throw error;
+    }
+
+    return "auth_code" as const;
+  }
+
+  if (input.payload.accessToken && input.payload.refreshToken) {
+    const { error } = await input.supabase.auth.setSession({
+      access_token: input.payload.accessToken,
+      refresh_token: input.payload.refreshToken,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return "session_tokens" as const;
+  }
+
+  throw createAuthFlowError(
+    "AUTH_UNKNOWN_UPSTREAM_FAILURE",
+    "Confirmation callback did not include required verification parameters.",
+  );
+}
+
 function mapConfirmEmailFailure(
   failure: NormalizedAuthFailure,
   messages: AppMessages,
 ): AuthStatusDescriptor {
+  const rawCode = (failure.rawCode ?? "").trim().toUpperCase();
+
+  if (
+    rawCode === "OTP_EXPIRED"
+    || rawCode === "FLOW_STATE_EXPIRED"
+    || rawCode === "FLOW_STATE_NOT_FOUND"
+  ) {
+    return {
+      tone: "warning",
+      icon: "warning",
+      title: messages.confirmEmailLinkExpiredTitle,
+      body: messages.confirmEmailLinkExpiredBody,
+    };
+  }
+
+  if (
+    rawCode === "BAD_CODE_VERIFIER"
+    || rawCode === "BAD_OTP"
+    || rawCode === "VALIDATION_FAILED"
+    || rawCode === "BAD_JWT"
+  ) {
+    return {
+      tone: "warning",
+      icon: "warning",
+      title: messages.confirmEmailInvalidLinkTitle,
+      body: messages.confirmEmailInvalidLinkBody,
+    };
+  }
+
   switch (failure.normalizedCode) {
     case "AUTH_NETWORK_FAILURE":
       return {
@@ -89,11 +303,14 @@ export function ConfirmEmailPanel({
   initialEmail,
   flow,
   fromRoute,
+  initialFinalize,
 }: ConfirmEmailPanelProps) {
   const [email, setEmail] = useState(initialEmail);
   const [status, setStatus] = useState<AuthStatusDescriptor | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const finalizationStartedRef = useRef(false);
   const supabaseConfigured = isSupabaseWebConfigured();
 
   const returnRoute = useMemo(() => resolveReturnRoute(flow, fromRoute), [flow, fromRoute]);
@@ -108,6 +325,87 @@ export function ConfirmEmailPanel({
       // Keep retry logic in submit path so users receive explicit runtime diagnostics.
     });
   }, [supabaseConfigured]);
+
+  useEffect(() => {
+    if (!supabaseConfigured || finalizationStartedRef.current) {
+      return;
+    }
+
+    const finalizePayload = mergeFinalizePayload(
+      initialFinalize,
+      readHashFinalizePayload(window.location.hash),
+    );
+
+    if (!hasFinalizePayload(finalizePayload)) {
+      return;
+    }
+
+    finalizationStartedRef.current = true;
+    setIsFinalizing(true);
+    setStatus({
+      tone: "info",
+      icon: "working",
+      title: messages.confirmEmailFinalizingTitle,
+      body: messages.confirmEmailFinalizingBody,
+    });
+
+    void (async () => {
+      let callbackKind: "token_hash" | "auth_code" | "session_tokens" | null = null;
+
+      try {
+        const supabase = await getEphemeralSupabaseClient();
+        callbackKind = await finalizeEmailConfirmation({
+          supabase,
+          payload: finalizePayload,
+        });
+
+        // Keep Auth.js as the single session authority by clearing any transient Supabase
+        // browser session that may be created while verifying callback tokens.
+        await supabase.auth.signOut({ scope: "local" });
+
+        console.info("[auth-confirmation]", {
+          routePath: APP_ROUTES.confirmEmail,
+          flow: flowKind,
+          callbackKind,
+          finalized: true,
+        });
+
+        setStatus({
+          tone: "success",
+          icon: "success",
+          title: messages.confirmEmailConfirmedTitle,
+          body: messages.confirmEmailConfirmedBody,
+        });
+      } catch (nextError) {
+        const failure = normalizeAuthFailure({
+          error: nextError,
+          flow: flowKind,
+          stage: "AUTH_STAGE_C_PROVIDER_RESPONSE",
+          routePath: APP_ROUTES.confirmEmail,
+          sessionCreationAttempted: false,
+        });
+
+        logAuthDiagnosis({
+          failure,
+          uxAction: "show_error",
+        });
+
+        console.warn("[auth-confirmation]", {
+          routePath: APP_ROUTES.confirmEmail,
+          flow: flowKind,
+          callbackKind,
+          finalized: false,
+          normalizedCode: failure.normalizedCode,
+          rawCode: failure.rawCode,
+        });
+
+        setStatus(mapConfirmEmailFailure(failure, messages));
+      } finally {
+        cleanupConfirmationCallbackUrl();
+        setIsFinalizing(false);
+      }
+    })();
+  }, [flowKind, initialFinalize, messages, supabaseConfigured]);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) {
@@ -129,11 +427,14 @@ export function ConfirmEmailPanel({
     !supabaseConfigured
     || !supabaseAuthReady
     || isSending
+    || isFinalizing
     || cooldownSeconds > 0
     || !hasValidEmail;
 
   const blockingStatus =
-    !supabaseConfigured
+    status
+      ? null
+      : !supabaseConfigured
       ? {
           tone: "warning" as const,
           icon: "config" as const,
@@ -159,9 +460,11 @@ export function ConfirmEmailPanel({
     live: "off",
   };
 
-  const visibleStatus = blockingStatus ?? status ?? idleStatus;
+  const visibleStatus = status ?? blockingStatus ?? idleStatus;
   const resendLabel =
-    isSending
+    isFinalizing
+      ? messages.confirmEmailFinalizingButton
+      : isSending
       ? messages.confirmEmailResendWorking
       : cooldownSeconds > 0
         ? `${messages.confirmEmailResendCooldownPrefix} ${cooldownSeconds}s`
@@ -193,9 +496,14 @@ export function ConfirmEmailPanel({
     try {
       const supabase = await getEphemeralSupabaseClient();
 
-      // Keep email-link return ownership on the login lanes so users re-enter the same auth boundary
-      // after confirmation, instead of landing in protected pages without a hydrated server session.
-      const emailRedirectTo = `${window.location.origin}${returnRoute}`;
+      // Keep confirmation callbacks on this page so the app can verify provider callback parameters
+      // and only show confirmation success after a real provider-backed finalize step.
+      const emailRedirectTo = buildConfirmationRedirectUrl({
+        origin: window.location.origin,
+        email: normalizedEmail,
+        flow,
+        fromRoute: returnRoute,
+      });
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: normalizedEmail,
@@ -252,12 +560,13 @@ export function ConfirmEmailPanel({
                 value={email}
                 onChange={(event) => {
                   setEmail(event.target.value);
-                  if (!isSending) {
+                  if (!isSending && !isFinalizing) {
                     setStatus(null);
                   }
                 }}
                 placeholder={messages.confirmEmailEmailPlaceholder}
                 autoComplete="email"
+                disabled={isSending || isFinalizing}
                 className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 placeholder:text-foreground-muted/80"
               />
             </label>
@@ -265,11 +574,13 @@ export function ConfirmEmailPanel({
             <button
               type="submit"
               disabled={disabled}
-              aria-busy={isSending}
+              aria-busy={isSending || isFinalizing}
               className="mt-1 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 font-bold text-white shadow-[0_14px_30px_rgba(5,150,105,0.25)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(5,150,105,0.32)] active:scale-[0.98] disabled:opacity-50"
             >
               <span>{resendLabel}</span>
-              {isSending ? <LoaderCircle className="h-5 w-5 animate-spin text-white" aria-hidden="true" /> : null}
+              {isSending || isFinalizing
+                ? <LoaderCircle className="h-5 w-5 animate-spin text-white" aria-hidden="true" />
+                : null}
             </button>
           </form>
 

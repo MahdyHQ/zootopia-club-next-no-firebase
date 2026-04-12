@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import {
   ConfirmEmailPanel,
+  type ConfirmEmailFinalizeParams,
   type ConfirmEmailFlow,
 } from "@/components/auth/confirm-email-panel";
 import { PublicAuthShell } from "@/components/auth/public-auth-shell";
@@ -41,6 +42,22 @@ function resolveFromRoute(value: string, flow: ConfirmEmailFlow) {
   return flow === "admin" ? APP_ROUTES.adminLogin : APP_ROUTES.login;
 }
 
+function resolveFinalizeParams(
+  searchParams: Record<string, SearchParamValue>,
+): ConfirmEmailFinalizeParams {
+  return {
+    authCode: getFirstSearchParamValue(searchParams.code).trim().slice(0, 1024),
+    tokenHash: getFirstSearchParamValue(searchParams.token_hash).trim().slice(0, 1024),
+    verificationType: getFirstSearchParamValue(searchParams.type).trim().slice(0, 128),
+    errorCode:
+      getFirstSearchParamValue(searchParams.error_code).trim().slice(0, 128)
+      || getFirstSearchParamValue(searchParams.error).trim().slice(0, 128),
+    errorDescription: getFirstSearchParamValue(searchParams.error_description).trim().slice(0, 640),
+    accessToken: getFirstSearchParamValue(searchParams.access_token).trim().slice(0, 4096),
+    refreshToken: getFirstSearchParamValue(searchParams.refresh_token).trim().slice(0, 4096),
+  };
+}
+
 export default async function ConfirmEmailPage({
   searchParams,
 }: ConfirmEmailPageProps) {
@@ -61,6 +78,7 @@ export default async function ConfirmEmailPage({
     flow,
   );
   const email = getFirstSearchParamValue(resolvedSearchParams.email).trim().slice(0, 320);
+  const initialFinalize = resolveFinalizeParams(resolvedSearchParams);
 
   return (
     <PublicAuthShell
@@ -99,6 +117,7 @@ export default async function ConfirmEmailPage({
           initialEmail={email}
           flow={flow}
           fromRoute={fromRoute}
+          initialFinalize={initialFinalize}
         />
       </div>
     </PublicAuthShell>

@@ -1497,3 +1497,58 @@ Risk Notes
 - Confirm-email resend currently uses Supabase `auth.resend({ type: "signup" })` by design for email-confirmation recovery.
 - Provider-specific resend throttling remains expected behavior; UI cooldown is advisory and does not bypass provider rate limits.
 - No backend authority was moved to client; client changes only drive auth UX and safe telemetry.
+
+---
+
+2026-04-12 - Confirm Email Finalization Truthfulness Hardening (Provider-Backed Callback Handling)
+
+Scope
+- Performed mandatory read-first workflow for this pass (full ledger read, source re-validation, then surgical edits).
+- Hardened `/confirm-email` so confirmation success is based on real provider callback finalization, not resend-request success alone.
+- Kept Auth.js as the single server session authority while using ephemeral Supabase browser auth only for callback verification.
+
+Primary Issue Fixed
+- The prior confirm-email flow could report resend success but had no explicit callback-finalization logic, so users could not see truthful in-app confirmation completion outcomes from callback payloads.
+
+Current Truth (post-pass)
+- Resend still uses `supabase.auth.resend({ type: "signup" })`, but `emailRedirectTo` now points back to `/confirm-email` (with safe lane context) instead of directly to login/admin routes.
+- `/confirm-email` now parses callback payloads and finalizes via provider APIs when present:
+  - `token_hash` + `type` -> `supabase.auth.verifyOtp(...)`
+  - `code` -> `supabase.auth.exchangeCodeForSession(...)`
+  - `access_token` + `refresh_token` hash/query payload -> `supabase.auth.setSession(...)`
+- After successful callback finalization, transient Supabase browser session state is cleared (`signOut({ scope: "local" })`) to preserve Auth.js server-session ownership.
+- Sensitive callback parameters are removed from URL/history after processing to reduce token leakage in browser history.
+
+Files Changed
+- `apps/web/components/auth/confirm-email-panel.tsx`
+  - Added callback payload parsing/finalization pipeline.
+  - Added code-path-specific error mapping for expired/invalid callback links.
+  - Added structured confirmation diagnostics (`[auth-confirmation]`) and retained normalized auth diagnosis logging.
+  - Updated resend redirect construction to target `/confirm-email` with lane context.
+  - Added busy-state guarding for finalization vs resend interactions.
+- `apps/web/app/(public)/confirm-email/page.tsx`
+  - Added safe parsing/forwarding of callback query params (`code`, `token_hash`, `type`, `error_code`, `error_description`, token fields).
+  - Passed initial callback payload to the client panel for deterministic handling.
+- `apps/web/lib/auth-failure.ts`
+  - Expanded raw code normalization coverage for production auth codes:
+    - provider/config: `EMAIL_PROVIDER_DISABLED`, `PROVIDER_DISABLED`, `OTP_DISABLED`
+    - refresh/expiry: `OTP_EXPIRED`, `FLOW_STATE_EXPIRED`, `FLOW_STATE_NOT_FOUND`, `SESSION_EXPIRED`, `SESSION_NOT_FOUND`
+    - throttling: `OVER_EMAIL_SEND_RATE_LIMIT`, `OVER_SMS_SEND_RATE_LIMIT`
+    - suspension: `USER_BANNED`
+  - Maintains code-first classification behavior with message fallback only when code is unavailable.
+- `apps/web/messages/en.json`
+  - Added new confirm-email states: finalizing, confirmed, expired-link, invalid-link.
+  - Updated resend success copy to accepted-request wording (truthful delivery semantics).
+- `apps/web/messages/ar.json`
+  - Added Arabic parity for all new confirm-email states and accepted-request wording.
+
+Verification
+- `npm run lint --workspace @zootopia/web`: PASSED
+- `npm run typecheck --workspace @zootopia/web`: PASSED
+- `npm run build --workspace @zootopia/web`: PASSED
+- Build manifest confirms `/confirm-email` route remains present in production build.
+
+Safety / Boundary Notes
+- No admin/user lane broadening was introduced.
+- No secrets or service-role logic moved to client.
+- Auth.js remains authoritative for protected server session ownership; Supabase callback handling remains transient and scoped to confirmation finalization only.
