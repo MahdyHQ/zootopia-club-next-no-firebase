@@ -2727,15 +2727,25 @@ export async function getAssessmentDailyCreditsSummaryForUser(
   return state.summary;
 }
 
-export async function getAdminAssessmentCreditStateForUser(ownerUid: string) {
-  const owner = await getUserByUid(ownerUid);
-  if (!owner) {
-    return null;
+export async function getAdminAssessmentCreditStateForUser(
+  ownerUid: string,
+  options: {
+    ownerRole?: UserRole;
+  } = {},
+) {
+  let ownerRole = options.ownerRole;
+  if (!ownerRole) {
+    const owner = await getUserByUid(ownerUid);
+    if (!owner) {
+      return null;
+    }
+
+    ownerRole = owner.role;
   }
 
   const state = await resolveAssessmentCreditStateForUser({
     uid: ownerUid,
-    role: owner.role,
+    role: ownerRole,
   });
   const nowMs = Date.now();
 
@@ -3510,7 +3520,9 @@ export async function applyAdminAssessmentCreditMutation(input: {
     }
   }
 
-  const state = await getAdminAssessmentCreditStateForUser(input.ownerUid);
+  const state = await getAdminAssessmentCreditStateForUser(input.ownerUid, {
+    ownerRole: owner.role,
+  });
   if (!state) {
     throw new Error("ASSESSMENT_CREDIT_STATE_UNAVAILABLE");
   }

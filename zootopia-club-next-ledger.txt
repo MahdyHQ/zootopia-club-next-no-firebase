@@ -1385,6 +1385,94 @@ Unresolved Ambiguity:
 
 ---
 
+2026-04-12 — Admin Users Detail/Export Reliability Hardening (Minimal / Backward-Compatible)
+==============================================================================================
+Type: Runtime Stability / Admin Observability / Fail-Safe Hardening
+Scope: /admin/users/[uid], /api/admin/users/export, admin credit-state read path
+
+Summary:
+- Traced intermittent 500 behavior to all-or-nothing async fan-out on non-critical admin detail/export data dependencies.
+- Added a role-aware optimization path to admin credit-state reads to avoid redundant auth-user lookups in hot admin flows.
+- Hardened admin export so one problematic user record no longer fails the entire workbook response.
+- Hardened admin user detail page so non-critical sections fail soft with safe defaults while identity and admin authorization remain strict.
+- Preserved backend-authoritative admin boundary (no privilege widening, no client-side service-role exposure).
+
+Root Cause (code-verified):
+- `/admin/users/[uid]` loaded several independent datasets in one `Promise.all(...)`; any transient repository/storage/auth failure could throw and collapse the whole server-rendered page to 500.
+- `/api/admin/users/export` previously used route-wide fan-out behavior where one per-user credit lookup failure could fail the full export generation path.
+- Repeated owner-role resolution in credit-state paths introduced avoidable extra auth admin lookups under load.
+
+Files Changed:
+- apps/web/lib/server/repository.ts
+- apps/web/app/(protected)/admin/users/[uid]/page.tsx
+- apps/web/app/api/admin/users/export/route.ts
+- apps/web/app/api/admin/users/[uid]/credits/route.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- `getAdminAssessmentCreditStateForUser(...)` now accepts optional `ownerRole` to reuse already-known role context and skip redundant `getUserByUid(...)` calls.
+- `/admin/users/[uid]` now:
+  - resolves target user first as a strict gate (still 404 when missing), then
+  - loads surrounding analytics/activity sections through guarded best-effort loaders with explicit fallbacks and non-sensitive warning logs.
+- `/api/admin/users/export` now:
+  - treats auth metadata enrichment as best-effort,
+  - processes per-user credit state with per-user error isolation,
+  - logs sanitized error-code telemetry,
+  - returns a generic export failure message instead of surfacing internal error details.
+- `/api/admin/users/[uid]/credits` GET now passes known `user.role` into credit-state resolution for the same role-aware optimization.
+
+Security / Boundary Confirmation:
+- Admin route/API guards remain server enforced through existing session/admin checks.
+- No changes moved privileged logic to the browser.
+- `SUPABASE_SERVICE_ROLE_KEY` usage remains server-only.
+- Normal users remain blocked from admin-only routes/APIs.
+
+Verification:
+- web-lint-post-polish: pass
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- When non-critical data dependencies are temporarily unavailable, `/admin/users/[uid]` now intentionally renders with partial/empty informational sections instead of returning 500.
+- Export now prioritizes completing workbook generation even if some users temporarily lack computed credit columns due to transient backend faults.
+- Observed an unrelated pre-existing working-tree change in `apps/web/lib/server/zootopia-postgres-adapter.ts`; left untouched in this pass.
+
+---
+
+2026-04-12 — Supabase Pooler Env + Global Singleton Typings Visibility
+=======================================================================
+Type: Runtime Configuration Hardening / TypeScript Contract Visibility
+Scope: local env pooler URI contract, globalThis singleton declaration visibility
+
+Summary:
+- Updated active local env contracts to use Supabase transaction pooler mode for Postgres (`:6543` + `pgbouncer=true`).
+- Added explicit global singleton declaration file so TypeScript always sees the `globalThis.__zootopia_sql_singleton__` contract independent of module traversal order.
+- Kept transaction semantics unchanged; `runTransaction(...)` remains backed by `postgres(...).begin(...)`, which preserves one connection per transaction scope.
+
+Files Changed:
+- .env.local (local file, gitignored)
+- apps/web/.env.local (local file, gitignored)
+- apps/web/global.d.ts
+- .env.example
+- zootopia-club-next-ledger.txt
+
+Behavioral / Contract Changes:
+- `SUPABASE_DATABASE_URL` in both active local env files now follows transaction pooler format (`:6543` with `?pgbouncer=true`).
+- Added `apps/web/global.d.ts` with:
+  - `declare global { var __zootopia_sql_singleton__: ReturnType<typeof postgres> | undefined; }`
+  - ensures the singleton declaration is visible to TypeScript during app compilation.
+- `.env.example` now explicitly documents the recommended transaction pooler URI format for `SUPABASE_DATABASE_URL`.
+
+Verification:
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- Local env files are gitignored; values were changed in-place for this workstation only.
+- During the edit pass, malformed intermediate local values were detected and immediately restored from `Guide-Files/env-backup.txt` before final validation.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve

@@ -7,6 +7,16 @@
  *
  * Active backend: Supabase Postgres (`zc_entities` table via `postgres` client)
  * Data persistence: Supabase Postgres only.
+ *
+ * Connection strategy
+ * ───────────────────
+ * • Uses SUPABASE_DATABASE_URL (preferred: port 6543 transaction-mode pooler)
+ *   or DATABASE_URL as fallback.
+ * • Singleton is stored on `globalThis` so Next.js hot-reloads do NOT create
+ *   extra pools and exhaust PgBouncer's session-mode client limit.
+ * • `prepare: false` is mandatory for PgBouncer compatibility.
+ * • Pool is kept intentionally small (max 3) to stay well inside Supabase's
+ *   default pool_size of 15.
  */
 
 import "server-only";
@@ -15,36 +25,10 @@ import postgres from "postgres";
 
 import { hasSupabaseAdminRuntime } from "@/lib/server/supabase-admin";
 
-function readDatabaseUrl() {
-  const raw =
-    process.env.SUPABASE_DATABASE_URL?.trim() ||
-    process.env.DATABASE_URL?.trim() ||
-    "";
-  return raw.length > 0 ? raw : null;
-}
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-function readBooleanEnvFlag(value: string | undefined) {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes";
-}
-
-function isProductionNodeEnv() {
-  return String(process.env.NODE_ENV ?? "").trim().toLowerCase() === "production";
-}
-
-export function hasZootopiaPostgresPersistence() {
-  return Boolean(readDatabaseUrl());
-}
-
-/* Production should fail closed when durable persistence prerequisites are missing.
-   Operators can opt into emergency in-memory fallback with an explicit env override. */
-export function isProductionMemoryFallbackAllowed() {
-  return readBooleanEnvFlag(process.env.ZOOTOPIA_ALLOW_PRODUCTION_MEMORY_FALLBACK);
-}
-
-export function requiresDurableZootopiaPersistence() {
-  return isProductionNodeEnv() && !isProductionMemoryFallbackAllowed();
-}
+type Sql = ReturnType<typeof postgres>;
+type SqlExecutor = Sql;
 
 export type ZootopiaPersistenceRuntimeState = {
   usingPostgres: boolean;
@@ -53,6 +37,53 @@ export type ZootopiaPersistenceRuntimeState = {
   requiresDurablePersistence: boolean;
   memoryFallbackAllowedInProduction: boolean;
 };
+
+type WhereClause = { field: string; op: "==" | "<="; value: string };
+type OrderSpec = { field: string; direction: "asc" | "desc" };
+
+// ─── Globals ─────────────────────────────────────────────────────────────────
+
+/**
+ * Attaching the singleton to `globalThis` prevents Next.js dev-mode hot reloads
+ * from leaking stale connection pools and hitting MaxClientsInSessionMode.
+ */
+declare global {
+  // eslint-disable-next-line no-var
+  var __zootopia_sql_singleton__: ReturnType<typeof postgres> | undefined;
+}
+
+// ─── Environment helpers ──────────────────────────────────────────────────────
+
+function readDatabaseUrl(): string | null {
+  const raw =
+    process.env.SUPABASE_DATABASE_URL?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
+    "";
+  return raw.length > 0 ? raw : null;
+}
+
+function readBooleanEnvFlag(value: string | undefined): boolean {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function isProductionNodeEnv(): boolean {
+  return String(process.env.NODE_ENV ?? "").trim().toLowerCase() === "production";
+}
+
+// ─── Public persistence flags ─────────────────────────────────────────────────
+
+export function hasZootopiaPostgresPersistence(): boolean {
+  return Boolean(readDatabaseUrl());
+}
+
+export function isProductionMemoryFallbackAllowed(): boolean {
+  return readBooleanEnvFlag(process.env.ZOOTOPIA_ALLOW_PRODUCTION_MEMORY_FALLBACK);
+}
+
+export function requiresDurableZootopiaPersistence(): boolean {
+  return isProductionNodeEnv() && !isProductionMemoryFallbackAllowed();
+}
 
 export function getZootopiaPersistenceRuntimeState(): ZootopiaPersistenceRuntimeState {
   const hasAdminRuntime = hasSupabaseAdminRuntime();
@@ -67,41 +98,76 @@ export function getZootopiaPersistenceRuntimeState(): ZootopiaPersistenceRuntime
   };
 }
 
-export function shouldUseZootopiaPostgresPersistence() {
+export function shouldUseZootopiaPostgresPersistence(): boolean {
   return getZootopiaPersistenceRuntimeState().usingPostgres;
 }
 
-let sqlSingleton: ReturnType<typeof postgres> | null = null;
+// ─── Connection pool ──────────────────────────────────────────────────────────
 
-export function getZootopiaSql() {
-  if (sqlSingleton) {
-    return sqlSingleton;
+/**
+ * Returns the shared `postgres` SQL client.
+ *
+ * FIX — MaxClientsInSessionMode
+ * ─────────────────────────────
+ * 1. Singleton is stored on `globalThis` so it survives Next.js hot reloads.
+ *    Previously a new pool was created on every reload, exhausting PgBouncer.
+ * 2. `prepare: false` is required when connecting through PgBouncer (Supabase
+ *    uses PgBouncer for its connection pooler).
+ * 3. `max: 3` keeps total connections well inside Supabase's default pool_size.
+ *    Tune upward only on a dedicated/large Supabase plan.
+ * 4. Point SUPABASE_DATABASE_URL at port **6543** (transaction-mode pooler)
+ *    rather than port 5432 (session mode) for the best concurrency headroom.
+ */
+export function getZootopiaSql(): Sql {
+  if (globalThis.__zootopia_sql_singleton__) {
+    return globalThis.__zootopia_sql_singleton__;
   }
 
   const url = readDatabaseUrl();
   if (!url) {
-    throw new Error("ZOOTOPIA_DATABASE_URL_MISSING");
+    throw new Error(
+      "ZOOTOPIA_DATABASE_URL_MISSING: set SUPABASE_DATABASE_URL (port 6543 for " +
+        "transaction-mode pooler) or DATABASE_URL in your environment.",
+    );
   }
 
-  sqlSingleton = postgres(url, {
-    max: 8,
-    idle_timeout: 20,
-    connect_timeout: 15,
+  const sql = postgres(url, {
+    // ─ Pool size ────────────────────────────────────────────────────────────
+    // Keep this at or below (supabase_pool_size / expected_server_instances).
+    // Default Supabase pool_size is 15; 3 leaves room for migrations / admin.
+    max: 3,
+
+    // ─ PgBouncer compatibility ───────────────────────────────────────────────
+    // Named prepared statements are NOT supported in transaction/session pooling.
+    prepare: false,
+
+    // ─ Timeouts ─────────────────────────────────────────────────────────────
+    idle_timeout: 20,      // seconds before an idle connection is released
+    connect_timeout: 15,   // seconds to wait for a new connection
+
+    // ─ Robustness ───────────────────────────────────────────────────────────
+    max_lifetime: 1800,    // recycle connections every 30 min (avoids stale sockets)
+    connection: {
+      application_name: "zootopia-adapter",
+    },
+
+    onnotice: () => {
+      /* suppress noisy NOTICE messages in production logs */
+    },
   });
 
-  return sqlSingleton;
+  // Store on globalThis so Next.js hot reloads reuse the same pool.
+  globalThis.__zootopia_sql_singleton__ = sql;
+
+  return sql;
 }
 
-type Sql = ReturnType<typeof postgres>;
+// ─── Internal utilities ───────────────────────────────────────────────────────
 
-/** Connection or transaction-scoped sql handle from `postgres` (begin callback). */
-type SqlExecutor = Sql;
-
-function safeJsonField(field: string) {
+function safeJsonField(field: string): string {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) {
-    throw new Error(`Unsupported JSON field: ${field}`);
+    throw new Error(`Unsupported JSON field name: "${field}"`);
   }
-
   return field;
 }
 
@@ -111,14 +177,8 @@ function bodyPathFragment(sql: Sql, field: string) {
 }
 
 function deriveOwnerUid(collection: string, row: Record<string, unknown>): string | null {
-  if (typeof row.ownerUid === "string" && row.ownerUid) {
-    return row.ownerUid;
-  }
-
-  if (collection === "users" && typeof row.uid === "string" && row.uid) {
-    return row.uid;
-  }
-
+  if (typeof row.ownerUid === "string" && row.ownerUid) return row.ownerUid;
+  if (collection === "users" && typeof row.uid === "string" && row.uid) return row.uid;
   return null;
 }
 
@@ -127,6 +187,7 @@ function deepMerge(
   patch: Record<string, unknown>,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...base };
+
   for (const key of Object.keys(patch)) {
     const pv = patch[key];
     if (pv === undefined) {
@@ -142,7 +203,10 @@ function deepMerge(
       typeof bv === "object" &&
       !Array.isArray(bv)
     ) {
-      out[key] = deepMerge(bv as Record<string, unknown>, pv as Record<string, unknown>);
+      out[key] = deepMerge(
+        bv as Record<string, unknown>,
+        pv as Record<string, unknown>,
+      );
     } else {
       out[key] = pv;
     }
@@ -150,6 +214,8 @@ function deepMerge(
 
   return out;
 }
+
+// ─── Document reference ───────────────────────────────────────────────────────
 
 export class PgDocumentRef {
   constructor(
@@ -160,24 +226,20 @@ export class PgDocumentRef {
 
   async _getWithSql(sql: SqlExecutor, forUpdate: boolean): Promise<PgDocSnapshot> {
     const rows = await sql`
-      select id, body
-      from zc_entities
-      where collection = ${this.parentCollection} and id = ${this.id}
-      ${forUpdate ? sql`for update` : sql``}
+      SELECT id, body
+      FROM   zc_entities
+      WHERE  collection = ${this.parentCollection}
+        AND  id         = ${this.id}
+      ${forUpdate ? sql`FOR UPDATE` : sql``}
     `;
 
     const row = rows[0] as { id: string; body: Record<string, unknown> } | undefined;
+
     if (!row) {
       return new PgDocSnapshot(this.rootSql, this.parentCollection, this.id, false, null);
     }
 
-    return new PgDocSnapshot(
-      this.rootSql,
-      this.parentCollection,
-      row.id,
-      true,
-      row.body,
-    );
+    return new PgDocSnapshot(this.rootSql, this.parentCollection, row.id, true, row.body);
   }
 
   async get(): Promise<PgDocSnapshot> {
@@ -189,11 +251,10 @@ export class PgDocumentRef {
     data: object,
     options?: { merge?: boolean },
   ): Promise<void> {
-    const merge = options?.merge === true;
     const patch = data as Record<string, unknown>;
     let nextBody = patch;
 
-    if (merge) {
+    if (options?.merge === true) {
       const existing = await this._getWithSql(sql, true);
       const prev = existing.exists ? (existing.raw() as Record<string, unknown>) : {};
       nextBody = deepMerge(prev, patch);
@@ -203,18 +264,18 @@ export class PgDocumentRef {
     const jsonBody = JSON.parse(JSON.stringify(nextBody)) as Record<string, unknown>;
 
     await sql`
-      insert into zc_entities (collection, id, owner_uid, body, updated_at)
-      values (
+      INSERT INTO zc_entities (collection, id, owner_uid, body, updated_at)
+      VALUES (
         ${this.parentCollection},
         ${this.id},
         ${ownerUid},
         ${sql.json(jsonBody as never)},
-        now()
+        NOW()
       )
-      on conflict (collection, id) do update set
-        owner_uid = excluded.owner_uid,
-        body = excluded.body,
-        updated_at = now()
+      ON CONFLICT (collection, id) DO UPDATE SET
+        owner_uid  = EXCLUDED.owner_uid,
+        body       = EXCLUDED.body,
+        updated_at = NOW()
     `;
   }
 
@@ -224,8 +285,9 @@ export class PgDocumentRef {
 
   async _deleteWithSql(sql: SqlExecutor): Promise<void> {
     await sql`
-      delete from zc_entities
-      where collection = ${this.parentCollection} and id = ${this.id}
+      DELETE FROM zc_entities
+      WHERE  collection = ${this.parentCollection}
+        AND  id         = ${this.id}
     `;
   }
 
@@ -233,6 +295,8 @@ export class PgDocumentRef {
     await this._deleteWithSql(this.rootSql);
   }
 }
+
+// ─── Document snapshot ────────────────────────────────────────────────────────
 
 export class PgDocSnapshot {
   constructor(
@@ -243,12 +307,9 @@ export class PgDocSnapshot {
     private readonly payload: Record<string, unknown> | null,
   ) {}
 
-  /** Raw JSON body as stored (for merges). */
+  /** Raw JSON body as stored (used for merge operations). */
   raw(): Record<string, unknown> {
-    if (!this.payload) {
-      throw new Error("DOCUMENT_MISSING");
-    }
-
+    if (!this.payload) throw new Error("DOCUMENT_MISSING");
     return this.payload;
   }
 
@@ -261,24 +322,16 @@ export class PgDocSnapshot {
   }
 }
 
-type WhereClause = { field: string; op: "==" | "<="; value: string };
+// ─── Query ────────────────────────────────────────────────────────────────────
 
 export class PgQuery {
-  private readonly clauses: WhereClause[];
-  private readonly orderSpecs: { field: string; direction: "asc" | "desc" }[];
-  private readonly limitCount: number | null;
-
   constructor(
     private readonly rootSql: SqlExecutor,
     private readonly parentCollection: string,
-    clauses: WhereClause[],
-    orderSpecs: { field: string; direction: "asc" | "desc" }[],
-    limitCount: number | null,
-  ) {
-    this.clauses = clauses;
-    this.orderSpecs = orderSpecs;
-    this.limitCount = limitCount;
-  }
+    private readonly clauses: WhereClause[],
+    private readonly orderSpecs: OrderSpec[],
+    private readonly limitCount: number | null,
+  ) {}
 
   where(field: string, op: "==" | "<=", value: unknown): PgQuery {
     return new PgQuery(
@@ -301,47 +354,53 @@ export class PgQuery {
   }
 
   limit(n: number): PgQuery {
-    return new PgQuery(this.rootSql, this.parentCollection, this.clauses, this.orderSpecs, n);
+    return new PgQuery(
+      this.rootSql,
+      this.parentCollection,
+      this.clauses,
+      this.orderSpecs,
+      n,
+    );
   }
 
   async _getWithSql(sqlConn: SqlExecutor, forUpdate: boolean): Promise<PgQuerySnapshot> {
     let query = sqlConn`
-      select id, body
-      from zc_entities
-      where collection = ${this.parentCollection}
+      SELECT id, body
+      FROM   zc_entities
+      WHERE  collection = ${this.parentCollection}
     `;
 
     for (const c of this.clauses) {
       if (c.field === "ownerUid" && c.op === "==") {
-        query = sqlConn`${query} and owner_uid = ${c.value}`;
+        query = sqlConn`${query} AND owner_uid = ${c.value}`;
       } else if (c.op === "==") {
         const path = bodyPathFragment(sqlConn, c.field);
-        query = sqlConn`${query} and ${path} = ${c.value}`;
+        query = sqlConn`${query} AND ${path} = ${c.value}`;
       } else if (c.op === "<=") {
         const path = bodyPathFragment(sqlConn, c.field);
-        query = sqlConn`${query} and ${path} <= ${c.value}`;
+        query = sqlConn`${query} AND ${path} <= ${c.value}`;
       }
     }
 
     if (this.orderSpecs.length > 0) {
-      query = sqlConn`${query} order by`;
+      query = sqlConn`${query} ORDER BY`;
       for (let i = 0; i < this.orderSpecs.length; i++) {
         const spec = this.orderSpecs[i]!;
         const path = bodyPathFragment(sqlConn, spec.field);
-        const dirToken = spec.direction === "desc" ? sqlConn`desc` : sqlConn`asc`;
+        const dir  = spec.direction === "desc" ? sqlConn`DESC` : sqlConn`ASC`;
         query =
           i === 0
-            ? sqlConn`${query} ${path} ${dirToken} nulls last`
-            : sqlConn`${query}, ${path} ${dirToken} nulls last`;
+            ? sqlConn`${query} ${path} ${dir} NULLS LAST`
+            : sqlConn`${query}, ${path} ${dir} NULLS LAST`;
       }
     }
 
     if (this.limitCount !== null) {
-      query = sqlConn`${query} limit ${this.limitCount}`;
+      query = sqlConn`${query} LIMIT ${this.limitCount}`;
     }
 
     if (forUpdate) {
-      query = sqlConn`${query} for update`;
+      query = sqlConn`${query} FOR UPDATE`;
     }
 
     const rows = (await query) as unknown as {
@@ -350,7 +409,8 @@ export class PgQuery {
     }[];
 
     const docs = rows.map(
-      (row) => new PgQueryDocSnapshot(this.rootSql, this.parentCollection, row.id, row.body),
+      (row) =>
+        new PgQueryDocSnapshot(this.rootSql, this.parentCollection, row.id, row.body),
     );
 
     return new PgQuerySnapshot(docs);
@@ -360,6 +420,8 @@ export class PgQuery {
     return this._getWithSql(this.rootSql, false);
   }
 }
+
+// ─── Query snapshots ──────────────────────────────────────────────────────────
 
 export class PgQueryDocSnapshot {
   constructor(
@@ -381,10 +443,16 @@ export class PgQueryDocSnapshot {
 export class PgQuerySnapshot {
   constructor(public readonly docs: PgQueryDocSnapshot[]) {}
 
-  get size() {
+  get size(): number {
     return this.docs.length;
   }
+
+  get empty(): boolean {
+    return this.docs.length === 0;
+  }
 }
+
+// ─── Collection reference ─────────────────────────────────────────────────────
 
 export class PgCollectionRef {
   constructor(
@@ -397,7 +465,13 @@ export class PgCollectionRef {
   }
 
   where(field: string, op: "==" | "<=", value: unknown): PgQuery {
-    return new PgQuery(this.rootSql, this.id, [{ field, op, value: String(value) }], [], null);
+    return new PgQuery(
+      this.rootSql,
+      this.id,
+      [{ field, op, value: String(value) }],
+      [],
+      null,
+    );
   }
 
   orderBy(field: string, direction: "asc" | "desc" = "asc"): PgQuery {
@@ -409,36 +483,41 @@ export class PgCollectionRef {
   }
 
   async get(): Promise<PgQuerySnapshot> {
-    const q = new PgQuery(this.rootSql, this.id, [], [], null);
-    return q.get();
+    return new PgQuery(this.rootSql, this.id, [], [], null).get();
   }
 }
+
+// ─── Transaction ──────────────────────────────────────────────────────────────
 
 export class PgTransaction {
   constructor(private readonly txSql: SqlExecutor) {}
 
-  async get(documentRef: PgDocumentRef): Promise<PgDocSnapshot>;
+  async get(ref: PgDocumentRef): Promise<PgDocSnapshot>;
   async get(query: PgQuery): Promise<PgQuerySnapshot>;
-  async get(target: PgDocumentRef | PgQuery): Promise<PgDocSnapshot | PgQuerySnapshot> {
+  async get(
+    target: PgDocumentRef | PgQuery,
+  ): Promise<PgDocSnapshot | PgQuerySnapshot> {
     if (target instanceof PgDocumentRef) {
       return target._getWithSql(this.txSql, true);
     }
-
     return target._getWithSql(this.txSql, true);
   }
 
-  set(ref: PgDocumentRef, data: object, options?: { merge?: boolean }) {
+  set(ref: PgDocumentRef, data: object, options?: { merge?: boolean }): Promise<void> {
     return ref._setWithSql(this.txSql, data, options);
   }
 
-  delete(ref: PgDocumentRef) {
+  delete(ref: PgDocumentRef): Promise<void> {
     return ref._deleteWithSql(this.txSql);
   }
 }
 
+// ─── Database handle ──────────────────────────────────────────────────────────
+
 /**
- * Postgres database handle with collection/transaction access.
- * Uses a document-store API shape (collection/doc/get/set) for repository-layer compatibility.
+ * Postgres database handle with collection / transaction access.
+ * Uses a document-store API shape (collection / doc / get / set) for
+ * repository-layer compatibility.
  */
 export class PgDatabase {
   constructor(private readonly rootSql: SqlExecutor) {}
@@ -447,17 +526,35 @@ export class PgDatabase {
     return new PgCollectionRef(this.rootSql, name);
   }
 
-  runTransaction<T>(fn: (transaction: PgTransaction) => Promise<T>): Promise<T> {
-    return this.rootSql.begin(async (sql) =>
-      fn(new PgTransaction(sql as unknown as Sql)),
+  runTransaction<T>(fn: (tx: PgTransaction) => Promise<T>): Promise<T> {
+    return this.rootSql.begin(
+      async (sql) => fn(new PgTransaction(sql as unknown as Sql)),
     ) as Promise<T>;
+  }
+
+  /**
+   * Lightweight connectivity check — useful in health-check routes.
+   * Returns `true` if the database is reachable, `false` otherwise.
+   */
+  async ping(): Promise<boolean> {
+    try {
+      await this.rootSql`SELECT 1`;
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
+// ─── Entry point ──────────────────────────────────────────────────────────────
+
 /**
- * Get the Supabase Postgres database handle.
- * Returns a singleton connection to the `zc_entities` table.
+ * Returns the shared Supabase Postgres database handle.
+ *
+ * Tip: point SUPABASE_DATABASE_URL at Supabase's **transaction-mode** pooler
+ * (port 6543) to maximise concurrent request throughput:
+ *   postgres://[user]:[password]@[host]:6543/[db]?pgbouncer=true
  */
-export function getZootopiaDatabase() {
+export function getZootopiaDatabase(): PgDatabase {
   return new PgDatabase(getZootopiaSql());
 }

@@ -246,6 +246,37 @@ function formatClientNetworkHints(value: {
   return parts.length > 0 ? parts.join("; ") : "Unavailable";
 }
 
+function getErrorCode(error: unknown) {
+  if (typeof error === "object" && error && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.trim()) {
+      return code;
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.name || "Error";
+  }
+
+  return "UNKNOWN";
+}
+
+async function loadAdminDetailOptionalSection<T>(input: {
+  section: string;
+  load: () => Promise<T>;
+  fallback: T;
+}) {
+  try {
+    return await input.load();
+  } catch (error) {
+    console.warn("[admin-user-detail] optional section load failed", {
+      section: input.section,
+      errorCode: getErrorCode(error),
+    });
+    return input.fallback;
+  }
+}
+
 /**
  * Dedicated admin user detail page.
  *
@@ -274,25 +305,50 @@ export default async function AdminUserDetailPage({
     redirect("/admin/users");
   }
 
+  const targetUser = await getUserByUid(targetUid);
+  if (!targetUser) {
+    notFound();
+  }
+
+  /* Keep identity resolution strict (target user must exist) while loading the surrounding
+     analytics/activity widgets in best-effort mode so a transient backend issue does not take
+     down the full admin detail route for this user. */
   const [
-    targetUser,
     creditState,
     userDocuments,
     userAssessments,
     userInfographics,
     adminActivityLogs,
   ] = await Promise.all([
-    getUserByUid(targetUid),
-    getAdminAssessmentCreditStateForUser(targetUid),
-    listDocumentsForUser(targetUid, 500),
-    listAssessmentGenerationsForUser(targetUid, 500),
-    listInfographicGenerationsForUser(targetUid, 500),
-    listAdminActivityLogs(120),
+    loadAdminDetailOptionalSection({
+      section: "assessment-credits",
+      load: () =>
+        getAdminAssessmentCreditStateForUser(targetUid, {
+          ownerRole: targetUser.role,
+        }),
+      fallback: null,
+    }),
+    loadAdminDetailOptionalSection({
+      section: "documents",
+      load: () => listDocumentsForUser(targetUid, 500),
+      fallback: [],
+    }),
+    loadAdminDetailOptionalSection({
+      section: "assessment-generations",
+      load: () => listAssessmentGenerationsForUser(targetUid, 500),
+      fallback: [],
+    }),
+    loadAdminDetailOptionalSection({
+      section: "infographic-generations",
+      load: () => listInfographicGenerationsForUser(targetUid, 500),
+      fallback: [],
+    }),
+    loadAdminDetailOptionalSection({
+      section: "admin-activity",
+      load: () => listAdminActivityLogs(120),
+      fallback: [],
+    }),
   ]);
-
-  if (!targetUser) {
-    notFound();
-  }
 
   const storageAvailable = hasRemoteBlobStorage();
   const storageNamespaceSummaries = storageAvailable

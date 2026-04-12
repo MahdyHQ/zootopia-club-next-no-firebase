@@ -89,7 +89,9 @@ export async function GET(
     return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
   }
 
-  const state = await getAdminAssessmentCreditStateForUser(uid);
+  const state = await getAdminAssessmentCreditStateForUser(uid, {
+    ownerRole: user.role,
+  });
   if (!state) {
     return applyNoStore(
       apiError(
