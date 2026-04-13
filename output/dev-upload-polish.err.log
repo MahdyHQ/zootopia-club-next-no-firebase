@@ -1,0 +1,23 @@
+⚠ Port 3000 is in use by process 7988, using available port 3001 instead.
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          7988
+- Dir:          C:\zootopia-club-next\apps\web
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 7988 /F to stop it.
+npm error Lifecycle script `dev:local` failed with error:
+npm error code 1
+npm error path C:\zootopia-club-next\apps\web
+npm error workspace @zootopia/web@0.1.0
+npm error location C:\zootopia-club-next\apps\web
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c next dev --turbopack
+npm error Lifecycle script `dev` failed with error:
+npm error code 1
+npm error path C:\zootopia-club-next\apps\web
+npm error workspace @zootopia/web@0.1.0
+npm error location C:\zootopia-club-next\apps\web
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c npm run dev:local

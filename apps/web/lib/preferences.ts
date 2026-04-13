@@ -3,17 +3,29 @@ import type { Locale, ThemeMode } from "@zootopia/shared-types";
 
 export const DEFAULT_LOCALE: Locale = "en";
 export const DEFAULT_THEME: ThemeMode = "dark";
+export type InitialThemeMode = Extract<ThemeMode, "dark" | "light">;
 
 export function resolveLocale(value: string | null | undefined): Locale {
   return value === "ar" ? "ar" : "en";
 }
 
-export function resolveThemeMode(value: string | null | undefined): ThemeMode {
+export function resolveInitialThemeMode(
+  value: string | null | undefined,
+): InitialThemeMode {
+  return value === "light" ? "light" : "dark";
+}
+
+export function resolveThemeMode(
+  value: string | null | undefined,
+  fallbackTheme: ThemeMode = DEFAULT_THEME,
+): ThemeMode {
   if (value === "light" || value === "dark" || value === "system") {
     return value;
   }
 
-  return DEFAULT_THEME;
+  return fallbackTheme === "light" || fallbackTheme === "dark"
+    ? fallbackTheme
+    : DEFAULT_THEME;
 }
 
 export function directionForLocale(locale: Locale): "ltr" | "rtl" {

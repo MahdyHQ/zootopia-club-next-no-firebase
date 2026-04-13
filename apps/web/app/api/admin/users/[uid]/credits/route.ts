@@ -215,6 +215,8 @@ export async function PATCH(
             : null,
         grantId: body.grantId ?? null,
         expiresAt: body.expiresAt ?? null,
+        reason: body.reason ?? null,
+        note: body.note ?? null,
       },
     });
 

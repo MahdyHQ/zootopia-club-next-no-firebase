@@ -33,6 +33,9 @@ function buildDeletionFailureFieldErrors(summary: AdminUserDeletionSummary): Api
     "deletion.deletedCreditAccounts": String(summary.database.deletedCreditAccounts),
     "deletion.deletedCreditGrants": String(summary.database.deletedCreditGrants),
     "deletion.deletedDailyCredits": String(summary.database.deletedDailyCredits),
+    "deletion.deletedCreditMutationHistory": String(
+      summary.database.deletedCreditMutationHistory,
+    ),
     "deletion.deletedIdempotencyKeys": String(summary.database.deletedIdempotencyKeys),
     "deletion.deletedDocumentObjects": String(summary.storage.deletedDocumentObjects),
     "deletion.deletedAssessmentArtifacts": String(summary.storage.deletedAssessmentArtifacts),

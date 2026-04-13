@@ -7,9 +7,12 @@ import { cookies } from "next/headers";
 import { getMessages, type AppMessages } from "@/lib/messages";
 import {
   directionForLocale,
+  resolveInitialThemeMode,
   resolveLocale,
   resolveThemeMode,
 } from "@/lib/preferences";
+
+const DEFAULT_THEME_MODE_ENV_KEY = "ZOOTOPIA_DEFAULT_THEME_MODE";
 
 export async function getRequestLocale(): Promise<Locale> {
   const cookieStore = await cookies();
@@ -18,7 +21,15 @@ export async function getRequestLocale(): Promise<Locale> {
 
 export async function getRequestThemeMode(): Promise<ThemeMode> {
   const cookieStore = await cookies();
-  return resolveThemeMode(cookieStore.get(ENV_KEYS.themeCookie)?.value);
+
+  /* Auth and public shells must start in a deterministic dark/light mode before any user
+     preference cookie exists. Keep this env gate strict (dark|light only) so invalid values
+     never destabilize bootstrap and always fail closed to dark. */
+  const initialThemeMode = resolveInitialThemeMode(
+    process.env[DEFAULT_THEME_MODE_ENV_KEY],
+  );
+
+  return resolveThemeMode(cookieStore.get(ENV_KEYS.themeCookie)?.value, initialThemeMode);
 }
 
 export async function getRequestUiContext(): Promise<{

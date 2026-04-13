@@ -3,6 +3,7 @@ import { PieChart } from "lucide-react";
 import Link from "next/link";
 
 import { InfographicStudio } from "@/components/infographic/infographic-studio";
+import { resolveDefaultModelIdForTool } from "@/lib/server/ai/default-models";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import {
   listDocumentsForUser,
@@ -102,6 +103,7 @@ export default async function InfographicPage() {
 
       <InfographicStudio
         messages={uiContext.messages}
+        defaultModelId={resolveDefaultModelIdForTool("infographic")}
         models={getModelsForTool("infographic")}
         initialDocuments={documents}
         initialGenerations={generations}

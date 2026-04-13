@@ -12,8 +12,15 @@ export const ASSESSMENT_DAILY_CREDIT_TIME_ZONE = "UTC";
 export const ASSESSMENT_DAILY_RESERVATION_TTL_MS = 30 * 60 * 1000;
 export const ASSESSMENT_DAILY_SUCCESS_LIMIT_ENV_KEY =
   "ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS";
+export const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_ENV_KEY =
+  "ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS";
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MIN = 1;
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MAX = 1000;
+const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_FALLBACK = 24;
+const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MIN = 1;
+const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MAX = 168;
+const ASSESSMENT_RENEWAL_WINDOW_KEY_PREFIX = "utc";
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
 export type AssessmentDailyCreditReservationSource = "daily" | "extra";
 
@@ -42,6 +49,20 @@ export function getDefaultDailyAssessmentCreditsLimit() {
   }
 
   return ASSESSMENT_DAILY_SUCCESS_LIMIT_FALLBACK;
+}
+
+export function getAssessmentCreditRenewalWindowHours() {
+  const parsed = parsePositiveInteger(
+    process.env[ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_ENV_KEY],
+  );
+  if (!parsed) {
+    return ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_FALLBACK;
+  }
+
+  return Math.min(
+    ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MAX,
+    Math.max(ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MIN, parsed),
+  );
 }
 
 export function normalizeAssessmentDailyLimitOverride(value: unknown) {
@@ -92,10 +113,7 @@ function padUtcDatePart(value: number) {
   return String(value).padStart(2, "0");
 }
 
-/* Assessment daily credits intentionally resolve against one canonical UTC day window.
-  Keep this timezone fixed so Vercel/server runtime instances, local development, and repository
-  writes all agree on the same reset boundary instead of drifting by browser locale or region. */
-export function resolveAssessmentDailyCreditWindow(now = new Date()) {
+function buildLegacyDailyWindow(now: Date) {
   const year = now.getUTCFullYear();
   const monthIndex = now.getUTCMonth();
   const dayOfMonth = now.getUTCDate();
@@ -109,7 +127,70 @@ export function resolveAssessmentDailyCreditWindow(now = new Date()) {
   };
 }
 
+function buildRenewalWindowKey(input: {
+  renewalWindowHours: number;
+  windowStartsAtMs: number;
+}) {
+  return `${ASSESSMENT_RENEWAL_WINDOW_KEY_PREFIX}-${input.renewalWindowHours}h-${input.windowStartsAtMs}`;
+}
+
+function parseRenewalWindowKey(dayKey: string) {
+  const normalized = dayKey.trim();
+  const match = /^utc-(\d{1,3})h-(\d+)$/.exec(normalized);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number.parseInt(match[1] || "", 10);
+  const windowStartMs = Number.parseInt(match[2] || "", 10);
+  if (
+    !Number.isFinite(hours)
+    || !Number.isFinite(windowStartMs)
+    || hours < ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MIN
+    || hours > ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MAX
+    || windowStartMs < 0
+  ) {
+    return null;
+  }
+
+  return {
+    hours,
+    windowStartMs,
+  };
+}
+
+/* Assessment credits intentionally resolve against canonical UTC renewal windows.
+  Keep this timezone fixed so Vercel/server runtime instances, local development, and repository
+  writes agree on the same reset boundary instead of drifting by browser locale or region. */
+export function resolveAssessmentDailyCreditWindow(now = new Date()) {
+  const renewalWindowHours = getAssessmentCreditRenewalWindowHours();
+  if (renewalWindowHours === ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_FALLBACK) {
+    return buildLegacyDailyWindow(now);
+  }
+
+  const renewalWindowMs = renewalWindowHours * ONE_HOUR_MS;
+  const nowMs = now.getTime();
+  const windowStartsAtMs = Math.floor(nowMs / renewalWindowMs) * renewalWindowMs;
+  const resetsAtMs = windowStartsAtMs + renewalWindowMs;
+
+  return {
+    dayKey: buildRenewalWindowKey({
+      renewalWindowHours,
+      windowStartsAtMs,
+    }),
+    windowStartsAt: new Date(windowStartsAtMs).toISOString(),
+    resetsAt: new Date(resetsAtMs).toISOString(),
+  };
+}
+
 export function getAssessmentDailyCreditResetAt(dayKey: string) {
+  const parsedRenewalWindowKey = parseRenewalWindowKey(dayKey);
+  if (parsedRenewalWindowKey) {
+    return new Date(
+      parsedRenewalWindowKey.windowStartMs + parsedRenewalWindowKey.hours * ONE_HOUR_MS,
+    ).toISOString();
+  }
+
   const [yearRaw, monthRaw, dayRaw] = dayKey.split("-");
   const year = Number.parseInt(yearRaw || "", 10);
   const month = Number.parseInt(monthRaw || "", 10);

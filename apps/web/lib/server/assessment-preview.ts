@@ -14,6 +14,7 @@ import {
 } from "@/lib/assessment-file-branding";
 import {
   annotateAssessmentCorrectChoices,
+  buildAssessmentQuestionRenderMetadata,
   buildAssessmentScienceRenderBlocks,
   countFillBlanks,
   deriveAssessmentQuestionDisplay,
@@ -118,6 +119,8 @@ function getQuestionTypeLabel(
   switch (value) {
     case "true_false":
       return messages.assessmentTypeTrueFalse;
+    case "scientific_term":
+      return messages.assessmentTypeScientificTerm;
     case "essay":
       return messages.assessmentTypeEssay;
     case "fill_blanks":
@@ -291,6 +294,16 @@ function buildPreviewQuestionItem(input: {
     answerText: question.answer,
     rationaleText: question.rationale,
   });
+  const rendering =
+    question.rendering ??
+    buildAssessmentQuestionRenderMetadata({
+      questionType: resolvedQuestionType,
+      structuredData: question.structuredData,
+      questionText: question.question,
+      answerText: question.answer,
+      rationaleText: question.rationale,
+    }) ??
+    null;
 
   return {
     id: question.id,
@@ -300,6 +313,7 @@ function buildPreviewQuestionItem(input: {
     difficulty: questionDifficulty,
     difficultyLabel: getQuestionDifficultyLabel(questionDifficulty, messages),
     structuredData: question.structuredData ?? null,
+    rendering,
     scienceBlocks,
     question: question.question,
     stem: display.stem,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { AdminAssessmentCreditMutationInput } from "@zootopia/shared-types";
 import {
   Activity,
   AlertCircle,
@@ -276,6 +277,201 @@ function getErrorCode(error: unknown) {
   return "UNKNOWN";
 }
 
+function buildAdminUserDetailPath(
+  targetUid: string,
+  params: Record<string, string | null | undefined>,
+) {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    const normalized = value?.trim();
+    if (normalized) {
+      searchParams.set(key, normalized);
+    }
+  }
+
+  const encodedUid = encodeURIComponent(targetUid);
+  return searchParams.size > 0
+    ? `/admin/users/${encodedUid}?${searchParams.toString()}`
+    : `/admin/users/${encodedUid}`;
+}
+
+function mapCreditMutationErrorToQueryCode(error: unknown) {
+  const code = error instanceof Error ? error.message : "ASSESSMENT_CREDIT_UPDATE_FAILED";
+
+  switch (code) {
+    case "USER_NOT_FOUND":
+      return "credits_user_not_found";
+    case "ASSESSMENT_CREDIT_GRANT_NOT_FOUND":
+      return "credits_grant_not_found";
+    case "ASSESSMENT_CREDIT_GRANT_ALREADY_REVOKED":
+      return "credits_grant_already_revoked";
+    case "ASSESSMENT_CREDIT_GRANT_OWNER_MISMATCH":
+      return "credits_grant_owner_mismatch";
+    case "ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN":
+      return "credits_self_mutation_forbidden";
+    case "ASSESSMENT_CREDIT_AMOUNT_INVALID":
+      return "credits_amount_invalid";
+    case "ASSESSMENT_DAILY_OVERRIDE_INVALID":
+      return "credits_daily_override_invalid";
+    case "ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID":
+      return "credits_grant_expiry_invalid";
+    case "ASSESSMENT_CREDIT_GRANT_ID_REQUIRED":
+      return "credits_grant_id_required";
+    case "ASSESSMENT_CREDIT_ACTION_UNSUPPORTED":
+    case "ASSESSMENT_CREDIT_ACCESS_INVALID":
+      return "credits_invalid_request";
+    default:
+      return "credits_update_failed";
+  }
+}
+
+function parsePositiveIntegerFromForm(value: FormDataEntryValue | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  const rounded = Math.round(parsed);
+  return rounded > 0 ? rounded : null;
+}
+
+function parseNonNegativeIntegerFromForm(value: FormDataEntryValue | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  const rounded = Math.round(parsed);
+  return rounded >= 0 ? rounded : null;
+}
+
+function parseOptionalMutationText(value: FormDataEntryValue | null, maxLength = 320) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.slice(0, maxLength);
+}
+
+function parseOptionalMutationExpiry(value: FormDataEntryValue | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const parsedMs = Date.parse(raw);
+  if (!Number.isFinite(parsedMs)) {
+    return "INVALID";
+  }
+
+  return new Date(parsedMs).toISOString();
+}
+
+function formatAdminCreditMutationAction(action: AdminAssessmentCreditMutationInput["action"]) {
+  switch (action) {
+    case "set_access":
+      return "Access updated";
+    case "set_daily_override":
+      return "Daily override set";
+    case "clear_daily_override":
+      return "Daily override cleared";
+    case "add_manual_credits":
+      return "Manual credits added";
+    case "subtract_manual_credits":
+      return "Manual credits removed";
+    case "set_manual_credits":
+      return "Manual credits set";
+    case "grant_credits":
+      return "Credit grant created";
+    case "revoke_grant":
+      return "Credit grant revoked";
+    default:
+      return "Credit mutation";
+  }
+}
+
+async function runAdminCreditMutationFromDetailPage(input: {
+  targetUid: string;
+  mutation: AdminAssessmentCreditMutationInput;
+}) {
+  const { appendAdminLog, applyAdminAssessmentCreditMutation, getUserByUid } = await import(
+    "@/lib/server/repository"
+  );
+  const { requireAdminUser } = await import("@/lib/server/session");
+
+  const admin = await requireAdminUser();
+  const targetUser = await getUserByUid(input.targetUid);
+  if (!targetUser) {
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: "credits_user_not_found",
+      }),
+    );
+  }
+
+  try {
+    const state = await applyAdminAssessmentCreditMutation({
+      ownerUid: input.targetUid,
+      admin: {
+        uid: admin.uid,
+        role: admin.role,
+      },
+      mutation: input.mutation,
+    });
+
+    await appendAdminLog({
+      actorUid: admin.uid,
+      actorRole: admin.role,
+      targetUid: input.targetUid,
+      ownerUid: input.targetUid,
+      ownerRole: targetUser.role,
+      action: `assessment-credits:${input.mutation.action}`,
+      resourceType: "assessment-credits",
+      resourceId: input.targetUid,
+      route: "/admin/users/[uid]",
+      metadata: {
+        action: input.mutation.action,
+        amount: typeof input.mutation.amount === "number" ? input.mutation.amount : null,
+        access: input.mutation.access ?? null,
+        dailyLimitOverride:
+          typeof input.mutation.dailyLimitOverride === "number"
+            ? input.mutation.dailyLimitOverride
+            : null,
+        grantId: input.mutation.grantId ?? null,
+        expiresAt: input.mutation.expiresAt ?? null,
+        reason: input.mutation.reason ?? null,
+        remainingCount:
+          typeof state.credits.remainingCount === "number"
+            ? state.credits.remainingCount
+            : null,
+      },
+    });
+  } catch (error) {
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: mapCreditMutationErrorToQueryCode(error),
+      }),
+    );
+  }
+
+  redirect(
+    buildAdminUserDetailPath(input.targetUid, {
+      credits_updated: input.mutation.action,
+    }),
+  );
+}
+
 async function loadAdminDetailOptionalSection<T>(input: {
   section: string;
   load: () => Promise<T>;
@@ -472,14 +668,39 @@ export default async function AdminUserDetailPage({
     .slice(0, 8);
 
   const errorCode = getFirstSearchParamValue(resolvedSearchParams.error).trim();
+  const creditsUpdatedAction = getFirstSearchParamValue(resolvedSearchParams.credits_updated).trim();
   const storageCleaned = getFirstSearchParamValue(resolvedSearchParams.storage_cleaned) === "true";
+  const creditMutationSuccessMessages: Record<string, string> = {
+    set_access: "Assessment access was updated successfully.",
+    set_daily_override: "Daily credit override was saved successfully.",
+    clear_daily_override: "Daily credit override was cleared successfully.",
+    add_manual_credits: "Manual credits were added successfully.",
+    subtract_manual_credits: "Manual credits were deducted successfully.",
+    set_manual_credits: "Manual credits were set successfully.",
+    grant_credits: "Credit grant was created successfully.",
+    revoke_grant: "Credit grant was revoked successfully.",
+  };
   const errorMessages: Record<string, string> = {
     confirmation_required: "Confirmation is required before deleting a user account. Type DELETE USER exactly.",
     confirmation_mismatch: "Confirmation must match the exact phrase \"DELETE USER\".",
     delete_failed: "User deletion failed. Review server logs and retry.",
     storage_confirmation_mismatch: "Storage cleanup confirmation must match the target user UID.",
     storage_cleanup_failed: "Storage cleanup failed. Review API/admin logs and retry.",
+    credits_user_not_found: "The selected user no longer exists.",
+    credits_self_mutation_forbidden: "Admins cannot mutate their own assessment credit balances.",
+    credits_amount_invalid: "Enter a valid credit amount.",
+    credits_daily_override_invalid: "Daily override must be a positive whole number.",
+    credits_grant_expiry_invalid: "Grant expiration must be a valid future date and time.",
+    credits_grant_id_required: "A grant identifier is required for this operation.",
+    credits_grant_not_found: "The selected grant could not be found.",
+    credits_grant_owner_mismatch: "The selected grant does not belong to this user.",
+    credits_grant_already_revoked: "This grant was already revoked.",
+    credits_invalid_request: "The credit mutation request is invalid.",
+    credits_update_failed: "Unable to update credits right now. Try again shortly.",
   };
+  const creditMutationSuccess = creditsUpdatedAction
+    ? creditMutationSuccessMessages[creditsUpdatedAction] ?? "Assessment credits updated successfully."
+    : null;
   const feedbackError = errorCode ? (errorMessages[errorCode] ?? "The requested admin action failed.") : null;
 
   const isAdmin = targetUser.role === "admin";
@@ -496,6 +717,7 @@ export default async function AdminUserDetailPage({
   });
   const numberFormatter = new Intl.NumberFormat("en-US");
   const activeGrantCount = creditState?.grants.filter((grant) => grant.effectiveStatus === "active").length ?? 0;
+  const recentCreditHistory = creditState?.history.slice(0, 12) ?? [];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -572,6 +794,13 @@ export default async function AdminUserDetailPage({
             namespaces and legacy uploads/temp, documents, assessment-results,
             and assessment-exports paths.
           </p>
+        </div>
+      )}
+
+      {creditMutationSuccess && (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
+          <ShieldCheck className="h-5 w-5 shrink-0" />
+          <p className="text-sm font-medium">{creditMutationSuccess}</p>
         </div>
       )}
 
@@ -783,6 +1012,138 @@ export default async function AdminUserDetailPage({
             }
             icon={<Clock3 className="h-4 w-4" />}
           />
+        </div>
+
+        {/*
+          Credit mutations stay server-authoritative: these controls only submit server actions
+          that call repository mutations and append admin logs. Keep browser logic display-only.
+        */}
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Credit Controls</h3>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Every mutation is written to durable storage and reflected in the per-user audit history.
+            </p>
+            <div className="mt-3 space-y-3">
+              <CreditAccessToggleForm
+                targetUid={targetUser.uid}
+                currentAccess={creditsAccount?.assessmentAccess ?? "enabled"}
+                disabled={isCurrentUser}
+              />
+              <CreditDailyOverrideForm
+                targetUid={targetUser.uid}
+                currentOverride={creditsAccount?.dailyLimitOverride ?? null}
+                disabled={isCurrentUser}
+              />
+              <CreditManualBalanceForm
+                targetUid={targetUser.uid}
+                disabled={isCurrentUser}
+              />
+              <CreditGrantCreateForm
+                targetUid={targetUser.uid}
+                disabled={isCurrentUser}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Credit Grants</h3>
+            {creditState?.grants.length ? (
+              <div className="mt-3 space-y-2">
+                {creditState.grants.map((grant) => {
+                  const canRevoke = grant.effectiveStatus === "active";
+                  return (
+                    <div
+                      key={grant.id}
+                      className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+                          {numberFormatter.format(grant.available)} / {numberFormatter.format(grant.credits)} available
+                        </p>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+                            grant.effectiveStatus === "active"
+                              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                          }`}
+                        >
+                          {grant.effectiveStatus}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-mono break-all">
+                        grant: {grant.id}
+                      </p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        expires: {grant.expiresAt ? formatDateTime(dateFormatter, grant.expiresAt) : "No expiry"}
+                      </p>
+                      {grant.reason ? (
+                        <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">
+                          reason: {grant.reason}
+                        </p>
+                      ) : null}
+
+                      <div className="mt-2">
+                        <RevokeCreditGrantForm
+                          targetUid={targetUser.uid}
+                          grantId={grant.id}
+                          disabled={isCurrentUser || !canRevoke}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+                No credit grants found for this user.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Credit Mutation History</h3>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Durable per-user ledger showing before/after balance snapshots for every admin mutation.
+          </p>
+          {recentCreditHistory.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+              No credit mutation history is recorded for this user yet.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {recentCreditHistory.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+                      {formatAdminCreditMutationAction(entry.action)}
+                    </p>
+                    <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                      {entry.action}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    {formatDateTime(dateFormatter, entry.createdAt)} | admin: {entry.adminUid}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Manual {numberFormatter.format(entry.before.manualCredits)} to {numberFormatter.format(entry.after.manualCredits)} | Remaining {entry.before.remainingCount === null ? "No limit" : numberFormatter.format(entry.before.remainingCount)} to {entry.after.remainingCount === null ? "No limit" : numberFormatter.format(entry.after.remainingCount)}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Access {entry.before.assessmentAccess} to {entry.after.assessmentAccess}
+                  </p>
+                  {entry.reason ? (
+                    <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">
+                      reason: {entry.reason}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -1136,6 +1497,414 @@ function StatusToggleForm({
         {isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
         {actionLabel}
       </Button>
+    </form>
+  );
+}
+
+/**
+ * Credit access toggle stays backend-owned through repository mutations.
+ */
+function CreditAccessToggleForm({
+  targetUid,
+  currentAccess,
+  disabled,
+}: {
+  targetUid: string;
+  currentAccess: "enabled" | "disabled";
+  disabled: boolean;
+}) {
+  const nextAccess = currentAccess === "enabled" ? "disabled" : "enabled";
+  const actionLabel = nextAccess === "enabled" ? "Enable Assessment Access" : "Disable Assessment Access";
+
+  return (
+    <form
+      action={async () => {
+        "use server";
+        await runAdminCreditMutationFromDetailPage({
+          targetUid,
+          mutation: {
+            action: "set_access",
+            access: nextAccess,
+            reason: `Admin set assessment access to ${nextAccess}.`,
+          },
+        });
+      }}
+    >
+      <Button
+        type="submit"
+        variant={nextAccess === "enabled" ? "default" : "outline"}
+        size="sm"
+        disabled={disabled}
+        className="w-full h-10 justify-center gap-2"
+      >
+        {actionLabel}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * Daily override form supports both set and clear actions with explicit operator intent.
+ */
+function CreditDailyOverrideForm({
+  targetUid,
+  currentOverride,
+  disabled,
+}: {
+  targetUid: string;
+  currentOverride: number | null;
+  disabled: boolean;
+}) {
+  return (
+    <form
+      action={async (formData: FormData) => {
+        "use server";
+        const overrideAction = String(formData.get("overrideAction") || "").trim();
+        const reason = parseOptionalMutationText(formData.get("reason"));
+
+        if (overrideAction === "clear") {
+          await runAdminCreditMutationFromDetailPage({
+            targetUid,
+            mutation: {
+              action: "clear_daily_override",
+              reason,
+            },
+          });
+          return;
+        }
+
+        const override = parsePositiveIntegerFromForm(formData.get("dailyLimitOverride"));
+        if (!override) {
+          redirect(
+            buildAdminUserDetailPath(targetUid, {
+              error: "credits_daily_override_invalid",
+            }),
+          );
+        }
+
+        await runAdminCreditMutationFromDetailPage({
+          targetUid,
+          mutation: {
+            action: "set_daily_override",
+            dailyLimitOverride: override,
+            reason,
+          },
+        });
+      }}
+    >
+      <div className="space-y-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+          Daily Limit Override {currentOverride !== null ? `(Current: ${currentOverride})` : "(Using default)"}
+        </p>
+        <input
+          type="number"
+          name="dailyLimitOverride"
+          min={1}
+          step={1}
+          placeholder="Override daily limit"
+          className="field-control h-10 w-full text-sm"
+          disabled={disabled}
+        />
+        <input
+          type="text"
+          name="reason"
+          placeholder="Reason (optional)"
+          className="field-control h-10 w-full text-sm"
+          disabled={disabled}
+          maxLength={320}
+        />
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            type="submit"
+            name="overrideAction"
+            value="set"
+            size="sm"
+            disabled={disabled}
+            className="h-9"
+          >
+            Save Override
+          </Button>
+          <Button
+            type="submit"
+            name="overrideAction"
+            value="clear"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            className="h-9"
+          >
+            Clear Override
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Manual balance actions are grouped to keep all amount-based mutations in one audited control.
+ */
+function CreditManualBalanceForm({
+  targetUid,
+  disabled,
+}: {
+  targetUid: string;
+  disabled: boolean;
+}) {
+  return (
+    <form
+      action={async (formData: FormData) => {
+        "use server";
+        const manualAction = String(formData.get("manualAction") || "").trim();
+        const reason = parseOptionalMutationText(formData.get("reason"));
+
+        if (
+          manualAction !== "add"
+          && manualAction !== "subtract"
+          && manualAction !== "set"
+        ) {
+          redirect(
+            buildAdminUserDetailPath(targetUid, {
+              error: "credits_invalid_request",
+            }),
+          );
+        }
+
+        if (manualAction === "set") {
+          const amount = parseNonNegativeIntegerFromForm(formData.get("amount"));
+          if (amount === null) {
+            redirect(
+              buildAdminUserDetailPath(targetUid, {
+                error: "credits_amount_invalid",
+              }),
+            );
+          }
+
+          await runAdminCreditMutationFromDetailPage({
+            targetUid,
+            mutation: {
+              action: "set_manual_credits",
+              amount,
+              reason,
+            },
+          });
+          return;
+        }
+
+        const amount = parsePositiveIntegerFromForm(formData.get("amount"));
+        if (!amount) {
+          redirect(
+            buildAdminUserDetailPath(targetUid, {
+              error: "credits_amount_invalid",
+            }),
+          );
+        }
+
+        await runAdminCreditMutationFromDetailPage({
+          targetUid,
+          mutation: {
+            action: manualAction === "add" ? "add_manual_credits" : "subtract_manual_credits",
+            amount,
+            reason,
+          },
+        });
+      }}
+    >
+      <div className="space-y-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+          Manual Credits
+        </p>
+        <input
+          type="number"
+          name="amount"
+          min={0}
+          step={1}
+          placeholder="Amount"
+          className="field-control h-10 w-full text-sm"
+          disabled={disabled}
+          required
+        />
+        <input
+          type="text"
+          name="reason"
+          placeholder="Reason (optional)"
+          className="field-control h-10 w-full text-sm"
+          disabled={disabled}
+          maxLength={320}
+        />
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Button
+            type="submit"
+            name="manualAction"
+            value="add"
+            size="sm"
+            disabled={disabled}
+            className="h-9"
+          >
+            Add
+          </Button>
+          <Button
+            type="submit"
+            name="manualAction"
+            value="subtract"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            className="h-9"
+          >
+            Subtract
+          </Button>
+          <Button
+            type="submit"
+            name="manualAction"
+            value="set"
+            variant="secondary"
+            size="sm"
+            disabled={disabled}
+            className="h-9"
+          >
+            Set
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Grant creation is isolated from manual balance changes to preserve clear operator intent.
+ */
+function CreditGrantCreateForm({
+  targetUid,
+  disabled,
+}: {
+  targetUid: string;
+  disabled: boolean;
+}) {
+  return (
+    <form
+      action={async (formData: FormData) => {
+        "use server";
+        const amount = parsePositiveIntegerFromForm(formData.get("amount"));
+        if (!amount) {
+          redirect(
+            buildAdminUserDetailPath(targetUid, {
+              error: "credits_amount_invalid",
+            }),
+          );
+        }
+
+        const parsedExpiry = parseOptionalMutationExpiry(formData.get("expiresAt"));
+        if (parsedExpiry === "INVALID") {
+          redirect(
+            buildAdminUserDetailPath(targetUid, {
+              error: "credits_grant_expiry_invalid",
+            }),
+          );
+        }
+
+        await runAdminCreditMutationFromDetailPage({
+          targetUid,
+          mutation: {
+            action: "grant_credits",
+            amount,
+            expiresAt: parsedExpiry,
+            reason: parseOptionalMutationText(formData.get("reason")),
+            note: parseOptionalMutationText(formData.get("note"), 1000),
+          },
+        });
+      }}
+    >
+      <div className="space-y-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+          Grant Credits
+        </p>
+        <input
+          type="number"
+          name="amount"
+          min={1}
+          step={1}
+          placeholder="Grant amount"
+          className="field-control h-10 w-full text-sm"
+          disabled={disabled}
+          required
+        />
+        <input
+          type="datetime-local"
+          name="expiresAt"
+          className="field-control h-10 w-full text-sm"
+          disabled={disabled}
+        />
+        <input
+          type="text"
+          name="reason"
+          placeholder="Reason (optional)"
+          className="field-control h-10 w-full text-sm"
+          disabled={disabled}
+          maxLength={320}
+        />
+        <textarea
+          name="note"
+          placeholder="Internal note (optional)"
+          className="field-control min-h-20 w-full resize-y text-sm"
+          disabled={disabled}
+          maxLength={1000}
+        />
+        <Button
+          type="submit"
+          size="sm"
+          disabled={disabled}
+          className="h-9 w-full"
+        >
+          Create Grant
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function RevokeCreditGrantForm({
+  targetUid,
+  grantId,
+  disabled,
+}: {
+  targetUid: string;
+  grantId: string;
+  disabled: boolean;
+}) {
+  return (
+    <form
+      action={async (formData: FormData) => {
+        "use server";
+        await runAdminCreditMutationFromDetailPage({
+          targetUid,
+          mutation: {
+            action: "revoke_grant",
+            grantId,
+            reason: parseOptionalMutationText(formData.get("reason")),
+          },
+        });
+      }}
+    >
+      <div className="space-y-2">
+        <input
+          type="text"
+          name="reason"
+          placeholder="Revocation reason (optional)"
+          className="field-control h-9 w-full text-xs"
+          disabled={disabled}
+          maxLength={320}
+        />
+        <Button
+          type="submit"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          className="h-8 w-full"
+        >
+          Revoke Grant
+        </Button>
+      </div>
     </form>
   );
 }

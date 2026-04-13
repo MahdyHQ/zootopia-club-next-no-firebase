@@ -25,28 +25,28 @@ function resolveToolScopedAlias(toolScope: ToolScope, modelId: string) {
 }
 
 export const ASSESSMENT_MODEL_IDS = [
-  "qwen3.5-flash",
   "gemini-3.1-flash-lite-preview",
-  "gemini-2.5-pro",
   "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "qwen3.5-flash",
 ] as const;
 
 export const MODEL_CATALOG: AiModelDescriptor[] = [
-  {
-    id: "qwen3.5-flash",
-    provider: "qwen",
-    label: "Qwen 3.5 Flash",
-    description:
-      "Default fast Alibaba Model Studio lane for Assessment through DashScope-compatible runtime.",
-    runtimeEnvKey: "QWEN_MODEL",
-    toolScopes: ["assessment"],
-  },
   {
     id: "gemini-3.1-flash-lite-preview",
     provider: "google",
     label: "Gemini 3.1 Flash-Lite",
     description:
       "Low-latency Gemini lane for everyday assessment generation.",
+    runtimeEnvKey: "GOOGLE_AI_MODEL",
+    toolScopes: ["assessment"],
+  },
+  {
+    id: "gemini-2.5-flash",
+    provider: "google",
+    label: "Gemini 2.5 Flash",
+    description:
+      "Balanced Gemini lane for reliable assessment quality with solid speed.",
     runtimeEnvKey: "GOOGLE_AI_MODEL",
     toolScopes: ["assessment"],
   },
@@ -60,12 +60,12 @@ export const MODEL_CATALOG: AiModelDescriptor[] = [
     toolScopes: ["assessment"],
   },
   {
-    id: "gemini-2.5-flash",
-    provider: "google",
-    label: "Gemini 2.5 Flash",
+    id: "qwen3.5-flash",
+    provider: "qwen",
+    label: "Qwen 3.5 Flash",
     description:
-      "Balanced Gemini lane for reliable assessment quality with solid speed.",
-    runtimeEnvKey: "GOOGLE_AI_MODEL",
+      "Fast Alibaba Model Studio lane for Assessment through DashScope-compatible runtime.",
+    runtimeEnvKey: "QWEN_MODEL",
     toolScopes: ["assessment"],
   },
   {

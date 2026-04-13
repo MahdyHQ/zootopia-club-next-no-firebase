@@ -1,10 +1,13 @@
 import "server-only";
 
 import type {
+  AdminAssessmentCreditMutationBalanceSnapshot,
   AdminAssessmentCreditMutationInput,
+  AdminAssessmentCreditMutationRecord,
   AdminAssessmentCreditState,
   AdminOverview,
   AdminUserDeletionSummary,
+  AssessmentArtifactRecord,
   AssessmentCreditAccountRecord,
   AssessmentCreditGrantAdminView,
   AssessmentCreditGrantEffectiveStatus,
@@ -29,6 +32,7 @@ import type {
 import {
   evaluateProfileCompletion,
   getPhoneNumberMetadata,
+  normalizeUploadExtension,
   toIsoTimestamp,
   validateUserGender,
 } from "@zootopia/shared-utils";
@@ -75,6 +79,7 @@ import { hasSupabaseAdminRuntime } from "@/lib/server/supabase-admin";
 import {
   getZootopiaPersistenceRuntimeState,
   getZootopiaDatabase,
+  type PgTransaction,
 } from "@/lib/server/zootopia-postgres-adapter";
 import {
   getAssessmentStatus,
@@ -108,6 +113,19 @@ type AssessmentGenerationIdempotencyRecord = {
   expiresAt: string;
 };
 
+type AssessmentArtifactMetadataRecord = AssessmentArtifactRecord & {
+  id: string;
+  ownerUid: string;
+  ownerRole?: UserRole;
+  generationId: string;
+  generationStatus: AssessmentGeneration["status"];
+  generationCreatedAt: string;
+  generationUpdatedAt: string;
+  generationExpiresAt: string;
+  artifactKey: string;
+  updatedAt: string;
+};
+
 export type ExpiredUploadSweepResult = {
   forced: boolean;
   skipped: boolean;
@@ -120,10 +138,12 @@ type MemoryStore = {
   users: Map<string, UserDocument>;
   documents: Map<string, DocumentRecord>;
   assessments: Map<string, AssessmentGeneration>;
+  assessmentArtifactMetadata: Map<string, AssessmentArtifactMetadataRecord>;
   assessmentGenerationIdempotency: Map<string, AssessmentGenerationIdempotencyRecord>;
   assessmentDailyCredits: Map<string, AssessmentDailyCreditLedgerDocument>;
   assessmentCreditAccounts: Map<string, AssessmentCreditAccountRecord>;
   assessmentCreditGrants: Map<string, AssessmentCreditGrantRecord>;
+  assessmentCreditMutationHistory: Map<string, AdminAssessmentCreditMutationRecord>;
   infographics: Map<string, InfographicGeneration>;
   adminLogs: AdminLogEntry[];
 };
@@ -148,12 +168,15 @@ type AssessmentDailyCreditReservationSuccess = {
 const EXPIRED_UPLOAD_SWEEP_INTERVAL_MS = 60 * 1000;
 const EXPIRED_UPLOAD_SWEEP_BATCH_LIMIT = 200;
 const ASSESSMENT_GENERATION_IDEMPOTENCY_COLLECTION = "assessmentGenerationIdempotency";
+const ASSESSMENT_ARTIFACT_METADATA_COLLECTION = "assessmentArtifactMetadata";
 const ASSESSMENT_GENERATION_IDEMPOTENCY_IN_PROGRESS_STALE_MS = 10 * 60 * 1000;
 const ASSESSMENT_DAILY_CREDITS_COLLECTION = "assessmentDailyCredits";
 const ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION = "assessmentCreditAccounts";
 const ASSESSMENT_CREDIT_GRANTS_COLLECTION = "assessmentCreditGrants";
+const ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION = "assessmentCreditMutationHistory";
+const ASSESSMENT_CREDIT_MUTATION_HISTORY_LIMIT = 40;
 const ASSESSMENT_DAILY_CREDITS_EXHAUSTED_MESSAGE =
-  "Today's successful assessment attempts are exhausted. They renew automatically tomorrow.";
+  "Assessment generation credits are currently exhausted. Daily and extra credits renew at the next reset window.";
 const ASSESSMENT_ACCESS_DISABLED_MESSAGE =
   "Assessment generation is currently disabled for this account.";
 const ASSESSMENT_CREDIT_MANUAL_BALANCE_MIN = 0;
@@ -179,10 +202,12 @@ function getMemoryStore(): MemoryStore {
       users: new Map(),
       documents: new Map(),
       assessments: new Map(),
+      assessmentArtifactMetadata: new Map(),
       assessmentGenerationIdempotency: new Map(),
       assessmentDailyCredits: new Map(),
       assessmentCreditAccounts: new Map(),
       assessmentCreditGrants: new Map(),
+      assessmentCreditMutationHistory: new Map(),
       infographics: new Map(),
       adminLogs: [],
     };
@@ -819,6 +844,21 @@ function normalizeDocumentRecord(
   fallbackActiveId: string | null,
   resolvedOwnerRole?: UserRole,
 ): DocumentRecord {
+  const normalizedExtensionSource =
+    typeof record.fileExtension === "string" && record.fileExtension.trim().length > 0
+      ? record.fileExtension
+      : normalizeUploadExtension(record.fileName);
+  const normalizedFileExtension = normalizedExtensionSource
+    .trim()
+    .toLowerCase()
+    .replace(/^\.+/, "");
+  const safeFileExtension = /^[a-z0-9]{1,16}$/.test(normalizedFileExtension)
+    ? normalizedFileExtension
+    : undefined;
+  const normalizedContentSha256 =
+    typeof record.contentSha256 === "string" && /^[a-f0-9]{64}$/i.test(record.contentSha256)
+      ? record.contentSha256.toLowerCase()
+      : undefined;
   const isActive = record.isActive === true || record.id === fallbackActiveId;
   // getRetentionExpiryTimestamp now returns string | null (env-driven retention).
   // Fall back to undefined when null so the DocumentRecord type stays consistent.
@@ -835,6 +875,8 @@ function normalizeDocumentRecord(
   return {
     ...record,
     ownerRole: normalizeStoredOwnerRole(record.ownerRole) ?? resolvedOwnerRole,
+    fileExtension: safeFileExtension,
+    contentSha256: normalizedContentSha256,
     storageDataClass:
       storageMetadata?.storageDataClass === "upload-source"
         ? "upload-source"
@@ -1021,16 +1063,140 @@ async function purgeExpiredAssessmentArtifacts(
   );
 }
 
+function buildAssessmentArtifactMetadataRecordId(input: {
+  generationId: string;
+  artifactKey: string;
+}) {
+  return `${input.generationId}::${input.artifactKey}`;
+}
+
+function buildAssessmentArtifactMetadataRecords(
+  generation: AssessmentGeneration,
+): AssessmentArtifactMetadataRecord[] {
+  return Object.values(generation.artifacts ?? {}).map((artifact) => ({
+    ...artifact,
+    id: buildAssessmentArtifactMetadataRecordId({
+      generationId: generation.id,
+      artifactKey: artifact.key,
+    }),
+    ownerUid: generation.ownerUid,
+    ownerRole: generation.ownerRole,
+    generationId: generation.id,
+    generationStatus: generation.status,
+    generationCreatedAt: generation.createdAt,
+    generationUpdatedAt: generation.updatedAt,
+    generationExpiresAt: generation.expiresAt,
+    artifactKey: artifact.key,
+    updatedAt: generation.updatedAt,
+  }));
+}
+
+/* Assessment artifact metadata is intentionally duplicated into a dedicated collection so
+   retention/admin/reporting queries can filter by owner/kind/expiry without scanning dynamic
+   `artifacts` map keys inside generation blobs. Keep this in lockstep with generation writes. */
+async function syncAssessmentArtifactMetadataForGeneration(input: {
+  generation: AssessmentGeneration;
+  transaction?: PgTransaction;
+}) {
+  const nextRecords = buildAssessmentArtifactMetadataRecords(input.generation);
+
+  if (shouldUseDatabase()) {
+    const database = getZootopiaDatabase();
+    const metadataCollection = database.collection(ASSESSMENT_ARTIFACT_METADATA_COLLECTION);
+    const existingQuery = metadataCollection
+      .where("generationId", "==", input.generation.id)
+      .limit(400);
+    const existingSnapshot = input.transaction
+      ? await input.transaction.get(existingQuery)
+      : await existingQuery.get();
+    const staleIds = new Set(existingSnapshot.docs.map((doc) => doc.id));
+    const writes: Promise<void>[] = [];
+
+    for (const record of nextRecords) {
+      const recordRef = metadataCollection.doc(record.id);
+      writes.push(
+        input.transaction
+          ? input.transaction.set(recordRef, omitUndefinedOwnerRole(record), {
+              merge: true,
+            })
+          : recordRef.set(omitUndefinedOwnerRole(record), { merge: true }),
+      );
+      staleIds.delete(record.id);
+    }
+
+    for (const staleId of staleIds) {
+      const staleRef = metadataCollection.doc(staleId);
+      writes.push(input.transaction ? input.transaction.delete(staleRef) : staleRef.delete());
+    }
+
+    await Promise.all(writes);
+    return;
+  }
+
+  const store = getMemoryStore();
+  for (const [recordId, record] of store.assessmentArtifactMetadata.entries()) {
+    if (record.generationId === input.generation.id) {
+      store.assessmentArtifactMetadata.delete(recordId);
+    }
+  }
+
+  for (const record of nextRecords) {
+    store.assessmentArtifactMetadata.set(record.id, record);
+  }
+}
+
+async function deleteAssessmentArtifactMetadataForGeneration(input: {
+  generationId: string;
+  transaction?: PgTransaction;
+}) {
+  if (shouldUseDatabase()) {
+    const database = getZootopiaDatabase();
+    const metadataCollection = database.collection(ASSESSMENT_ARTIFACT_METADATA_COLLECTION);
+    const existingQuery = metadataCollection
+      .where("generationId", "==", input.generationId)
+      .limit(400);
+    const snapshot = input.transaction
+      ? await input.transaction.get(existingQuery)
+      : await existingQuery.get();
+
+    if (snapshot.docs.length === 0) {
+      return;
+    }
+
+    const deletions = snapshot.docs.map((doc) => {
+      const docRef = metadataCollection.doc(doc.id);
+      return input.transaction ? input.transaction.delete(docRef) : docRef.delete();
+    });
+    await Promise.all(deletions);
+    return;
+  }
+
+  const store = getMemoryStore();
+  for (const [recordId, record] of store.assessmentArtifactMetadata.entries()) {
+    if (record.generationId === input.generationId) {
+      store.assessmentArtifactMetadata.delete(recordId);
+    }
+  }
+}
+
 async function purgeExpiredAssessmentGenerationRecord(record: AssessmentGeneration) {
   await purgeExpiredAssessmentArtifacts(record);
 
   if (shouldUseDatabase()) {
-    await getZootopiaDatabase()
-      .collection("assessmentGenerations")
-      .doc(record.id)
-      .delete();
+    await Promise.all([
+      getZootopiaDatabase()
+        .collection("assessmentGenerations")
+        .doc(record.id)
+        .delete(),
+      deleteAssessmentArtifactMetadataForGeneration({
+        generationId: record.id,
+      }),
+    ]);
   } else {
     getMemoryStore().assessments.delete(record.id);
+    await deleteAssessmentArtifactMetadataForGeneration({
+      generationId: record.id,
+    });
   }
 
   await appendAdminLog({
@@ -1713,10 +1879,12 @@ export async function deleteUserAccountAsAdmin(input: {
     database: {
       deletedDocuments: 0,
       deletedAssessmentGenerations: 0,
+      deletedAssessmentArtifactMetadata: 0,
       deletedInfographicGenerations: 0,
       deletedCreditAccounts: 0,
       deletedCreditGrants: 0,
       deletedDailyCredits: 0,
+      deletedCreditMutationHistory: 0,
       deletedIdempotencyKeys: 0,
       deletedLegacyUserRecords: 0,
     },
@@ -1780,6 +1948,9 @@ export async function deleteUserAccountAsAdmin(input: {
       summary.database.deletedAssessmentGenerations = await deleteOwnerScopedCollection(
         "assessmentGenerations",
       );
+      summary.database.deletedAssessmentArtifactMetadata = await deleteOwnerScopedCollection(
+        ASSESSMENT_ARTIFACT_METADATA_COLLECTION,
+      );
       summary.database.deletedInfographicGenerations = await deleteOwnerScopedCollection(
         "infographicGenerations",
       );
@@ -1788,6 +1959,9 @@ export async function deleteUserAccountAsAdmin(input: {
       );
       summary.database.deletedDailyCredits = await deleteOwnerScopedCollection(
         ASSESSMENT_DAILY_CREDITS_COLLECTION,
+      );
+      summary.database.deletedCreditMutationHistory = await deleteOwnerScopedCollection(
+        ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION,
       );
       summary.database.deletedIdempotencyKeys = await deleteOwnerScopedCollection(
         ASSESSMENT_GENERATION_IDEMPOTENCY_COLLECTION,
@@ -1831,6 +2005,15 @@ export async function deleteUserAccountAsAdmin(input: {
         summary.database.deletedAssessmentGenerations += 1;
       }
 
+      for (const [artifactMetadataId, artifactMetadataRecord] of store.assessmentArtifactMetadata.entries()) {
+        if (artifactMetadataRecord.ownerUid !== targetUid) {
+          continue;
+        }
+
+        store.assessmentArtifactMetadata.delete(artifactMetadataId);
+        summary.database.deletedAssessmentArtifactMetadata += 1;
+      }
+
       for (const [infographicId, infographicRecord] of store.infographics.entries()) {
         if (infographicRecord.ownerUid !== targetUid) {
           continue;
@@ -1860,6 +2043,15 @@ export async function deleteUserAccountAsAdmin(input: {
 
         store.assessmentDailyCredits.delete(dailyId);
         summary.database.deletedDailyCredits += 1;
+      }
+
+      for (const [mutationId, mutationRecord] of store.assessmentCreditMutationHistory.entries()) {
+        if (mutationRecord.ownerUid !== targetUid) {
+          continue;
+        }
+
+        store.assessmentCreditMutationHistory.delete(mutationId);
+        summary.database.deletedCreditMutationHistory += 1;
       }
 
       for (const [idempotencyId, idempotencyRecord] of store.assessmentGenerationIdempotency.entries()) {
@@ -1899,10 +2091,12 @@ export async function deleteUserAccountAsAdmin(input: {
         authAccountDeleted: summary.authAccountDeleted,
         deletedDocuments: summary.database.deletedDocuments,
         deletedAssessments: summary.database.deletedAssessmentGenerations,
+        deletedAssessmentArtifactMetadata: summary.database.deletedAssessmentArtifactMetadata,
         deletedInfographics: summary.database.deletedInfographicGenerations,
         deletedCreditAccounts: summary.database.deletedCreditAccounts,
         deletedCreditGrants: summary.database.deletedCreditGrants,
         deletedDailyCredits: summary.database.deletedDailyCredits,
+        deletedCreditMutationHistory: summary.database.deletedCreditMutationHistory,
         deletedIdempotencyKeys: summary.database.deletedIdempotencyKeys,
         deletedDocumentObjects: summary.storage.deletedDocumentObjects,
         deletedAssessmentArtifacts: summary.storage.deletedAssessmentArtifacts,
@@ -1933,10 +2127,12 @@ export async function deleteUserAccountAsAdmin(input: {
         authAccountDeleted: summary.authAccountDeleted,
         deletedDocuments: summary.database.deletedDocuments,
         deletedAssessments: summary.database.deletedAssessmentGenerations,
+        deletedAssessmentArtifactMetadata: summary.database.deletedAssessmentArtifactMetadata,
         deletedInfographics: summary.database.deletedInfographicGenerations,
         deletedCreditAccounts: summary.database.deletedCreditAccounts,
         deletedCreditGrants: summary.database.deletedCreditGrants,
         deletedDailyCredits: summary.database.deletedDailyCredits,
+        deletedCreditMutationHistory: summary.database.deletedCreditMutationHistory,
         deletedIdempotencyKeys: summary.database.deletedIdempotencyKeys,
         deletedDocumentObjects: summary.storage.deletedDocumentObjects,
         deletedAssessmentArtifacts: summary.storage.deletedAssessmentArtifacts,
@@ -2598,6 +2794,390 @@ function buildAssessmentCreditComputation(input: {
   };
 }
 
+function normalizeAdminAssessmentCreditMutationAction(
+  action: unknown,
+): AdminAssessmentCreditMutationInput["action"] {
+  switch (action) {
+    case "set_access":
+    case "set_daily_override":
+    case "clear_daily_override":
+    case "add_manual_credits":
+    case "subtract_manual_credits":
+    case "set_manual_credits":
+    case "grant_credits":
+    case "revoke_grant":
+      return action;
+    default:
+      return "set_manual_credits";
+  }
+}
+
+function normalizeAssessmentCreditMutationBalanceSnapshot(
+  snapshot: Partial<AdminAssessmentCreditMutationBalanceSnapshot> | null | undefined,
+): AdminAssessmentCreditMutationBalanceSnapshot {
+  const normalizedDailyLimitOverride = normalizeAssessmentDailyLimitOverride(
+    snapshot?.dailyLimitOverride,
+  );
+  const dailyLimit = resolveAssessmentDailyCreditsLimit({
+    override: normalizedDailyLimitOverride,
+    fallback:
+      typeof snapshot?.dailyLimit === "number" && Number.isFinite(snapshot.dailyLimit)
+        ? Math.round(snapshot.dailyLimit)
+        : getDefaultDailyAssessmentCreditsLimit(),
+  });
+
+  return {
+    assessmentAccess: snapshot?.assessmentAccess === "disabled" ? "disabled" : "enabled",
+    dailyLimitOverride: normalizedDailyLimitOverride,
+    manualCredits: clampManualCredits(
+      typeof snapshot?.manualCredits === "number" && Number.isFinite(snapshot.manualCredits)
+        ? Math.round(snapshot.manualCredits)
+        : 0,
+    ),
+    dailyLimit,
+    usedCount:
+      typeof snapshot?.usedCount === "number" && Number.isFinite(snapshot.usedCount)
+        ? Math.max(0, Math.round(snapshot.usedCount))
+        : 0,
+    remainingCount:
+      snapshot?.remainingCount === null
+        ? null
+        : typeof snapshot?.remainingCount === "number" && Number.isFinite(snapshot.remainingCount)
+          ? Math.max(0, Math.round(snapshot.remainingCount))
+          : null,
+    grantCreditsAvailable:
+      typeof snapshot?.grantCreditsAvailable === "number" && Number.isFinite(snapshot.grantCreditsAvailable)
+        ? Math.max(0, Math.round(snapshot.grantCreditsAvailable))
+        : 0,
+    activeGrantCount:
+      typeof snapshot?.activeGrantCount === "number" && Number.isFinite(snapshot.activeGrantCount)
+        ? Math.max(0, Math.round(snapshot.activeGrantCount))
+        : 0,
+  };
+}
+
+function buildAssessmentCreditMutationBalanceSnapshot(input: {
+  account: AssessmentCreditAccountRecord;
+  summary: AssessmentDailyCreditsSummary;
+}): AdminAssessmentCreditMutationBalanceSnapshot {
+  return {
+    assessmentAccess: input.account.assessmentAccess,
+    dailyLimitOverride: input.account.dailyLimitOverride,
+    manualCredits: input.account.manualCredits,
+    dailyLimit: input.summary.dailyLimit,
+    usedCount: input.summary.usedCount,
+    remainingCount: input.summary.remainingCount,
+    grantCreditsAvailable: input.summary.grantCreditsAvailable,
+    activeGrantCount: input.summary.activeGrantCount,
+  };
+}
+
+function normalizeAssessmentCreditMutationRecord(input: {
+  ownerUid: string;
+  recordId: string;
+  record: Partial<AdminAssessmentCreditMutationRecord> | null | undefined;
+  nowIso: string;
+}): AdminAssessmentCreditMutationRecord {
+  return {
+    id: input.recordId,
+    ownerUid:
+      typeof input.record?.ownerUid === "string" && input.record.ownerUid.trim()
+        ? input.record.ownerUid.trim()
+        : input.ownerUid,
+    action: normalizeAdminAssessmentCreditMutationAction(input.record?.action),
+    amount: parseMutationNonNegativeAmount(input.record?.amount),
+    access:
+      input.record?.access === "enabled" || input.record?.access === "disabled"
+        ? input.record.access
+        : null,
+    dailyLimitOverride: normalizeAssessmentDailyLimitOverride(input.record?.dailyLimitOverride),
+    grantId:
+      typeof input.record?.grantId === "string" && input.record.grantId.trim()
+        ? input.record.grantId.trim()
+        : null,
+    expiresAt: parseOptionalIsoTimestamp(input.record?.expiresAt),
+    reason: sanitizeCreditMutationText(input.record?.reason),
+    note: sanitizeCreditMutationText(input.record?.note, 1000),
+    adminUid:
+      typeof input.record?.adminUid === "string" && input.record.adminUid.trim()
+        ? input.record.adminUid.trim()
+        : "system",
+    adminRole: input.record?.adminRole === "user" ? "user" : "admin",
+    before: normalizeAssessmentCreditMutationBalanceSnapshot(input.record?.before),
+    after: normalizeAssessmentCreditMutationBalanceSnapshot(input.record?.after),
+    createdAt:
+      typeof input.record?.createdAt === "string" && Number.isFinite(Date.parse(input.record.createdAt))
+        ? input.record.createdAt
+        : input.nowIso,
+  };
+}
+
+async function listAssessmentCreditMutationHistoryForOwner(input: {
+  ownerUid: string;
+  nowIso: string;
+  limit?: number;
+}) {
+  const resolvedLimit = Math.max(
+    1,
+    Math.min(input.limit ?? ASSESSMENT_CREDIT_MUTATION_HISTORY_LIMIT, ASSESSMENT_CREDIT_MUTATION_HISTORY_LIMIT),
+  );
+
+  if (shouldUseDatabase()) {
+    const snapshot = await getZootopiaDatabase()
+      .collection(ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION)
+      .where("ownerUid", "==", input.ownerUid)
+      .orderBy("createdAt", "desc")
+      .limit(resolvedLimit)
+      .get();
+
+    return snapshot.docs
+      .map((documentSnapshot) =>
+        normalizeAssessmentCreditMutationRecord({
+          ownerUid: input.ownerUid,
+          recordId: documentSnapshot.id,
+          record: documentSnapshot.data() as Partial<AdminAssessmentCreditMutationRecord>,
+          nowIso: input.nowIso,
+        }),
+      )
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, resolvedLimit);
+  }
+
+  return [...getMemoryStore().assessmentCreditMutationHistory.values()]
+    .filter((record) => record.ownerUid === input.ownerUid)
+    .map((record) =>
+      normalizeAssessmentCreditMutationRecord({
+        ownerUid: input.ownerUid,
+        recordId: record.id,
+        record,
+        nowIso: input.nowIso,
+      }),
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, resolvedLimit);
+}
+
+type AssessmentCreditMutationApplyResult = {
+  nextAccount: AssessmentCreditAccountRecord;
+  nextGrants: AssessmentCreditGrantRecord[];
+  accountChanged: boolean;
+  upsertGrants: AssessmentCreditGrantRecord[];
+  history: {
+    amount: number | null;
+    access: AssessmentCreditAccountRecord["assessmentAccess"] | null;
+    dailyLimitOverride: number | null;
+    grantId: string | null;
+    expiresAt: string | null;
+  };
+};
+
+function applyAssessmentCreditMutationToState(input: {
+  ownerUid: string;
+  admin: Pick<SessionUser, "uid" | "role">;
+  mutation: AdminAssessmentCreditMutationInput;
+  account: AssessmentCreditAccountRecord;
+  grants: AssessmentCreditGrantRecord[];
+  nowIso: string;
+  nowMs: number;
+  mutationReason: string | null;
+  mutationNote: string | null;
+}): AssessmentCreditMutationApplyResult {
+  let nextAccount = input.account;
+  const nextGrants = [...input.grants];
+  let accountChanged = false;
+  const upsertGrants: AssessmentCreditGrantRecord[] = [];
+  const history: AssessmentCreditMutationApplyResult["history"] = {
+    amount: null,
+    access: null,
+    dailyLimitOverride: null,
+    grantId: null,
+    expiresAt: null,
+  };
+
+  switch (input.mutation.action) {
+    case "set_access": {
+      if (input.mutation.access !== "enabled" && input.mutation.access !== "disabled") {
+        throw new Error("ASSESSMENT_CREDIT_ACCESS_INVALID");
+      }
+
+      history.access = input.mutation.access;
+      nextAccount = {
+        ...nextAccount,
+        assessmentAccess: input.mutation.access,
+        updatedAt: input.nowIso,
+      };
+      accountChanged = true;
+      break;
+    }
+
+    case "set_daily_override": {
+      const override = normalizeAssessmentDailyLimitOverride(
+        input.mutation.dailyLimitOverride,
+      );
+      if (!override) {
+        throw new Error("ASSESSMENT_DAILY_OVERRIDE_INVALID");
+      }
+
+      history.dailyLimitOverride = override;
+      nextAccount = {
+        ...nextAccount,
+        dailyLimitOverride: override,
+        updatedAt: input.nowIso,
+      };
+      accountChanged = true;
+      break;
+    }
+
+    case "clear_daily_override": {
+      history.dailyLimitOverride = null;
+      nextAccount = {
+        ...nextAccount,
+        dailyLimitOverride: null,
+        updatedAt: input.nowIso,
+      };
+      accountChanged = true;
+      break;
+    }
+
+    case "add_manual_credits": {
+      const amount = parseMutationPositiveAmount(input.mutation.amount);
+      if (!amount) {
+        throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
+      }
+
+      history.amount = amount;
+      nextAccount = {
+        ...nextAccount,
+        manualCredits: clampManualCredits(nextAccount.manualCredits + amount),
+        updatedAt: input.nowIso,
+      };
+      accountChanged = true;
+      break;
+    }
+
+    case "subtract_manual_credits": {
+      const amount = parseMutationPositiveAmount(input.mutation.amount);
+      if (!amount) {
+        throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
+      }
+
+      history.amount = amount;
+      nextAccount = {
+        ...nextAccount,
+        manualCredits: clampManualCredits(nextAccount.manualCredits - amount),
+        updatedAt: input.nowIso,
+      };
+      accountChanged = true;
+      break;
+    }
+
+    case "set_manual_credits": {
+      const amount = parseMutationNonNegativeAmount(input.mutation.amount);
+      if (amount === null) {
+        throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
+      }
+
+      history.amount = amount;
+      nextAccount = {
+        ...nextAccount,
+        manualCredits: clampManualCredits(amount),
+        updatedAt: input.nowIso,
+      };
+      accountChanged = true;
+      break;
+    }
+
+    case "grant_credits": {
+      const amount = parseMutationPositiveAmount(input.mutation.amount);
+      if (!amount) {
+        throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
+      }
+
+      const expiresAt = parseOptionalIsoTimestamp(input.mutation.expiresAt ?? null);
+      if (input.mutation.expiresAt && !expiresAt) {
+        throw new Error("ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID");
+      }
+
+      if (expiresAt && Date.parse(expiresAt) <= input.nowMs) {
+        throw new Error("ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID");
+      }
+
+      const credits = clampGrantCredits(amount);
+      const grantId = randomUUID();
+      const grantRecord: AssessmentCreditGrantRecord = {
+        id: grantId,
+        ownerUid: input.ownerUid,
+        credits,
+        consumed: 0,
+        status: "active",
+        expiresAt,
+        reason: input.mutationReason,
+        note: input.mutationNote,
+        createdByUid: input.admin.uid,
+        createdByRole: input.admin.role,
+        createdAt: input.nowIso,
+        updatedAt: input.nowIso,
+        revokedAt: null,
+        revokedByUid: null,
+        revokeReason: null,
+      };
+
+      history.amount = credits;
+      history.grantId = grantId;
+      history.expiresAt = expiresAt;
+      nextGrants.push(grantRecord);
+      upsertGrants.push(grantRecord);
+      break;
+    }
+
+    case "revoke_grant": {
+      const grantId = String(input.mutation.grantId || "").trim();
+      if (!grantId) {
+        throw new Error("ASSESSMENT_CREDIT_GRANT_ID_REQUIRED");
+      }
+
+      const grantIndex = nextGrants.findIndex((grant) => grant.id === grantId);
+      if (grantIndex < 0) {
+        throw new Error("ASSESSMENT_CREDIT_GRANT_NOT_FOUND");
+      }
+
+      const grant = nextGrants[grantIndex];
+      if (grant.ownerUid !== input.ownerUid) {
+        throw new Error("ASSESSMENT_CREDIT_GRANT_OWNER_MISMATCH");
+      }
+
+      if (grant.status === "revoked") {
+        throw new Error("ASSESSMENT_CREDIT_GRANT_ALREADY_REVOKED");
+      }
+
+      const revokedGrant: AssessmentCreditGrantRecord = {
+        ...grant,
+        status: "revoked",
+        revokedAt: input.nowIso,
+        revokedByUid: input.admin.uid,
+        revokeReason: input.mutationReason,
+        updatedAt: input.nowIso,
+      };
+
+      history.grantId = grantId;
+      nextGrants[grantIndex] = revokedGrant;
+      upsertGrants.push(revokedGrant);
+      break;
+    }
+
+    default:
+      throw new Error("ASSESSMENT_CREDIT_ACTION_UNSUPPORTED");
+  }
+
+  return {
+    nextAccount,
+    nextGrants,
+    accountChanged,
+    upsertGrants,
+    history,
+  };
+}
+
 async function readAssessmentCreditAccount(input: { ownerUid: string; nowIso: string }) {
   if (shouldUseDatabase()) {
     const snapshot = await getZootopiaDatabase()
@@ -2775,10 +3355,18 @@ export async function getAdminAssessmentCreditStateForUser(
     ownerRole = owner.role;
   }
 
-  const state = await resolveAssessmentCreditStateForUser({
-    uid: ownerUid,
-    role: ownerRole,
-  });
+  const nowIso = toIsoTimestamp(new Date());
+  const [state, history] = await Promise.all([
+    resolveAssessmentCreditStateForUser({
+      uid: ownerUid,
+      role: ownerRole,
+    }),
+    listAssessmentCreditMutationHistoryForOwner({
+      ownerUid,
+      nowIso,
+      limit: ASSESSMENT_CREDIT_MUTATION_HISTORY_LIMIT,
+    }),
+  ]);
   const nowMs = Date.now();
 
   return {
@@ -2788,6 +3376,7 @@ export async function getAdminAssessmentCreditStateForUser(
     grants: state.grants
       .map((grant) => buildAssessmentCreditGrantAdminView(grant, nowMs))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+    history,
   } satisfies AdminAssessmentCreditState;
 }
 
@@ -3178,15 +3767,33 @@ export async function applyAdminAssessmentCreditMutation(input: {
     throw new Error("ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN");
   }
 
-  const nowIso = toIsoTimestamp(new Date());
-  const mutation = input.mutation;
+  const now = new Date();
+  const nowIso = toIsoTimestamp(now);
+  const nowMs = now.getTime();
+  const creditWindow = resolveAssessmentDailyCreditWindow(now);
+  const historyRecordId = randomUUID();
+  const mutationReason = sanitizeCreditMutationText(input.mutation.reason);
+  const mutationNote = sanitizeCreditMutationText(input.mutation.note, 1000);
 
   if (shouldUseDatabase()) {
     await getZootopiaDatabase().runTransaction(async (transaction) => {
       const accountRef = getZootopiaDatabase()
         .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
         .doc(input.ownerUid);
-      const accountSnapshot = await transaction.get(accountRef);
+      const ledgerRef = getZootopiaDatabase()
+        .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
+        .doc(buildAssessmentDailyCreditDocumentId(input.ownerUid, creditWindow.dayKey));
+      const grantsQuery = getZootopiaDatabase()
+        .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
+        .where("ownerUid", "==", input.ownerUid)
+        .limit(400);
+
+      const [accountSnapshot, ledgerSnapshot, grantsSnapshot] = await Promise.all([
+        transaction.get(accountRef),
+        transaction.get(ledgerRef),
+        transaction.get(grantsQuery),
+      ]);
+
       const account = normalizeAssessmentCreditAccountRecord({
         ownerUid: input.ownerUid,
         record: accountSnapshot.exists
@@ -3194,203 +3801,112 @@ export async function applyAdminAssessmentCreditMutation(input: {
           : null,
         nowIso,
       });
+      const grants = grantsSnapshot.docs.map((grantSnapshot) =>
+        normalizeAssessmentCreditGrantRecord({
+          ownerUid: input.ownerUid,
+          grantId: grantSnapshot.id,
+          record: grantSnapshot.data() as Partial<AssessmentCreditGrantRecord>,
+          nowIso,
+        }),
+      );
+      const ledger = normalizeAssessmentDailyCreditLedger({
+        ownerUid: input.ownerUid,
+        dayKey: creditWindow.dayKey,
+        record: ledgerSnapshot.exists
+          ? (ledgerSnapshot.data() as Partial<AssessmentDailyCreditLedgerDocument>)
+          : null,
+        nowIso,
+      });
+      const activeReservations = filterActiveAssessmentDailyCreditReservations(
+        ledger.pendingReservations,
+        nowMs,
+      );
+      const dailyReservationCount = activeReservations.filter(
+        (entry) => entry.source === "daily",
+      ).length;
+      const extraReservationCount = activeReservations.filter(
+        (entry) => entry.source === "extra",
+      ).length;
 
-      switch (mutation.action) {
-        case "set_access": {
-          if (mutation.access !== "enabled" && mutation.access !== "disabled") {
-            throw new Error("ASSESSMENT_CREDIT_ACCESS_INVALID");
-          }
+      const beforeComputation = buildAssessmentCreditComputation({
+        role: owner.role,
+        dayKey: creditWindow.dayKey,
+        resetsAt: creditWindow.resetsAt,
+        ledger,
+        account,
+        grants,
+        dailyReservationCount,
+        extraReservationCount,
+      });
 
-          transaction.set(
-            accountRef,
-            {
-              ...account,
-              assessmentAccess: mutation.access,
-              updatedAt: nowIso,
-            } satisfies AssessmentCreditAccountRecord,
-            { merge: true },
-          );
-          return;
-        }
+      const mutationResult = applyAssessmentCreditMutationToState({
+        ownerUid: input.ownerUid,
+        admin: input.admin,
+        mutation: input.mutation,
+        account,
+        grants,
+        nowIso,
+        nowMs,
+        mutationReason,
+        mutationNote,
+      });
 
-        case "set_daily_override": {
-          const override = normalizeAssessmentDailyLimitOverride(
-            mutation.dailyLimitOverride,
-          );
-          if (!override) {
-            throw new Error("ASSESSMENT_DAILY_OVERRIDE_INVALID");
-          }
-
-          transaction.set(
-            accountRef,
-            {
-              ...account,
-              dailyLimitOverride: override,
-              updatedAt: nowIso,
-            } satisfies AssessmentCreditAccountRecord,
-            { merge: true },
-          );
-          return;
-        }
-
-        case "clear_daily_override": {
-          transaction.set(
-            accountRef,
-            {
-              ...account,
-              dailyLimitOverride: null,
-              updatedAt: nowIso,
-            } satisfies AssessmentCreditAccountRecord,
-            { merge: true },
-          );
-          return;
-        }
-
-        case "add_manual_credits": {
-          const amount = parseMutationPositiveAmount(mutation.amount);
-          if (!amount) {
-            throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
-          }
-
-          transaction.set(
-            accountRef,
-            {
-              ...account,
-              manualCredits: clampManualCredits(account.manualCredits + amount),
-              updatedAt: nowIso,
-            } satisfies AssessmentCreditAccountRecord,
-            { merge: true },
-          );
-          return;
-        }
-
-        case "subtract_manual_credits": {
-          const amount = parseMutationPositiveAmount(mutation.amount);
-          if (!amount) {
-            throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
-          }
-
-          transaction.set(
-            accountRef,
-            {
-              ...account,
-              manualCredits: clampManualCredits(account.manualCredits - amount),
-              updatedAt: nowIso,
-            } satisfies AssessmentCreditAccountRecord,
-            { merge: true },
-          );
-          return;
-        }
-
-        case "set_manual_credits": {
-          const amount = parseMutationNonNegativeAmount(mutation.amount);
-          if (amount === null) {
-            throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
-          }
-
-          transaction.set(
-            accountRef,
-            {
-              ...account,
-              manualCredits: clampManualCredits(amount),
-              updatedAt: nowIso,
-            } satisfies AssessmentCreditAccountRecord,
-            { merge: true },
-          );
-          return;
-        }
-
-        case "grant_credits": {
-          const amount = parseMutationPositiveAmount(mutation.amount);
-          if (!amount) {
-            throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
-          }
-
-          const expiresAt = parseOptionalIsoTimestamp(mutation.expiresAt ?? null);
-          if (mutation.expiresAt && !expiresAt) {
-            throw new Error("ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID");
-          }
-
-          if (expiresAt && Date.parse(expiresAt) <= Date.now()) {
-            throw new Error("ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID");
-          }
-
-          const grantId = randomUUID();
-          const grantRecord: AssessmentCreditGrantRecord = {
-            id: grantId,
-            ownerUid: input.ownerUid,
-            credits: clampGrantCredits(amount),
-            consumed: 0,
-            status: "active",
-            expiresAt,
-            reason: sanitizeCreditMutationText(mutation.reason),
-            note: sanitizeCreditMutationText(mutation.note, 1000),
-            createdByUid: input.admin.uid,
-            createdByRole: input.admin.role,
-            createdAt: nowIso,
-            updatedAt: nowIso,
-            revokedAt: null,
-            revokedByUid: null,
-            revokeReason: null,
-          };
-
-          transaction.set(
-            getZootopiaDatabase()
-              .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
-              .doc(grantId),
-            grantRecord,
-            { merge: true },
-          );
-          return;
-        }
-
-        case "revoke_grant": {
-          const grantId = String(mutation.grantId || "").trim();
-          if (!grantId) {
-            throw new Error("ASSESSMENT_CREDIT_GRANT_ID_REQUIRED");
-          }
-
-          const grantRef = getZootopiaDatabase()
-            .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
-            .doc(grantId);
-          const grantSnapshot = await transaction.get(grantRef);
-          if (!grantSnapshot.exists) {
-            throw new Error("ASSESSMENT_CREDIT_GRANT_NOT_FOUND");
-          }
-
-          const grant = normalizeAssessmentCreditGrantRecord({
-            ownerUid: input.ownerUid,
-            grantId,
-            record: grantSnapshot.data() as Partial<AssessmentCreditGrantRecord>,
-            nowIso,
-          });
-
-          if (grant.ownerUid !== input.ownerUid) {
-            throw new Error("ASSESSMENT_CREDIT_GRANT_OWNER_MISMATCH");
-          }
-
-          if (grant.status === "revoked") {
-            throw new Error("ASSESSMENT_CREDIT_GRANT_ALREADY_REVOKED");
-          }
-
-          transaction.set(
-            grantRef,
-            {
-              ...grant,
-              status: "revoked",
-              revokedAt: nowIso,
-              revokedByUid: input.admin.uid,
-              revokeReason: sanitizeCreditMutationText(mutation.reason),
-              updatedAt: nowIso,
-            } satisfies AssessmentCreditGrantRecord,
-            { merge: true },
-          );
-          return;
-        }
-
-        default:
-          throw new Error("ASSESSMENT_CREDIT_ACTION_UNSUPPORTED");
+      if (mutationResult.accountChanged) {
+        transaction.set(accountRef, mutationResult.nextAccount, { merge: true });
       }
+
+      for (const grantRecord of mutationResult.upsertGrants) {
+        transaction.set(
+          getZootopiaDatabase()
+            .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
+            .doc(grantRecord.id),
+          grantRecord,
+          { merge: true },
+        );
+      }
+
+      const afterComputation = buildAssessmentCreditComputation({
+        role: owner.role,
+        dayKey: creditWindow.dayKey,
+        resetsAt: creditWindow.resetsAt,
+        ledger,
+        account: mutationResult.nextAccount,
+        grants: mutationResult.nextGrants,
+        dailyReservationCount,
+        extraReservationCount,
+      });
+
+      const historyRecord: AdminAssessmentCreditMutationRecord = {
+        id: historyRecordId,
+        ownerUid: input.ownerUid,
+        action: input.mutation.action,
+        amount: mutationResult.history.amount,
+        access: mutationResult.history.access,
+        dailyLimitOverride: mutationResult.history.dailyLimitOverride,
+        grantId: mutationResult.history.grantId,
+        expiresAt: mutationResult.history.expiresAt,
+        reason: mutationReason,
+        note: mutationNote,
+        adminUid: input.admin.uid,
+        adminRole: input.admin.role,
+        before: buildAssessmentCreditMutationBalanceSnapshot({
+          account,
+          summary: beforeComputation.summary,
+        }),
+        after: buildAssessmentCreditMutationBalanceSnapshot({
+          account: mutationResult.nextAccount,
+          summary: afterComputation.summary,
+        }),
+        createdAt: nowIso,
+      };
+
+      transaction.set(
+        getZootopiaDatabase()
+          .collection(ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION)
+          .doc(historyRecordId),
+        historyRecord,
+        { merge: true },
+      );
     });
   } else {
     const store = getMemoryStore();
@@ -3399,157 +3915,101 @@ export async function applyAdminAssessmentCreditMutation(input: {
       record: store.assessmentCreditAccounts.get(input.ownerUid) ?? null,
       nowIso,
     });
-
-    switch (mutation.action) {
-      case "set_access": {
-        if (mutation.access !== "enabled" && mutation.access !== "disabled") {
-          throw new Error("ASSESSMENT_CREDIT_ACCESS_INVALID");
-        }
-
-        store.assessmentCreditAccounts.set(input.ownerUid, {
-          ...account,
-          assessmentAccess: mutation.access,
-          updatedAt: nowIso,
-        });
-        break;
-      }
-
-      case "set_daily_override": {
-        const override = normalizeAssessmentDailyLimitOverride(
-          mutation.dailyLimitOverride,
-        );
-        if (!override) {
-          throw new Error("ASSESSMENT_DAILY_OVERRIDE_INVALID");
-        }
-
-        store.assessmentCreditAccounts.set(input.ownerUid, {
-          ...account,
-          dailyLimitOverride: override,
-          updatedAt: nowIso,
-        });
-        break;
-      }
-
-      case "clear_daily_override": {
-        store.assessmentCreditAccounts.set(input.ownerUid, {
-          ...account,
-          dailyLimitOverride: null,
-          updatedAt: nowIso,
-        });
-        break;
-      }
-
-      case "add_manual_credits": {
-        const amount = parseMutationPositiveAmount(mutation.amount);
-        if (!amount) {
-          throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
-        }
-
-        store.assessmentCreditAccounts.set(input.ownerUid, {
-          ...account,
-          manualCredits: clampManualCredits(account.manualCredits + amount),
-          updatedAt: nowIso,
-        });
-        break;
-      }
-
-      case "subtract_manual_credits": {
-        const amount = parseMutationPositiveAmount(mutation.amount);
-        if (!amount) {
-          throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
-        }
-
-        store.assessmentCreditAccounts.set(input.ownerUid, {
-          ...account,
-          manualCredits: clampManualCredits(account.manualCredits - amount),
-          updatedAt: nowIso,
-        });
-        break;
-      }
-
-      case "set_manual_credits": {
-        const amount = parseMutationNonNegativeAmount(mutation.amount);
-        if (amount === null) {
-          throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
-        }
-
-        store.assessmentCreditAccounts.set(input.ownerUid, {
-          ...account,
-          manualCredits: clampManualCredits(amount),
-          updatedAt: nowIso,
-        });
-        break;
-      }
-
-      case "grant_credits": {
-        const amount = parseMutationPositiveAmount(mutation.amount);
-        if (!amount) {
-          throw new Error("ASSESSMENT_CREDIT_AMOUNT_INVALID");
-        }
-
-        const expiresAt = parseOptionalIsoTimestamp(mutation.expiresAt ?? null);
-        if (mutation.expiresAt && !expiresAt) {
-          throw new Error("ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID");
-        }
-
-        if (expiresAt && Date.parse(expiresAt) <= Date.now()) {
-          throw new Error("ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID");
-        }
-
-        const grantId = randomUUID();
-        store.assessmentCreditGrants.set(grantId, {
-          id: grantId,
+    const grants = [...store.assessmentCreditGrants.values()]
+      .filter((grant) => grant.ownerUid === input.ownerUid)
+      .map((grant) =>
+        normalizeAssessmentCreditGrantRecord({
           ownerUid: input.ownerUid,
-          credits: clampGrantCredits(amount),
-          consumed: 0,
-          status: "active",
-          expiresAt,
-          reason: sanitizeCreditMutationText(mutation.reason),
-          note: sanitizeCreditMutationText(mutation.note, 1000),
-          createdByUid: input.admin.uid,
-          createdByRole: input.admin.role,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-          revokedAt: null,
-          revokedByUid: null,
-          revokeReason: null,
-        });
-        break;
-      }
+          grantId: grant.id,
+          record: grant,
+          nowIso,
+        }),
+      );
+    const ledger = normalizeAssessmentDailyCreditLedger({
+      ownerUid: input.ownerUid,
+      dayKey: creditWindow.dayKey,
+      record:
+        store.assessmentDailyCredits.get(
+          buildAssessmentDailyCreditDocumentId(input.ownerUid, creditWindow.dayKey),
+        ) ?? null,
+      nowIso,
+    });
+    const activeReservations = filterActiveAssessmentDailyCreditReservations(
+      ledger.pendingReservations,
+      nowMs,
+    );
+    const dailyReservationCount = activeReservations.filter(
+      (entry) => entry.source === "daily",
+    ).length;
+    const extraReservationCount = activeReservations.filter(
+      (entry) => entry.source === "extra",
+    ).length;
 
-      case "revoke_grant": {
-        const grantId = String(mutation.grantId || "").trim();
-        if (!grantId) {
-          throw new Error("ASSESSMENT_CREDIT_GRANT_ID_REQUIRED");
-        }
+    const beforeComputation = buildAssessmentCreditComputation({
+      role: owner.role,
+      dayKey: creditWindow.dayKey,
+      resetsAt: creditWindow.resetsAt,
+      ledger,
+      account,
+      grants,
+      dailyReservationCount,
+      extraReservationCount,
+    });
 
-        const existingGrant = store.assessmentCreditGrants.get(grantId);
-        if (!existingGrant) {
-          throw new Error("ASSESSMENT_CREDIT_GRANT_NOT_FOUND");
-        }
+    const mutationResult = applyAssessmentCreditMutationToState({
+      ownerUid: input.ownerUid,
+      admin: input.admin,
+      mutation: input.mutation,
+      account,
+      grants,
+      nowIso,
+      nowMs,
+      mutationReason,
+      mutationNote,
+    });
 
-        if (existingGrant.ownerUid !== input.ownerUid) {
-          throw new Error("ASSESSMENT_CREDIT_GRANT_OWNER_MISMATCH");
-        }
-
-        if (existingGrant.status === "revoked") {
-          throw new Error("ASSESSMENT_CREDIT_GRANT_ALREADY_REVOKED");
-        }
-
-        store.assessmentCreditGrants.set(grantId, {
-          ...existingGrant,
-          status: "revoked",
-          revokedAt: nowIso,
-          revokedByUid: input.admin.uid,
-          revokeReason: sanitizeCreditMutationText(mutation.reason),
-          updatedAt: nowIso,
-        });
-        break;
-      }
-
-      default:
-        throw new Error("ASSESSMENT_CREDIT_ACTION_UNSUPPORTED");
+    if (mutationResult.accountChanged) {
+      store.assessmentCreditAccounts.set(input.ownerUid, mutationResult.nextAccount);
     }
+
+    for (const grantRecord of mutationResult.upsertGrants) {
+      store.assessmentCreditGrants.set(grantRecord.id, grantRecord);
+    }
+
+    const afterComputation = buildAssessmentCreditComputation({
+      role: owner.role,
+      dayKey: creditWindow.dayKey,
+      resetsAt: creditWindow.resetsAt,
+      ledger,
+      account: mutationResult.nextAccount,
+      grants: mutationResult.nextGrants,
+      dailyReservationCount,
+      extraReservationCount,
+    });
+
+    store.assessmentCreditMutationHistory.set(historyRecordId, {
+      id: historyRecordId,
+      ownerUid: input.ownerUid,
+      action: input.mutation.action,
+      amount: mutationResult.history.amount,
+      access: mutationResult.history.access,
+      dailyLimitOverride: mutationResult.history.dailyLimitOverride,
+      grantId: mutationResult.history.grantId,
+      expiresAt: mutationResult.history.expiresAt,
+      reason: mutationReason,
+      note: mutationNote,
+      adminUid: input.admin.uid,
+      adminRole: input.admin.role,
+      before: buildAssessmentCreditMutationBalanceSnapshot({
+        account,
+        summary: beforeComputation.summary,
+      }),
+      after: buildAssessmentCreditMutationBalanceSnapshot({
+        account: mutationResult.nextAccount,
+        summary: afterComputation.summary,
+      }),
+      createdAt: nowIso,
+    });
   }
 
   const state = await getAdminAssessmentCreditStateForUser(input.ownerUid, {
@@ -4032,8 +4492,14 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
         .collection("assessmentGenerations")
         .doc(normalizedRecord.id)
         .set(omitUndefinedOwnerRole(normalizedRecord), { merge: true });
+      await syncAssessmentArtifactMetadataForGeneration({
+        generation: normalizedRecord,
+      });
     } else {
       getMemoryStore().assessments.set(normalizedRecord.id, normalizedRecord);
+      await syncAssessmentArtifactMetadataForGeneration({
+        generation: normalizedRecord,
+      });
     }
 
     const creditWindow = resolveAssessmentDailyCreditWindow(new Date());
@@ -4203,6 +4669,10 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
 
       transaction.set(generationRef, omitUndefinedOwnerRole(normalizedRecord), {
         merge: true,
+      });
+      await syncAssessmentArtifactMetadataForGeneration({
+        generation: normalizedRecord,
+        transaction,
       });
       transaction.set(creditsRef, nextLedger, { merge: true });
 
@@ -4375,6 +4845,9 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
   };
 
   store.assessments.set(normalizedRecord.id, normalizedRecord);
+  await syncAssessmentArtifactMetadataForGeneration({
+    generation: normalizedRecord,
+  });
   store.assessmentDailyCredits.set(documentId, nextLedger);
   store.assessmentCreditAccounts.set(input.user.uid, {
     ...nextAccount,
@@ -4416,8 +4889,14 @@ export async function saveAssessmentGeneration(record: AssessmentGeneration) {
       .collection("assessmentGenerations")
       .doc(normalizedRecord.id)
       .set(omitUndefinedOwnerRole(normalizedRecord), { merge: true });
+    await syncAssessmentArtifactMetadataForGeneration({
+      generation: normalizedRecord,
+    });
   } else {
     getMemoryStore().assessments.set(normalizedRecord.id, normalizedRecord);
+    await syncAssessmentArtifactMetadataForGeneration({
+      generation: normalizedRecord,
+    });
   }
 
   return normalizedRecord;

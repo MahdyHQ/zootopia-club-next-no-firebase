@@ -3,6 +3,7 @@ import type { AssessmentDailyCreditsSummary } from "@zootopia/shared-types";
 import { BrainCircuit } from "lucide-react";
 
 import { AssessmentStudio } from "@/components/assessment/assessment-studio";   
+import { resolveDefaultModelIdForTool } from "@/lib/server/ai/default-models";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import {
   getActiveDocumentForOwner,
@@ -98,6 +99,7 @@ export default async function AssessmentPage() {
       <AssessmentStudio
         locale={uiContext.locale}
         messages={uiContext.messages}
+        defaultModelId={resolveDefaultModelIdForTool("assessment")}
         models={getModelsForTool("assessment")}
         initialDocuments={documents}
         initialGenerations={generations}

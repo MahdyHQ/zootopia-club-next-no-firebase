@@ -1,5 +1,6 @@
 import "server-only";
 
+import { findModelForTool } from "@zootopia/shared-config";
 import type {
   AssessmentDifficulty,
   AssessmentGeneration,
@@ -24,7 +25,11 @@ import {
   buildAssessmentPrompt,
   buildToolPrompt,
 } from "@/lib/server/ai/prompt-orchestrator";
-import { resolveAssessmentQuestionStructuredData } from "@/lib/assessment-question-display";
+import { resolveDefaultModelForTool } from "@/lib/server/ai/default-models";
+import {
+  buildAssessmentQuestionRenderMetadata,
+  resolveAssessmentQuestionStructuredData,
+} from "@/lib/assessment-question-display";
 import {
   buildAssessmentPromptPreview,
   buildAssessmentSummary,
@@ -235,8 +240,6 @@ function normalizeAssessmentQuestionType(value: unknown): AssessmentQuestionType
     case "true_false":
     case "truefalse":
       return "true_false";
-    case "essay":
-      return "essay";
     case "fill_blanks":
     case "fill_in_the_blanks":
     case "fill_in_blanks":
@@ -244,58 +247,20 @@ function normalizeAssessmentQuestionType(value: unknown): AssessmentQuestionType
     case "short_answer":
     case "shortanswer":
       return "short_answer";
-    case "matching":
-      return "matching";
-    case "multiple_response":
-    case "multiple_responses":
-    case "select_all_that_apply":
-      return "multiple_response";
     case "terminology":
-    case "term":
-    case "term_identification":
       return "terminology";
+    case "scientific_term":
+    case "scientific_terms":
+    case "term_identification":
+    case "identify_term":
+    case "exact_term":
+      return "scientific_term";
     case "definition":
     case "define":
       return "definition";
     case "comparison":
     case "compare":
       return "comparison";
-    case "labeling":
-    case "labelling":
-    case "label":
-    case "naming":
-      return "labeling";
-    case "classification":
-    case "classify":
-    case "categorization":
-    case "categorisation":
-      return "classification";
-    case "sequencing":
-    case "sequence":
-    case "ordering":
-    case "ordered_steps":
-      return "sequencing";
-    case "process_mechanism":
-    case "mechanism":
-    case "process":
-    case "mechanism_explanation":
-      return "process_mechanism";
-    case "cause_effect":
-    case "cause_and_effect":
-    case "causal":
-      return "cause_effect";
-    case "distinguish_between":
-    case "distinguish":
-    case "differentiate":
-      return "distinguish_between";
-    case "identify_structure":
-    case "structure_identification":
-    case "identify_part":
-      return "identify_structure";
-    case "identify_compound":
-    case "compound_identification":
-    case "identify_molecule":
-      return "identify_compound";
     default:
       return undefined;
   }
@@ -509,6 +474,14 @@ function buildAssessmentQuestionCopy(input: {
           rationale:
             "هذا النوع يقيس دقة استرجاع المصطلح العلمي وربطه بالمعنى الصحيح.",
         };
+      case "scientific_term":
+        return {
+          question: `السؤال ${input.index + 1} (مصطلح علمي): ما المصطلح العلمي الدقيق المرتبط مباشرة بـ ${input.topic}؟`,
+          answer:
+            "الإجابة النموذجية: اذكر المصطلح العلمي الدقيق ثم أضف ملاحظة قصيرة تؤكد سبب صحته.",
+          rationale:
+            "هذا النوع يقيس استرجاع المصطلح العلمي بصيغة دقيقة ومباشرة من الدلالة المعطاة.",
+        };
       case "definition":
         return {
           question: `السؤال ${input.index + 1} (تعريف): عرّف ${input.topic} تعريفاً علمياً دقيقاً ومباشراً.`,
@@ -650,6 +623,14 @@ function buildAssessmentQuestionCopy(input: {
         rationale:
           "This item checks precision in term recall and concept naming.",
       };
+    case "scientific_term":
+      return {
+        question: `Question ${input.index + 1} (Scientific term): Identify the exact scientific term directly associated with ${input.topic}.`,
+        answer:
+          "Model answer: provide the exact scientific term and one short confirmation note.",
+        rationale:
+          "This item checks whether the learner can retrieve the precise scientific term from the clue.",
+      };
     case "definition":
       return {
         question: `Question ${input.index + 1} (Definition): Define ${input.topic} in a precise scientific sentence.`,
@@ -783,6 +764,13 @@ function buildFallbackAssessmentQuestions(input: {
       answerText: copy.answer,
       rationaleText: copy.rationale,
     });
+    const rendering = buildAssessmentQuestionRenderMetadata({
+      questionType: type,
+      structuredData,
+      questionText: copy.question,
+      answerText: copy.answer,
+      rationaleText: copy.rationale,
+    });
 
     return {
       id: `q-${index + 1}`,
@@ -793,6 +781,7 @@ function buildFallbackAssessmentQuestions(input: {
       rationale: copy.rationale,
       tags: buildAssessmentTagList(topic, input.language),
       structuredData,
+      rendering,
     };
   });
 }
@@ -943,6 +932,13 @@ function normalizeProviderQuestion(input: {
         answerText: input.fallback.answer,
         rationaleText: input.fallback.rationale,
       }),
+      rendering: buildAssessmentQuestionRenderMetadata({
+        questionType: input.fallback.type,
+        structuredData: input.fallback.structuredData,
+        questionText: normalizedQuestion,
+        answerText: input.fallback.answer,
+        rationaleText: input.fallback.rationale,
+      }),
     } satisfies AssessmentQuestion;
   }
 
@@ -964,6 +960,13 @@ function normalizeProviderQuestion(input: {
     answerText: normalizedAnswer,
     rationaleText: normalizedRationale,
   });
+  const rendering = buildAssessmentQuestionRenderMetadata({
+    questionType: resolvedType,
+    structuredData,
+    questionText: normalizedQuestion,
+    answerText: normalizedAnswer,
+    rationaleText: normalizedRationale,
+  });
 
   return {
     id: `q-${input.index + 1}`,
@@ -979,6 +982,7 @@ function normalizeProviderQuestion(input: {
     rationale: normalizedRationale,
     tags: normalizeProviderTags(input.question.tags, input.language),
     structuredData,
+    rendering,
   } satisfies AssessmentQuestion;
 }
 
@@ -1217,6 +1221,25 @@ function buildProviderExecutionError(input: {
       code: "ASSESSMENT_PROVIDER_AUTH_FAILED",
       message: `The selected ${input.providerLabel} model runtime is not authorized to execute this request.`,
       status: 503,
+      context: providerHttpContext,
+    });
+  }
+
+  /* DashScope can reject Qwen requests with `arrearage` when provider billing/quota is
+     exhausted. Classify this as a capacity limit (not a transport execution failure) so
+     callers receive a stable retry/exhaustion signal instead of a generic 502. */
+  if (
+    code.includes("arrearage") ||
+    type.includes("arrearage") ||
+    message.includes("arrearage") ||
+    message.includes("insufficient balance") ||
+    message.includes("insufficient funds") ||
+    message.includes("billing")
+  ) {
+    return createAssessmentExecutionError({
+      code: "ASSESSMENT_PROVIDER_RATE_LIMITED",
+      message: `The selected ${input.providerLabel} model runtime does not have enough provider quota right now.`,
+      status: 429,
       context: providerHttpContext,
     });
   }
@@ -1886,7 +1909,12 @@ export async function generateInfographic(input: {
   documentContext?: string | null;
   sourceDocument?: InfographicGenerationSourceDocument | null;
 }): Promise<InfographicGeneration> {
-  const model = getModelById(input.request.modelId);
+  /* Infographic generation must stay bound to infographic-scoped model defaults. This guard
+     prevents unsupported request values from ever falling back to the generic assessment
+     default path if a caller bypasses the route-level validator in the future. */
+  const model =
+    findModelForTool("infographic", input.request.modelId)
+    ?? resolveDefaultModelForTool("infographic");
   const prompt = buildToolPrompt({
     tool: "infographic",
     userPrompt: input.request.topic,

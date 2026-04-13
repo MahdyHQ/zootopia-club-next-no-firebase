@@ -16,6 +16,7 @@ import { DocumentContextCard } from "@/components/document/document-context-card
 
 type InfographicStudioProps = {
   messages: AppMessages;
+  defaultModelId: string;
   models: AiModelDescriptor[];
   initialDocuments: DocumentRecord[];
   initialGenerations: InfographicGeneration[];
@@ -23,6 +24,7 @@ type InfographicStudioProps = {
 
 export function InfographicStudio({
   messages,
+  defaultModelId,
   models,
   initialDocuments,
   initialGenerations,
@@ -31,7 +33,7 @@ export function InfographicStudio({
   const [request, setRequest] = useState<InfographicRequest>({
     topic: "",
     style: "balanced",
-    modelId: models[0]?.id ?? "google-balanced",
+    modelId: defaultModelId,
   });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

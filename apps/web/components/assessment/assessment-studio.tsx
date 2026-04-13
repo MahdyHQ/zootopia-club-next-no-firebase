@@ -2,8 +2,8 @@
 
 import { APP_ROUTES } from "@zootopia/shared-config";
 import {
+  ASSESSMENT_ACTIVE_QUESTION_TYPES,
   ASSESSMENT_MODES,
-  ASSESSMENT_QUESTION_TYPES,
   type AiModelDescriptor,
   type ApiFailure,
   type ApiResult,
@@ -45,6 +45,7 @@ import { DocumentContextCard } from "@/components/document/document-context-card
 type AssessmentStudioProps = {
   locale: Locale;
   messages: AppMessages;
+  defaultModelId: string;
   models: AiModelDescriptor[];
   initialDocuments: DocumentRecord[];
   initialGenerations: AssessmentGeneration[];
@@ -54,7 +55,8 @@ type AssessmentStudioProps = {
 
 const QUESTION_COUNT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 const ASSESSMENT_MODE_OPTIONS = [...ASSESSMENT_MODES];
-const QUESTION_TYPE_OPTIONS = [...ASSESSMENT_QUESTION_TYPES];
+const QUESTION_TYPE_OPTIONS = [...ASSESSMENT_ACTIVE_QUESTION_TYPES];
+const ACTIVE_QUESTION_TYPE_SET = new Set<AssessmentQuestionType>(QUESTION_TYPE_OPTIONS);
 const RETENTION_NOTICE_AUTO_DISMISS_MS = 60_000;
 
 type AssessmentModelTone = "accent" | "gold" | "muted";
@@ -74,6 +76,89 @@ function buildBalancedQuestionTypeDistribution(
       percentage,
     };
   });
+}
+
+function sanitizeAssessmentQuestionTypes(
+  questionTypes: AssessmentQuestionType[],
+): AssessmentQuestionType[] {
+  const normalized = questionTypes.filter((type, index, types) => {
+    if (!ACTIVE_QUESTION_TYPE_SET.has(type)) {
+      return false;
+    }
+
+    return types.indexOf(type) === index;
+  });
+
+  return normalized.length > 0 ? normalized : (["mcq"] as AssessmentQuestionType[]);
+}
+
+function sanitizeAssessmentQuestionTypeDistribution(
+  distribution: AssessmentQuestionTypeDistribution[],
+  questionTypes: AssessmentQuestionType[],
+) {
+  if (!Array.isArray(distribution) || distribution.length === 0) {
+    return buildBalancedQuestionTypeDistribution(questionTypes);
+  }
+
+  const normalized = questionTypes.map((type) => {
+    const entry = distribution.find((item) => item.type === type);
+    return {
+      type,
+      percentage:
+        typeof entry?.percentage === "number" && Number.isFinite(entry.percentage)
+          ? Math.trunc(entry.percentage)
+          : NaN,
+    } satisfies AssessmentQuestionTypeDistribution;
+  });
+  const hasInvalidPercentages = normalized.some(
+    (entry) =>
+      !Number.isInteger(entry.percentage) ||
+      entry.percentage < 0 ||
+      entry.percentage > 100,
+  );
+  const total = normalized.reduce((sum, entry) => sum + entry.percentage, 0);
+
+  return hasInvalidPercentages || total !== 100
+    ? buildBalancedQuestionTypeDistribution(questionTypes)
+    : normalized;
+}
+
+/* Assessment Studio only exposes the temporary active type catalog above, but stale client
+   state can still survive hot reloads or future local persistence. Keep this sanitizer on the
+   client boundary so removed types never leak back into the request payload invisibly. */
+function sanitizeAssessmentRequestQuestionTypes(request: AssessmentRequest): AssessmentRequest {
+  const questionTypes = sanitizeAssessmentQuestionTypes(request.options.questionTypes);
+  const questionTypeDistribution = sanitizeAssessmentQuestionTypeDistribution(
+    request.options.questionTypeDistribution,
+    questionTypes,
+  );
+
+  return {
+    ...request,
+    options: {
+      ...request.options,
+      questionTypes,
+      questionTypeDistribution,
+    },
+  };
+}
+
+function hasSameQuestionTypeSelection(left: AssessmentRequest, right: AssessmentRequest) {
+  const leftTypes = left.options.questionTypes;
+  const rightTypes = right.options.questionTypes;
+  const leftDistribution = left.options.questionTypeDistribution;
+  const rightDistribution = right.options.questionTypeDistribution;
+
+  return (
+    leftTypes.length === rightTypes.length &&
+    leftTypes.every((type, index) => type === rightTypes[index]) &&
+    leftDistribution.length === rightDistribution.length &&
+    leftDistribution.every(
+      (entry, index) =>
+        entry.type === rightDistribution[index]?.type &&
+        entry.percentage === rightDistribution[index]?.percentage,
+    )
+  );
 }
 
 function buildQuestionTypeCountMap(
@@ -116,13 +201,13 @@ function buildQuestionTypeCountMap(
 
 function createInitialRequest(
   locale: Locale,
-  models: AiModelDescriptor[],
+  defaultModelId: string,
   initialDocumentId: string | null,
 ): AssessmentRequest {
   const questionTypes: AssessmentQuestionType[] = ["mcq"];
   return {
     prompt: "",
-    modelId: models[0]?.id ?? "qwen3.5-flash",
+    modelId: defaultModelId,
     documentId: initialDocumentId ?? undefined,
     options: {
       mode: "question_generation",
@@ -171,6 +256,8 @@ function getQuestionTypeLabel(value: AssessmentQuestionType, messages: AppMessag
   switch (value) {
     case "true_false":
       return messages.assessmentTypeTrueFalse;
+    case "scientific_term":
+      return messages.assessmentTypeScientificTerm;
     case "essay":
       return messages.assessmentTypeEssay;
     case "fill_blanks":
@@ -330,6 +417,7 @@ function isAssessmentDailyCreditsExhausted(credits: AssessmentDailyCreditsSummar
 export function AssessmentStudio({
   locale,
   messages,
+  defaultModelId,
   models,
   initialDocuments,
   initialGenerations,
@@ -339,7 +427,7 @@ export function AssessmentStudio({
   const [generations, setGenerations] = useState(initialGenerations);
   const [creditSummary, setCreditSummary] = useState(initialCreditSummary);
   const [request, setRequest] = useState<AssessmentRequest>(() =>
-    createInitialRequest(locale, models, initialActiveDocumentId),
+    createInitialRequest(locale, defaultModelId, initialActiveDocumentId),
   );
   const [pending, setPending] = useState(false);
   const [readbackId, setReadbackId] = useState<string | null>(null);
@@ -358,6 +446,13 @@ export function AssessmentStudio({
   useEffect(() => {
     setCreditSummary(initialCreditSummary);
   }, [initialCreditSummary]);
+
+  useEffect(() => {
+    setRequest((current) => {
+      const sanitized = sanitizeAssessmentRequestQuestionTypes(current);
+      return hasSameQuestionTypeSelection(current, sanitized) ? current : sanitized;
+    });
+  }, []);
 
   useEffect(() => {
     if (!initialActiveDocumentId) {
@@ -563,6 +658,11 @@ export function AssessmentStudio({
     setShowRetentionNotice(false);
     setLastCreatedGeneration(null);
     setFieldErrors({});
+    const requestForSubmit = sanitizeAssessmentRequestQuestionTypes(request);
+
+    if (!hasSameQuestionTypeSelection(request, requestForSubmit)) {
+      setRequest(requestForSubmit);
+    }
 
     // This is only a user-friendly local stop. The real exhausted-limit enforcement lives on the
     // server route so duplicate tabs, retried requests, and direct API calls stay constrained.
@@ -578,14 +678,14 @@ export function AssessmentStudio({
       return;
     }
 
-    if (request.options.questionTypes.length === 0) {
+    if (requestForSubmit.options.questionTypes.length === 0) {
       setFieldErrors({ questionTypes: messages.assessmentQuestionTypesRequired });
       setPending(false);
       return;
     }
 
     if (
-      request.options.questionTypeDistribution.reduce(
+      requestForSubmit.options.questionTypeDistribution.reduce(
         (total, entry) => total + entry.percentage,
         0,
       ) !== 100
@@ -599,7 +699,7 @@ export function AssessmentStudio({
 
     // The prompt now acts as an optional steering note. We still block empty-content submissions
     // so Assessment always has either user intent text or a linked server-owned document to work from.
-    if (!request.prompt.trim() && !request.documentId) {
+    if (!requestForSubmit.prompt.trim() && !requestForSubmit.documentId) {
       setFieldErrors({
         prompt: messages.assessmentPromptOrDocumentRequired,
         documentId: messages.assessmentPromptOrDocumentRequired,
@@ -612,7 +712,7 @@ export function AssessmentStudio({
       const response = await fetch("/api/assessment", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(request),
+        body: JSON.stringify(requestForSubmit),
       });
       const payload = (await response.json()) as ApiResult<AssessmentCreateResponse>;
 
@@ -626,11 +726,24 @@ export function AssessmentStudio({
             current.applies
               ? {
                   ...current,
+                  dailyRemainingCount: 0,
+                  extraCreditsAvailable: 0,
+                  totalRemainingCount: 0,
                   remainingCount: 0,
                   usedCount: current.dailyLimit,
                 }
               : current,
           );
+          dispatchAssessmentCreditRefresh();
+        }
+
+        if (
+          !payload.ok
+          && (
+            payload.error.code === "ASSESSMENT_ACCESS_DISABLED"
+            || payload.error.code === "ASSESSMENT_FINALIZATION_FAILED"
+          )
+        ) {
           dispatchAssessmentCreditRefresh();
         }
 
@@ -660,17 +773,48 @@ export function AssessmentStudio({
       <div className="grid gap-6">
         <section className="assessment-premium-panel relative isolate overflow-visible rounded-[2rem] p-5 shadow-sm sm:p-6 lg:p-8">
           <div className="relative z-10 space-y-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] dark:text-emerald-200">
-                <BrainCircuit className="h-5 w-5" />
+            {/* Keep model control isolated in the setup header so desktop/tablet layouts stay
+                compact while small screens can stack naturally without squeezing the title lane. */}
+            <div className="assessment-setup-top-row">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] dark:text-emerald-200">
+                  <BrainCircuit className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <p className="section-label text-emerald-700 dark:text-emerald-200">
+                    {messages.assessmentTitle}
+                  </p>
+                  <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-foreground">
+                    {messages.assessmentConfigTitle}
+                  </h2>
+                </div>
               </div>
-              <div className="min-w-0 space-y-1">
-                <p className="section-label text-emerald-700 dark:text-emerald-200">
-                  {messages.assessmentTitle}
-                </p>
-                <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-foreground">
-                  {messages.assessmentConfigTitle}
-                </h2>
+
+              <div className="assessment-model-control">
+                <AssessmentFieldSelect
+                  id="assessment-model"
+                  label={messages.modelLabel}
+                  value={request.modelId}
+                  options={modelOptions}
+                  icon={Sparkles}
+                  error={fieldErrors.modelId}
+                  onChange={(nextValue) => {
+                    setFieldErrors((current) => ({ ...current, modelId: "" }));
+                    setRequest((current) => ({ ...current, modelId: nextValue }));
+                  }}
+                />
+                {selectedModel ? (
+                  <div className="assessment-model-control__meta">
+                    {getAssessmentModelMeta(selectedModel.id, messages).map((chip) => (
+                      <span
+                        key={`${selectedModel.id}-${chip.label}`}
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getModelChipClasses(chip.tone)}`}
+                      >
+                        {chip.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -756,7 +900,7 @@ export function AssessmentStudio({
                 ) : null}
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <AssessmentFieldSelect
                   id="assessment-count"
                   label={messages.assessmentQuestionCount}
@@ -813,32 +957,7 @@ export function AssessmentStudio({
                     }));
                   }}
                 />
-
-                <AssessmentFieldSelect
-                  id="assessment-model"
-                  label={messages.modelLabel}
-                  value={request.modelId}
-                  options={modelOptions}
-                  icon={Sparkles}
-                  error={fieldErrors.modelId}
-                  onChange={(nextValue) => {
-                    setFieldErrors((current) => ({ ...current, modelId: "" }));
-                    setRequest((current) => ({ ...current, modelId: nextValue }));
-                  }}
-                />
               </div>
-              {selectedModel ? (
-                <div className="-mt-1 flex flex-wrap gap-2">
-                  {getAssessmentModelMeta(selectedModel.id, messages).map((chip) => (
-                    <span
-                      key={`${selectedModel.id}-${chip.label}`}
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getModelChipClasses(chip.tone)}`}
-                    >
-                      {chip.label}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
 
               <div className="rounded-[1.5rem] border border-white/10 bg-black/[0.02] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] dark:bg-white/[0.02]">
                 <div className="flex flex-wrap items-center justify-between gap-3">

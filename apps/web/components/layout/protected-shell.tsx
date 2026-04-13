@@ -4,6 +4,7 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 import type { CSSProperties } from "react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Menu, Search, Bell, Sparkles, CheckCircle2, ChevronLeft, ChevronRight, ArrowUp, HandCoins, WalletCards } from "lucide-react";
 import type {
   ApiResult,
@@ -13,6 +14,10 @@ import type {
   ThemeMode,
 } from "@zootopia/shared-types";
 import { ASSESSMENT_CREDIT_REFRESH_EVENT } from "@/lib/assessment-credit-events";
+import {
+  resolveAvatarFallbackInitial,
+  resolveRoleGenderAvatarSrc,
+} from "@/lib/avatar";
 import type { AppMessages } from "@/lib/messages";
 import { getSiteContent } from "@/lib/site-content";
 import { ProtectedSignatureSeal } from "./protected-signature-seal";
@@ -33,6 +38,7 @@ export function ProtectedShell({
   locale,
   themeMode,
 }: ProtectedShellProps) {
+  const CREDIT_SUMMARY_REFRESH_INTERVAL_MS = 60_000;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -40,6 +46,8 @@ export function ProtectedShell({
     useState<AssessmentDailyCreditsSummary | null>(null);
   const mainScrollRef = useRef<HTMLElement | null>(null);
   const siteContent = getSiteContent(locale);
+  const headerAvatarSrc = resolveRoleGenderAvatarSrc(user);
+  const headerAvatarInitial = resolveAvatarFallbackInitial(user);
 
   const handleMobileOverlayClick = () => setIsSidebarOpen(false);
   const isRtl = locale === 'ar';
@@ -103,14 +111,31 @@ export function ProtectedShell({
       void refreshCreditSummary();
     };
 
+    /* Credit state can change outside this tab (admin mutation or another session). Keep
+       header balance fresh on route focus/visibility and a light interval without polling hard. */
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCreditSummary();
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refreshCreditSummary();
+    }, CREDIT_SUMMARY_REFRESH_INTERVAL_MS);
+
     void refreshCreditSummary();
     window.addEventListener(ASSESSMENT_CREDIT_REFRESH_EVENT, handleRefreshCredits);
+    window.addEventListener("focus", handleRefreshCredits);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener(
         ASSESSMENT_CREDIT_REFRESH_EVENT,
         handleRefreshCredits,
       );
+      window.removeEventListener("focus", handleRefreshCredits);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -227,8 +252,22 @@ export function ProtectedShell({
              <div className="mx-1 hidden h-8 w-px bg-border/80 sm:block" />
              
              <div className="flex max-w-[120px] cursor-pointer items-center gap-3 rounded-2xl border border-border/60 bg-background/55 px-2 py-1.5 shadow-sm transition-colors hover:bg-background/70 sm:max-w-[200px] sm:px-3">
-                <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-black text-xs uppercase shadow-sm">
-                  {user.displayName?.[0] || user.email?.[0] || "U"}
+                <span className="relative flex h-7 w-7 shrink-0 overflow-hidden rounded-full border border-emerald-500/30 bg-emerald-500/20 shadow-sm">
+                  {headerAvatarSrc ? (
+                    <Image
+                      src={headerAvatarSrc}
+                      alt=""
+                      aria-hidden="true"
+                      width={28}
+                      height={28}
+                      sizes="28px"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-xs font-black uppercase text-emerald-400">
+                      {headerAvatarInitial}
+                    </span>
+                  )}
                   <span className="absolute -bottom-0.5 -right-0.5 rounded-full border border-background-strong bg-background p-[1px]">
                     <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
                   </span>

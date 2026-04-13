@@ -4,6 +4,7 @@ import type {
   AssessmentCreditGrantAdminView,
   AssessmentDailyCreditsSummary,
 } from "./assessment";
+import type { UserRole } from "./auth";
 import type { UserDocument } from "./user";
 
 export interface AdminOverview {
@@ -53,6 +54,36 @@ export interface AdminAssessmentCreditState {
   account: AssessmentCreditAccountRecord;
   credits: AssessmentDailyCreditsSummary;
   grants: AssessmentCreditGrantAdminView[];
+  history: AdminAssessmentCreditMutationRecord[];
+}
+
+export interface AdminAssessmentCreditMutationBalanceSnapshot {
+  assessmentAccess: AssessmentCreditAccountAccess;
+  dailyLimitOverride: number | null;
+  manualCredits: number;
+  dailyLimit: number;
+  usedCount: number;
+  remainingCount: number | null;
+  grantCreditsAvailable: number;
+  activeGrantCount: number;
+}
+
+export interface AdminAssessmentCreditMutationRecord {
+  id: string;
+  ownerUid: string;
+  action: AdminAssessmentCreditMutationAction;
+  amount: number | null;
+  access: AssessmentCreditAccountAccess | null;
+  dailyLimitOverride: number | null;
+  grantId: string | null;
+  expiresAt: string | null;
+  reason: string | null;
+  note: string | null;
+  adminUid: string;
+  adminRole: UserRole;
+  before: AdminAssessmentCreditMutationBalanceSnapshot;
+  after: AdminAssessmentCreditMutationBalanceSnapshot;
+  createdAt: string;
 }
 
 export interface AdminUserAssessmentCreditsResponse {
@@ -70,10 +101,12 @@ export interface AdminUserDeletionStorageSummary {
 export interface AdminUserDeletionDatabaseSummary {
   deletedDocuments: number;
   deletedAssessmentGenerations: number;
+  deletedAssessmentArtifactMetadata: number;
   deletedInfographicGenerations: number;
   deletedCreditAccounts: number;
   deletedCreditGrants: number;
   deletedDailyCredits: number;
+  deletedCreditMutationHistory: number;
   deletedIdempotencyKeys: number;
   deletedLegacyUserRecords: number;
 }

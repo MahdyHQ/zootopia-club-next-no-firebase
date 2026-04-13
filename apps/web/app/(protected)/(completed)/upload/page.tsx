@@ -7,6 +7,9 @@ import { getRequestUiContext } from "@/lib/server/request-context";
 import { listDocumentsForUser } from "@/lib/server/repository";
 import { requireCompletedUser } from "@/lib/server/session";
 
+const uploadQuickActionCardClassName =
+  "group relative overflow-hidden rounded-3xl border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.58),rgba(255,248,242,0.26))] p-6 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.84),0_24px_54px_rgba(148,163,184,0.14)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-white/70 hover:bg-[linear-gradient(145deg,rgba(255,255,255,0.68),rgba(247,250,252,0.34))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_28px_64px_rgba(148,163,184,0.18)] dark:border-white/10 dark:bg-[linear-gradient(145deg,rgba(6,18,31,0.46),rgba(2,10,20,0.22))] dark:text-white dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_44px_rgba(2,6,23,0.2)] dark:hover:border-white/16 dark:hover:bg-[linear-gradient(145deg,rgba(8,24,39,0.56),rgba(3,12,22,0.26))] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_24px_56px_rgba(2,6,23,0.28)]";
+
 export default async function UploadPage() {
   const [user, uiContext] = await Promise.all([
     requireCompletedUser(APP_ROUTES.upload),
@@ -28,26 +31,25 @@ export default async function UploadPage() {
   const canAccessInfographic = user.role === "admin";
 
   return (
-    <div className="space-y-12 pb-8 min-w-0">
+    <div className="min-w-0 space-y-12 pb-8">
       {documentsDataDegraded ? (
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-200">
           Recent documents are temporarily unavailable. Upload actions are still available.
         </div>
       ) : null}
 
-      {/* 1. Hero Upload Section - Dark Premium Glow Design */}
-      <section className="relative flex flex-col items-center justify-center min-h-[65vh] w-full rounded-[2.5rem] bg-background-elevated/40 border border-white/5 backdrop-blur-2xl shadow-2xl overflow-hidden p-6 sm:p-12 lg:p-20 min-w-0">
-        <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 50% 0%, #1e4d50 0%, transparent 60%)' }} />
-        <div className="absolute inset-0 mix-blend-overlay opacity-10 pointer-events-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%239C92AC\" fill-opacity=\"0.15\"%3E%3Cpath d=\"M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
-        
-        <div className="relative z-10 w-full min-w-0 flex flex-col items-center text-center">
-          <div className="flex items-center gap-2 mb-10 opacity-80">
-            <UploadCloud className="h-5 w-5 text-emerald-400" />
-            <h2 className="text-sm font-bold uppercase tracking-[0.25em] text-zinc-300">
-              {uiContext.messages.navUpload?.toUpperCase() || 'UPLOAD RESEARCH DATA'}
+      <section className="relative flex min-w-0 min-h-[65vh] w-full flex-col items-center justify-center overflow-hidden p-4 sm:p-8 lg:p-14">
+
+        <div className="relative z-10 flex w-full min-w-0 flex-col items-center text-center">
+          <div className="mb-8 flex items-center gap-2 rounded-full border border-white/60 bg-white/45 px-4 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_12px_28px_rgba(148,163,184,0.12)] backdrop-blur-xl sm:mb-10 dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <UploadCloud className="h-5 w-5 text-accent-strong dark:text-emerald-400" />
+            <h2 className="text-sm font-bold uppercase tracking-[0.25em] text-foreground/80 dark:text-zinc-200">
+              {uiContext.messages.navUpload?.toUpperCase() || "UPLOAD RESEARCH DATA"}
             </h2>
           </div>
 
+          {/* UploadWorkspace owns the single translucent intake shell for this route.
+              Keep the page wrapper neutral so layered ghost slabs do not reappear behind Document intake. */}
           <div className="w-full min-w-0 max-w-[100vw] overflow-x-hidden">
             <UploadWorkspace
               messages={uiContext.messages}
@@ -60,57 +62,68 @@ export default async function UploadPage() {
 
       {/* 2. Secondary Metrics & Quick Links (Demoted) */}
       <section className="relative px-2">
-
-        <div className="flex items-center gap-3 mb-6">
-          <Zap className="h-6 w-6 text-zinc-400" />
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-white">
+        <div className="mb-6 flex items-center gap-3">
+          <Zap className="h-6 w-6 text-foreground-muted dark:text-zinc-300/80" />
+          <h2 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-foreground dark:text-white">
             {uiContext.messages.uploadPageQuickActionsTitle}
           </h2>
         </div>
-        
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
-          <Link href={APP_ROUTES.assessment} className="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/5 backdrop-blur-sm p-6 transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-violet-500/10 hover:border-violet-500/30">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Link
+            href={APP_ROUTES.assessment}
+            className={`${uploadQuickActionCardClassName} hover:border-violet-400/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_24px_56px_rgba(76,29,149,0.18)]`}
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(167,139,250,0.16),transparent_38%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
             <div className="absolute top-0 right-0 p-6 opacity-0 translate-x-4 transition-all group-hover:opacity-100 group-hover:translate-x-0">
-              <ArrowRight className="h-5 w-5 text-violet-400" />
+              <ArrowRight className="h-5 w-5 text-violet-600 dark:text-violet-400" />
             </div>
-            <BrainCircuit className="h-8 w-8 text-violet-400 mb-4" />
-            <h3 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-white group-hover:text-violet-400 transition-colors truncate">
+            <BrainCircuit className="mb-4 h-8 w-8 text-violet-600 dark:text-violet-400" />
+            <h3 className="truncate font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-foreground transition-colors group-hover:text-violet-600 dark:text-white dark:group-hover:text-violet-400">
               {uiContext.messages.assessmentTitle}
             </h3>
           </Link>
 
           {canAccessInfographic ? (
-            <Link href={APP_ROUTES.infographic} className="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/5 backdrop-blur-sm p-6 transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-amber-500/10 hover:border-amber-500/30">
+            <Link
+              href={APP_ROUTES.infographic}
+              className={`${uploadQuickActionCardClassName} hover:border-amber-300/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_24px_56px_rgba(180,83,9,0.16)]`}
+            >
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.14),transparent_38%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
               <div className="absolute top-0 right-0 p-6 opacity-0 translate-x-4 transition-all group-hover:opacity-100 group-hover:translate-x-0">
-                <ArrowRight className="h-5 w-5 text-amber-400" />
+                <ArrowRight className="h-5 w-5 text-amber-500 dark:text-amber-400" />
               </div>
-              <PieChart className="h-8 w-8 text-amber-400 mb-4" />
-              <h3 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-white group-hover:text-amber-400 transition-colors truncate">
+              <PieChart className="mb-4 h-8 w-8 text-amber-500 dark:text-amber-400" />
+              <h3 className="truncate font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-foreground transition-colors group-hover:text-amber-600 dark:text-white dark:group-hover:text-amber-300">
                 {uiContext.messages.infographicTitle}
               </h3>
             </Link>
           ) : (
-            <article className="relative overflow-hidden rounded-3xl border border-amber-500/10 bg-white/[0.04] p-6 backdrop-blur-sm">
-              <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">
+            <article className={uploadQuickActionCardClassName}>
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.12),transparent_38%)] opacity-90" />
+              <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
                 {uiContext.messages.comingSoonLabel}
               </span>
-              <PieChart className="mt-4 h-8 w-8 text-amber-400/90 mb-4" />
-              <h3 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-white truncate">
+              <PieChart className="mb-4 mt-4 h-8 w-8 text-amber-500/90 dark:text-amber-400/90" />
+              <h3 className="truncate font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-foreground dark:text-white">
                 {uiContext.messages.infographicTitle}
               </h3>
-              <p className="mt-3 text-sm leading-6 text-zinc-300">
+              <p className="mt-3 text-sm leading-6 text-foreground-muted dark:text-zinc-300">
                 {uiContext.messages.infographicLockedBody}
               </p>
             </article>
           )}
 
-          <Link href={APP_ROUTES.home} className="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/5 backdrop-blur-sm p-6 transition-all hover:bg-white/10 hover:shadow-lg hover:shadow-emerald-500/10 hover:border-emerald-500/30">
+          <Link
+            href={APP_ROUTES.home}
+            className={`${uploadQuickActionCardClassName} hover:border-emerald-400/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_24px_56px_rgba(5,150,105,0.16)]`}
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.16),transparent_38%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
             <div className="absolute top-0 right-0 p-6 opacity-0 translate-x-4 transition-all group-hover:opacity-100 group-hover:translate-x-0">
-              <ArrowRight className="h-5 w-5 text-emerald-400" />
+              <ArrowRight className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <FileText className="h-8 w-8 text-zinc-400 group-hover:text-emerald-400 mb-4 transition-colors" />
-            <h3 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-white group-hover:text-emerald-400 transition-colors truncate">
+            <FileText className="mb-4 h-8 w-8 text-foreground-muted transition-colors group-hover:text-emerald-600 dark:text-zinc-400 dark:group-hover:text-emerald-400" />
+            <h3 className="truncate font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-foreground transition-colors group-hover:text-emerald-600 dark:text-white dark:group-hover:text-emerald-300">
               {uiContext.messages.homeTitle}
             </h3>
           </Link>

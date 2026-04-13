@@ -1,4 +1,7 @@
 import type {
+  AssessmentQuestionBlankSlot,
+  AssessmentQuestionRenderBlockKind,
+  AssessmentQuestionRenderMetadata,
   AssessmentQuestionStructuredData,
   AssessmentQuestionStructuredPair,
   AssessmentQuestionType,
@@ -54,11 +57,7 @@ export interface AssessmentMatchingPair {
   right: string;
 }
 
-export type AssessmentScienceRenderBlockKind =
-  | "value"
-  | "pair"
-  | "list"
-  | "pair-list";
+export type AssessmentScienceRenderBlockKind = AssessmentQuestionRenderBlockKind;
 
 export interface AssessmentScienceRenderBlock {
   key: string;
@@ -1022,6 +1021,7 @@ function deriveAssessmentQuestionStructuredData(input: {
   const rationaleText = normalizeStructuredString(input.rationaleText);
 
   switch (input.questionType) {
+    case "scientific_term":
     case "terminology":
       return buildStructuredDataFromSource({
         expectedTerm: extractFirstMeaningfulSegment(answerText),
@@ -1139,6 +1139,46 @@ export function resolveAssessmentQuestionStructuredData(input: {
   return mergeStructuredData(normalizedStructured, derivedStructured);
 }
 
+function buildBlankSlots(blankCount: number): AssessmentQuestionBlankSlot[] | undefined {
+  if (blankCount <= 0) {
+    return undefined;
+  }
+
+  return Array.from({ length: blankCount }, (_, index) => ({
+    index: index + 1,
+  }));
+}
+
+function resolveExpectedResponsesForMetadata(input: {
+  questionType: AssessmentQuestionType;
+  structuredData: AssessmentQuestionStructuredData | undefined;
+  answerText: string;
+}) {
+  switch (input.questionType) {
+    case "true_false": {
+      const binaryAnswer = resolveTrueFalseAnswerValue(input.answerText);
+      return binaryAnswer ? [binaryAnswer] : undefined;
+    }
+    case "definition":
+      return input.structuredData?.expectedDefinition
+        ? [input.structuredData.expectedDefinition]
+        : undefined;
+    case "scientific_term":
+    case "terminology": {
+      const expectedResponses = [
+        input.structuredData?.expectedTerm,
+        ...(input.structuredData?.acceptableVariants ?? []),
+      ].filter((value): value is string => Boolean(value));
+
+      return expectedResponses.length > 0
+        ? dedupeStrings(expectedResponses).slice(0, STRUCTURED_LIST_MAX_ITEMS)
+        : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
 function createValueBlock(input: {
   key: string;
   label: string;
@@ -1245,6 +1285,29 @@ export function buildAssessmentScienceRenderBlocks(input: {
   const blocks: Array<AssessmentScienceRenderBlock | null> = [];
 
   switch (input.questionType) {
+    case "scientific_term":
+      blocks.push(
+        createValueBlock({
+          key: "scientific-term",
+          label: localizeScienceLabel(input.locale, "Expected scientific term", "المصطلح العلمي المتوقع"),
+          value: structuredData.expectedTerm,
+        }),
+      );
+      blocks.push(
+        createListBlock({
+          key: "scientific-term-variants",
+          label: localizeScienceLabel(input.locale, "Accepted variants", "البدائل المقبولة"),
+          items: structuredData.acceptableVariants,
+        }),
+      );
+      blocks.push(
+        createValueBlock({
+          key: "scientific-term-note",
+          label: localizeScienceLabel(input.locale, "Explanation note", "ملاحظة توضيحية"),
+          value: structuredData.explanatoryNote,
+        }),
+      );
+      break;
     case "terminology":
       blocks.push(
         createValueBlock({
@@ -1451,4 +1514,88 @@ export function buildAssessmentScienceRenderBlocks(input: {
   }
 
   return blocks.filter((block): block is AssessmentScienceRenderBlock => Boolean(block));
+}
+
+/* Canonical assessment results now persist lightweight render metadata so future viewer/export
+   routes can branch by question type without reparsing raw text on every surface. Keep this
+   derived from canonical type + structured content only, and do not let it become a second
+   source of truth for the saved question copy itself. */
+export function buildAssessmentQuestionRenderMetadata(input: {
+  questionType: AssessmentQuestionType | null | undefined;
+  structuredData?: unknown;
+  questionText: string;
+  answerText: string;
+  rationaleText?: string | null;
+}): AssessmentQuestionRenderMetadata | undefined {
+  if (!input.questionType) {
+    return undefined;
+  }
+
+  const structuredData = resolveAssessmentQuestionStructuredData({
+    questionType: input.questionType,
+    structuredData: input.structuredData,
+    questionText: input.questionText,
+    answerText: input.answerText,
+    rationaleText: input.rationaleText,
+  });
+  const scienceBlockKinds = Array.from(
+    new Set(
+      buildAssessmentScienceRenderBlocks({
+        locale: "en",
+        questionType: input.questionType,
+        structuredData,
+        questionText: input.questionText,
+        answerText: input.answerText,
+        rationaleText: input.rationaleText,
+      }).map((block) => block.kind),
+    ),
+  ) as AssessmentQuestionRenderBlockKind[];
+  const expectedResponses = resolveExpectedResponsesForMetadata({
+    questionType: input.questionType,
+    structuredData,
+    answerText: input.answerText,
+  });
+
+  switch (input.questionType) {
+    case "mcq":
+      return {
+        renderer: input.questionType,
+        responseMode: "single_select",
+        answerPlacement: "choice_list",
+      };
+    case "true_false":
+      return {
+        renderer: input.questionType,
+        responseMode: "boolean",
+        answerPlacement: "boolean_toggle",
+        expectedResponses,
+      };
+    case "fill_blanks": {
+      const blankCount = countFillBlanks(input.questionText);
+
+      return {
+        renderer: input.questionType,
+        responseMode: "inline_blanks",
+        answerPlacement: "inline_blanks",
+        blankCount: blankCount || undefined,
+        blankSlots: buildBlankSlots(blankCount),
+      };
+    }
+    case "short_answer":
+      return {
+        renderer: input.questionType,
+        responseMode: "free_response",
+        answerPlacement: "answer_box",
+      };
+    default:
+      return {
+        renderer: input.questionType,
+        responseMode: "free_response",
+        answerPlacement:
+          scienceBlockKinds.length > 0 ? "science_blocks" : "answer_box",
+        expectedResponses,
+        scienceBlockKinds:
+          scienceBlockKinds.length > 0 ? scienceBlockKinds : undefined,
+      };
+  }
 }

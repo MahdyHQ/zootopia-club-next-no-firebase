@@ -27,7 +27,10 @@ import {
 } from "@zootopia/shared-utils";
 
 import { getModelById } from "@/lib/ai/models";
-import { resolveAssessmentQuestionStructuredData } from "@/lib/assessment-question-display";
+import {
+  buildAssessmentQuestionRenderMetadata,
+  resolveAssessmentQuestionStructuredData,
+} from "@/lib/assessment-question-display";
 import {
   buildAssessmentPreviewRoute,
   buildAssessmentResultRoute,
@@ -158,6 +161,7 @@ function normalizeLanguage(value: unknown, fallback: Locale): Locale {
 function normalizeQuestionType(value: unknown): AssessmentQuestionType | undefined {
   return value === "mcq" ||
     value === "true_false" ||
+    value === "scientific_term" ||
     value === "essay" ||
     value === "fill_blanks" ||
     value === "short_answer" ||
@@ -397,6 +401,13 @@ function normalizeAssessmentQuestion(
     answerText: normalizedAnswerText,
     rationaleText: normalizedRationaleText,
   });
+  const rendering = buildAssessmentQuestionRenderMetadata({
+    questionType: questionType ?? null,
+    structuredData,
+    questionText: normalizedQuestionText,
+    answerText: normalizedAnswerText,
+    rationaleText: normalizedRationaleText,
+  });
 
   if (typeof question === "string") {
     const normalizedQuestion: AssessmentQuestion = {
@@ -414,6 +425,10 @@ function normalizeAssessmentQuestion(
 
     if (structuredData) {
       normalizedQuestion.structuredData = structuredData;
+    }
+
+    if (rendering) {
+      normalizedQuestion.rendering = rendering;
     }
 
     return normalizedQuestion;
@@ -441,6 +456,10 @@ function normalizeAssessmentQuestion(
 
   if (structuredData) {
     normalizedQuestion.structuredData = structuredData;
+  }
+
+  if (rendering) {
+    normalizedQuestion.rendering = rendering;
   }
 
   return normalizedQuestion;

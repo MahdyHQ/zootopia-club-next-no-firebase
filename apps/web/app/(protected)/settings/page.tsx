@@ -1,9 +1,15 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import { Settings2, ShieldCheck } from "lucide-react";
+import Image from "next/image";
 
 import { LocaleToggle } from "@/components/preferences/locale-toggle";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
+import {
+  resolveAvatarDisplayName,
+  resolveAvatarFallbackInitial,
+  resolveRoleGenderAvatarSrc,
+} from "@/lib/avatar";
 import { sanitizeUserReturnTo } from "@/lib/return-to";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { requireAuthenticatedUser } from "@/lib/server/session";
@@ -25,6 +31,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     ? resolvedSearchParams.returnTo[0]
     : resolvedSearchParams.returnTo;
   const returnTo = sanitizeUserReturnTo(requestedReturnTo);
+  const settingsAvatarSrc = resolveRoleGenderAvatarSrc(user);
+  const settingsAvatarInitial = resolveAvatarFallbackInitial(user);
+  const settingsDisplayName = resolveAvatarDisplayName(user);
 
   return (
     <div className="space-y-7 animate-in fade-in duration-700 lg:space-y-8">
@@ -32,10 +41,36 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.13),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(242,198,106,0.14),transparent_42%)]" />
 
         <div className="relative z-10 max-w-5xl space-y-3.5">
-          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-400/12 dark:text-emerald-200">
-            <Settings2 className="h-4 w-4" />
-            {uiContext.messages.navSettings}
-          </span>
+          {/* Keep settings identity compact and aligned with header avatar policy so this hero does not grow into a second profile card. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-400/12 dark:text-emerald-200">
+              <Settings2 className="h-4 w-4" />
+              {uiContext.messages.navSettings}
+            </span>
+
+            <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/55 bg-white/70 px-2.5 py-1 shadow-sm dark:border-white/15 dark:bg-slate-950/55">
+              <span className="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-full border border-emerald-500/30 bg-emerald-500/20">
+                {settingsAvatarSrc ? (
+                  <Image
+                    src={settingsAvatarSrc}
+                    alt=""
+                    aria-hidden="true"
+                    width={32}
+                    height={32}
+                    sizes="32px"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-xs font-black uppercase text-emerald-400">
+                    {settingsAvatarInitial}
+                  </span>
+                )}
+              </span>
+              <span className="max-w-[8.5rem] truncate text-[10px] font-black uppercase tracking-[0.18em] text-foreground-muted sm:max-w-[11rem]">
+                {settingsDisplayName}
+              </span>
+            </span>
+          </div>
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-black tracking-[-0.05em] text-zinc-950 dark:text-white sm:text-3xl lg:text-4xl">
             {uiContext.messages.settingsTitle}
           </h1>

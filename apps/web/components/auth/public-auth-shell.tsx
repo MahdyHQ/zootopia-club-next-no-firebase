@@ -34,7 +34,7 @@ export function PublicAuthShell({
     <main className={pageShellClassName}>
       <div className={shellClassName}>
         <header className="auth-shell-top">
-          <ZootopiaLockup compact showTagline={false} />
+          <ZootopiaLockup compact showTagline={false} className="auth-shell-brand" />
           <div className="auth-utility-group">{controls}</div>
         </header>
 

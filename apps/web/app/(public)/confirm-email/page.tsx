@@ -1,14 +1,13 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import { redirect } from "next/navigation";
 
+import { AuthTopControls } from "@/components/auth/auth-top-controls";
 import {
   ConfirmEmailPanel,
   type ConfirmEmailFinalizeParams,
   type ConfirmEmailFlow,
 } from "@/components/auth/confirm-email-panel";
 import { PublicAuthShell } from "@/components/auth/public-auth-shell";
-import { LocaleToggle } from "@/components/preferences/locale-toggle";
-import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { getAuthenticatedUserRedirectPath } from "@/lib/return-to";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { getRuntimeFlags } from "@/lib/server/runtime";
@@ -104,27 +103,21 @@ export default async function ConfirmEmailPage({
       subtitle={uiContext.messages.confirmEmailSubtitle}
       imageAlt={uiContext.messages.loginTitle}
       controls={
-        <>
-          <ThemeToggle
-            value={uiContext.themeMode}
-            label={uiContext.messages.themeLabel}
-            labels={{
-              light: uiContext.messages.themeLight,
-              dark: uiContext.messages.themeDark,
-              system: uiContext.messages.themeSystem,
-            }}
-            variant="compact"
-          />
-          <LocaleToggle
-            value={uiContext.locale}
-            label={uiContext.messages.localeLabel}
-            labels={{
-              en: uiContext.messages.localeEnglish,
-              ar: uiContext.messages.localeArabic,
-            }}
-            variant="compact"
-          />
-        </>
+        <AuthTopControls
+          themeMode={uiContext.themeMode}
+          locale={uiContext.locale}
+          themeLabel={uiContext.messages.themeLabel}
+          themeLabels={{
+            light: uiContext.messages.themeLight,
+            dark: uiContext.messages.themeDark,
+            system: uiContext.messages.themeSystem,
+          }}
+          localeLabel={uiContext.messages.localeLabel}
+          localeLabels={{
+            en: uiContext.messages.localeEnglish,
+            ar: uiContext.messages.localeArabic,
+          }}
+        />
       }
     >
       <div className="flex min-w-0 items-center justify-center">

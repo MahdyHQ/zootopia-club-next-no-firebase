@@ -1,6 +1,7 @@
 import type {
   AssessmentDifficulty,
   AssessmentGenerationStatus,
+  AssessmentQuestionRenderMetadata,
   AssessmentQuestionStructuredData,
   AssessmentQuestionType,
   Locale,
@@ -58,6 +59,7 @@ export interface AssessmentPreviewQuestionItem {
   difficulty: AssessmentDifficulty | null;
   difficultyLabel: string | null;
   structuredData: AssessmentQuestionStructuredData | null;
+  rendering: AssessmentQuestionRenderMetadata | null;
   scienceBlocks: AssessmentScienceRenderBlock[];
   question: string;
   stem: string;

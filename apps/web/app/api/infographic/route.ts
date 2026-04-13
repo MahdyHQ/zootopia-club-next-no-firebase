@@ -1,7 +1,12 @@
+import {
+  isModelSupportedForTool,
+  toCanonicalToolModelId,
+} from "@zootopia/shared-config";
 import type { InfographicRequest } from "@zootopia/shared-types";
 
 import { isProfileCompletionRequired } from "@/lib/return-to";
 import { apiError, apiSuccess } from "@/lib/server/api";
+import { resolveDefaultModelForTool } from "@/lib/server/ai/default-models";
 import { generateInfographic } from "@/lib/server/ai/execution";
 import {
   appendAdminLog,
@@ -12,7 +17,10 @@ import { getAuthenticatedSessionContext } from "@/lib/server/session";
 
 export const runtime = "nodejs";
 
-function normalizeInfographicRequest(input: Partial<InfographicRequest>): InfographicRequest {
+function normalizeInfographicRequest(
+  input: Partial<InfographicRequest>,
+  defaultModelId: string,
+): InfographicRequest {
   return {
     documentId: input.documentId || undefined,
     topic: String(input.topic || "").trim(),
@@ -22,7 +30,7 @@ function normalizeInfographicRequest(input: Partial<InfographicRequest>): Infogr
       input.style === "bold"
         ? input.style
         : "balanced",
-    modelId: String(input.modelId || "google-balanced"),
+    modelId: String(input.modelId || defaultModelId).trim(),
   };
 }
 
@@ -66,10 +74,25 @@ export async function POST(request: Request) {
     return apiError("INVALID_JSON", "Request body must be valid JSON.", 400);
   }
 
-  const normalized = normalizeInfographicRequest(body);
+  const defaultModel = resolveDefaultModelForTool("infographic");
+  const normalized = normalizeInfographicRequest(body, defaultModel.id);
   if (!normalized.topic) {
     return apiError("TOPIC_REQUIRED", "An infographic topic is required.", 400);
   }
+
+  const canonicalModelId = toCanonicalToolModelId("infographic", normalized.modelId);
+  if (!isModelSupportedForTool("infographic", canonicalModelId)) {
+    return apiError(
+      "INFOGRAPHIC_MODEL_UNSUPPORTED",
+      "Select one of the supported infographic models.",
+      400,
+    );
+  }
+
+  /* Keep infographic model selection validated on the server before execution so unsupported
+     client input cannot fall through to the generic catalog helper and silently pick a
+     different tool's default model. */
+  normalized.modelId = canonicalModelId;
 
   let documentContext: string | null | undefined;
   let sourceDocument = null;
@@ -106,7 +129,7 @@ export async function POST(request: Request) {
     resourceId: generation.id,
     route: "/api/infographic",
     metadata: {
-      modelId: normalized.modelId,
+      modelId: generation.modelId,
       documentId: normalized.documentId ?? null,
     },
   });

@@ -24,8 +24,10 @@ export interface DocumentRecord {
   ownerUid: string;
   ownerRole?: UserRole;
   fileName: string;
+  fileExtension?: string;
   mimeType: string;
   sizeBytes: number;
+  contentSha256?: string;
   storagePath: string | null;
   storageDataClass?: "upload-source";
   storageOwnerUid?: string;

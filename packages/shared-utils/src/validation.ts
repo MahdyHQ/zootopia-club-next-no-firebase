@@ -1,4 +1,5 @@
 import type {
+  AssessmentActiveQuestionType,
   AssessmentDifficulty,
   AssessmentMode,
   AssessmentQuestionType,
@@ -13,6 +14,7 @@ import type {
   UserProfileFieldErrors,
   UserRole,
 } from "@zootopia/shared-types";
+import { ASSESSMENT_ACTIVE_QUESTION_TYPES as ACTIVE_ASSESSMENT_QUESTION_TYPES } from "@zootopia/shared-types";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 
 type ValidationSuccess<T> = {
@@ -77,26 +79,9 @@ const SUPPORTED_ASSESSMENT_MODES: AssessmentMode[] = [
   "question_generation",
   "exam_generation",
 ];
-const DEFAULT_ASSESSMENT_QUESTION_TYPE: AssessmentQuestionType = "mcq";
-const SUPPORTED_ASSESSMENT_QUESTION_TYPES: AssessmentQuestionType[] = [
-  "mcq",
-  "true_false",
-  "essay",
-  "fill_blanks",
-  "short_answer",
-  "matching",
-  "multiple_response",
-  "terminology",
-  "definition",
-  "comparison",
-  "labeling",
-  "classification",
-  "sequencing",
-  "process_mechanism",
-  "cause_effect",
-  "distinguish_between",
-  "identify_structure",
-  "identify_compound",
+const DEFAULT_ASSESSMENT_QUESTION_TYPE: AssessmentActiveQuestionType = "mcq";
+const SUPPORTED_ASSESSMENT_QUESTION_TYPES: AssessmentActiveQuestionType[] = [
+  ...ACTIVE_ASSESSMENT_QUESTION_TYPES,
 ];
 
 export function assertNonEmptyString(value: string, message: string) {
@@ -509,23 +494,90 @@ function resolveAssessmentLanguage(input: AssessmentRequestInput): Locale | unde
     : undefined;
 }
 
+function readAssessmentQuestionTypesInput(input: AssessmentRequestInput) {
+  return input.options?.questionTypes ?? input.questionTypes;
+}
+
+function readAssessmentQuestionTypeDistributionInput(input: AssessmentRequestInput) {
+  return input.options?.questionTypeDistribution ?? input.questionTypeDistribution;
+}
+
+function findUnsupportedAssessmentQuestionTypes(input: AssessmentRequestInput) {
+  const rawValue = readAssessmentQuestionTypesInput(input);
+  if (!Array.isArray(rawValue)) {
+    return [];
+  }
+
+  return rawValue
+    .map((value) => normalizeWhitespace(String(value || "")))
+    .filter(
+      (value, index, values) =>
+        Boolean(value) &&
+        values.indexOf(value) === index &&
+        !SUPPORTED_ASSESSMENT_QUESTION_TYPES.includes(value as AssessmentActiveQuestionType),
+    );
+}
+
+function findUnsupportedAssessmentDistributionTypes(input: AssessmentRequestInput) {
+  const rawValue = readAssessmentQuestionTypeDistributionInput(input);
+  if (!Array.isArray(rawValue)) {
+    return [];
+  }
+
+  return rawValue
+    .map((entry) =>
+      typeof entry === "object" && entry !== null
+        ? normalizeWhitespace(String(entry.type || ""))
+        : "",
+    )
+    .filter(
+      (value, index, values) =>
+        Boolean(value) &&
+        values.indexOf(value) === index &&
+        !SUPPORTED_ASSESSMENT_QUESTION_TYPES.includes(value as AssessmentActiveQuestionType),
+    );
+}
+
+function findQuestionTypeDistributionMismatches(
+  input: AssessmentRequestInput,
+  questionTypes: AssessmentQuestionType[],
+) {
+  const rawValue = readAssessmentQuestionTypeDistributionInput(input);
+  if (!Array.isArray(rawValue)) {
+    return [];
+  }
+
+  return rawValue
+    .map((entry) =>
+      typeof entry === "object" && entry !== null
+        ? normalizeWhitespace(String(entry.type || ""))
+        : "",
+    )
+    .filter(
+      (value, index, values) =>
+        Boolean(value) &&
+        values.indexOf(value) === index &&
+        !questionTypes.includes(value as AssessmentQuestionType),
+    );
+}
+
 function resolveAssessmentQuestionTypes(
   input: AssessmentRequestInput,
 ): AssessmentQuestionType[] {
-  const rawValue = input.options?.questionTypes ?? input.questionTypes;
+  const rawValue = readAssessmentQuestionTypesInput(input);
   if (!Array.isArray(rawValue)) {
     return [DEFAULT_ASSESSMENT_QUESTION_TYPE];
   }
 
   const normalized = rawValue.filter((value, index, values) => {
-    if (!SUPPORTED_ASSESSMENT_QUESTION_TYPES.includes(value as AssessmentQuestionType)) {
+    if (!SUPPORTED_ASSESSMENT_QUESTION_TYPES.includes(value as AssessmentActiveQuestionType)) {
       return false;
     }
 
     return values.indexOf(value) === index;
   }) as AssessmentQuestionType[];
 
-  return normalized.length > 0 ? normalized : [DEFAULT_ASSESSMENT_QUESTION_TYPE];
+  return normalized;
 }
 
 function buildBalancedQuestionTypeDistribution(
@@ -549,8 +601,7 @@ function resolveAssessmentQuestionTypeDistribution(
   input: AssessmentRequestInput,
   questionTypes: AssessmentQuestionType[],
 ) {
-  const rawValue =
-    input.options?.questionTypeDistribution ?? input.questionTypeDistribution;
+  const rawValue = readAssessmentQuestionTypeDistributionInput(input);
   if (!Array.isArray(rawValue) || rawValue.length === 0) {
     return buildBalancedQuestionTypeDistribution(questionTypes);
   }
@@ -587,6 +638,12 @@ export function validateAssessmentRequest(
   const language = resolveAssessmentLanguage(input);
   const questionTypes = resolveAssessmentQuestionTypes(input);
   const questionTypeDistribution = resolveAssessmentQuestionTypeDistribution(
+    input,
+    questionTypes,
+  );
+  const unsupportedQuestionTypes = findUnsupportedAssessmentQuestionTypes(input);
+  const unsupportedDistributionTypes = findUnsupportedAssessmentDistributionTypes(input);
+  const distributionMismatches = findQuestionTypeDistributionMismatches(
     input,
     questionTypes,
   );
@@ -632,11 +689,23 @@ export function validateAssessmentRequest(
     fieldErrors.language = "Assessment language must be English or Arabic.";
   }
 
-  if (questionTypes.length === 0) {
-    fieldErrors.questionTypes = "Select at least one question type.";
+  if (unsupportedQuestionTypes.length > 0) {
+    fieldErrors.questionTypes =
+      "Selected question types include unsupported assessment formats.";
   }
 
-  if (questionTypeDistribution.length !== questionTypes.length) {
+  if (questionTypes.length === 0) {
+    fieldErrors.questionTypes =
+      fieldErrors.questionTypes ?? "Select at least one question type.";
+  }
+
+  if (unsupportedDistributionTypes.length > 0) {
+    fieldErrors.questionTypeDistribution =
+      "Question type distribution includes unsupported assessment formats.";
+  } else if (distributionMismatches.length > 0) {
+    fieldErrors.questionTypeDistribution =
+      "Question type distribution must match the selected question types.";
+  } else if (questionTypeDistribution.length !== questionTypes.length) {
     fieldErrors.questionTypeDistribution = "Question type distribution is incomplete.";
   } else {
     const hasInvalidPercentages = questionTypeDistribution.some(

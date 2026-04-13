@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-13 (sidebar/settings compact UI cleanup + fallback warning removal)
+Last Updated: 2026-04-13 (compact role/gender identity avatars for header + settings)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -80,15 +80,27 @@ Key verified facts:
 - Admin access controlled by email allowlist (ZOOTOPIA_ADMIN_EMAILS)
 - Profile completion gating blocks incomplete profiles from protected features
 - AI providers: Google AI (Gemini) and DashScope (Qwen/Alibaba)
+- Tool default models are now server-authoritative per real tool via
+  `ZOOTOPIA_DEFAULT_MODEL_ASSESSMENT` and `ZOOTOPIA_DEFAULT_MODEL_INFOGRAPHIC`,
+  with strict tool-scoped fallback validation
+- Assessment export/result artifact metadata now mirrors into
+  `assessmentArtifactMetadata` documents for owner/kind/status/expiry queries
+- Upload records now persist normalized `fileExtension` and `contentSha256`
+  metadata for durable reporting and retention tooling
 - Document uploads stored with configurable retention (default 15 min)
 - Assessment results stored with configurable retention (default 1440 min / 1 day)
 - Export artifacts stored with configurable retention (default 15 min)
-- Daily assessment credits limit AI generation (default 3/day)
+- Assessment credits limit AI generation with env-configurable UTC renewal windows
+  (default 24h, daily behavior preserved)
+- Admin credit mutations now persist durable per-user before/after history
+  snapshots and are rendered on `/admin/users/[uid]`
+- Protected header and settings surfaces now share a compact local avatar policy
+  (`admin` role override → managed `gender` asset → initial fallback)
 - Email verification via Supabase with Resend provider support
 - Admin panel includes user management, storage management, governance dashboard
 - Database uses Supabase Postgres with RLS policies
 - Migration management via scripts/supabase/apply-migrations.mjs
-- 9 migration files tracked in supabase/migrations (latest expands storage owner policy compatibility for canonical users/{uid} paths)
+- 10 migration files tracked in supabase/migrations (latest adds artifact-metadata indexing + document file-extension backfill)
 
 ================================================================================
 3. PROJECT PURPOSE & PLATFORM DIRECTION
@@ -306,6 +318,15 @@ Admin & Governance:
 Session & Credits:
 - ZOOTOPIA_SESSION_TTL_SECONDS: Session TTL (default 3600)
 - ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS: Daily AI credit cap (default 3)
+- ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS: Credit renewal window in UTC hours
+  (default 24, valid range 1..168)
+- ZOOTOPIA_DEFAULT_THEME_MODE: Initial theme fallback (`dark` or `light`, invalid falls back to `dark`)
+
+Tool Default Models:
+- ZOOTOPIA_DEFAULT_MODEL_ASSESSMENT: server-authoritative default for assessment
+- ZOOTOPIA_DEFAULT_MODEL_INFOGRAPHIC: server-authoritative default for infographic
+- Missing, invalid, unsupported, or cross-tool values fall back to the built-in
+  tool default instead of leaking across tool scopes
 
 Redirects:
 - NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT: Post-login redirect (default /)
@@ -668,17 +689,28 @@ Assessment Generation Flow:
    c. Admin bypass (if admin)
    d. Idempotency check
    e. Credit reservation check (daily limit)
+   f. Tool-scoped default-model resolution and request model validation
 5. AI generation via ai/execution.ts
 6. Assessment result saved to Postgres
 7. Admin log entry created
 8. Response includes assessment data
 
+Assessment Model Defaults:
+- Backend default model resolves through `apps/web/lib/server/ai/default-models.ts`
+- Env key: `ZOOTOPIA_DEFAULT_MODEL_ASSESSMENT`
+- Frontend initial selected model is passed from the server page using the same
+  resolver, but backend request validation still re-normalizes and re-validates
+  the submitted model id
+- Fallback when env is missing/invalid/unsupported: `gemini-3.1-flash-lite-preview`
+
 Credit System:
 - Daily credit limit: ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS (default 3)
-- Credits reset daily
-- GET /api/assessment/credits returns current status
+- Renewal window: ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS (default 24h UTC)
+- GET /api/assessment/credits returns current status with explicit no-store headers
 - Credit reservation before AI generation
 - Credit consumed on success, released on failure
+- Protected shell credit badge now refreshes on explicit assessment events plus focus,
+  visibility, and periodic sync to reduce admin/user cross-session drift
 
 Assessment Retrieval:
 - GET /api/assessment/[id] — Single assessment
@@ -705,6 +737,8 @@ Infographic Generation:
 - POST /api/infographic — Generate infographic
 - Admin-only feature (currently gated)
 - Non-admin users see "coming soon" on /infographic page
+- Backend now validates infographic model selection against infographic-scoped
+  catalog entries before execution
 
 Flow:
 1. User/admin navigates to /infographic
@@ -717,6 +751,17 @@ Flow:
 Modes:
 - Multiple infographic modes supported
 - English language guide available (Guide-Files/Zootopia_Infographic_Modes_English_Guide.md)
+
+Infographic Model Defaults:
+- Backend default model resolves through `apps/web/lib/server/ai/default-models.ts`
+- Env key: `ZOOTOPIA_DEFAULT_MODEL_INFOGRAPHIC`
+- Frontend initial selected model is passed from the server page using the same
+  resolver, but backend still validates submitted model ids
+- Fallback when env is missing/invalid/unsupported or cross-tool:
+  `google-balanced`
+- Invalid infographic request model ids now fail closed with
+  `INFOGRAPHIC_MODEL_UNSUPPORTED`, and execution has a second infographic-scoped
+  guard to prevent accidental fallback into assessment defaults
 
 ================================================================================
 18. DATABASE / MIGRATIONS / STORAGE / PERSISTENCE NOTES
@@ -743,12 +788,22 @@ Migrations (supabase/migrations/):
   - Idempotent repair for missing created_at metadata column + supporting index
 9. 20260414103000_storage_owner_policies_unified_user_root.sql
   - Rebuilds storage object owner policies to allow canonical users/{uid}/... paths while keeping legacy compatibility
+10. 20260414153000_assessment_artifact_metadata_index_and_document_extension.sql
+  - Adds assessment artifact metadata query indexes + backfills assessmentArtifactMetadata mirror rows
+  - Backfills missing document fileExtension metadata and adds file-extension query index
 
 Migration Application:
 - scripts/supabase/apply-migrations.mjs
 - Uses postgres npm client against SUPABASE_DATABASE_URL / DATABASE_URL
 - Maintains public._migration_history for canonical timestamp-safe replay tracking
 - Applies pending migrations sequentially inside per-file transactions
+
+Current Metadata Persistence Notes:
+- Assessment generations still persist canonical `artifacts` map payloads.
+- `assessmentArtifactMetadata` now mirrors each artifact into independently queryable
+  owner-scoped records (for retention/admin/reporting queries).
+- Upload documents now persist `fileExtension` and `contentSha256` fields for
+  durable format/digest metadata lookup.
 
 NPM Scripts:
 - npm run supabase:migrations:list — List migrations
@@ -792,6 +847,17 @@ Orchestration:
 - Prompt construction from messages/ directory templates
 - Response parsing and validation
 - Error handling and fallback logic
+
+Tool Model Catalog & Defaults:
+- Real tool scopes currently present in the repo: `assessment`, `infographic`
+- Shared catalog lives in `packages/shared-config/src/models.ts`
+- Built-in assessment default: `gemini-3.1-flash-lite-preview`
+- Built-in infographic default: `google-balanced`
+- Server-authoritative per-tool env resolver lives in
+  `apps/web/lib/server/ai/default-models.ts`
+- Provider runtime env overrides (`GOOGLE_AI_MODEL`,
+  `GOOGLE_AI_ADVANCED_MODEL`, `QWEN_MODEL`) remain separate from tool-default
+  selection and still resolve provider-side model ids after tool selection
 
 Prompt Templates:
 - Stored in apps/web/messages/ directory
@@ -2320,6 +2386,675 @@ Risks / Notes:
 - This pass intentionally avoids auth/business-logic/storage/API ownership changes and keeps modifications UI/theme-layer only.
 - Existing workspace CSS language-service warnings for Tailwind custom at-rules (`@custom-variant`, `@theme`, `@apply`) remain pre-existing/non-blocking.
 - Theme switch suppression is intentionally brief (220ms) and scoped to manual toggle events to avoid persistent animation disablement.
+
+
+---
+
+2026-04-13 — Assessment 502 Production Classification Fix + Lifecycle Audit Hardening
+========================================================================================
+Type: Backend reliability fix / provider error classification correction / assessment attempt lifecycle observability
+Scope: assessment API route execution envelope, provider HTTP classifier, assessment default model ordering
+
+Summary:
+- Completed mandatory full-ledger read, subagent-first exploration, and direct source-chain validation before edits.
+- Reproduced the reported production-class failure on `POST /api/assessment` with a live authenticated call path.
+- Confirmed backend root cause was provider-classification drift: Qwen/DashScope returned HTTP 400 with `code=arrearage`, but server fallback classification mapped it to generic `ASSESSMENT_PROVIDER_EXECUTION_FAILED` (502).
+- Applied a surgical backend fix so arrearage/billing-exhaustion signals are treated as quota exhaustion (`ASSESSMENT_PROVIDER_RATE_LIMITED`, 429) instead of gateway-style 502.
+- Shifted default Assessment model order to Gemini lane first so default generation path no longer depends on a degraded Qwen billing state.
+- Added durable assessment attempt lifecycle audit events (`started`, `failed`, `finalization-failed`, existing `generated`) with best-effort semantics that cannot break generation/credit transactions.
+- Added route-segment execution budget export (`maxDuration`) to reduce platform timeout risk during provider calls.
+
+Root Cause (code-verified):
+- In `apps/web/lib/server/ai/execution.ts`, `buildProviderExecutionError(...)` did not classify DashScope `arrearage` responses.
+- Upstream `400 arrearage` therefore fell through to generic execution branch:
+  - `code: ASSESSMENT_PROVIDER_EXECUTION_FAILED`
+  - `status: 502`
+- Because `qwen3.5-flash` was the first Assessment model in shared config, default request lanes repeatedly hit this degraded provider path.
+
+Files Changed:
+- apps/web/lib/server/ai/execution.ts
+- packages/shared-config/src/models.ts
+- apps/web/app/api/assessment/route.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Provider error classification:
+  - DashScope/Qwen arrearage and billing-exhaustion signatures now map to `ASSESSMENT_PROVIDER_RATE_LIMITED` (429).
+  - Generic 502 execution fallback is no longer used for this known provider quota state.
+- Assessment default model order:
+  - Default Assessment lane now resolves to Gemini first (Qwen remains available/selectable).
+- Assessment route lifecycle persistence:
+  - Added best-effort `appendAdminLog(...)` events for:
+    - `assessment-generation-started`
+    - `assessment-generation-failed`
+    - `assessment-finalization-failed`
+    - Existing `assessment-generated` retained
+  - Logging failures are now explicitly non-fatal and cannot flip successful writes into false finalization failures.
+- Route runtime envelope:
+  - Added `export const maxDuration = 120` on `/api/assessment` route segment.
+
+Verification:
+- Runtime reproduction (authenticated admin path):
+  - Pre-fix reproduction: `POST /api/assessment` => 502 `ASSESSMENT_PROVIDER_EXECUTION_FAILED` with upstream `{ status: 400, code: arrearage }` in server diagnostics.
+  - Post-fix Qwen forced lane (`modelId=qwen3.5-flash`): `POST /api/assessment` => 429 `ASSESSMENT_PROVIDER_RATE_LIMITED` (no 502).
+  - Post-fix default lane: `POST /api/assessment` no longer returns 502; now returns classified Google runtime auth failure in this environment (`ASSESSMENT_PROVIDER_AUTH_FAILED`, 503).
+- Build/quality checks:
+  - web-lint-post-polish: pass
+  - web-typecheck-post-polish: pass
+  - web-build-post-polish: pass
+
+Risks / Notes:
+- This fix eliminates the misleading 502 class for known provider arrearage but does not override upstream provider account state (billing/quota/auth must still be healthy for successful generation).
+- Default-lane switch to Gemini is intentional resilience behavior to avoid outage-by-default when Qwen billing is degraded.
+- Credit reserve/commit semantics and owner-scope isolation were preserved; no client-side authority expansion was introduced.
+
+---
+
+2026-04-13 — Upload Page Premium Glass Polish + Veil Tuning (UI-Only)
+========================================================================
+Type: UI polish / Upload route visual refinement / protected background translucency tuning
+Scope: `/upload` hero depth stack, `UploadWorkspace` intake surfaces, protected workspace overlay visibility
+
+Summary:
+- Completed mandatory full-ledger read, Next.js CSS guidance review, route-chain analysis, and an explorer subagent repo survey before editing.
+- Removed the warm brown feel from the `Document intake` header/container by replacing token-driven warm surfaces with a cooler dark glass treatment scoped to the Upload workspace.
+- Increased translucency across the Upload hero shell, intake card, dropzone, status panels, and quick-action cards so the protected workspace artwork reads through more clearly.
+- Added restrained perspective layering behind the Upload hero shell to create deeper stacking and elevation without changing layout structure or workflow.
+- Lightened the shared protected workspace image/overlay veil slightly so the page background is more visible while keeping text contrast controlled.
+
+Files Changed:
+- apps/web/app/(protected)/(completed)/upload/page.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Upload route hero shell now uses:
+  - cooler dark-glass background treatment
+  - subtle cyan/teal radial lighting
+  - layered perspective plates gated to larger breakpoints (`sm`/`md`) to avoid mobile clutter
+- `UploadWorkspace` now uses page-scoped Upload glass presets for:
+  - outer intake card
+  - `Document intake` header surface
+  - dropzone shell and floating document mini-cards
+  - uploading/recent-upload panels
+  - active-document continuation card
+- Infographic CTA inside the active-document card now uses a neutral glass base with amber hover accents instead of a heavier amber fill, reducing warm patchiness.
+- Protected workspace background tuning:
+  - light image opacity increased from `0.30` → `0.34`
+  - dark/system-dark image opacity increased from `0.32` → `0.38`
+  - dark/system-dark veil gradient density reduced (`0.14/0.34/0.66/0.88` → `0.10/0.28/0.54/0.78`)
+  - dark/system-dark grid opacity reduced from `0.12` → `0.10`
+
+Verification:
+- `npm run lint --workspace @zootopia/web`: pass
+- `npm run typecheck --workspace @zootopia/web`: pass
+- `npm run build --workspace @zootopia/web`: pass
+- Production-style local server:
+  - built app served successfully on `http://localhost:3100`
+  - `GET /` returned `200`
+- Protected-route browser verification:
+  - attempted via Playwright CLI against `/upload`
+  - actual result: redirect to `/login`
+  - code-verified blocker: available Playwright session `authcheck` was not authenticated for the current environment, and the repo no longer exposes a usable auth bootstrap endpoint (`/api/auth/bootstrap` and `/api/auth/admin/bootstrap` both return deprecation `410`)
+- Responsive verification status:
+  - full live authenticated browser verification of `/upload` was not completed because of the auth redirect above
+  - code-level responsive safeguards were validated in source:
+    - hero perspective plates are hidden below `sm`/`md`
+    - Upload shell and workspace preserve `min-w-0`, `max-w-3xl`, and existing grid breakpoints
+    - no new fixed-width horizontal layout was introduced
+    - new depth layers remain clipped inside existing overflow containers to avoid page-level spillover
+
+Risks / Notes:
+- This pass intentionally avoided auth, storage, routing, upload API, validation, and document-processing logic.
+- The protected workspace veil change is global across authenticated pages, but it was kept intentionally small to avoid broad readability regressions.
+- The Upload page still needs a true authenticated live browser pass in this environment if a reusable session or test credentials become available.
+
+---
+
+2026-04-13 — Backend-Authoritative Tool Default Model Env Resolver (Assessment + Infographic)
+===============================================================================================
+Type: Backend configuration hardening / tool-scoped model-default alignment / frontend-server consistency
+Scope: assessment + infographic model defaults, route validation, server page initial state, env template
+
+Summary:
+- Added a single server-only default-model resolver for the real current tool scopes only: `assessment` and `infographic`.
+- Wired both backend routes and both server-rendered pages to the same resolver so frontend initial selection now mirrors the backend-authoritative default without duplicating hardcoded model ids.
+- Preserved provider-level runtime model overrides as a separate concern; this pass only changes tool-default selection.
+- Closed an infographic safety gap where unsupported infographic model ids could previously fall through to the generic catalog helper and land on the assessment default.
+
+Files Changed:
+- apps/web/lib/server/ai/default-models.ts
+- apps/web/app/api/assessment/route.ts
+- apps/web/app/api/infographic/route.ts
+- apps/web/app/(protected)/(completed)/assessment/page.tsx
+- apps/web/app/(protected)/(completed)/infographic/page.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/components/infographic/infographic-studio.tsx
+- apps/web/lib/server/ai/execution.ts
+- .env.example
+- zootopia-club-next-ledger.txt
+
+Env Keys Added:
+- `ZOOTOPIA_DEFAULT_MODEL_ASSESSMENT`
+- `ZOOTOPIA_DEFAULT_MODEL_INFOGRAPHIC`
+
+Backend / Frontend Alignment Approach:
+- Central resolver:
+  - `apps/web/lib/server/ai/default-models.ts`
+  - strict mapping:
+    - assessment -> `ZOOTOPIA_DEFAULT_MODEL_ASSESSMENT`
+    - infographic -> `ZOOTOPIA_DEFAULT_MODEL_INFOGRAPHIC`
+- Backend remains source of truth:
+  - assessment API now takes its `defaultModelId` from the central resolver before shared request validation
+  - infographic API now takes its default from the same resolver, canonicalizes the submitted id, and rejects unsupported ids with `INFOGRAPHIC_MODEL_UNSUPPORTED`
+  - infographic execution now re-checks model scope and falls back only to the infographic default, never the assessment default
+- Frontend alignment:
+  - assessment and infographic server pages resolve the default model on the server and pass `defaultModelId` into the client studios
+  - client initial request state now seeds `modelId` from that server prop instead of `models[0]` / hardcoded literals
+
+Fallback Behavior:
+- Assessment fallback when env is missing/invalid/unsupported:
+  - `gemini-3.1-flash-lite-preview`
+- Infographic fallback when env is missing/invalid/unsupported or cross-tool:
+  - `google-balanced`
+- Cross-tool isolation:
+  - assessment defaults cannot leak into infographic
+  - infographic defaults cannot leak into assessment
+
+Verification:
+- Code-path verification:
+  - assessment route still uses shared assessment validation with tool-scoped normalization/support checks, but now sources its default from the central resolver
+  - infographic route now rejects unsupported model ids before execution
+  - infographic execution has a second tool-scoped guard to prevent generic fallback into assessment defaults
+- Resolver behavior probe (using `node --experimental-transform-types` against `packages/shared-config/src/models.ts` to mirror the resolver mapping logic):
+  - no env values -> `{"assessment":"gemini-3.1-flash-lite-preview","infographic":"google-balanced"}`
+  - valid env values (`assessment=gemini-2.5-pro`, `infographic=qwen-balanced`) ->
+    `{"assessment":"gemini-2.5-pro","infographic":"qwen-balanced"}`
+  - invalid / cross-tool env values (`assessment=not-a-model`, `infographic=gemini-2.5-pro`) ->
+    `{"assessment":"gemini-3.1-flash-lite-preview","infographic":"google-balanced"}`
+- Build/quality checks:
+  - `npm run lint --workspace @zootopia/web`: pass
+  - `npm run typecheck --workspace @zootopia/web`: pass
+  - `npm run build --workspace @zootopia/web`: pass
+
+Risks / Notes:
+- This pass intentionally avoids auth, routing ownership, credit logic, storage behavior, and provider runtime env semantics.
+- Direct standalone Node import of the new server resolver is blocked outside Next runtime by the `server-only` marker, so the env-resolution probe validated the same mapping logic against the shared model helpers instead of importing the server file directly.
+- Existing unrelated working-tree changes from earlier tasks were left untouched.
+
+---
+
+2026-04-13 — Upload Page Light-Mode Airiness Pass + Clutter Removal (UI-Only)
+==============================================================================
+Type: UI polish / Upload route light-mode refinement / protected background visibility tuning
+Scope: `/upload` hero shell, `UploadWorkspace` light surfaces, light-mode protected workspace veil
+
+Summary:
+- Applied a focused light-mode polish pass to the Upload page so the laboratory background reads through more clearly and the main intake surface feels more free-standing.
+- Removed the page-level stacked decorative ghost cards behind the main Upload card and replaced them with a lighter ambient field that keeps depth without clutter.
+- Corrected the light-mode card, dropzone, and CTA color treatment so Upload now aligns with the app’s existing premium light palette instead of carrying dark-heavy surfaces into light mode.
+- Preserved the existing Upload workflow, auth boundary, storage behavior, and upload logic.
+
+Files Changed:
+- apps/web/app/(protected)/(completed)/upload/page.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+Visual Clutter Removed:
+- Deleted the two rotated decorative slabs that previously sat behind the main Upload hero shell.
+- Removed the stacked mini-document cards inside the dropzone and replaced them with a single centered upload glyph so the intake action reads as one clean focal surface.
+- Kept all decorative depth layers clipped and non-interactive so smaller screens do not inherit overflow clutter.
+
+Translucency / Depth Improvements:
+- Upload hero shell now uses a lighter, theme-aware glass wrapper in light mode with restrained ambient highlights instead of a darker boxed-in container.
+- Main Upload workspace shell, header, status panels, and active-document card now use brighter translucent glass fills, softer inner highlights, and lighter shadows in light mode.
+- Dropzone now feels more free-standing through:
+  - increased breathing room and responsive padding
+  - softer edge contour lines
+  - a subtle hover lift with cleaner architectural highlights
+- Protected workspace light background tuning:
+  - light background artwork opacity increased from `0.34` → `0.38`
+  - light overlay veil density reduced (`0.10/0.20/0.44/0.64` → `0.08/0.16/0.36/0.56`)
+  - light overlay blur reduced from `0.9px` → `0.72px`
+  - light grid opacity reduced from `0.14` → `0.11`
+
+Light-Mode Upload Color Corrections:
+- `Document intake` header now uses a bright neutral-laboratory glass tint in light mode instead of a dark imported treatment.
+- Quick-action cards on `/upload` now use light glass surfaces with dark readable text in light mode, while keeping the existing dark styling intact.
+- Pending upload / recent upload accents were corrected to use stronger `accent-strong` treatment so icons, progress bars, and action buttons keep adequate contrast in light mode.
+- Active-document continuation card now uses a pale glass + emerald/sky tint in light mode instead of a heavier dark mass.
+
+Responsive Spacing Improvements:
+- Upload hero wrapper padding was reduced slightly at the page shell level so the main workspace feels less trapped inside nested layers.
+- `UploadWorkspace` body spacing shifted from a denser `space-y-8` / `p-6` pattern to a lighter responsive rhythm with smaller base padding and preserved larger-screen breathing room.
+- Dropzone now uses responsive `min-height` and `px/py` values so mobile keeps enough room without forcing desktop into a cramped look.
+- Decorative contour lines remain inside the dropzone bounds and do not create horizontal overflow.
+
+Verification:
+- `npm run lint --workspace @zootopia/web`: pass
+- `npm run typecheck --workspace @zootopia/web`: pass
+- `npm run build --workspace @zootopia/web`: pass
+- Browser reachability probe:
+  - launched a local production-style server at `http://127.0.0.1:3101`
+  - checked `/upload` at mobile (`390x844`), tablet (`834x1194`), and desktop (`1440x1200`) using a local `puppeteer-core` script
+  - all three viewports redirected to `/login`, confirming the protected-route gate but blocking a live authenticated Upload UI visual pass
+- Responsive verification status:
+  - live authenticated `/upload` verification remains pending because no reusable authenticated browser session was available in this environment
+  - code-level responsive checks completed:
+    - no new fixed-width layout was introduced
+    - hero clutter layers were removed rather than added
+    - dropzone uses responsive min-height and padding
+    - Upload shell remains constrained to existing `max-w-3xl` workspace bounds
+
+Risks / Notes:
+- This pass intentionally avoided auth, routing, backend, storage, validation, and upload business logic.
+- The protected workspace veil adjustment is shared across authenticated pages, but it was kept narrow and light-mode-only to minimize cross-route visual drift.
+- The prior dark-mode Upload premium glass work remains intact; this pass specifically corrects light mode without redesigning the feature.
+
+---
+
+2026-04-13 — Auth Responsive Header Cleanup + Default Theme Env Fallback
+=======================================================================
+Type: Auth surface responsive polish / visual overlap cleanup / theme bootstrap default hardening
+Scope: user login, admin login, confirm-email, public auth shell controls and branding, auth overlay tuning, env default theme fallback
+
+Summary:
+- Completed mandatory full-ledger read first, then ran a dedicated Explore subagent and direct source verification before edits.
+- Applied a focused auth-only responsive cleanup pass with no auth/business/security flow rewrites.
+- Replaced small-screen auth toggle groups with compact icon controls while preserving richer controls on larger breakpoints.
+- Rebalanced login branding placement and shared auth lockup sizing to reduce crowding near top controls.
+- Lightened auth overlays slightly so background media remains more visible without sacrificing card/input readability.
+- Added env-backed initial theme fallback key `ZOOTOPIA_DEFAULT_THEME_MODE` with strict allowed values (`dark` | `light`) and fail-closed fallback to dark.
+
+Files Changed:
+- apps/web/components/auth/auth-top-controls.tsx
+- apps/web/components/preferences/locale-toggle.tsx
+- apps/web/app/(public)/login/page.tsx
+- apps/web/app/(public)/admin/login/page.tsx
+- apps/web/app/(public)/confirm-email/page.tsx
+- apps/web/components/auth/public-auth-shell.tsx
+- apps/web/app/globals.css
+- apps/web/lib/preferences.ts
+- apps/web/lib/server/request-context.ts
+- .env.example
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Small-screen auth controls:
+  - User login, admin login, and confirm-email now use one icon button per control on mobile (`< md`).
+  - Theme icon button is state-aware (light/dark/system icon changes with current selection).
+  - Locale icon button is state-aware (icon changes with current locale selection).
+  - On `md` and above, richer compact grouped toggles remain in place.
+- University/faculty branding cleanup:
+  - Student login faculty badge moved tighter to corner placement and reduced in visual weight to avoid crowding.
+  - Shared auth lockup (`ZootopiaLockup`) in admin/confirm shell now uses responsive auth-specific sizing to reduce header pressure.
+- Overlay/background balance:
+  - Login page veil reduced from `bg-background/60` to `bg-background/52`.
+  - Shared auth media panel and gradient overlays were tuned to slightly lower opacity in light and dark/system-dark variants.
+- Confirm-email consistency:
+  - Confirm-email now uses the same shared responsive control component and behavior as user/admin login surfaces.
+- Env-backed default theme behavior:
+  - Added `ZOOTOPIA_DEFAULT_THEME_MODE=dark` to `.env.example` with allowed-values guidance.
+  - `getRequestThemeMode()` now resolves request fallback from env via strict dark/light resolver.
+  - Cookie-selected user preference behavior remains unchanged; env value is only used when cookie is missing/invalid.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: fail (pre-existing unrelated errors)
+  - `apps/web/components/assessment/assessment-studio.tsx` type errors
+  - `packages/shared-utils/src/validation.ts` type error
+- `shell: web-build-post-polish`: fail (blocked by same pre-existing type errors above)
+- IDE diagnostics on edited auth/theme files in this pass: no errors.
+
+Risks / Notes:
+- The workspace contains unrelated pre-existing changes and type failures outside auth surfaces; this pass did not alter those files.
+- Auth/business/security logic ownership remains unchanged; this is a UI/layout/bootstrap-default pass only.
+
+---
+
+2026-04-13 — Assessment Active Type Reduction Finalization + Build Health Restore
+===============================================================================
+Type: Assessment contract hardening / frontend-to-backend canonical flow enforcement / compile-health restoration
+Scope: temporary active question-type catalog, orchestration alignment, normalization/persistence metadata readiness, validation typing fixes
+
+Summary:
+- Completed mandatory full-ledger read first, then ran a dedicated Explore subagent and direct source verification before edits.
+- Finalized the temporary assessment question-type reduction to the active canonical 8-type set across UI selection, request validation, prompt orchestration, provider normalization, and persistence/render metadata contracts.
+- Preserved architecture for future dynamic viewer/export behavior by keeping canonical `type` + per-question `rendering` metadata in saved results.
+- Fixed the previously failing typecheck/build blockers in assessment/shared-utils typing boundaries so the workspace verification gates pass again.
+
+Active Canonical Types (temporary generation catalog):
+- `mcq`
+- `true_false`
+- `definition`
+- `terminology`
+- `short_answer`
+- `fill_blanks`
+- `comparison`
+- `scientific_term`
+
+Temporarily Removed From Frontend Selection UI:
+- `essay`
+- `matching`
+- `multiple_response`
+- `labeling`
+- `classification`
+- `sequencing`
+- `process_mechanism`
+- `cause_effect`
+- `distinguish_between`
+- `identify_structure`
+- `identify_compound`
+
+Canonical Flow Enforcement (verified):
+- Frontend selector uses `ASSESSMENT_ACTIVE_QUESTION_TYPES` and request sanitization to prevent stale UI leakage.
+- Request validation rejects unsupported types and distribution mismatches with explicit field errors.
+- Prompt orchestration includes selected canonical type ids and type-distribution directives in the model prompt.
+- Execution normalization maps provider wording/synonyms into canonical type ids (including `scientific_term` aliases) before persistence.
+- Saved question payload keeps stable `type` plus `rendering` metadata for dynamic type-aware rendering/export readiness.
+
+Files Changed (this finalization pass):
+- apps/web/components/assessment/assessment-studio.tsx
+  - fixed question-type sanitizer typing to keep `AssessmentQuestionType[]` contract (prevents `string[]` widening).
+- packages/shared-utils/src/validation.ts
+  - fixed active-type includes narrowing to `AssessmentActiveQuestionType` so validation remains strict and type-safe.
+- zootopia-club-next-ledger.txt
+  - added this finalization record and updated current state headline.
+
+Verified Existing Contract Files (no direct edit in this pass):
+- apps/web/lib/server/ai/prompt-orchestrator.ts
+- apps/web/lib/server/ai/execution.ts
+- apps/web/lib/server/assessment-records.ts
+- apps/web/lib/server/assessment-preview.ts
+- packages/shared-types/src/assessment.ts
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Legacy question-type rendering branches remain in viewer compatibility layers for historical/backward-readable records, while new generation/validation stays locked to the active 8-type set.
+- Auth, credits, ownership, and admin boundary logic were not modified in this pass.
+
+---
+
+2026-04-13 — Metadata Persistence Audit Hardening (Uploads + Assessment Artifacts)
+===============================================================================
+Type: Persistence-contract hardening / queryability upgrade / backward-compatible metadata indexing
+Scope: upload document metadata durability, assessment artifact metadata query surfaces, migration/index coverage, owner-isolated cleanup
+
+Summary:
+- Completed mandatory full-ledger read, subagent-first exploration, and direct source/migration verification before edits.
+- Confirmed the active runtime persists assessment artifact metadata inside generation `artifacts` maps (durable but weak for global querying by owner/kind/expiry).
+- Added a dedicated `assessmentArtifactMetadata` mirror persistence path so every saved generation write now keeps independently queryable artifact metadata rows.
+- Kept backward compatibility by preserving existing generation `artifacts` payloads and adding mirror persistence only.
+- Added upload metadata hardening so new document records persist normalized `fileExtension` and content digest `contentSha256`.
+
+Files Changed:
+- apps/web/lib/server/repository.ts
+- apps/web/lib/server/document-runtime.ts
+- packages/shared-types/src/document.ts
+- packages/shared-types/src/admin.ts
+- supabase/migrations/20260414153000_assessment_artifact_metadata_index_and_document_extension.sql
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Assessment artifact metadata mirroring:
+  - New collection name: `assessmentArtifactMetadata` (stored in `zc_entities`)
+  - Write paths now sync mirror rows during:
+    - `saveAssessmentGeneration(...)`
+    - `saveAssessmentGenerationWithCreditCommit(...)` (same DB transaction path)
+  - Expired-generation cleanup now removes both:
+    - generation record
+    - mirrored artifact metadata rows for that generation
+  - Admin user deletion now removes mirrored artifact metadata rows and reports count in deletion summary.
+- Upload metadata durability:
+  - New `DocumentRecord` optional fields: `fileExtension`, `contentSha256`
+  - New uploads persist both fields at creation time.
+  - Document normalization backfills/sanitizes extension and digest values for read consistency.
+
+Migration Added:
+- `20260414153000_assessment_artifact_metadata_index_and_document_extension.sql`
+  - Adds indexes for `assessmentArtifactMetadata` owner/generation, owner/kind/status, and expiresAt query lanes.
+  - Backfills `assessmentArtifactMetadata` rows from existing `assessmentGenerations.body.artifacts` entries.
+  - Backfills missing `documents.body.fileExtension` (derivable from `fileName`) and adds a file-extension index.
+
+Owner Isolation Guarantees (verified in code paths):
+- Mirror rows store canonical `ownerUid` from generation ownership.
+- User-facing read/export routes remain owner-checked as before.
+- Storage object reads/writes/deletes remain owner-scoped via `assertOwnerScopedStoragePath(...)`.
+- Admin delete flow still freezes/revokes auth first, then performs owner-scoped data cleanup (including new metadata rows).
+
+Verification:
+- File diagnostics (`get_errors`) on edited files: no errors.
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- `npm run supabase:check`: pass
+  - migration ordering validated
+  - migration list includes new `20260414153000...` file
+
+Risks / Notes:
+- Mirror indexing intentionally duplicates artifact metadata; generation `artifacts` remains authoritative for backward-compatible reads.
+- No auth/session/provider/runtime ownership models were changed in this pass.
+
+---
+
+2026-04-13 — Assessment Setup Model Selector Compact Right-Rail Refinement
+==========================================================================
+Type: UI layout refinement / responsive compactness polish
+Scope: assessment setup header/model control placement, shared assessment selector sizing behavior
+
+Summary:
+- Completed mandatory full-ledger read first, then ran an Explore subagent and direct source analysis before edits.
+- Moved the Assessment model selector from the mid-form field grid into a dedicated setup-header control lane so it sits in the upper-right area of the main setup card.
+- Kept all existing model selection logic, state handling, and validation wiring unchanged; this pass is presentation/layout only.
+- Added scoped responsive styling so the selector is compact and horizontal on tablet/desktop, while preserving clean vertical stacking on mobile.
+
+Files Changed:
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Setup header now uses a dedicated `assessment-setup-top-row` layout container.
+- Model selector now renders inside `assessment-model-control` in the header-right lane instead of the form grid.
+- Model meta chips now render directly under the moved selector within the same compact control area.
+- Remaining setup field grid now focuses on question count, difficulty, and language (`xl:grid-cols-3`), reducing perceived vertical heaviness.
+- Shared CSS now applies compact trigger/icon sizing for the header model control at `min-width: 768px` and keeps full-width stack behavior on mobile.
+- Added dark and system-dark theme variants for the new compact model control surface so premium styling remains consistent.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- This pass intentionally avoids backend/model catalog/auth/session/credit logic and only adjusts Assessment setup presentation.
+- A transient JSX merge corruption occurred during the first refactor attempt in `assessment-studio.tsx`; it was repaired immediately, and all gates passed afterward.
+
+---
+
+2026-04-13 — Upload Single-Shell Translucent Container Cleanup (UI-Only)
+=========================================================================
+Type: UI visual cleanup / layered backdrop simplification / theme-aware translucency tuning
+Scope: upload hero wrapper backdrop ownership, upload workspace shell backdrop layering
+
+Summary:
+- Completed mandatory full-ledger read first, then ran an Explore subagent and direct source analysis before edits.
+- Removed the extra Upload page backdrop overlays that were creating a stacked multi-panel effect behind the main Document intake surface.
+- Kept UploadWorkspace as the single translucent container and tuned its glass opacity/blur to reveal the lab background slightly while preserving readability.
+- Preserved all upload/runtime behavior: no changes to routes, auth, storage, APIs, or business logic.
+
+Files Changed:
+- apps/web/app/(protected)/(completed)/upload/page.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Upload page hero wrapper now stays visually neutral (layout wrapper only) instead of rendering extra decorative ambient overlays behind intake.
+- Removed the page-level `aria-hidden` ambient radial/noise overlay block behind the Upload intake area.
+- Removed UploadWorkspace shell-level decorative glow overlays so the intake stack no longer reads as layered ghost cards.
+- Retained one main premium translucent shell (`uploadWorkspaceShellClassName`) and slightly rebalanced light/dark translucency + blur to keep background visibility subtle and text contrast strong.
+- Preserved responsive structure (`min-w-0`, existing spacing and breakpoints) with no new wrappers or layout ownership changes.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- This cleanup intentionally avoids shared protected background ownership in `globals.css` / `ProtectedWorkspaceBackground`; those layers remain global across all protected routes.
+- Dropzone and active-document internal visual accents remain intact because they are inside the single intake container and do not recreate the removed stacked backdrop slabs.
+
+---
+
+2026-04-13 — Assessment Credit Hardening (Renewal Window + Fresh-State Sync)
+=============================================================================
+Type: Credit lifecycle hardening / config flexibility / UI-state synchronization
+Scope: assessment credit renewal-window resolver, credit summary cache policy, protected-shell refresh cadence, localized exhausted-credit messaging
+
+Summary:
+- Completed mandatory full-ledger read and source-first verification of reserve/release/commit credit lifecycle before edits.
+- Confirmed success-only consumption semantics already existed in route/repository flow:
+  reserve before generation, release on execution failure/finalization failure, commit on durable save only.
+- Implemented an env-configurable UTC credit renewal interval with strict guardrails and a safe 24-hour default.
+- Hardened credit-state freshness so protected-shell balances update more reliably after admin-side changes.
+- Updated exhausted-credit copy to premium-aware wording (daily + extra credits) and localized reset-window language.
+
+Files Changed:
+- apps/web/lib/server/assessment-daily-credits.ts
+- apps/web/app/api/assessment/credits/route.ts
+- apps/web/components/layout/protected-shell.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/lib/server/repository.ts
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- .env.example
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Renewal window config:
+  - Added `ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS` (1..168, default 24)
+  - 24-hour mode preserves existing daily key format (`YYYY-MM-DD`) for backward compatibility
+  - Non-24h windows use deterministic UTC key format (`utc-{hours}h-{windowStartMs}`)
+  - Reset timestamp parsing now supports both legacy daily keys and new interval keys
+- Freshness hardening:
+  - `GET /api/assessment/credits` now uses explicit no-store headers via `applyNoStore(...)`
+  - Protected shell balance refresh now runs on:
+    - `zootopia:assessment-credit-refresh` event
+    - browser focus
+    - document visibility return
+    - 60-second periodic sync
+  - Assessment Studio now dispatches credit-refresh for `ASSESSMENT_ACCESS_DISABLED`
+    and `ASSESSMENT_FINALIZATION_FAILED` responses in addition to exhausted-credit responses
+- Messaging:
+  - Exhausted-credit EN/AR text now states daily + extra credits are depleted
+  - Renewal copy now references the next reset window (not hardcoded "tomorrow")
+  - Backend exhausted-credit error message updated to match reset-window semantics
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- UI labels still use existing "daily" terminology for continuity; behavior remains identical in the default 24h configuration.
+- No auth boundary, route ownership, or credit commit authority was moved client-side.
+- Existing unrelated working-tree changes were left untouched.
+
+---
+
+2026-04-13 — Admin User Credit Mutation Controls + Durable Per-User Audit Ledger
+===============================================================================
+Type: Admin governance hardening / per-user credit mutation auditability / server-action management UI
+Scope: admin user detail credit controls, repository mutation persistence, admin credit state contracts, deletion summary telemetry
+
+Summary:
+- Completed analysis-first implementation for server-authoritative credit mutation controls directly on `/admin/users/[uid]`.
+- Added durable per-user mutation-history persistence with before/after balance snapshots for every admin credit mutation.
+- Added admin UI ledger rendering so operators can inspect recent credit mutations without querying backend logs.
+- Preserved backend authority: all mutations flow through repository APIs; browser remains display + form submission only.
+
+Files Changed:
+- packages/shared-types/src/admin.ts
+- apps/web/lib/server/repository.ts
+- apps/web/app/(protected)/admin/users/[uid]/page.tsx
+- apps/web/app/api/admin/users/[uid]/credits/route.ts
+- apps/web/app/api/admin/users/[uid]/route.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Shared contracts:
+  - `AdminAssessmentCreditState` now includes `history`.
+  - Added `AdminAssessmentCreditMutationRecord` and `AdminAssessmentCreditMutationBalanceSnapshot`.
+  - Deletion summary now tracks `deletedCreditMutationHistory`.
+- Repository credit mutation flow:
+  - New collection key: `assessmentCreditMutationHistory`.
+  - Each mutation now computes and stores before/after snapshots in the same authoritative mutation path.
+  - Mutation execution is consolidated through `applyAssessmentCreditMutationToState(...)` for both Postgres and memory fallback lanes.
+  - `getAdminAssessmentCreditStateForUser(...)` now returns latest mutation history (bounded list).
+- Admin user detail UI:
+  - Added server-action forms for access toggle, daily override set/clear, manual add/subtract/set, grant create, and grant revoke.
+  - Added success/error feedback mapping for mutation outcomes.
+  - Added Credit Grants and Credit Mutation History panels with readable before/after balance context.
+- Admin APIs:
+  - Credits PATCH logging metadata now includes `reason` and `note`.
+  - User deletion API failure payload now includes `deletion.deletedCreditMutationHistory`.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- File diagnostics on edited admin files: no errors.
+
+Risks / Notes:
+- Mutation history intentionally returns a bounded recent list in admin state responses for UI stability.
+- Admin self-mutation guard remains enforced (`ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN`).
+- This pass intentionally avoids widening any client authority; all credit writes remain backend-owned.
+
+---
+
+2026-04-13 — Compact Role/Gender Identity Avatars (Header + Settings)
+======================================================================
+Type: UI identity hardening / avatar policy unification / compact layout-preserving polish
+Scope: protected shell header identity badge, settings hero identity chip, shared avatar resolver
+
+Summary:
+- Implemented one shared avatar-resolution policy for authenticated identity surfaces.
+- Enforced deterministic precedence: `admin` role asset first, then managed `gender` asset, then initial fallback for missing/unknown gender.
+- Kept both surfaces compact so the protected shell and settings hero maintain their existing spacing rhythm.
+- Restricted role/gender avatars to local public assets to avoid remote image dependency drift.
+
+Files Changed:
+- apps/web/lib/avatar.ts
+- apps/web/components/layout/protected-shell.tsx
+- apps/web/app/(protected)/settings/page.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Added shared helper policy in `apps/web/lib/avatar.ts`:
+  - `admin` -> `/admin-avatar.png`
+  - `female` -> `/female-avatar.png`
+  - `male` -> `/male-avatar.png`
+  - missing/unknown `gender` -> `null` (forces compact initial fallback)
+- Header user badge (`ProtectedShell`) now uses role/gender local asset rendering with the same compact `h-7 w-7` footprint and existing verification glyph.
+- Settings hero now includes a compact identity chip that mirrors the same avatar policy and fallback behavior, with a truncated display-name label to protect responsive density.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Unknown or unset gender intentionally falls back to initials (not a gendered avatar) to avoid incorrect assignment.
+- This pass intentionally avoided auth/session/repository changes; behavior is presentation-layer only.
+- Existing unrelated working-tree changes were left untouched.
 
 ---
 

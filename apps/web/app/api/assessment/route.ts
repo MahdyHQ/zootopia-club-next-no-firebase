@@ -1,5 +1,4 @@
 import {
-  getDefaultModelForTool,
   isModelSupportedForTool,
   toCanonicalToolModelId,
 } from "@zootopia/shared-config";
@@ -13,6 +12,7 @@ import { createHash } from "node:crypto";
 
 import { isProfileCompletionRequired } from "@/lib/return-to";
 import { apiError, apiSuccess } from "@/lib/server/api";
+import { resolveDefaultModelForTool } from "@/lib/server/ai/default-models";
 import {
   AssessmentExecutionError,
   generateAssessment,
@@ -36,6 +36,7 @@ import {
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 const ASSESSMENT_IDEMPOTENCY_KEY_MAX_LENGTH = 200;
 const ASSESSMENT_ROUTE = "/api/assessment" as const;
@@ -344,7 +345,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const defaultModel = getDefaultModelForTool("assessment");
+  const defaultModel = resolveDefaultModelForTool("assessment");
   const validation = validateAssessmentRequest(body, {
     defaultModelId: defaultModel.id,
     normalizeModelId: (modelId) => toCanonicalToolModelId("assessment", modelId),
@@ -558,6 +559,37 @@ export async function POST(request: Request) {
   let generation: Awaited<ReturnType<typeof generateAssessment>>;
   const executionLane: "admin" | "user" = isAdmin ? "admin" : "user";
 
+  /* Attempt lifecycle logs are best-effort observability only. They must never block
+     generation, credit release, or idempotency cleanup if logging backends are degraded. */
+  await appendAdminLog({
+    actorUid: user.uid,
+    actorRole: user.role,
+    ownerUid: user.uid,
+    ownerRole: user.role,
+    action: "assessment-generation-started",
+    resourceType: "assessment",
+    resourceId: deterministicGenerationId ?? undefined,
+    route: "/api/assessment",
+    metadata: {
+      modelId: normalized.modelId,
+      canonicalModelId,
+      inputMode,
+      idempotencyKeyPresent: Boolean(requestIdempotencyKey),
+      executionLane,
+    },
+  }).catch((logError) => {
+    console.warn("Assessment start lifecycle log failed unexpectedly.", {
+      ...baseDiagnosticContext,
+      layer: "audit",
+      subsystem: "admin-log",
+      operation: "assessment-generation-started",
+      modelId: normalized.modelId,
+      canonicalModelId,
+      inputMode,
+      error: logError instanceof Error ? logError.message : String(logError),
+    });
+  });
+
   try {
     generation = await generateAssessment({
       ownerUid: user.uid,
@@ -608,6 +640,40 @@ export async function POST(request: Request) {
         ...executionContext,
       });
 
+      await appendAdminLog({
+        actorUid: user.uid,
+        actorRole: user.role,
+        ownerUid: user.uid,
+        ownerRole: user.role,
+        action: "assessment-generation-failed",
+        resourceType: "assessment",
+        resourceId: deterministicGenerationId ?? undefined,
+        route: "/api/assessment",
+        metadata: {
+          failureCode: error.code,
+          failureStatus: error.status,
+          modelId: executionContext.modelId ?? normalized.modelId,
+          canonicalModelId: executionContext.canonicalModelId ?? canonicalModelId,
+          provider: executionContext.provider ?? null,
+          providerModelId: executionContext.providerModelId ?? null,
+          inputMode,
+          upstreamStatus: executionContext.upstreamStatus ?? null,
+          upstreamCode: executionContext.upstreamCode ?? null,
+          upstreamType: executionContext.upstreamType ?? null,
+        },
+      }).catch((logError) => {
+        console.warn("Assessment failure lifecycle log failed unexpectedly.", {
+          ...baseDiagnosticContext,
+          layer: "audit",
+          subsystem: "admin-log",
+          operation: "assessment-generation-failed",
+          modelId: normalized.modelId,
+          canonicalModelId,
+          inputMode,
+          error: logError instanceof Error ? logError.message : String(logError),
+        });
+      });
+
       return respondAssessmentError({
         code: error.code,
         message: error.message,
@@ -617,6 +683,35 @@ export async function POST(request: Request) {
     }
 
     console.error("Assessment generation failed unexpectedly.", error);
+    await appendAdminLog({
+      actorUid: user.uid,
+      actorRole: user.role,
+      ownerUid: user.uid,
+      ownerRole: user.role,
+      action: "assessment-generation-failed",
+      resourceType: "assessment",
+      resourceId: deterministicGenerationId ?? undefined,
+      route: "/api/assessment",
+      metadata: {
+        failureCode: "ASSESSMENT_GENERATION_FAILED",
+        failureStatus: 500,
+        modelId: normalized.modelId,
+        canonicalModelId,
+        inputMode,
+      },
+    }).catch((logError) => {
+      console.warn("Assessment generic failure lifecycle log failed unexpectedly.", {
+        ...baseDiagnosticContext,
+        layer: "audit",
+        subsystem: "admin-log",
+        operation: "assessment-generation-failed-generic",
+        modelId: normalized.modelId,
+        canonicalModelId,
+        inputMode,
+        error: logError instanceof Error ? logError.message : String(logError),
+      });
+    });
+
     return respondAssessmentError({
       code: "ASSESSMENT_GENERATION_FAILED",
       message: "The assessment could not be generated right now.",
@@ -688,6 +783,16 @@ export async function POST(request: Request) {
         modelId: savedGeneration.generation.modelId,
         dailyCreditsRemaining: savedGeneration.credits.remainingCount ?? "admin-exempt",
       },
+    }).catch((logError) => {
+      console.warn("Assessment success lifecycle log failed unexpectedly.", {
+        ...baseDiagnosticContext,
+        layer: "audit",
+        subsystem: "admin-log",
+        operation: "assessment-generated",
+        modelId: savedGeneration.generation.modelId,
+        inputMode,
+        error: logError instanceof Error ? logError.message : String(logError),
+      });
     });
 
     return apiSuccess<AssessmentCreateResponse>(savedGeneration, 201);
@@ -743,6 +848,35 @@ export async function POST(request: Request) {
     }
 
     console.error("Assessment finalization failed unexpectedly.", error);
+    await appendAdminLog({
+      actorUid: user.uid,
+      actorRole: user.role,
+      ownerUid: user.uid,
+      ownerRole: user.role,
+      action: "assessment-finalization-failed",
+      resourceType: "assessment",
+      resourceId: baseGeneration.id,
+      route: "/api/assessment",
+      metadata: {
+        failureCode: "ASSESSMENT_FINALIZATION_FAILED",
+        failureStatus: 500,
+        modelId: normalized.modelId,
+        canonicalModelId,
+        inputMode,
+      },
+    }).catch((logError) => {
+      console.warn("Assessment finalization failure lifecycle log failed unexpectedly.", {
+        ...baseDiagnosticContext,
+        layer: "audit",
+        subsystem: "admin-log",
+        operation: "assessment-finalization-failed",
+        modelId: normalized.modelId,
+        canonicalModelId,
+        inputMode,
+        error: logError instanceof Error ? logError.message : String(logError),
+      });
+    });
+
     return respondAssessmentError({
       code: "ASSESSMENT_FINALIZATION_FAILED",
       message: "The assessment finished, but it could not be finalized safely. No daily credit was used.",

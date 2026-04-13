@@ -2,9 +2,10 @@ import "server-only";
 
 import type { DocumentRecord } from "@zootopia/shared-types";
 import {
+  normalizeUploadExtension,
   validateUploadDescriptor,
 } from "@zootopia/shared-utils";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { buildDocumentMarkdownSnapshot } from "@/lib/server/document-markdown";
 import {
@@ -164,6 +165,8 @@ export async function createDocumentRecord(input: {
 
   const createdAt = new Date().toISOString();
   const documentId = randomUUID();
+    const fileExtension = normalizeUploadExtension(input.fileName) || undefined;
+    const contentSha256 = createHash("sha256").update(input.buffer).digest("hex");
   /* This is the active upload normalization path for the protected workspace.
      It replaced the retired Datalab-specific helper, and future agents should preserve the same direct-file-first contract and truthful warnings. */
   const snapshot = buildDocumentMarkdownSnapshot({
@@ -202,8 +205,10 @@ export async function createDocumentRecord(input: {
       ownerUid: input.ownerUid,
       ownerRole: input.ownerRole,
       fileName: input.fileName,
+      fileExtension,
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
+      contentSha256,
       storagePath,
       storageDataClass: storageMetadata?.storageDataClass === "upload-source"
         ? "upload-source"

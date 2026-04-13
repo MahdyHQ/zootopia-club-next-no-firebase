@@ -10,17 +10,25 @@ export const ASSESSMENT_MODES = [
   "exam_generation",
 ] as const;
 export type AssessmentMode = (typeof ASSESSMENT_MODES)[number];
-export const ASSESSMENT_QUESTION_TYPES = [
+/* The active generation catalog is intentionally smaller than the legacy render catalog.
+   Assessment Studio, request validation, prompt orchestration, and new saved results must
+   stay anchored to these canonical ids so temporary UI reductions do not drift from backend truth. */
+export const ASSESSMENT_ACTIVE_QUESTION_TYPES = [
   "mcq",
   "true_false",
-  "essay",
-  "fill_blanks",
+  "definition",
+  "terminology",
   "short_answer",
+  "fill_blanks",
+  "comparison",
+  "scientific_term",
+] as const;
+export type AssessmentActiveQuestionType =
+  (typeof ASSESSMENT_ACTIVE_QUESTION_TYPES)[number];
+export const ASSESSMENT_LEGACY_QUESTION_TYPES = [
+  "essay",
   "matching",
   "multiple_response",
-  "terminology",
-  "definition",
-  "comparison",
   "labeling",
   "classification",
   "sequencing",
@@ -29,6 +37,10 @@ export const ASSESSMENT_QUESTION_TYPES = [
   "distinguish_between",
   "identify_structure",
   "identify_compound",
+] as const;
+export const ASSESSMENT_QUESTION_TYPES = [
+  ...ASSESSMENT_ACTIVE_QUESTION_TYPES,
+  ...ASSESSMENT_LEGACY_QUESTION_TYPES,
 ] as const;
 export type AssessmentQuestionType = (typeof ASSESSMENT_QUESTION_TYPES)[number];
 
@@ -83,6 +95,38 @@ export interface AssessmentQuestionStructuredPair {
   right: string;
 }
 
+export type AssessmentQuestionRenderBlockKind =
+  | "value"
+  | "pair"
+  | "list"
+  | "pair-list";
+
+export interface AssessmentQuestionBlankSlot {
+  index: number;
+}
+
+/* Saved render metadata stays lightweight on purpose: it gives future viewer/export surfaces
+   stable backend-authored type/render hints without replacing the canonical question text,
+   answer text, or science structuredData payloads that remain the primary source of truth. */
+export interface AssessmentQuestionRenderMetadata {
+  renderer: AssessmentQuestionType;
+  responseMode:
+    | "single_select"
+    | "boolean"
+    | "free_response"
+    | "inline_blanks";
+  answerPlacement:
+    | "choice_list"
+    | "boolean_toggle"
+    | "answer_box"
+    | "inline_blanks"
+    | "science_blocks";
+  blankCount?: number;
+  blankSlots?: AssessmentQuestionBlankSlot[];
+  expectedResponses?: string[];
+  scienceBlockKinds?: AssessmentQuestionRenderBlockKind[];
+}
+
 /* This optional structured payload deepens question-type fidelity for science-oriented prompts
    without breaking legacy generic question records. Renderers and exports must keep graceful
    fallback behavior when some or all fields are missing. */
@@ -123,6 +167,7 @@ export interface AssessmentQuestion {
   rationale?: string;
   tags?: string[];
   structuredData?: AssessmentQuestionStructuredData;
+  rendering?: AssessmentQuestionRenderMetadata;
 }
 
 export interface AssessmentGenerationSourceDocument {
