@@ -4,6 +4,7 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 import type {
   SessionSnapshot,
   SessionUser,
+  UserGender,
   UserRole,
   UserStatus,
 } from "@zootopia/shared-types";
@@ -42,6 +43,14 @@ function normalizeStatus(value: unknown): UserStatus {
 
 function normalizeString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeGender(value: unknown): UserGender | null {
+  if (value === "male" || value === "female" || value === "prefer_not_to_say") {
+    return value;
+  }
+
+  return null;
 }
 
 function readSessionUid(value: unknown) {
@@ -111,6 +120,7 @@ const getVerifiedSessionContext = cache(
           phoneNumber: persistedUser.phoneNumber,
           phoneCountryIso2: persistedUser.phoneCountryIso2 ?? null,
           phoneCountryCallingCode: persistedUser.phoneCountryCallingCode ?? null,
+          gender: persistedUser.gender,
           nationality: persistedUser.nationality,
           profileCompleted: persistedUser.profileCompleted,
           profileCompletedAt: persistedUser.profileCompletedAt,
@@ -150,6 +160,7 @@ const getVerifiedSessionContext = cache(
           phoneCountryCallingCode: normalizeString(
             sessionUser?.phoneCountryCallingCode,
           ),
+          gender: normalizeGender(sessionUser?.gender),
           nationality: normalizeString(sessionUser?.nationality),
           profileCompleted: Boolean(sessionUser?.profileCompleted),
           profileCompletedAt: normalizeString(sessionUser?.profileCompletedAt),

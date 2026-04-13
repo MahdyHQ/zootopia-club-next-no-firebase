@@ -28,6 +28,7 @@ export async function PATCH(request: Request) {
   const validation = validateRequiredUserProfile({
     fullName: String(body.fullName || ""),
     universityCode: String(body.universityCode || ""),
+    gender: String(body.gender || ""),
     nationality: String(body.nationality || ""),
   });
 
@@ -52,7 +53,7 @@ export async function PATCH(request: Request) {
   ) {
     return apiError(
       "PROFILE_VALIDATION_FAILED",
-      "Profile completion requires valid full name, university code, phone number, and nationality.",
+      "Profile completion requires valid full name, university code, gender, phone number, and nationality.",
       400,
       {
         phoneNumber: phoneValidation.error,
@@ -65,6 +66,7 @@ export async function PATCH(request: Request) {
   const updatedUser = await updateUserProfile(user.uid, {
     fullName: validation.value.fullName,
     universityCode: validation.value.universityCode,
+    gender: validation.value.gender,
     nationality: validation.value.nationality,
     phoneNumber: phoneValidation.ok ? phoneValidation.value : null,
   });

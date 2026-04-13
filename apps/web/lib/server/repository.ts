@@ -30,6 +30,7 @@ import {
   evaluateProfileCompletion,
   getPhoneNumberMetadata,
   toIsoTimestamp,
+  validateUserGender,
 } from "@zootopia/shared-utils";
 import { randomUUID } from "node:crypto";
 
@@ -589,6 +590,7 @@ function buildAuthCriticalClaimsFromUser(user: Pick<
   | "phoneNumber"
   | "phoneCountryIso2"
   | "phoneCountryCallingCode"
+  | "gender"
   | "nationality"
   | "profileCompleted"
   | "profileCompletedAt"
@@ -606,6 +608,7 @@ function buildAuthCriticalClaimsFromUser(user: Pick<
     zc_phone_number: user.phoneNumber,
     zc_phone_country_iso2: user.phoneCountryIso2,
     zc_phone_country_calling_code: user.phoneCountryCallingCode,
+    zc_gender: user.gender,
     zc_nationality: user.nationality,
     zc_profile_completed: user.profileCompleted,
     zc_profile_completed_at: user.profileCompletedAt,
@@ -1128,15 +1131,18 @@ function resolveProfileState(input: {
   phoneNumber: string | null;
   phoneCountryIso2: string | null;
   phoneCountryCallingCode: string | null;
+  gender: string | null;
   nationality: string | null;
   profileCompletedAt: string | null | undefined;
   now: string;
 }) {
+  const genderValidation = validateUserGender(String(input.gender || ""));
   const completion = evaluateProfileCompletion({
     role: input.role,
     fullName: input.fullName,
     universityCode: input.universityCode,
     phoneNumber: input.phoneNumber,
+    gender: input.gender,
     nationality: input.nationality,
   });
   const phoneMetadata = completion.normalizedPhoneNumber
@@ -1156,6 +1162,7 @@ function resolveProfileState(input: {
     phoneNumber: completion.normalizedPhoneNumber ?? input.phoneNumber ?? null,
     phoneCountryIso2: resolvedPhoneCountryIso2,
     phoneCountryCallingCode: resolvedPhoneCountryCallingCode,
+    gender: genderValidation.ok ? genderValidation.value : null,
     nationality: completion.normalizedNationality ?? input.nationality ?? null,
     profileCompleted: completion.profileCompleted,
     profileCompletedAt: completion.profileCompleted
@@ -1203,6 +1210,10 @@ function buildUserDocumentFromAuthRecord(
     phoneCountryCallingCode:
       existing?.phoneCountryCallingCode
       ?? readStringClaim(customClaims, "zc_phone_country_calling_code")
+      ?? null,
+    gender:
+      existing?.gender
+      ?? readStringClaim(customClaims, "zc_gender")
       ?? null,
     nationality:
       existing?.nationality
@@ -1269,6 +1280,7 @@ function buildUserDocumentFromAuthRecord(
     phoneNumber: profileState.phoneNumber,
     phoneCountryIso2: profileState.phoneCountryIso2,
     phoneCountryCallingCode: profileState.phoneCountryCallingCode,
+    gender: profileState.gender,
     nationality: profileState.nationality,
     profileCompleted: resolvedProfileCompleted,
     profileCompletedAt: resolvedProfileCompletedAt,
@@ -1428,6 +1440,7 @@ export async function upsertUserFromAuth(input: {
     phoneNumber: existing?.phoneNumber ?? null,
     phoneCountryIso2: existing?.phoneCountryIso2 ?? null,
     phoneCountryCallingCode: existing?.phoneCountryCallingCode ?? null,
+    gender: existing?.gender ?? null,
     nationality: existing?.nationality ?? null,
     profileCompletedAt: existing?.profileCompletedAt,
     now,
@@ -1471,6 +1484,7 @@ export async function upsertUserFromAuth(input: {
     phoneNumber: profileState.phoneNumber,
     phoneCountryIso2: profileState.phoneCountryIso2,
     phoneCountryCallingCode: profileState.phoneCountryCallingCode,
+    gender: profileState.gender,
     nationality: profileState.nationality,
     profileCompleted: profileState.profileCompleted,
     profileCompletedAt: profileState.profileCompletedAt,
@@ -1572,6 +1586,7 @@ export async function setUserRole(uid: string, role: UserRole) {
     phoneNumber: user.phoneNumber,
     phoneCountryIso2: user.phoneCountryIso2 ?? null,
     phoneCountryCallingCode: user.phoneCountryCallingCode ?? null,
+    gender: user.gender,
     nationality: user.nationality,
     profileCompletedAt: user.profileCompletedAt,
     now,
@@ -1585,6 +1600,7 @@ export async function setUserRole(uid: string, role: UserRole) {
     phoneNumber: profileState.phoneNumber,
     phoneCountryIso2: profileState.phoneCountryIso2,
     phoneCountryCallingCode: profileState.phoneCountryCallingCode,
+    gender: profileState.gender,
     nationality: profileState.nationality,
     profileCompleted: profileState.profileCompleted,
     profileCompletedAt: profileState.profileCompletedAt,
@@ -1957,6 +1973,7 @@ export async function updateUserProfile(
     phoneCountryIso2: profile.phoneCountryIso2 ?? user.phoneCountryIso2 ?? null,
     phoneCountryCallingCode:
       profile.phoneCountryCallingCode ?? user.phoneCountryCallingCode ?? null,
+    gender: profile.gender,
     nationality: profile.nationality,
     profileCompletedAt: user.profileCompletedAt,
     now,
@@ -1969,6 +1986,7 @@ export async function updateUserProfile(
     phoneNumber: profileState.phoneNumber,
     phoneCountryIso2: profileState.phoneCountryIso2,
     phoneCountryCallingCode: profileState.phoneCountryCallingCode,
+    gender: profileState.gender,
     nationality: profileState.nationality,
     profileCompleted: profileState.profileCompleted,
     profileCompletedAt: profileState.profileCompletedAt,

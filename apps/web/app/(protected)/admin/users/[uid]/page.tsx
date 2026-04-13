@@ -116,6 +116,22 @@ function formatMetadataStringArray(values: string[] | null | undefined) {
   return values.join(" | ");
 }
 
+function formatStoredGender(value: string | null | undefined) {
+  if (value === "male") {
+    return "Male";
+  }
+
+  if (value === "female") {
+    return "Female";
+  }
+
+  if (value === "prefer_not_to_say") {
+    return "Prefer not to say";
+  }
+
+  return "Not set";
+}
+
 function formatServerObservedGeo(value: {
   source: string | null;
   countryCode: string | null;
@@ -628,6 +644,7 @@ export default async function AdminUserDetailPage({
           <DetailCard label="Full Name" value={targetUser.fullName || "Not set"} />
           <DetailCard label="University Code" value={targetUser.universityCode || "Not set"} />
           <DetailCard label="Phone" value={targetUser.phoneNumber || "Not set"} />
+          <DetailCard label="Gender" value={formatStoredGender(targetUser.gender)} />
           <DetailCard label="Nationality" value={targetUser.nationality || "Not set"} />
           <DetailCard
             label="Role"

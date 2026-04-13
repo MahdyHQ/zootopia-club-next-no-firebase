@@ -9,6 +9,7 @@ import type {
   Locale,
   RequiredUserProfile,
   UpdateUserProfileInput,
+  UserGender,
   UserProfileFieldErrors,
   UserRole,
 } from "@zootopia/shared-types";
@@ -27,6 +28,7 @@ type ValidationFailure = {
 type ProfileValidationSuccess = ValidationSuccess<{
   fullName: string;
   universityCode: string;
+  gender: UserGender;
   nationality: string;
   cohortYear: number;
 }>;
@@ -56,6 +58,11 @@ const NAME_LETTERS_ONLY_PATTERN = /^[\p{Script=Arabic}\p{Script=Latin}]+$/u;
 const LOCATION_TEXT_PATTERN =
   /^[\p{Script=Arabic}\p{Script=Latin}\s.'-]+$/u;
 const E164_PHONE_PATTERN = /^\+[1-9]\d{6,17}$/;
+const SUPPORTED_USER_GENDERS: UserGender[] = [
+  "male",
+  "female",
+  "prefer_not_to_say",
+];
 const ASSESSMENT_MIN_QUESTION_COUNT = 10;
 const ASSESSMENT_MAX_QUESTION_COUNT = 100;
 const ASSESSMENT_QUESTION_COUNT_STEP = 10;
@@ -278,6 +285,33 @@ export function validateNationality(
   return validateLocationField(value, "Nationality");
 }
 
+export function validateUserGender(
+  value: string,
+): ValidationSuccess<UserGender> | ValidationFailure {
+  const normalized = normalizeWhitespace(value)
+    .toLocaleLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (!normalized) {
+    return {
+      ok: false,
+      error: "Gender is required.",
+    };
+  }
+
+  if (!SUPPORTED_USER_GENDERS.includes(normalized as UserGender)) {
+    return {
+      ok: false,
+      error: "Gender must be one of: male, female, or prefer_not_to_say.",
+    };
+  }
+
+  return {
+    ok: true,
+    value: normalized as UserGender,
+  };
+}
+
 export function validatePhoneNumberE164(
   value: string,
 ): ValidationSuccess<string> | ValidationFailure {
@@ -338,11 +372,13 @@ export function validateRequiredUserProfile(
 ): ProfileValidationSuccess | ProfileValidationFailure {
   const fullNameResult = validateFullName(input.fullName);
   const universityCodeResult = validateUniversityCode(input.universityCode);
+  const genderResult = validateUserGender(input.gender);
   const nationalityResult = validateNationality(input.nationality);
 
   if (
     !fullNameResult.ok ||
     !universityCodeResult.ok ||
+    !genderResult.ok ||
     !nationalityResult.ok
   ) {
     const fieldErrors: UserProfileFieldErrors = {};
@@ -354,6 +390,10 @@ export function validateRequiredUserProfile(
       fieldErrors.universityCode = universityCodeResult.error;
     }
 
+    if (!genderResult.ok) {
+      fieldErrors.gender = genderResult.error;
+    }
+
     if (!nationalityResult.ok) {
       fieldErrors.nationality = nationalityResult.error;
     }
@@ -362,7 +402,7 @@ export function validateRequiredUserProfile(
       ok: false,
       fieldErrors,
       message:
-        "Profile completion requires valid full name, university code, and nationality.",
+        "Profile completion requires valid full name, university code, gender, and nationality.",
     };
   }
 
@@ -371,6 +411,7 @@ export function validateRequiredUserProfile(
     value: {
       fullName: fullNameResult.value,
       universityCode: universityCodeResult.value.code,
+      gender: genderResult.value,
       nationality: nationalityResult.value,
       cohortYear: universityCodeResult.value.cohortYear,
     },
@@ -382,6 +423,7 @@ export function evaluateProfileCompletion(input: {
   fullName?: string | null;
   universityCode?: string | null;
   phoneNumber?: string | null;
+  gender?: string | null;
   nationality?: string | null;
 }) {
   if (input.role === "admin") {
@@ -390,6 +432,7 @@ export function evaluateProfileCompletion(input: {
       normalizedFullName: null,
       normalizedUniversityCode: null,
       normalizedPhoneNumber: null,
+      normalizedGender: null,
       normalizedNationality: null,
       cohortYear: null,
     };
@@ -402,12 +445,14 @@ export function evaluateProfileCompletion(input: {
   const phoneNumberResult = validatePhoneNumberE164(
     String(input.phoneNumber || ""),
   );
+  const genderResult = validateUserGender(String(input.gender || ""));
   const nationalityResult = validateNationality(String(input.nationality || ""));
 
   return {
     profileCompleted:
       fullNameResult.ok &&
       universityCodeResult.ok &&
+      genderResult.ok &&
       nationalityResult.ok &&
       phoneNumberResult.ok,
     normalizedFullName: fullNameResult.ok ? fullNameResult.value : null,
@@ -415,6 +460,7 @@ export function evaluateProfileCompletion(input: {
       ? universityCodeResult.value.code
       : null,
     normalizedPhoneNumber: phoneNumberResult.ok ? phoneNumberResult.value : null,
+    normalizedGender: genderResult.ok ? genderResult.value : null,
     normalizedNationality: nationalityResult.ok ? nationalityResult.value : null,
     cohortYear: universityCodeResult.ok
       ? universityCodeResult.value.cohortYear

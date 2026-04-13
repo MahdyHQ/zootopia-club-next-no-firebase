@@ -4,9 +4,14 @@ import type {
   ApiResult,
   Locale,
   UpdateUserProfileResponse,
+  UserGender,
   UserProfileFieldErrors,
 } from "@zootopia/shared-types";
-import { validatePhoneNumberE164, validateRequiredUserProfile } from "@zootopia/shared-utils";
+import {
+  validatePhoneNumberE164,
+  validateRequiredUserProfile,
+  validateUserGender,
+} from "@zootopia/shared-utils";
 import {
   Globe2,
   IdCard,
@@ -15,6 +20,7 @@ import {
   ShieldAlert,
   Sparkles,
   UserRound,
+  VenusAndMars,
   type LucideIcon,
 } from "lucide-react";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
@@ -43,6 +49,7 @@ type ProfileSettingsFormProps = {
   initialUniversityCode: string;
   initialPhoneNumber: string;
   initialPhoneCountryIso2: string | null;
+  initialGender: string;
   initialNationality: string;
   returnTo: string | null;
   profileCompleted: boolean;
@@ -121,6 +128,26 @@ function buildPhoneCountryOptions(options: ProfileCountryOption[]): SettingsSele
   }));
 }
 
+function buildGenderOptions(messages: AppMessages): SettingsSelectOption[] {
+  return [
+    {
+      value: "male",
+      label: messages.settingsGenderOptionMale,
+      searchTokens: ["male"],
+    },
+    {
+      value: "female",
+      label: messages.settingsGenderOptionFemale,
+      searchTokens: ["female"],
+    },
+    {
+      value: "prefer_not_to_say",
+      label: messages.settingsGenderOptionPreferNotToSay,
+      searchTokens: ["prefer not to say", "prefer_not_to_say"],
+    },
+  ];
+}
+
 function extractNationalDigitsFromPhoneValue(
   value: string,
   currentCountry: ProfileCountryOption,
@@ -174,6 +201,7 @@ export function ProfileSettingsForm({
   initialUniversityCode,
   initialPhoneNumber,
   initialPhoneCountryIso2,
+  initialGender,
   initialNationality,
   returnTo,
   profileCompleted,
@@ -204,6 +232,7 @@ export function ProfileSettingsForm({
   );
   const [fullName, setFullName] = useState(initialFullName);
   const [universityCode, setUniversityCode] = useState(initialUniversityCode);
+  const [gender, setGender] = useState(initialGender);
   const [nationality, setNationality] = useState(initialNationality);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -242,6 +271,11 @@ export function ProfileSettingsForm({
     [nationality, profileCountryOptions],
   );
 
+  const genderOptions = useMemo(
+    () => buildGenderOptions(messages),
+    [messages],
+  );
+
   const phonePreview = useMemo(() => formatPhonePreview(phoneValue), [phoneValue]);
 
   const formTitle = isAdmin
@@ -277,6 +311,12 @@ export function ProfileSettingsForm({
           complete: Boolean(normalizeTextValue(universityCode)),
         },
         {
+          key: "gender",
+          label: messages.settingsGenderLabel,
+          icon: VenusAndMars,
+          complete: validateUserGender(gender).ok,
+        },
+        {
           key: "phoneNumber",
           label: messages.settingsPhoneLabel,
           icon: Phone,
@@ -297,9 +337,11 @@ export function ProfileSettingsForm({
     [
       fullName,
       messages.settingsFullNameLabel,
+      messages.settingsGenderLabel,
       messages.settingsNationalityLabel,
       messages.settingsPhoneLabel,
       messages.settingsUniversityCodeLabel,
+      gender,
       nationality,
       phoneValidation.ok,
       universityCode,
@@ -354,6 +396,7 @@ export function ProfileSettingsForm({
     const validation = validateRequiredUserProfile({
       fullName,
       universityCode,
+      gender,
       nationality,
     });
 
@@ -393,6 +436,7 @@ export function ProfileSettingsForm({
         body: JSON.stringify({
           fullName: validation.value.fullName,
           universityCode: validation.value.universityCode,
+          gender: validation.value.gender,
           nationality: validation.value.nationality,
           phoneNumber: phoneValidation.ok ? phoneValidation.value : null,
           phoneCountryIso2: phoneValidation.ok ? selectedPhoneCountry.iso2 : null,
@@ -667,6 +711,26 @@ export function ProfileSettingsForm({
               ) : null}
             </div>
           </section>
+
+          <div className={panelClassName}>
+            <SettingsCountrySelect
+              label={messages.settingsGenderLabel}
+              value={gender}
+              placeholder={messages.settingsGenderPlaceholder}
+              searchPlaceholder={messages.settingsGenderSearchPlaceholder}
+              searchEmpty={messages.settingsGenderSearchEmpty}
+              options={genderOptions}
+              icon={VenusAndMars}
+              onChange={(nextValue) => {
+                setGender(nextValue as UserGender);
+                clearFieldError("gender");
+              }}
+              error={fieldErrors.gender}
+            />
+            <p className="mt-2 text-sm text-foreground-muted">
+              {messages.settingsGenderHint}
+            </p>
+          </div>
 
           <div className={panelClassName}>
             <SettingsCountrySelect

@@ -1,4 +1,10 @@
-import type { Locale, ThemeMode, UserRole, UserStatus } from "./auth";
+import type {
+  Locale,
+  ThemeMode,
+  UserGender,
+  UserRole,
+  UserStatus,
+} from "./auth";
 
 export interface UserPreferences {
   theme: ThemeMode;
@@ -8,6 +14,7 @@ export interface UserPreferences {
 export interface RequiredUserProfile {
   fullName: string;
   universityCode: string;
+  gender: string;
   nationality: string;
 }
 
@@ -21,6 +28,7 @@ export interface UserProfileFieldErrors {
   fullName?: string;
   universityCode?: string;
   phoneNumber?: string;
+  gender?: string;
   nationality?: string;
 }
 
@@ -112,6 +120,7 @@ export interface UserDocument {
   phoneNumber: string | null;
   phoneCountryIso2: string | null;
   phoneCountryCallingCode: string | null;
+  gender: UserGender | null;
   nationality: string | null;
   profileCompleted: boolean;
   profileCompletedAt: string | null;

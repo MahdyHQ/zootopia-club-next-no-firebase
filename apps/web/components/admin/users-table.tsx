@@ -44,6 +44,22 @@ function extractDownloadFileName(contentDisposition: string | null, fallback: st
   return fileNameMatch?.[1] ?? fallback;
 }
 
+function formatUserGender(value: string | null | undefined, messages: AppMessages) {
+  if (value === "male") {
+    return messages.settingsGenderOptionMale;
+  }
+
+  if (value === "female") {
+    return messages.settingsGenderOptionFemale;
+  }
+
+  if (value === "prefer_not_to_say") {
+    return messages.settingsGenderOptionPreferNotToSay;
+  }
+
+  return "-";
+}
+
 export function UsersTable({
   messages,
   locale,
@@ -171,6 +187,7 @@ export function UsersTable({
             const isCurrentUser = user.uid === currentUserId;
             const isAdmin = user.role === "admin";
             const isActive = user.status === "active";
+            const genderLabel = formatUserGender(user.gender, messages);
             const userInitial =
               (user.fullName || user.displayName || user.email || user.uid || "U")
                 .charAt(0)
@@ -252,6 +269,9 @@ export function UsersTable({
                 <div className="mt-4 grid gap-2 text-[0.76rem] font-medium leading-6 text-foreground-muted sm:grid-cols-2">
                   <span className="rounded-full border border-border bg-background-strong/60 px-3 py-1.5">
                     {messages.adminUserCodeLabel}: {user.universityCode || "-"}
+                  </span>
+                  <span className="rounded-full border border-border bg-background-strong/60 px-3 py-1.5">
+                    {messages.settingsGenderLabel}: {genderLabel}
                   </span>
                   <span className="rounded-full border border-border bg-background-strong/60 px-3 py-1.5">
                     {messages.adminUserJoinedLabel}: {dateFormatter.format(new Date(user.createdAt))}

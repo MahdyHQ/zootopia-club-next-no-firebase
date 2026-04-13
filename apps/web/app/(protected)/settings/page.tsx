@@ -8,6 +8,7 @@ import {
   Settings2,
   ShieldCheck,
   UserRound,
+  VenusAndMars,
 } from "lucide-react";
 
 import { LocaleToggle } from "@/components/preferences/locale-toggle";
@@ -29,6 +30,27 @@ type SettingsPageProps = {
   }>;
 };
 
+function resolveGenderLabel(input: {
+  gender: string | null;
+  maleLabel: string;
+  femaleLabel: string;
+  preferNotToSayLabel: string;
+}) {
+  if (input.gender === "male") {
+    return input.maleLabel;
+  }
+
+  if (input.gender === "female") {
+    return input.femaleLabel;
+  }
+
+  if (input.gender === "prefer_not_to_say") {
+    return input.preferNotToSayLabel;
+  }
+
+  return null;
+}
+
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const [resolvedSearchParams, user, uiContext] = await Promise.all([
     searchParams,
@@ -48,6 +70,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const phoneCountryOption = user.phoneCountryIso2
     ? resolveProfileCountryOption(countryOptions, user.phoneCountryIso2)
     : null;
+  const genderLabel = resolveGenderLabel({
+    gender: user.gender,
+    maleLabel: uiContext.messages.settingsGenderOptionMale,
+    femaleLabel: uiContext.messages.settingsGenderOptionFemale,
+    preferNotToSayLabel: uiContext.messages.settingsGenderOptionPreferNotToSay,
+  });
 
   const runtimeServices = [
     { label: "Supabase Auth", status: runtimeFlags.supabaseAuth },
@@ -90,6 +118,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           initialUniversityCode={user.universityCode ?? ""}
           initialPhoneNumber={user.phoneNumber ?? ""}
           initialPhoneCountryIso2={user.phoneCountryIso2 ?? null}
+          initialGender={user.gender ?? ""}
           initialNationality={user.nationality ?? ""}
           locale={uiContext.locale}
           returnTo={returnTo ?? APP_ROUTES.settings}
@@ -182,6 +211,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     {phoneCountryOption ? `${phoneCountryOption.flag} ` : ""}
                     {user.phoneNumber}
                   </span>
+                </div>
+              ) : null}
+              {genderLabel ? (
+                <div className="flex items-center gap-2.5 rounded-[1rem] border border-white/40 bg-white/80 px-3 py-2.5 dark:border-white/10 dark:bg-slate-950/70">
+                  <VenusAndMars className="h-4 w-4 text-emerald-700 dark:text-emerald-200" />
+                  <span className="text-sm text-foreground-muted">{genderLabel}</span>
                 </div>
               ) : null}
               {nationalityOption ? (

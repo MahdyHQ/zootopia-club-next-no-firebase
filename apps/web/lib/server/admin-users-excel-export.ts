@@ -50,6 +50,7 @@ type AdminUsersExportRow = {
   phoneNumber: string;
   phoneCountryIso2: string;
   phoneCountryCallingCode: string;
+  gender: string;
   nationality: string;
   createdAt: string;
   updatedAt: string;
@@ -172,6 +173,7 @@ const USERS_EXPORT_COLUMN_DEFINITIONS: Array<{
     key: "phoneCountryCallingCode",
     width: 28,
   },
+  { header: "Gender", key: "gender", width: 20 },
   { header: "Nationality", key: "nationality", width: 18 },
   { header: "Created At", key: "createdAt", width: 24 },
   { header: "Updated At", key: "updatedAt", width: 24 },
@@ -383,6 +385,22 @@ function formatStatus(status: UserDocument["status"]) {
   return status === "active" ? "Active" : "Suspended";
 }
 
+function formatGender(gender: UserDocument["gender"]) {
+  if (gender === "male") {
+    return "Male";
+  }
+
+  if (gender === "female") {
+    return "Female";
+  }
+
+  if (gender === "prefer_not_to_say") {
+    return "Prefer not to say";
+  }
+
+  return "";
+}
+
 function summarizeProviders(providerData: AuthUserInfo[]) {
   const labels = providerData
     .map((provider) => AUTH_PROVIDER_LABELS[provider.providerId] ?? provider.providerId)
@@ -553,6 +571,7 @@ function mapUserToExportRow(input: {
     phoneNumber: user.phoneNumber ?? "",
     phoneCountryIso2: user.phoneCountryIso2 ?? "",
     phoneCountryCallingCode: user.phoneCountryCallingCode ?? "",
+    gender: formatGender(user.gender),
     nationality: user.nationality ?? "",
     createdAt: formatExportTimestamp(user.createdAt),
     updatedAt: formatExportTimestamp(user.updatedAt),

@@ -5,6 +5,7 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 import type {
   SessionUser,
   UserClientBestEffortSignInMetadata,
+  UserGender,
   UserRole,
   UserServerObservedSignInMetadata,
   UserStatus,
@@ -67,6 +68,7 @@ type AuthorizedUser = {
   phoneNumber: string | null;
   phoneCountryIso2: string | null;
   phoneCountryCallingCode: string | null;
+  gender: UserGender | null;
   nationality: string | null;
   profileCompleted: boolean;
   profileCompletedAt: string | null;
@@ -380,6 +382,7 @@ function toAuthorizedUser(user: SessionUser): AuthorizedUser {
     phoneNumber: user.phoneNumber,
     phoneCountryIso2: user.phoneCountryIso2,
     phoneCountryCallingCode: user.phoneCountryCallingCode,
+    gender: user.gender,
     nationality: user.nationality,
     profileCompleted: user.profileCompleted,
     profileCompletedAt: user.profileCompletedAt,
@@ -966,6 +969,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         claims.phoneCountryCallingCode = normalizeString(
           authUser.phoneCountryCallingCode,
         );
+        claims.gender = normalizeString(authUser.gender);
         claims.nationality = normalizeString(authUser.nationality);
         claims.profileCompleted = Boolean(authUser.profileCompleted);
         claims.profileCompletedAt = normalizeString(authUser.profileCompletedAt);
@@ -1015,6 +1019,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         phoneNumber: normalizeString(claims.phoneNumber),
         phoneCountryIso2: normalizeString(claims.phoneCountryIso2),
         phoneCountryCallingCode: normalizeString(claims.phoneCountryCallingCode),
+        gender: normalizeString(claims.gender),
         nationality: normalizeString(claims.nationality),
         profileCompleted: Boolean(claims.profileCompleted),
         profileCompletedAt: normalizeString(claims.profileCompletedAt),

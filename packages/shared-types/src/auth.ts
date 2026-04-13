@@ -1,5 +1,6 @@
 export type UserRole = "admin" | "user";
 export type UserStatus = "active" | "suspended";
+export type UserGender = "male" | "female" | "prefer_not_to_say";
 export type ThemeMode = "light" | "dark" | "system";
 export type Locale = "en" | "ar";
 
@@ -16,6 +17,7 @@ export interface SessionUser {
   phoneNumber: string | null;
   phoneCountryIso2: string | null;
   phoneCountryCallingCode: string | null;
+  gender: UserGender | null;
   nationality: string | null;
   profileCompleted: boolean;
   profileCompletedAt: string | null;

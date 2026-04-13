@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-13 (Hash salt dependency audit + one-user governance cleanup runbook)
+Last Updated: 2026-04-13 (Gender persistence storage audit + no-migration verification)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 79e2ebd3950a82c77a14fa224660bc73e8e9c81c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -1714,6 +1714,135 @@ Risks / Notes:
 - Rotating hash salt without a coordinated governance-row migration/clear will make prior rows unreachable by new
   derived hashes.
 - One-user cleanup remains account-scoped by design to avoid collateral network-wide state deletion.
+
+---
+
+2026-04-13 — Required Managed Gender Profile Contract + Redirect/Admin Visibility Alignment
+=============================================================================================
+Type: Profile Contract Hardening / Auth Claims Propagation / Admin Visibility Expansion / Env Contract Clarification
+Scope: shared profile types + validation, repository claim persistence, session/JWT propagation, settings form/API, admin users UI/export, redirect env examples
+
+Summary:
+- Added a required managed `gender` field (controlled values) to the profile completion contract for non-admin users.
+- Kept redirect authority centralized and server-owned: no redirect architecture redesign, only data-contract extension.
+- Extended admin visibility surfaces (user cards, detail page, Excel export) so gender appears where profile state is reviewed.
+- Updated redirect env template comments with explicit role-safe route examples tied to current route map.
+
+Files Changed:
+- packages/shared-types/src/auth.ts
+- packages/shared-types/src/user.ts
+- packages/shared-utils/src/validation.ts
+- apps/web/lib/server/repository.ts
+- apps/web/auth.ts
+- apps/web/lib/server/session.ts
+- apps/web/app/api/users/me/profile/route.ts
+- apps/web/components/settings/profile-settings-form.tsx
+- apps/web/app/(protected)/settings/page.tsx
+- apps/web/components/admin/users-table.tsx
+- apps/web/app/(protected)/admin/users/[uid]/page.tsx
+- apps/web/lib/server/admin-users-excel-export.ts
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- apps/web/lib/site-content.ts
+- .env.example
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Shared profile contract now includes required `gender` input and field error channel.
+- Controlled gender values are validated as: `male`, `female`, `prefer_not_to_say`.
+- `evaluateProfileCompletion()` now requires valid gender for non-admin users; admin bypass remains intact.
+- Repository claim persistence now includes `zc_gender` and reconstructs gender from claims during user hydration.
+- Auth.js JWT/session pass-through now carries `gender` end-to-end.
+- Settings self-profile form now renders a managed gender selector and submits validated gender in PATCH payload.
+- `/api/users/me/profile` now validates and persists gender in the same server-authoritative update path.
+- Admin users surfaces now show gender in:
+  - overview cards
+  - user detail identity section
+  - Excel export workbook column
+- Privacy copy (EN/AR) and profile-gate explanatory copy now reference gender in required profile fields.
+- `.env.example` redirect comments now list valid role-safe route examples for user vs admin defaults.
+
+Redirect/Role/Sidebar Audit Outcome (this pass):
+- Confirm-email finalization redirect logic remains centralized in `resolveAuthenticatedUserRedirectPath()` and unchanged.
+- Settings-save redirect path remains `requestedReturnTo || getAuthenticatedUserRedirectPath(updatedUser)`.
+- Admin vs user lane separation remains unchanged (allowlist + role claims + admin route gate).
+- Sidebar wiring remained direct and route-constant based (`Link href={APP_ROUTES.*}`); no route rewiring required.
+
+Verification:
+- web-lint-post-polish: pass (1 pre-existing warning in `apps/web/lib/server/zootopia-postgres-adapter.ts`)
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+- Source verification:
+  - confirm-email redirect decision path: still role/profile-complete aware
+  - settings save redirect path: still resolver-backed
+  - admin/user route separation and proxy gating: unchanged
+  - sidebar links: direct route constants, no indirection regression introduced
+
+Risks / Notes:
+- Existing non-admin users without gender data will now evaluate as profile-incomplete until gender is set.
+- Controlled gender validation is fail-closed; unknown/legacy string values normalize to incomplete/null.
+- Runtime browser flow validation for every viewport/theme/locale combination was not executed in this pass;
+  compile-time/lint/build checks and source-trace verification were completed.
+
+---
+
+2026-04-13 — Gender Persistence Storage Audit (No Schema Migration Required)
+=============================================================================
+Type: Persistence audit / schema verification / build validation
+Scope: user profile gender durability path, auth/session propagation, admin visibility/export, migrations
+
+Summary:
+- Completed mandatory full-ledger read first, then ran seven parallel read-only traces for:
+  1. user persistence schema
+  2. profile settings save path
+  3. repository storage model
+  4. Supabase migrations/schema
+  5. auth/session claim propagation
+  6. admin display/export surfaces
+  7. lint/typecheck/build verification baselines
+- Cross-validated subagent findings directly in source before any edits.
+- Determined that `gender` is durably persisted in the active runtime model via Supabase Auth custom claims (`zc_gender`), not via a dedicated SQL column.
+
+Persistence Verdict (code-verified):
+- Write path:
+  - `apps/web/app/api/users/me/profile/route.ts` validates and forwards `gender` to `updateUserProfile(...)`.
+  - `apps/web/lib/server/repository.ts` (`updateUserProfile`) builds `nextUser.gender` and persists via `persistAuthCriticalUserClaims(...)`.
+  - `persistAuthCriticalUserClaims(...)` writes `zc_gender` through `getServerAuthAdmin().setCustomUserClaims(...)`.
+- Readback path:
+  - `getUserByUid(...)` loads auth record via `getServerAuthAdmin().getUser(...)`.
+  - `buildUserDocumentFromAuthRecord(...)` reconstructs `gender` from `zc_gender` claims.
+  - `apps/web/lib/server/session.ts` hydrates `SessionUser.gender` from persisted user (or normalized token fallback).
+
+Storage Model Findings:
+- Active user profile authority is Supabase Auth claim metadata, not relational `user_profiles` writes.
+- `supabase/migrations/20260410180000_phase1_postgres_parity_tables.sql` has no `gender` column in `public.user_profiles`.
+- `supabase/migrations/20260410120000_zootopia_platform_entities.sql` confirms schema-flexible `zc_entities` JSONB storage exists, but active user profile read/write paths currently do not depend on `collection("users")` for profile authority.
+- No pre-existing gender-specific migration exists.
+
+Decision:
+- No new migration added.
+- Rationale: current production user-profile persistence contract is claim-backed and already stores/re-hydrates `gender` durably through Supabase Auth metadata.
+
+Coverage Checks:
+- Settings load: `apps/web/app/(protected)/settings/page.tsx` reads `user.gender` and passes `initialGender`.
+- Settings save: `apps/web/components/settings/profile-settings-form.tsx` validates and submits `gender` to PATCH.
+- Profile completion: `packages/shared-utils/src/validation.ts` includes `gender` in `validateRequiredUserProfile(...)` and `evaluateProfileCompletion(...)`.
+- Auth/session hydration: `apps/web/auth.ts` maps `gender` into JWT/session; `apps/web/lib/server/session.ts` normalizes/hydrates it.
+- Admin table: `apps/web/components/admin/users-table.tsx` renders localized gender.
+- Admin detail: `apps/web/app/(protected)/admin/users/[uid]/page.tsx` renders stored gender.
+- Admin export: `apps/web/lib/server/admin-users-excel-export.ts` includes Gender column + value mapping.
+
+Verification:
+- web-lint-post-polish: pass (1 pre-existing warning in `apps/web/lib/server/zootopia-postgres-adapter.ts`)
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Files Changed:
+- zootopia-club-next-ledger.txt
+
+Files Not Changed:
+- No runtime/source files changed.
+- No Supabase migration files changed.
 
 ---
 

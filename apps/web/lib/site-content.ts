@@ -354,7 +354,7 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
         {
           title: "Profile information",
           body:
-            "Your profile can include full name, university code, phone number, phone country, and nationality. This information is used for account identity, profile completion requirements, and platform eligibility checks.",
+            "Your profile can include full name, university code, gender, phone number, phone country, and nationality. This information is used for account identity, profile completion requirements, and platform eligibility checks.",
         },
         {
           title: "Uploaded documents",
@@ -599,7 +599,7 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
         {
           title: "بيانات الملف الشخصي",
           body:
-            "قد يتضمن ملفك الشخصي الاسم الكامل، والكود الجامعي، ورقم الهاتف، ودولة الهاتف، والجنسية. تُستخدم هذه البيانات لهوية الحساب ومتطلبات اكتمال الملف وقيود الأهلية داخل المنصة.",
+            "قد يتضمن ملفك الشخصي الاسم الكامل، والكود الجامعي، والنوع، ورقم الهاتف، ودولة الهاتف، والجنسية. تُستخدم هذه البيانات لهوية الحساب ومتطلبات اكتمال الملف وقيود الأهلية داخل المنصة.",
         },
         {
           title: "الملفات المرفوعة",
