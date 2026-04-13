@@ -23,7 +23,7 @@ export function AuthTopControls({
   className,
 }: AuthTopControlsProps) {
   return (
-    <div className={`flex items-center justify-end gap-2 ${className ?? ""}`.trim()}>
+    <div className={`flex flex-wrap items-center justify-end gap-2 ${className ?? ""}`.trim()}>
       {/* Auth mobile rail keeps controls compact to prevent header clutter over background media. */}
       <div className="md:hidden">
         <ThemeToggle

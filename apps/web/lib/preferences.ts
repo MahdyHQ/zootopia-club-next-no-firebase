@@ -3,10 +3,17 @@ import type { Locale, ThemeMode } from "@zootopia/shared-types";
 
 export const DEFAULT_LOCALE: Locale = "en";
 export const DEFAULT_THEME: ThemeMode = "dark";
+export type InitialLocale = Locale;
 export type InitialThemeMode = Extract<ThemeMode, "dark" | "light">;
 
 export function resolveLocale(value: string | null | undefined): Locale {
-  return value === "ar" ? "ar" : "en";
+  return value === "en" || value === "ar" ? value : DEFAULT_LOCALE;
+}
+
+export function resolveInitialLocale(
+  value: string | null | undefined,
+): InitialLocale {
+  return value === "ar" ? "ar" : DEFAULT_LOCALE;
 }
 
 export function resolveInitialThemeMode(

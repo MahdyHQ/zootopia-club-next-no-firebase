@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-13 (compact role/gender identity avatars for header + settings)
+Last Updated: 2026-04-13 (locale default env + home/assessment/auth visual polish)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -96,6 +96,14 @@ Key verified facts:
   snapshots and are rendered on `/admin/users/[uid]`
 - Protected header and settings surfaces now share a compact local avatar policy
   (`admin` role override → managed `gender` asset → initial fallback)
+- Request-locale bootstrap now supports env-seeded first-load language via
+  `ZOOTOPIA_DEFAULT_LANGUAGE` (`en|ar`, invalid/missing fails closed to `en`)
+- Home page stat counters now render in a lower workspace snapshot section so
+  the hero title lane remains clean across breakpoints
+- Assessment hero/premium surfaces now use slightly higher translucency while
+  preserving contrast for controls and text
+- Public auth pages now include tighter mobile overlap guards and restrained
+  overlay/shadow density for cleaner stacking behavior
 - Email verification via Supabase with Resend provider support
 - Admin panel includes user management, storage management, governance dashboard
 - Database uses Supabase Postgres with RLS policies
@@ -321,6 +329,7 @@ Session & Credits:
 - ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS: Credit renewal window in UTC hours
   (default 24, valid range 1..168)
 - ZOOTOPIA_DEFAULT_THEME_MODE: Initial theme fallback (`dark` or `light`, invalid falls back to `dark`)
+- ZOOTOPIA_DEFAULT_LANGUAGE: Initial locale fallback (`en` or `ar`, invalid falls back to `en`)
 
 Tool Default Models:
 - ZOOTOPIA_DEFAULT_MODEL_ASSESSMENT: server-authoritative default for assessment
@@ -3054,6 +3063,64 @@ Verification:
 Risks / Notes:
 - Unknown or unset gender intentionally falls back to initials (not a gendered avatar) to avoid incorrect assignment.
 - This pass intentionally avoided auth/session/repository changes; behavior is presentation-layer only.
+- Existing unrelated working-tree changes were left untouched.
+
+---
+
+2026-04-13 — Locale Default Bootstrap + Home/Assessment/Auth Visual Stability Polish
+====================================================================================
+Type: Preference bootstrap hardening / layout polish / translucency and stacking refinement
+Scope: request locale bootstrap, env template, home hero/stat composition, assessment surface translucency, public auth overlap/overlay tuning
+
+Summary:
+- Completed mandatory ledger-first analysis and source tracing before edits.
+- Added strict env-driven first-load locale fallback with cookie-first precedence.
+- Moved Home stat counters from the hero header into a lower snapshot section to keep the title lane uncluttered.
+- Slightly increased Assessment container translucency while keeping field/control contrast intact.
+- Applied targeted public-auth visual stability guards for overlap, stacking, overlay density, and heavy-shadow balance.
+
+Files Changed:
+- apps/web/lib/preferences.ts
+- apps/web/lib/server/request-context.ts
+- .env.example
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/app/(protected)/(completed)/assessment/page.tsx
+- apps/web/app/(public)/login/page.tsx
+- apps/web/components/auth/auth-top-controls.tsx
+- apps/web/components/auth/login-panel.tsx
+- apps/web/components/auth/admin-login-panel.tsx
+- apps/web/components/auth/confirm-email-panel.tsx
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Locale bootstrap:
+  - Added `resolveInitialLocale(...)` and strict `en|ar` validation with fail-closed `en` fallback.
+  - `getRequestLocale()` now keeps locale-cookie authority and uses `ZOOTOPIA_DEFAULT_LANGUAGE` only when cookie is missing/invalid.
+  - Added `ZOOTOPIA_DEFAULT_LANGUAGE=en` guidance to `.env.example`.
+- Home composition:
+  - Extracted stat card data into a shared `homeStats` map.
+  - Removed top-right stat cards from the hero header.
+  - Added a dedicated lower "Workspace Snapshot" stats section with responsive 1/2/3-column behavior.
+- Assessment translucency:
+  - Increased transparency in assessment hero gradient backgrounds (light/dark).
+  - Increased transparency in `.assessment-premium-panel` (light/dark/system-dark) without changing field focus/readability behavior.
+- Public auth stability polish:
+  - Login page now reserves top-rail width against the decorative badge and adds a dedicated top offset so absolute controls do not overlap centered content.
+  - `AuthTopControls` now wraps when width is constrained.
+  - Auth shell header and media panel now enforce clearer stacking (`z-index` guard + isolated media context).
+  - Media overlays were slightly softened and made pointer-event transparent.
+  - Login/admin/confirm cards now use isolated card contexts with slightly lighter shadow density.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- Edited-file diagnostics: no errors.
+
+Risks / Notes:
+- No auth/session/provider authority changes were introduced; this pass is preference bootstrap + presentation-layer only.
+- Locale cookies still remain the primary persisted preference source.
 - Existing unrelated working-tree changes were left untouched.
 
 ---

@@ -1011,9 +1011,9 @@ html[dir="rtl"] .field-control {
 .assessment-premium-panel {
   border: 1px solid rgba(15, 118, 110, 0.18);
   background:
-    radial-gradient(circle at top left, rgba(45, 212, 191, 0.18), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(242, 198, 106, 0.12), transparent 36%),
-    linear-gradient(180deg, rgba(252, 255, 254, 0.92), rgba(241, 249, 247, 0.88));
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(242, 198, 106, 0.1), transparent 36%),
+    linear-gradient(180deg, rgba(252, 255, 254, 0.86), rgba(241, 249, 247, 0.8));
   box-shadow:
     0 30px 72px rgba(3, 10, 18, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.48);
@@ -2144,9 +2144,9 @@ html[dir="rtl"] .field-control {
 :root[data-theme="dark"] .assessment-premium-panel {
   border-color: rgba(45, 212, 191, 0.18);
   background:
-    radial-gradient(circle at top left, rgba(45, 212, 191, 0.18), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(242, 198, 106, 0.08), transparent 36%),
-    linear-gradient(180deg, rgba(4, 12, 21, 0.94), rgba(3, 10, 18, 0.96));
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(242, 198, 106, 0.07), transparent 36%),
+    linear-gradient(180deg, rgba(4, 12, 21, 0.88), rgba(3, 10, 18, 0.9));
   box-shadow:
     0 32px 80px rgba(2, 6, 23, 0.52),
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
@@ -2289,9 +2289,9 @@ html[dir="rtl"] .field-control {
   :root[data-theme="system"] .assessment-premium-panel {
     border-color: rgba(45, 212, 191, 0.18);
     background:
-      radial-gradient(circle at top left, rgba(45, 212, 191, 0.18), transparent 32%),
-      radial-gradient(circle at bottom right, rgba(242, 198, 106, 0.08), transparent 36%),
-      linear-gradient(180deg, rgba(4, 12, 21, 0.94), rgba(3, 10, 18, 0.96));
+      radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 32%),
+      radial-gradient(circle at bottom right, rgba(242, 198, 106, 0.07), transparent 36%),
+      linear-gradient(180deg, rgba(4, 12, 21, 0.88), rgba(3, 10, 18, 0.9));
     box-shadow:
       0 32px 80px rgba(2, 6, 23, 0.52),
       inset 0 1px 0 rgba(255, 255, 255, 0.05),
@@ -3072,11 +3072,14 @@ html[dir="rtl"] .toggle-group--compact .toggle-label {
   gap: 0.85rem;
 }
 
+/* Keep auth header controls above media/content layers so wrapping toggles remain clickable and never clip behind hero art. */
 .auth-shell-top {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.6rem;
+  position: relative;
+  z-index: 2;
 }
 
 .auth-utility-group {
@@ -3085,6 +3088,7 @@ html[dir="rtl"] .toggle-group--compact .toggle-label {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-inline-start: auto;
+  max-width: 100%;
 }
 
 .auth-shell-body {
@@ -3096,6 +3100,8 @@ html[dir="rtl"] .toggle-group--compact .toggle-label {
 
 .auth-media-panel {
   position: relative;
+  /* Isolate the media panel stacking context so overlay gradients stay scoped and cannot bleed into sibling auth surfaces. */
+  isolation: isolate;
   overflow: hidden;
   border-radius: 2rem;
   border: 1px solid var(--border);
@@ -3111,22 +3117,24 @@ html[dir="rtl"] .toggle-group--compact .toggle-label {
 }
 
 .auth-media-overlay {
+  /* Overlay opacity is intentionally restrained to preserve headline readability without over-darkening shared auth imagery. */
+  pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(7, 17, 27, 0.1) 0%, rgba(7, 17, 27, 0.36) 62%, rgba(7, 17, 27, 0.62) 100%),
-    linear-gradient(90deg, rgba(7, 17, 27, 0.42) 0%, rgba(7, 17, 27, 0.16) 52%, rgba(7, 17, 27, 0.32) 100%);
+    linear-gradient(180deg, rgba(7, 17, 27, 0.08) 0%, rgba(7, 17, 27, 0.3) 62%, rgba(7, 17, 27, 0.54) 100%),
+    linear-gradient(90deg, rgba(7, 17, 27, 0.34) 0%, rgba(7, 17, 27, 0.12) 52%, rgba(7, 17, 27, 0.26) 100%);
 }
 
 :root[data-theme="dark"] .auth-media-overlay {
   background:
-    linear-gradient(180deg, rgba(5, 12, 19, 0.2) 0%, rgba(5, 12, 19, 0.52) 68%, rgba(5, 12, 19, 0.78) 100%),
-    linear-gradient(90deg, rgba(5, 12, 19, 0.58) 0%, rgba(5, 12, 19, 0.3) 48%, rgba(5, 12, 19, 0.5) 100%);
+    linear-gradient(180deg, rgba(5, 12, 19, 0.16) 0%, rgba(5, 12, 19, 0.46) 68%, rgba(5, 12, 19, 0.7) 100%),
+    linear-gradient(90deg, rgba(5, 12, 19, 0.5) 0%, rgba(5, 12, 19, 0.24) 48%, rgba(5, 12, 19, 0.42) 100%);
 }
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] .auth-media-overlay {
     background:
-      linear-gradient(180deg, rgba(5, 12, 19, 0.2) 0%, rgba(5, 12, 19, 0.52) 68%, rgba(5, 12, 19, 0.78) 100%),
-      linear-gradient(90deg, rgba(5, 12, 19, 0.58) 0%, rgba(5, 12, 19, 0.3) 48%, rgba(5, 12, 19, 0.5) 100%);
+      linear-gradient(180deg, rgba(5, 12, 19, 0.16) 0%, rgba(5, 12, 19, 0.46) 68%, rgba(5, 12, 19, 0.7) 100%),
+      linear-gradient(90deg, rgba(5, 12, 19, 0.5) 0%, rgba(5, 12, 19, 0.24) 48%, rgba(5, 12, 19, 0.42) 100%);
   }
 }
 

@@ -46,7 +46,7 @@ export default async function LoginPage() {
           className="theme-image-dark object-cover object-center"
           sizes="100vw"
         />
-        <div className="absolute inset-0 bg-background/52 backdrop-blur-[1.5px] transition-colors duration-700" />
+        <div className="absolute inset-0 bg-background/46 backdrop-blur-[1.5px] transition-colors duration-700" />
       </div>
 
       {/* Regular-login badge ownership:
@@ -68,8 +68,9 @@ export default async function LoginPage() {
       </div>
 
       {/* Top Navigation & Controls */}
+      {/* Reserve horizontal space for the decorative badge so control chips never collide with it on tight mobile widths. */}
       <AuthTopControls
-        className="absolute end-3 top-3 z-20 max-w-[calc(100%-1.25rem)] sm:end-4 sm:top-4 md:end-8 md:top-8"
+        className="absolute end-3 top-3 z-20 max-w-[calc(100%-5.5rem)] sm:end-4 sm:top-4 sm:max-w-[calc(100%-6.75rem)] md:end-8 md:top-8 md:max-w-[calc(100%-10rem)]"
         themeMode={uiContext.themeMode}
         locale={uiContext.locale}
         themeLabel={uiContext.messages.themeLabel}
@@ -86,7 +87,8 @@ export default async function LoginPage() {
       />
 
       {/* Login Stage Container */}
-      <div className="z-10 flex w-full max-w-lg min-h-[calc(100vh-2rem)] flex-col px-4 py-6 sm:min-h-[calc(100vh-3rem)] sm:px-6 sm:py-8">
+      {/* Keep a dedicated top offset so absolute controls stay independent from the centered title/panel stack. */}
+      <div className="z-10 flex w-full max-w-lg min-h-[calc(100vh-2rem)] flex-col px-4 pb-6 pt-20 sm:min-h-[calc(100vh-3rem)] sm:px-6 sm:pb-8 sm:pt-24 md:pt-10">
         {/* Keep title and primary auth panel centered while reserving a stable footer rail for the signature line. */}
         <div className="flex flex-1 flex-col justify-center">
           <div className="mb-10 text-center">

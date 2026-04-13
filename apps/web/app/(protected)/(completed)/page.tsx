@@ -55,6 +55,32 @@ export default async function HomePage() {
 
   const runtimeFlags = getRuntimeFlags();
   const siteContent = getSiteContent(uiContext.locale);
+  const homeStats = [
+    {
+      key: "documents",
+      label: uiContext.messages.recentDocumentsTitle,
+      value: documents.length,
+      icon: Database,
+      color: "text-blue-500",
+      bg: "bg-blue-500/10",
+    },
+    {
+      key: "assessments",
+      label: uiContext.messages.recentAssessmentsTitle,
+      value: assessments.length,
+      icon: BrainCircuit,
+      color: "text-purple-500",
+      bg: "bg-purple-500/10",
+    },
+    {
+      key: "infographics",
+      label: uiContext.messages.recentInfographicsTitle,
+      value: infographics.length,
+      icon: PieChart,
+      color: "text-amber-500",
+      bg: "bg-amber-500/10",
+    },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
@@ -71,42 +97,14 @@ export default async function HomePage() {
 
         {/* ── Header: title + stat counters ─────────────────────────── */}
         <div className="relative z-10 p-6 pb-0 md:p-10 md:pb-0">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-
-            {/* Title block */}
-            <div className="flex flex-col gap-3">
-              <span className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
-                <MonitorPlay className="h-3.5 w-3.5" />
-                {uiContext.messages.homeSectionLabel}
-              </span>
-              <h1 className="max-w-2xl font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-zinc-900 md:text-4xl dark:text-white">
-                {uiContext.messages.homeTitle}
-              </h1>
-            </div>
-
-            {/* Compact stat counters */}
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: uiContext.messages.recentDocumentsTitle, value: documents.length, icon: Database, color: "text-blue-500", bg: "bg-blue-500/10" },
-                { label: uiContext.messages.recentAssessmentsTitle, value: assessments.length, icon: BrainCircuit, color: "text-purple-500", bg: "bg-purple-500/10" },
-                { label: uiContext.messages.recentInfographicsTitle, value: infographics.length, icon: PieChart, color: "text-amber-500", bg: "bg-amber-500/10" },
-              ].map((stat, i) => (
-                <div
-                  key={i}
-                  className="rounded-[1.25rem] border border-white/15 bg-white/50 p-4 backdrop-blur-xl dark:border-white/5 dark:bg-zinc-900/40"
-                >
-                  <div className={`mb-2 inline-flex rounded-lg p-1.5 ${stat.bg}`}>
-                    <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                  </div>
-                  <div className="text-2xl font-black tracking-tighter text-zinc-900 dark:text-white">
-                    {stat.value}
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                    {stat.label}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="flex flex-col gap-3">
+            <span className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+              <MonitorPlay className="h-3.5 w-3.5" />
+              {uiContext.messages.homeSectionLabel}
+            </span>
+            <h1 className="max-w-2xl font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-zinc-900 md:text-4xl dark:text-white">
+              {uiContext.messages.homeTitle}
+            </h1>
           </div>
         </div>
 
@@ -316,7 +314,32 @@ export default async function HomePage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          ZONE 3 — UPLOAD CTA + TRUST FOOTER
+          ZONE 3 — WORKSPACE SNAPSHOT
+          Keep stats below the hero so the title area stays cleaner on all widths.
+          ═══════════════════════════════════════════════════════════════════ */}
+      <section className="rounded-[2rem] border border-white/15 bg-white/50 p-5 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/40 sm:p-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {homeStats.map((stat) => (
+            <div
+              key={stat.key}
+              className="rounded-[1.25rem] border border-white/15 bg-white/55 p-4 backdrop-blur-xl dark:border-white/5 dark:bg-zinc-900/45"
+            >
+              <div className={`mb-2 inline-flex rounded-lg p-1.5 ${stat.bg}`}>
+                <stat.icon className={`h-4 w-4 ${stat.color}`} />
+              </div>
+              <div className="text-2xl font-black tracking-tighter text-zinc-900 dark:text-white">
+                {stat.value}
+              </div>
+              <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          ZONE 4 — UPLOAD CTA + TRUST FOOTER
           Clear action point + privacy link. Minimal, intentional.
           ═══════════════════════════════════════════════════════════════════ */}
       <section className="space-y-5">

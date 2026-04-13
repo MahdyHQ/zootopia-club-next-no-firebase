@@ -522,7 +522,7 @@ export function AdminLoginPanel({
 
   return (
     <div className="relative mx-auto flex w-full max-w-[440px] flex-col gap-2 animate-in fade-in zoom-in-95 duration-700">
-      <div className="relative overflow-hidden rounded-[2.1rem] border border-border bg-background-elevated/90 p-4 shadow-2xl shadow-black/20 backdrop-blur-2xl sm:p-5">
+      <div className="relative isolate overflow-hidden rounded-[2.1rem] border border-border bg-background-elevated/90 p-4 shadow-2xl shadow-black/16 backdrop-blur-2xl sm:p-5">
         <div className="relative z-10 flex flex-col gap-3">
           {/* Keep the admin sign-in card operational and compact: form first, runtime/security notes second. */}
 

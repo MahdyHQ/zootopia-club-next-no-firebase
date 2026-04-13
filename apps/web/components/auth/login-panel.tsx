@@ -621,7 +621,7 @@ export function LoginPanel({
       : (isBusy ? messages.loginCtaWorking : localText.signInButton);
 
   return (
-    <div className="relative mx-auto w-full max-w-[440px] overflow-hidden rounded-[2rem] border border-border bg-background-elevated/90 p-6 shadow-2xl shadow-black/20 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-700 sm:rounded-[2.25rem] sm:p-8">
+    <div className="relative isolate mx-auto w-full max-w-[440px] overflow-hidden rounded-[2rem] border border-border bg-background-elevated/90 p-6 shadow-2xl shadow-black/16 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-700 sm:rounded-[2.25rem] sm:p-8">
       <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30" />
       <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-emerald-500 opacity-20 blur-3xl transition-opacity duration-700 dark:opacity-30" />
 

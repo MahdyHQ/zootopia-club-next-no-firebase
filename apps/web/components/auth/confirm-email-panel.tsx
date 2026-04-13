@@ -1305,7 +1305,7 @@ export function ConfirmEmailPanel({
 
   return (
     <div className="relative mx-auto flex w-full max-w-[480px] flex-col gap-3 animate-in fade-in zoom-in-95 duration-700">
-      <div className="relative overflow-hidden rounded-[2rem] border border-border bg-background-elevated/90 p-5 shadow-2xl shadow-black/20 backdrop-blur-2xl sm:p-6">
+      <div className="relative isolate overflow-hidden rounded-[2rem] border border-border bg-background-elevated/90 p-5 shadow-2xl shadow-black/16 backdrop-blur-2xl sm:p-6">
         <div className="relative z-10 flex flex-col gap-4">
           {/* Keep confirmation UX explicit and recovery-focused so unverified accounts are not misdiagnosed as session refresh failures. */}
           <AuthStatus status={visibleStatus} />
