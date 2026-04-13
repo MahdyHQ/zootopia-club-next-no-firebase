@@ -1120,6 +1120,7 @@ export function ConfirmEmailPanel({
     : mapGovernanceSnapshotToStatus(governance, messages);
 
   const isGovernanceBlocked = Boolean(governance && !governance.allowed);
+  const isCooldownActive = cooldownSeconds > 0;
   const isGovernancePriming =
     supabaseConfigured
     && supabaseAuthReady
@@ -1134,6 +1135,7 @@ export function ConfirmEmailPanel({
     || isGovernanceLoading
     || isGovernancePriming
     || isGovernanceBlocked
+    || isCooldownActive
     || !hasValidEmail;
 
   const blockingStatus =
@@ -1213,33 +1215,32 @@ export function ConfirmEmailPanel({
       return;
     }
 
-    let nextGovernance = governance;
+    // Always refresh governance before submit — catches null state (initial load race),
+    // stale snapshots from prior navigation, and cooldowns that expired between polls.
+    const freshGovernance = await syncGovernanceState(normalizedEmail, {
+      suppressStatus: false,
+    });
+    setGovernancePrimedEmail(normalizedEmail);
 
-    if (!nextGovernance || !nextGovernance.allowed) {
-      /* Re-read governance right before submit so the first click cannot be blocked by
-         a stale snapshot that was fetched during prior route history or cooldown drift,
-         and so initialization races cannot send a blind POST before backend truth arrives. */
-      const refreshedGovernance = await syncGovernanceState(normalizedEmail, {
-        suppressStatus: true,
-      });
+    const effectiveGovernance = freshGovernance ?? governance;
 
-      setGovernancePrimedEmail(normalizedEmail);
-
-      if (refreshedGovernance) {
-        nextGovernance = refreshedGovernance;
-      }
-
-      if (nextGovernance && !nextGovernance.allowed) {
-        setStatus(
-          mapGovernanceSnapshotToStatus(nextGovernance, messages) ?? {
-            tone: "warning",
-            icon: "warning",
-            title: messages.confirmEmailRateLimitedTitle,
-            body: messages.confirmEmailRateLimitedBody,
-          },
-        );
-        return;
-      }
+    if (!effectiveGovernance || !effectiveGovernance.allowed) {
+      setStatus(
+        effectiveGovernance
+          ? (mapGovernanceSnapshotToStatus(effectiveGovernance, messages) ?? {
+              tone: "warning" as const,
+              icon: "warning" as const,
+              title: messages.confirmEmailRateLimitedTitle,
+              body: messages.confirmEmailRateLimitedBody,
+            })
+          : {
+              tone: "warning" as const,
+              icon: "warning" as const,
+              title: messages.confirmEmailGenericErrorTitle,
+              body: messages.confirmEmailGenericErrorBody,
+            },
+      );
+      return;
     }
 
     submitInFlightRef.current = true;

@@ -33,6 +33,8 @@ export type VerificationResendGovernanceSnapshot = {
   ip: ScopeWindowSnapshot;
   hasAcceptedSend: boolean;
   lastAcceptedSendAt: string | null;
+  /** Internal route helper: true when reserve mutation succeeded for this request. */
+  reservationAccepted?: boolean;
 };
 
 export type VerificationResendGovernanceConfig = {
@@ -114,6 +116,11 @@ const MIN_WINDOW_SECONDS = 30;
 const MAX_WINDOW_SECONDS = 24 * 60 * 60;
 const MIN_WINDOW_MINUTES = 1;
 const MAX_WINDOW_MINUTES = Math.floor(MAX_WINDOW_SECONDS / 60);
+
+const CANONICAL_HASH_SALT_ENV_KEY = "ZOOTOPIA_EMAIL_VERIFICATION_HASH_SALT";
+
+let hasWarnedAboutMissingHashSalt = false;
+let hasWarnedAboutLegacyHashSalt = false;
 
 const GOVERNANCE_ENV_KEYS = {
   mode: [
@@ -252,6 +259,34 @@ function parseWindowSecondsFromMinutesOrLegacySeconds(input: {
   });
 }
 
+function resolveHashSaltWithWarnings(input: ResolvedEnvValue) {
+  const hashSalt = input.raw ?? "";
+
+  if (!hashSalt) {
+    if (!hasWarnedAboutMissingHashSalt) {
+      console.warn(
+        "[verification-resend-governance] "
+          + `${CANONICAL_HASH_SALT_ENV_KEY} is unset. `
+          + "Hash keys now derive from an empty salt, so this value should be set and kept stable "
+          + "across environments to avoid orphaned governance rows.",
+      );
+      hasWarnedAboutMissingHashSalt = true;
+    }
+
+    return hashSalt;
+  }
+
+  if (input.envKey !== CANONICAL_HASH_SALT_ENV_KEY && !hasWarnedAboutLegacyHashSalt) {
+    console.warn(
+      `[verification-resend-governance] Using legacy ${input.envKey}. `
+        + `Set ${CANONICAL_HASH_SALT_ENV_KEY} as the canonical hash-salt key for deterministic governance lookups.`,
+    );
+    hasWarnedAboutLegacyHashSalt = true;
+  }
+
+  return hashSalt;
+}
+
 export function getVerificationResendGovernanceConfig(): VerificationResendGovernanceConfig {
   const mode = resolveEnvValue(GOVERNANCE_ENV_KEYS.mode);
   const cooldownSeconds = resolveEnvValue(GOVERNANCE_ENV_KEYS.cooldownSeconds);
@@ -292,7 +327,7 @@ export function getVerificationResendGovernanceConfig(): VerificationResendGover
       legacySecondsEnvKeys: GOVERNANCE_ENV_KEYS.ipWindowSecondsLegacy,
       fallbackSeconds: DEFAULT_VERIFICATION_RESEND_IP_WINDOW_SECONDS,
     }),
-    hashSalt: hashSalt.raw ?? "",
+    hashSalt: resolveHashSaltWithWarnings(hashSalt),
   };
 }
 
@@ -924,13 +959,18 @@ export async function reserveVerificationResendAttempt(input: {
       await persistScopeWindow({ sql: txSql, window: ipWindow });
     }
 
-    return buildGovernanceSnapshot({
-      config,
-      accountWindow,
-      ipWindow,
-      ipDetected: subjectKeys.ipDetected,
-      nowMs,
-    });
+    return {
+      ...buildGovernanceSnapshot({
+        config,
+        accountWindow,
+        ipWindow,
+        ipDetected: subjectKeys.ipDetected,
+        nowMs,
+      }),
+      // Mark this request as reservation-accepted so caller can allow provider send
+      // even though the newly-set cooldown now applies to subsequent requests.
+      reservationAccepted: true,
+    };
   }) as Promise<VerificationResendGovernanceSnapshot>;
 }
 
@@ -959,32 +999,27 @@ export async function rollbackVerificationResendAttempt(input: {
 
   const sql = getZootopiaSql();
 
-  await sql.begin(async (tx) => {
-    const txSql = tx as unknown as ReturnType<typeof getZootopiaSql>;
+  await sql`
+    UPDATE public.email_verification_resend_governance
+    SET
+      attempt_count = GREATEST(0, attempt_count - 1),
+      updated_at    = NOW()
+    WHERE key_scope = 'account'
+      AND key_hash  = ${subjectKeys.accountKeyHash}
+      AND attempt_count > 0
+  `;
 
-    await txSql`
+  if (subjectKeys.ipDetected && subjectKeys.ipKeyHash) {
+    await sql`
       UPDATE public.email_verification_resend_governance
       SET
         attempt_count = GREATEST(0, attempt_count - 1),
-        updated_at = NOW()
-      WHERE key_scope = 'account'
-        AND key_hash = ${subjectKeys.accountKeyHash}
+        updated_at    = NOW()
+      WHERE key_scope = 'ip'
+        AND key_hash  = ${subjectKeys.ipKeyHash}
         AND attempt_count > 0
     `;
-
-    // Mirror reserve semantics: only touch IP scope when a real IP was detected.
-    if (subjectKeys.ipDetected && subjectKeys.ipKeyHash !== null) {
-      await txSql`
-        UPDATE public.email_verification_resend_governance
-        SET
-          attempt_count = GREATEST(0, attempt_count - 1),
-          updated_at = NOW()
-        WHERE key_scope = 'ip'
-          AND key_hash = ${subjectKeys.ipKeyHash}
-          AND attempt_count > 0
-      `;
-    }
-  });
+  }
 }
 
 export async function markVerificationResendProviderAccepted(input: {
@@ -1041,6 +1076,9 @@ export async function readVerificationResendAccountGovernanceByEmail(input: {
 export async function clearVerificationResendAccountGovernanceByEmail(input: {
   email: string;
 }): Promise<VerificationResendGovernanceAdminClearResult> {
+  // Account scope is intentionally the only clear target for one-user resets.
+  // IP scope can represent multiple users behind a shared network and must not
+  // be blanket-deleted from account-level operational tooling.
   const config = getVerificationResendGovernanceConfig();
   const accountKeyHash = buildAccountKeyHash(input.email, config);
 

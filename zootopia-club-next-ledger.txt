@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-13 (Resend provider-failure rollback + governance-truthful submit hardening)
+Last Updated: 2026-04-13 (Hash salt dependency audit + one-user governance cleanup runbook)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 79e2ebd3950a82c77a14fa224660bc73e8e9c81c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -868,6 +868,8 @@ Resend Governance Correctness Hardening (2026-04-13):
 - Rollback remains best-effort: route still returns provider-classified errors if rollback itself fails.
 - Confirm-email panel now disables submit while governance is initializing and during governance-blocked states
   (cooldown/account/ip/unavailable), preventing misleading early submits.
+- Reserve flow now marks reservation-accepted sends so the same request is not immediately rejected by its own
+  newly-created cooldown; cooldown still applies to subsequent attempts.
 
 Email Templates:
 - docs/auth-email/templates/zootopia-confirm-email-template-supabase.html
@@ -1601,6 +1603,117 @@ Risks / Notes:
 - Rollback is best-effort by design; provider error responses are returned even if rollback logging indicates a failure.
 - Deterministic provider-branch verification required a temporary local cooldown override (`=0`) to ensure POST reaches
   provider branch before cooldown enforcement in this environment.
+
+---
+
+2026-04-13 — First-Click Cooldown Self-Block Fix + Strict Resend Preflight
+============================================================================
+Type: Auth Resend Correctness / Backend Governance Flow Hardening / UX Preflight Tightening
+Scope: reserve→rejection sequencing in resend POST, rollback branch telemetry, confirm-email submit preflight and disabled guards
+
+Summary:
+- Fixed the observed network pattern `GET ready -> POST 429 cooldown` on first valid resend click.
+- Preserved provider-failure rollback semantics while adding explicit rollback telemetry on provider rejection.
+- Tightened panel preflight so every submit re-checks backend governance truth before POST, with cooldown explicitly treated as a disabled state.
+
+Root Cause (code + runtime verified):
+- `reserveVerificationResendAttempt()` incremented counters and set cooldown inside the same request.
+- Route-level `mapGovernanceRejection()` then interpreted the post-reservation cooldown as a block for that same request,
+  returning `VERIFICATION_RESEND_COOLDOWN_ACTIVE` before provider send.
+- Panel pre-check logic did not force a governance refresh on every submit attempt and did not explicitly include
+  cooldownSeconds in disabled-state derivation.
+
+Files Changed:
+- apps/web/lib/server/verification-resend-governance.ts
+- apps/web/app/api/auth/confirm-email/resend/route.ts
+- apps/web/components/auth/confirm-email-panel.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Governance snapshot now carries internal `reservationAccepted` metadata when reservation succeeds in the current request.
+- Resend POST now rejects governance only when block state was present before reservation (not from same-request cooldown creation).
+- Provider rejection branch keeps best-effort rollback and now logs `attemptRolledBack: true` for explicit observability.
+- Panel disabled-state now includes `cooldownSeconds > 0` directly.
+- Panel submit pre-check now always refreshes governance (`suppressStatus: false`) before deciding whether to POST.
+
+Verification:
+- web-lint-post-polish: pass (1 pre-existing warning in apps/web/lib/server/zootopia-postgres-adapter.ts)
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+- Runtime replay (default cooldown):
+  - GET `/api/auth/confirm-email/resend?email=...` => 200 `VERIFICATION_RESEND_READY`
+  - POST `/api/auth/confirm-email/resend` => 200 `ok=true, providerAccepted=true`
+  - follow-up snapshot => cooldown active with consumed attempt counters (expected for subsequent attempts)
+- Runtime forced provider rejection (invalid service-role key):
+  - before POST counters: account/ip 0/0
+  - POST => 503 provider config/auth failure
+  - after POST counters: account/ip 0/0 (rollback preserved budget)
+
+Risks / Notes:
+- Cooldown remains intentionally preserved even on provider rejection to avoid rapid-fire provider hammering.
+- `reservationAccepted` is internal optional metadata on server snapshot shape and is not relied on by client contracts.
+
+---
+
+2026-04-13 — Hash Salt Dependency Audit + One-User Governance Cleanup Runbook
+===============================================================================
+Type: Operational Safety Audit / Hash-Key Contract Clarity / Minimal Hardening
+Scope: resend-governance hash salt resolution path, admin cleanup boundary, environment contract notes
+
+Summary:
+- Completed a six-track architecture/safety audit focused on the resend-governance hash/salt dependency chain,
+  one-user cleanup safety, and backend-authoritative controls.
+- Confirmed the hashed governance model is intact (`scope|salt|normalized_value` via SHA-256) and no raw email
+  keys are persisted in governance storage.
+- Added non-breaking runtime diagnostics for missing/legacy hash salt env usage plus env-template guidance to keep
+  hash salt stable across environments.
+
+Audit Findings (code-verified):
+- Salt/key dependency:
+  - `getVerificationResendGovernanceConfig()` resolves canonical key
+    `ZOOTOPIA_EMAIL_VERIFICATION_HASH_SALT` with legacy alias fallback.
+  - `hashGovernanceSubject()` deterministically hashes `scope|salt|value`.
+  - Missing salt previously fell back silently to empty-string salt; this pass adds explicit warning telemetry.
+- Persistence boundary:
+  - `public.email_verification_resend_governance` primary key remains `(key_scope, key_hash)` only.
+  - RLS + revoke policies keep table backend-only for browser roles.
+- One-user cleanup safety:
+  - Admin internal route remains email-driven server-side hash lookup/clear for account scope only.
+  - Account-scope-only clearing is intentional; IP scope may represent shared networks and must not be bulk-cleared
+    from account-targeted operational actions.
+
+Files Changed:
+- apps/web/lib/server/verification-resend-governance.ts
+- .env.example
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Governance config now logs a one-time warning when canonical hash salt is unset.
+- Governance config now logs a one-time warning when a legacy hash-salt alias is used instead of canonical key.
+- Added an architecture comment documenting why account cleanup intentionally does not clear IP-scope rows.
+- Env template now explicitly warns to keep hash salt stable after rows exist.
+
+Safe One-User Cleanup (no mass delete):
+- Preferred operational path:
+  - Use admin internal endpoint `DELETE /api/admin/internal/verification-resend-governance?email=<target>`
+    under authenticated admin session.
+- SQL-only fallback (when direct DB ops are required and salt is known):
+  - Wrap in a transaction and scope strictly to account key for one email.
+  - Pattern:
+    `delete from public.email_verification_resend_governance`
+    `where key_scope = 'account'`
+    `and key_hash = encode(digest('account' || '|' || <salt> || '|' || lower(trim(<email>)), 'sha256'), 'hex');`
+
+Verification:
+- web-lint-post-polish: pass (1 pre-existing warning in apps/web/lib/server/zootopia-postgres-adapter.ts)
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- Hash-salt warnings are observability-only and do not change runtime governance math.
+- Rotating hash salt without a coordinated governance-row migration/clear will make prior rows unreachable by new
+  derived hashes.
+- One-user cleanup remains account-scoped by design to avoid collateral network-wide state deletion.
 
 ---
 

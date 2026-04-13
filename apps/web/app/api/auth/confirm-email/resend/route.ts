@@ -408,7 +408,7 @@ export async function POST(request: Request) {
   }
 
   const governanceRejection = mapGovernanceRejection(governance);
-  if (governanceRejection) {
+  if (governanceRejection && governance.reservationAccepted !== true) {
     return withGovernanceHeaders(
       applyNoStore(
         apiError(
@@ -437,9 +437,9 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    // Provider rejected this request before delivery acceptance, so undo the
-    // previously reserved governance attempt to avoid burning user budget on
-    // sends that never actually happened.
+    // Roll back the consumed attempt - the provider never sent the email,
+    // so the user's limited budget should not be wasted.
+    // Cooldown is intentionally preserved to prevent rapid-fire retries.
     await rollbackVerificationResendAttempt({ request, email }).catch((rollbackError) => {
       console.warn(
         "[confirm-email-resend] failed to roll back governance attempt after provider rejection",
@@ -447,7 +447,8 @@ export async function POST(request: Request) {
       );
     });
 
-    const rollbackAwareGovernance = await readVerificationResendGovernanceSnapshot({
+    // Re-read governance after rollback so response headers expose corrected counters.
+    const rolledBackGovernance = await readVerificationResendGovernanceSnapshot({
       request,
       email,
     }).catch(() => governance);
@@ -466,6 +467,7 @@ export async function POST(request: Request) {
       providerCode: providerFailure.providerCode,
       providerStatus: providerFailure.providerStatus,
       providerMessage: providerFailure.safeProviderMessage,
+      attemptRolledBack: true,
     });
 
     const failure = applyNoStore(
@@ -484,7 +486,7 @@ export async function POST(request: Request) {
       failure.headers.set("Retry-After", String(providerFailure.retryAfterSeconds));
     }
 
-    return withGovernanceHeaders(failure, rollbackAwareGovernance);
+    return withGovernanceHeaders(failure, rolledBackGovernance);
   }
 
   await markVerificationResendProviderAccepted({ email }).catch((markError) => {
