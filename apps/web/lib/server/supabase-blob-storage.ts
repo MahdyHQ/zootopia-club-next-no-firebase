@@ -8,7 +8,8 @@ import { getSupabaseAdminClient, hasSupabaseAdminRuntime } from "@/lib/server/su
    Ownership enforcement happens at TWO layers:
    
    1. SERVER CODE LAYER (this file + callers):
-      - ownerUid is embedded in the path: {namespace}/{ownerUid}/{resource}/...
+    - ownerUid is embedded in the path: users/{ownerUid}/{namespace}/... (canonical)
+    - legacy paths ({namespace}/{ownerUid}/...) remain readable during transition
       - assertOwnerScopedStoragePath() validates path matches owner before any I/O
       - Ownership source: session.user.uid (authenticated identity, not request params)
    
@@ -32,9 +33,9 @@ import { getSupabaseAdminClient, hasSupabaseAdminRuntime } from "@/lib/server/su
    1. User logs in → session.user.uid = "abc123"
    2. POST /api/uploads → createDocumentRecord({ ownerUid: user.uid, ... })
    3. buildDocumentStoragePath({ ownerUid: "abc123", documentId: "doc1", ... })
-   4. Result: "documents/abc123/doc1/file.pdf"
-   5. assertOwnerScopedStoragePath("documents/abc123/doc1/file.pdf", user.uid, ["documents"]) → passes
-   6. uploadZootopiaPrivateObject({ path: "documents/abc123/doc1/file.pdf", ... })
+  4. Result: "users/abc123/documents/doc1/file.pdf"
+  5. assertOwnerScopedStoragePath("users/abc123/documents/doc1/file.pdf", user.uid, ["documents"]) → passes
+  6. uploadZootopiaPrivateObject({ path: "users/abc123/documents/doc1/file.pdf", ... })
    7. Supabase Storage persists with owner metadata (future: in object tags or custom headers)
    
    Future agents: Preserve the path structure and ownership check order.
@@ -71,7 +72,7 @@ export async function uploadZootopiaPrivateObject(input: {
      This function does NOT re-check ownership; it assumes the caller did.
      
      Ownership invariant:
-     - path must be: {namespace}/{ownerUid}/...
+    - path must be owner-scoped: users/{ownerUid}/{namespace}/... (or allowed legacy path)
      - ownerUid must match authenticated session.uid
      - assertOwnerScopedStoragePath(path, session.uid, allowedNamespaces) must have passed
      
@@ -108,7 +109,7 @@ export async function downloadZootopiaPrivateObject(path: string): Promise<Buffe
      2. Path assertion: assertOwnerScopedStoragePath(path, ownerUid, ["documents"])
      3. Storage read: This function downloads the file
      
-     If the metadata says ownerUid="alice" but path is "documents/bob/...", the assertion fails
+    If the metadata says ownerUid="alice" but path is "users/bob/documents/...", the assertion fails
      and this function is never called. This prevents any leaked/forged paths from being accessed.
      
      Failure modes:

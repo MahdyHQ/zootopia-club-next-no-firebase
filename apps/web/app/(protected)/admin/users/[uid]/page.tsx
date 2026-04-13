@@ -37,15 +37,14 @@ import {
   hasRemoteBlobStorage,
   listZootopiaPrivateObjectDescriptorsByPrefix,
 } from "@/lib/server/supabase-blob-storage";
+import {
+  OWNER_STORAGE_NAMESPACES,
+  listOwnerScopedStoragePrefixes,
+} from "@/lib/server/owner-scope";
 
 export const runtime = "nodejs";
 
-const USER_STORAGE_NAMESPACES = [
-  "uploads/temp",
-  "documents",
-  "assessment-results",
-  "assessment-exports",
-] as const;
+const USER_STORAGE_NAMESPACES = [...OWNER_STORAGE_NAMESPACES] as const;
 const DELETE_USER_CONFIRMATION_PHRASE = "DELETE USER";
 
 type SearchParamValue = string | string[] | undefined;
@@ -367,12 +366,19 @@ export default async function AdminUserDetailPage({
   ]);
 
   const storageAvailable = hasRemoteBlobStorage();
-  const fallbackStorageNamespaceSummaries = USER_STORAGE_NAMESPACES.map((namespace) => ({
-    namespace,
-    prefix: `${namespace}/${targetUid}`,
-    objectCount: 0,
-    totalSizeBytes: 0,
-  }));
+  const fallbackStorageNamespaceSummaries = USER_STORAGE_NAMESPACES.map((namespace) => {
+    const prefixes = listOwnerScopedStoragePrefixes({
+      ownerUid: targetUid,
+      namespace,
+    });
+
+    return {
+      namespace,
+      prefix: prefixes.join(" | "),
+      objectCount: 0,
+      totalSizeBytes: 0,
+    };
+  });
 
   let storageNamespaceSummaries = fallbackStorageNamespaceSummaries;
   let storageSummaryDegraded = false;
@@ -381,17 +387,30 @@ export default async function AdminUserDetailPage({
     try {
       storageNamespaceSummaries = await Promise.all(
         USER_STORAGE_NAMESPACES.map(async (namespace) => {
-          const prefix = `${namespace}/${targetUid}`;
-          const descriptors = await listZootopiaPrivateObjectDescriptorsByPrefix(prefix);
-          const totalSizeBytes = descriptors.reduce(
+          const prefixes = listOwnerScopedStoragePrefixes({
+            ownerUid: targetUid,
+            namespace,
+          });
+          const descriptorsByPath = new Map<string, { sizeBytes: number | null }>();
+
+          for (const prefix of prefixes) {
+            const descriptors = await listZootopiaPrivateObjectDescriptorsByPrefix(prefix);
+            for (const descriptor of descriptors) {
+              descriptorsByPath.set(descriptor.path, {
+                sizeBytes: descriptor.sizeBytes,
+              });
+            }
+          }
+
+          const totalSizeBytes = [...descriptorsByPath.values()].reduce(
             (sum, descriptor) => sum + (descriptor.sizeBytes ?? 0),
             0,
           );
 
           return {
             namespace,
-            prefix,
-            objectCount: descriptors.length,
+            prefix: prefixes.join(" | "),
+            objectCount: descriptorsByPath.size,
             totalSizeBytes,
           };
         }),
@@ -546,8 +565,12 @@ export default async function AdminUserDetailPage({
         <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
           <HardDrive className="h-5 w-5 shrink-0" />
           <p className="text-sm font-medium">
-            Per-user storage cleanup completed. User-owned objects were removed from uploads/temp,
-            documents, assessment-results, and assessment-exports.
+            Per-user storage cleanup completed. User-owned objects were removed from canonical
+            {" "}
+            <span className="font-mono">{`users/${targetUser.uid}/...`}</span>
+            {" "}
+            namespaces and legacy uploads/temp, documents, assessment-results,
+            and assessment-exports paths.
           </p>
         </div>
       )}
@@ -896,17 +919,17 @@ export default async function AdminUserDetailPage({
             <DetailCard
               label="Uploads"
               value={retentionSummaries.uploads}
-              subtitle="documents/* and uploads/temp/*"
+              subtitle="users/*/documents/*, users/*/uploads/temp/*, and legacy paths"
             />
             <DetailCard
               label="Results"
               value={retentionSummaries.results}
-              subtitle="assessment-results/*"
+              subtitle="users/*/assessment-results/* and legacy paths"
             />
             <DetailCard
               label="Exports"
               value={retentionSummaries.exports}
-              subtitle="assessment-exports/*"
+              subtitle="users/*/assessment-exports/* and legacy paths"
             />
           </div>
         </div>

@@ -12,6 +12,13 @@ export type DocumentExtractionEngine =
   | "direct-file"
   | "datalab-convert";
 
+export type StorageDataClass =
+  | "upload-source"
+  | "assessment-result"
+  | "assessment-export";
+
+export type StorageLayoutVersion = "legacy-v1" | "unified-v2";
+
 export interface DocumentRecord {
   id: string;
   ownerUid: string;
@@ -20,6 +27,9 @@ export interface DocumentRecord {
   mimeType: string;
   sizeBytes: number;
   storagePath: string | null;
+  storageDataClass?: "upload-source";
+  storageOwnerUid?: string;
+  storageLayoutVersion?: StorageLayoutVersion;
   status: DocumentStatus;
   markdown: string | null;
   extractionEngine: DocumentExtractionEngine;

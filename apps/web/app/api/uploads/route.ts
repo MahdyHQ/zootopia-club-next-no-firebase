@@ -50,7 +50,7 @@ export async function POST(request: Request) {
          Session Binding:
          - ownerUid = user.uid (from authenticated session, NOT request body)
          - workspaceExpiresAt = session.sessionExpiresAt (uploads expire when session expires)
-         - Path: documents/{userId}/* ← fully scoped to authenticated owner
+         - Path: users/{userId}/documents/* ← fully scoped to authenticated owner
          
          Temporary Lifecycle:
          - Uploaded source files are session-workspace assets with env-driven upload retention
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
          Future agents:
          - Do NOT accept userId, ownerId, or uploaderId from request body/params
          - Always derive ownerUid from session.user.uid
-         - Preserve the path structure: documents/{ownerUid}/{documentId}/{fileName}
+        - Preserve the canonical path structure: users/{ownerUid}/documents/{documentId}/{fileName}
       */
       workspaceExpiresAt: session.sessionExpiresAt,
       fileName: file.name,

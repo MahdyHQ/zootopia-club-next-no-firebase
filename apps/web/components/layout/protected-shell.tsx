@@ -179,7 +179,7 @@ export function ProtectedShell({
             </button>
           <div className="hidden lg:flex items-center gap-2 h-10 px-4 shrink-0 rounded-xl bg-white/5 border border-white/5 shadow-sm text-xs font-black uppercase tracking-widest text-foreground">
                <Sparkles className="h-4 w-4 text-emerald-400" />
-               <span>{messages.appName} <span className="opacity-40 font-normal mx-1">/</span> Workspace</span>
+            <span className="truncate">{messages.appName || "Zootopia Club"}</span>
             </div>
           </div>
           

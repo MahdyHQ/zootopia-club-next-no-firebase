@@ -16,21 +16,22 @@ import {
   deleteZootopiaPrivateObjectsBatch,
   hasRemoteBlobStorage,
 } from "@/lib/server/supabase-blob-storage";
+import {
+  OWNER_STORAGE_NAMESPACES,
+  listGlobalUserOwnedStorageRoots,
+  listOwnerScopedStoragePrefixes,
+} from "@/lib/server/owner-scope";
 
 export const runtime = "nodejs";
 
 const STORAGE_CLEANUP_ROUTE = "/api/admin/storage/cleanup";
-const USER_OWNED_STORAGE_NAMESPACES = [
-  "uploads/temp",
-  "documents",
-  "assessment-results",
-  "assessment-exports",
-] as const;
+const USER_OWNED_STORAGE_NAMESPACES = [...OWNER_STORAGE_NAMESPACES] as const;
+const GLOBAL_USER_OWNED_STORAGE_ROOTS = [...listGlobalUserOwnedStorageRoots()] as const;
 const STORAGE_DELETE_BATCH_SIZE = 500;
 
 type NamespaceCleanupBreakdown = {
   namespace: string;
-  prefix: string;
+  prefixes: string[];
   matchedCount: number;
   deletedCount: number;
   failedCount: number;
@@ -38,7 +39,7 @@ type NamespaceCleanupBreakdown = {
 
 async function deleteNamespaceObjectsInBatches(input: {
   namespace: string;
-  prefix: string;
+  prefixes: string[];
   paths: string[];
 }) {
   let deletedCount = 0;
@@ -51,7 +52,7 @@ async function deleteNamespaceObjectsInBatches(input: {
 
   return {
     namespace: input.namespace,
-    prefix: input.prefix,
+    prefixes: input.prefixes,
     matchedCount: input.paths.length,
     deletedCount,
     failedCount: input.paths.length - deletedCount,
@@ -118,7 +119,8 @@ export async function POST(request: Request) {
 /**
  * Per-user storage cleanup: deletes all storage objects owned by a specific user.
  *
- * Scope: All user-owned namespaces under uploads/temp/{targetUid}/, documents/{targetUid}/,
+ * Scope: All user-owned namespaces under canonical users/{targetUid}/... plus
+ * legacy uploads/temp/{targetUid}/, documents/{targetUid}/,
  * assessment-results/{targetUid}/, and assessment-exports/{targetUid}/.
  *
  * Also deletes related DB records (documents, assessment generations, infographic generations).
@@ -223,13 +225,25 @@ async function handleUserCleanup(admin: SessionUser, body: Record<string, unknow
 
   try {
     // Phase 1: enumerate and delete user-owned objects by namespace.
+    // Each namespace checks both canonical unified-v2 and legacy-v1 prefix layouts.
     for (const namespace of USER_OWNED_STORAGE_NAMESPACES) {
-      const prefix = `${namespace}/${targetUid}`;
-      const objects = await listZootopiaPrivateObjectsByPrefix(prefix);
+      const prefixes = listOwnerScopedStoragePrefixes({
+        ownerUid: targetUid,
+        namespace,
+      });
+      const objectPaths = new Set<string>();
+
+      for (const prefix of prefixes) {
+        const objects = await listZootopiaPrivateObjectsByPrefix(prefix);
+        for (const path of objects) {
+          objectPaths.add(path);
+        }
+      }
+
       const breakdown = await deleteNamespaceObjectsInBatches({
         namespace,
-        prefix,
-        paths: objects,
+        prefixes,
+        paths: [...objectPaths],
       });
 
       result.namespaceBreakdown.push(breakdown);
@@ -345,8 +359,9 @@ async function handleUserCleanup(admin: SessionUser, body: Record<string, unknow
  *
  * This is a VERY dangerous operation. Requires stronger confirmation.
  *
- * Scope: Only user-owned namespaces (uploads/temp/, documents/, assessment-results/, assessment-exports/).
- * Does NOT delete system assets or other bucket contents.
+ * Scope: only user-owned storage roots in both layouts:
+ * canonical users/* and legacy uploads/temp/, documents/, assessment-results/, assessment-exports/.
+ * Does NOT delete non-user system assets outside those roots.
  */
 async function handleGlobalCleanup(admin: SessionUser, body: Record<string, unknown>) {
   const confirmation = String(body.confirmation || "").trim();
@@ -382,7 +397,7 @@ async function handleGlobalCleanup(admin: SessionUser, body: Record<string, unkn
   const result = {
     actingAdminUid: admin.uid,
     scope: "user-namespaces-only",
-    namespaces: USER_OWNED_STORAGE_NAMESPACES,
+    namespaces: GLOBAL_USER_OWNED_STORAGE_ROOTS,
     namespaceBreakdown: [] as NamespaceCleanupBreakdown[],
     // Storage results
     storageObjectsMatched: 0,
@@ -394,12 +409,12 @@ async function handleGlobalCleanup(admin: SessionUser, body: Record<string, unkn
   };
 
   try {
-    // Only clean user-owned namespaces to avoid deleting system assets.
-    for (const namespace of USER_OWNED_STORAGE_NAMESPACES) {
-      const objects = await listZootopiaPrivateObjectsByPrefix(namespace);
+    // Only clean user-owned namespace roots to avoid deleting system assets.
+    for (const namespaceRoot of GLOBAL_USER_OWNED_STORAGE_ROOTS) {
+      const objects = await listZootopiaPrivateObjectsByPrefix(namespaceRoot);
       const breakdown = await deleteNamespaceObjectsInBatches({
-        namespace,
-        prefix: namespace,
+        namespace: namespaceRoot,
+        prefixes: [namespaceRoot],
         paths: objects,
       });
 

@@ -58,7 +58,7 @@ export default async function AdminStoragePage() {
         </h2>
         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
           This will delete ALL user-owned storage objects across all namespaces
-          (uploads/temp, documents, assessment-results, assessment-exports). This action cannot be undone.
+          (canonical users/* plus legacy uploads/temp, documents, assessment-results, assessment-exports). This action cannot be undone.
         </p>
 
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-300">

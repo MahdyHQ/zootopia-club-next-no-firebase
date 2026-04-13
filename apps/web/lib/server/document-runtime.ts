@@ -16,6 +16,7 @@ import {
 import {
   assertOwnerScopedStoragePath,
   buildDocumentStoragePath,
+  inferOwnerScopedStoragePathMetadata,
 } from "@/lib/server/owner-scope";
 import { getRetentionExpiryTimestamp } from "@/lib/server/assessment-retention";
 
@@ -71,7 +72,7 @@ async function tryPersistBinaryToStorage(input: {
        The ownerUid is derived from session.user.uid (authenticated identity), NOT from
        client request parameters.
        
-       Path format: documents/{ownerUid}/* ← {ownerUid} comes from getAuthenticatedSessionUser().uid
+      Path format: users/{ownerUid}/documents/* ← {ownerUid} comes from getAuthenticatedSessionUser().uid
        
        Assertion layer: Even if a corrupted metadata record has the wrong ownerUid,
        assertOwnerScopedStoragePath() will reject the write and throw OWNER_STORAGE_SCOPE_MISMATCH.
@@ -187,6 +188,14 @@ export async function createDocumentRecord(input: {
     );
   }
 
+  const storageMetadata = storagePath
+    ? inferOwnerScopedStoragePathMetadata({
+        storagePath,
+        ownerUid: input.ownerUid,
+        allowedNamespaces: ["documents"],
+      })
+    : null;
+
   return {
     document: {
       id: documentId,
@@ -196,6 +205,11 @@ export async function createDocumentRecord(input: {
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
       storagePath,
+      storageDataClass: storageMetadata?.storageDataClass === "upload-source"
+        ? "upload-source"
+        : undefined,
+      storageOwnerUid: storageMetadata?.ownerUid,
+      storageLayoutVersion: storageMetadata?.storageLayoutVersion,
       status: "ready",
       markdown: snapshot.markdown,
       extractionEngine: "direct-file",

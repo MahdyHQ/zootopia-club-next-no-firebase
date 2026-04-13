@@ -33,6 +33,7 @@ import {
   buildAssessmentResultRoute,
   getAssessmentStatus,
 } from "@/lib/server/assessment-retention";
+import { inferOwnerScopedStoragePathMetadata } from "@/lib/server/owner-scope";
 
 type AssessmentRequestLike = Partial<AssessmentRequest> & {
   options?: Partial<AssessmentRequestOptions>;
@@ -505,6 +506,7 @@ function normalizeThemeMode(value: unknown): ThemeMode | null | undefined {
 
 function normalizeAssessmentArtifacts(
   value: Record<string, Partial<AssessmentArtifactRecord>> | null | undefined,
+  ownerUid: string,
 ) {
   if (!value || typeof value !== "object") {
     return undefined;
@@ -526,8 +528,13 @@ function normalizeAssessmentArtifacts(
       expiresAt: normalizeOptionalString(artifact.expiresAt) ?? null,
       status: artifact.status,
     });
+    const storageMetadata = inferOwnerScopedStoragePathMetadata({
+      storagePath: storagePath ?? "",
+      ownerUid,
+      allowedNamespaces: ["assessment-results", "assessment-exports"],
+    });
 
-    if (!storagePath || !fileName || !contentType || !kind) {
+    if (!storagePath || !fileName || !contentType || !kind || !storageMetadata) {
       continue;
     }
 
@@ -546,6 +553,9 @@ function normalizeAssessmentArtifacts(
             }
           : {}),
         storagePath,
+        storageDataClass: storageMetadata.storageDataClass,
+        storageOwnerUid: storageMetadata.ownerUid,
+        storageLayoutVersion: storageMetadata.storageLayoutVersion,
         status: lifecycle.status,
         createdAt,
         expiresAt: lifecycle.expiresAt,
@@ -729,12 +739,13 @@ export function normalizeAssessmentGenerationRecord(
     normalizeOptionalString(record.previewRoute) ?? buildAssessmentPreviewRoute(normalizedId);
   const resultRoute =
     normalizeOptionalString(record.resultRoute) ?? buildAssessmentResultRoute(normalizedId);
+  const normalizedOwnerUid = normalizeWhitespace(String(record.ownerUid || ""));
   const resolvedOwnerRole = normalizeOwnerRole(record.ownerRole) ?? options.resolvedOwnerRole;
-  const normalizedArtifacts = normalizeAssessmentArtifacts(record.artifacts);
+  const normalizedArtifacts = normalizeAssessmentArtifacts(record.artifacts, normalizedOwnerUid);
 
   const normalizedGeneration: AssessmentGeneration = {
     id: normalizedId,
-    ownerUid: normalizeWhitespace(String(record.ownerUid || "")),
+    ownerUid: normalizedOwnerUid,
     title:
       normalizeOptionalString(record.title) ??
       buildAssessmentTitle({

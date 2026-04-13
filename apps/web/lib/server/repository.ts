@@ -69,6 +69,7 @@ import {
   type AuthTraceContext,
 } from "@/lib/server/auth-tracing";
 import { deleteDocumentBinaryFromStorage } from "@/lib/server/document-runtime";
+import { inferOwnerScopedStoragePathMetadata } from "@/lib/server/owner-scope";
 import { getServerAuthAdmin } from "@/lib/server/server-auth";
 import { hasSupabaseAdminRuntime } from "@/lib/server/supabase-admin";
 import {
@@ -823,10 +824,23 @@ function normalizeDocumentRecord(
   // Fall back to undefined when null so the DocumentRecord type stays consistent.
   const computedExpiry = getRetentionExpiryTimestamp(record.createdAt, "uploads");
   const expiresAt = record.expiresAt ?? (computedExpiry ?? undefined);
+  const storageMetadata = record.storagePath
+    ? inferOwnerScopedStoragePathMetadata({
+        storagePath: record.storagePath,
+        ownerUid: record.ownerUid,
+        allowedNamespaces: ["documents"],
+      })
+    : null;
 
   return {
     ...record,
     ownerRole: normalizeStoredOwnerRole(record.ownerRole) ?? resolvedOwnerRole,
+    storageDataClass:
+      storageMetadata?.storageDataClass === "upload-source"
+        ? "upload-source"
+        : (record.storageDataClass ?? undefined),
+    storageOwnerUid: storageMetadata?.ownerUid ?? record.storageOwnerUid,
+    storageLayoutVersion: storageMetadata?.storageLayoutVersion ?? record.storageLayoutVersion,
     isActive,
     supersededAt: isActive ? null : record.supersededAt ?? null,
     expiresAt,

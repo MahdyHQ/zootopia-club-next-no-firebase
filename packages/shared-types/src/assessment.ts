@@ -1,6 +1,6 @@
 import type { AiProviderId } from "./ai";
 import type { Locale, ThemeMode, UserRole } from "./auth";
-import type { DocumentStatus } from "./document";
+import type { DocumentStatus, StorageDataClass, StorageLayoutVersion } from "./document";
 
 export type AssessmentDifficulty = "easy" | "medium" | "hard";
 export type AssessmentGenerationStatus = "ready" | "expired";
@@ -232,6 +232,9 @@ export interface AssessmentArtifactRecord {
   fileName: string;
   versionTag?: string | null;
   storagePath: string;
+  storageDataClass?: StorageDataClass;
+  storageOwnerUid?: string;
+  storageLayoutVersion?: StorageLayoutVersion;
   status: AssessmentGenerationStatus;
   createdAt: string;
   expiresAt: string | null;

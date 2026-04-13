@@ -1,12 +1,22 @@
 import "server-only";
 
-import type { SessionUser, ThemeMode } from "@zootopia/shared-types";
+import type {
+  SessionUser,
+  StorageDataClass,
+  StorageLayoutVersion,
+  ThemeMode,
+} from "@zootopia/shared-types";
 
-type AllowedStorageNamespace =
-  | "documents"
-  | "uploads/temp"
-  | "assessment-results"
-  | "assessment-exports";
+export const OWNER_STORAGE_NAMESPACES = [
+  "documents",
+  "uploads/temp",
+  "assessment-results",
+  "assessment-exports",
+] as const;
+
+export type AllowedStorageNamespace = (typeof OWNER_STORAGE_NAMESPACES)[number];
+
+const OWNER_STORAGE_UNIFIED_ROOT = "users";
 
 type AssessmentArtifactPathInput = {
   ownerUid: string;
@@ -31,6 +41,48 @@ function sanitizeStorageSegment(value: string | null | undefined, fallback: stri
   return trimmed || fallback;
 }
 
+function normalizeStoragePath(value: string) {
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "");
+}
+
+function toStorageDataClass(namespace: AllowedStorageNamespace): StorageDataClass {
+  if (namespace === "assessment-results") {
+    return "assessment-result";
+  }
+
+  if (namespace === "assessment-exports") {
+    return "assessment-export";
+  }
+
+  return "upload-source";
+}
+
+function buildOwnerScopedNamespacePrefix(input: {
+  ownerUid: string;
+  namespace: AllowedStorageNamespace;
+  storageLayoutVersion: StorageLayoutVersion;
+}) {
+  const ownerUid = String(input.ownerUid || "").trim();
+  if (input.storageLayoutVersion === "unified-v2") {
+    return `${OWNER_STORAGE_UNIFIED_ROOT}/${ownerUid}/${input.namespace}`;
+  }
+
+  return `${input.namespace}/${ownerUid}`;
+}
+
+function pathMatchesPrefix(path: string, prefix: string) {
+  return path === prefix || path.startsWith(`${prefix}/`);
+}
+
+export type OwnerScopedStoragePathMetadata = {
+  namespace: AllowedStorageNamespace;
+  ownerUid: string;
+  storageDataClass: StorageDataClass;
+  storageLayoutVersion: StorageLayoutVersion;
+};
+
 export function buildOwnerSnapshot(user: Pick<SessionUser, "uid" | "role">) {
   return {
     ownerUid: user.uid,
@@ -46,7 +98,7 @@ export function buildOwnerSnapshot(user: Pick<SessionUser, "uid" | "role">) {
 /* TEMPORARY UPLOAD STORAGE:
    Session identity (uid) is the ONLY authority for ownership. Every temp upload is bound to the
    authenticated session's user.uid at creation time. The storage path enforces this binding:
-   uploads/temp/{userId}/* — this namespace is ONLY accessible by the session owner (uid).
+   users/{userId}/uploads/temp/* (canonical) — this namespace is ONLY accessible by the session owner (uid).
    Cleanup is opportunistic (on session boundary) or scheduled (maintenance endpoint).
    See apps/web/lib/server/session.ts for how session.uid is resolved server-side from auth.
 */
@@ -56,7 +108,7 @@ export function buildTemporaryUploadStoragePath(input: {
   fileName: string;
 }) {
   const safeFileName = sanitizeStorageSegment(input.fileName, "upload.bin");
-  return `uploads/temp/${input.ownerUid}/${input.uploadId}/${safeFileName}`;
+  return `${OWNER_STORAGE_UNIFIED_ROOT}/${input.ownerUid}/uploads/temp/${input.uploadId}/${safeFileName}`;
 }
 
 export function buildDocumentStoragePath(input: {
@@ -65,14 +117,14 @@ export function buildDocumentStoragePath(input: {
   fileName: string;
 }) {
   const safeFileName = sanitizeStorageSegment(input.fileName, "document.bin");
-  return `documents/${input.ownerUid}/${input.documentId}/${safeFileName}`;
+  return `${OWNER_STORAGE_UNIFIED_ROOT}/${input.ownerUid}/documents/${input.documentId}/${safeFileName}`;
 }
 
 export function buildAssessmentResultStoragePath(input: {
   ownerUid: string;
   generationId: string;
 }) {
-  return `assessment-results/${input.ownerUid}/${input.generationId}/result.json`;
+  return `${OWNER_STORAGE_UNIFIED_ROOT}/${input.ownerUid}/assessment-results/${input.generationId}/result.json`;
 }
 
 export function buildAssessmentArtifactStoragePath(input: AssessmentArtifactPathInput) {
@@ -85,7 +137,92 @@ export function buildAssessmentArtifactStoragePath(input: AssessmentArtifactPath
       : null;
   const variantSegment = themeSegment ? `${localeSegment}-${themeSegment}` : localeSegment;
 
-  return `assessment-exports/${input.ownerUid}/${input.generationId}/${safeArtifactKey}/${variantSegment}.${safeExtension}`;
+  return `${OWNER_STORAGE_UNIFIED_ROOT}/${input.ownerUid}/assessment-exports/${input.generationId}/${safeArtifactKey}/${variantSegment}.${safeExtension}`;
+}
+
+/* This helper powers admin reporting/cleanup and dual-layout compatibility checks.
+   Keep both legacy-v1 and unified-v2 prefixes until all historical rows and objects
+   have fully aged out or are migrated. */
+export function listOwnerScopedStoragePrefixes(input: {
+  ownerUid: string;
+  namespace: AllowedStorageNamespace;
+  includeLegacy?: boolean;
+  includeUnified?: boolean;
+}) {
+  const prefixes: string[] = [];
+
+  if (input.includeUnified !== false) {
+    prefixes.push(
+      buildOwnerScopedNamespacePrefix({
+        ownerUid: input.ownerUid,
+        namespace: input.namespace,
+        storageLayoutVersion: "unified-v2",
+      }),
+    );
+  }
+
+  if (input.includeLegacy !== false) {
+    prefixes.push(
+      buildOwnerScopedNamespacePrefix({
+        ownerUid: input.ownerUid,
+        namespace: input.namespace,
+        storageLayoutVersion: "legacy-v1",
+      }),
+    );
+  }
+
+  return [...new Set(prefixes.filter((prefix) => prefix.trim().length > 0))];
+}
+
+export function listGlobalUserOwnedStorageRoots() {
+  return [OWNER_STORAGE_UNIFIED_ROOT, ...OWNER_STORAGE_NAMESPACES] as const;
+}
+
+export function inferOwnerScopedStoragePathMetadata(input: {
+  storagePath: string;
+  ownerUid: string;
+  allowedNamespaces?: readonly AllowedStorageNamespace[];
+}): OwnerScopedStoragePathMetadata | null {
+  const normalizedPath = normalizeStoragePath(input.storagePath);
+  const ownerUid = String(input.ownerUid || "").trim();
+
+  if (!normalizedPath || !ownerUid) {
+    return null;
+  }
+
+  const allowedNamespaces = input.allowedNamespaces ?? OWNER_STORAGE_NAMESPACES;
+
+  for (const namespace of allowedNamespaces) {
+    const unifiedPrefix = buildOwnerScopedNamespacePrefix({
+      ownerUid,
+      namespace,
+      storageLayoutVersion: "unified-v2",
+    });
+    if (pathMatchesPrefix(normalizedPath, unifiedPrefix)) {
+      return {
+        namespace,
+        ownerUid,
+        storageDataClass: toStorageDataClass(namespace),
+        storageLayoutVersion: "unified-v2",
+      };
+    }
+
+    const legacyPrefix = buildOwnerScopedNamespacePrefix({
+      ownerUid,
+      namespace,
+      storageLayoutVersion: "legacy-v1",
+    });
+    if (pathMatchesPrefix(normalizedPath, legacyPrefix)) {
+      return {
+        namespace,
+        ownerUid,
+        storageDataClass: toStorageDataClass(namespace),
+        storageLayoutVersion: "legacy-v1",
+      };
+    }
+  }
+
+  return null;
 }
 
 export function isOwnerScopedStoragePath(
@@ -93,9 +230,12 @@ export function isOwnerScopedStoragePath(
   ownerUid: string,
   allowedNamespaces: AllowedStorageNamespace[],
 ) {
-  const normalizedPath = String(storagePath || "").replace(/\\/g, "/");
-  return allowedNamespaces.some((namespace) =>
-    normalizedPath.startsWith(`${namespace}/${ownerUid}/`),
+  return Boolean(
+    inferOwnerScopedStoragePathMetadata({
+      storagePath,
+      ownerUid,
+      allowedNamespaces,
+    }),
   );
 }
 
@@ -107,9 +247,15 @@ export function assertOwnerScopedStoragePath(
   ownerUid: string,
   allowedNamespaces: AllowedStorageNamespace[],
 ) {
-  if (!isOwnerScopedStoragePath(storagePath, ownerUid, allowedNamespaces)) {
+  const metadata = inferOwnerScopedStoragePathMetadata({
+    storagePath,
+    ownerUid,
+    allowedNamespaces,
+  });
+
+  if (!metadata) {
     throw new Error("OWNER_STORAGE_SCOPE_MISMATCH");
   }
 
-  return storagePath;
+  return normalizeStoragePath(storagePath);
 }

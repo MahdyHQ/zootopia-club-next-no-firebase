@@ -18,6 +18,7 @@ import {
   assertOwnerScopedStoragePath,
   buildAssessmentArtifactStoragePath,
   buildAssessmentResultStoragePath,
+  inferOwnerScopedStoragePathMetadata,
 } from "@/lib/server/owner-scope";
 import { getRetentionExpiryTimestamp } from "@/lib/server/assessment-retention";
 
@@ -83,6 +84,12 @@ export async function persistAssessmentExportArtifact(input: {
     contentType: input.contentType,
   });
 
+  const storageMetadata = inferOwnerScopedStoragePathMetadata({
+    storagePath: assertedStoragePath,
+    ownerUid: input.ownerUid,
+    allowedNamespaces: ["assessment-exports"],
+  });
+
   return {
     key: getAssessmentArtifactRecordKey({
       kind: input.kind,
@@ -100,6 +107,9 @@ export async function persistAssessmentExportArtifact(input: {
         }
       : {}),
     storagePath: assertedStoragePath,
+    storageDataClass: storageMetadata?.storageDataClass,
+    storageOwnerUid: storageMetadata?.ownerUid,
+    storageLayoutVersion: storageMetadata?.storageLayoutVersion,
     status: "ready",
     createdAt: input.createdAt,
     expiresAt: input.expiresAt ?? getRetentionExpiryTimestamp(input.createdAt, "exports"),
@@ -135,6 +145,12 @@ export async function persistAssessmentResultArtifact(
     contentType: "application/json; charset=utf-8",
   });
 
+  const storageMetadata = inferOwnerScopedStoragePathMetadata({
+    storagePath: assertedStoragePath,
+    ownerUid: generation.ownerUid,
+    allowedNamespaces: ["assessment-results"],
+  });
+
   return {
     key: "canonical-result",
     kind: "canonical-result",
@@ -143,6 +159,9 @@ export async function persistAssessmentResultArtifact(
     contentType: "application/json; charset=utf-8",
     fileName: resultFileName,
     storagePath: assertedStoragePath,
+    storageDataClass: storageMetadata?.storageDataClass,
+    storageOwnerUid: storageMetadata?.ownerUid,
+    storageLayoutVersion: storageMetadata?.storageLayoutVersion,
     status: generation.status,
     createdAt: generation.createdAt,
     expiresAt: generation.expiresAt,

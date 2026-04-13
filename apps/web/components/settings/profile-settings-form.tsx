@@ -13,19 +13,18 @@ import {
   validateUserGender,
 } from "@zootopia/shared-utils";
 import {
+  Check,
   Globe2,
   IdCard,
   LoaderCircle,
   Phone,
-  ShieldAlert,
   Sparkles,
   UserRound,
   VenusAndMars,
-  type LucideIcon,
 } from "lucide-react";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
   SettingsCountrySelect,
@@ -57,6 +56,15 @@ type ProfileSettingsFormProps = {
 };
 
 type ProfileSaveFeedbackTone = "idle" | "pending" | "success" | "error";
+
+type SavedFieldSnapshot = {
+  fullName: string;
+  universityCode: string;
+  phoneNumber: string;
+  phoneCountryIso2: string;
+  gender: UserGender | "";
+  nationality: string;
+};
 
 function normalizeTextValue(value: string) {
   return String(value || "").trim().replace(/\s+/g, " ");
@@ -196,6 +204,46 @@ function formatPhonePreview(phoneValue: string): string {
   }
 }
 
+function buildSavedFieldSnapshot(input: {
+  fullName: string;
+  universityCode: string;
+  phoneNumber: string;
+  phoneCountryIso2: string;
+  gender: string;
+  nationality: string;
+}): SavedFieldSnapshot {
+  const normalizedPhone = normalizePhoneDraftValue(input.phoneNumber);
+  const phoneValidation = validatePhoneNumberE164(normalizedPhone);
+  const genderValidation = validateUserGender(input.gender);
+
+  return {
+    fullName: normalizeTextValue(input.fullName),
+    universityCode: normalizeTextValue(input.universityCode),
+    phoneNumber: phoneValidation.ok
+      ? normalizePhoneForCompare(phoneValidation.value)
+      : "",
+    phoneCountryIso2: input.phoneCountryIso2,
+    gender: genderValidation.ok ? genderValidation.value : "",
+    nationality: normalizeTextValue(input.nationality),
+  };
+}
+
+function FieldSavedIndicator(input: {
+  isSaved: boolean;
+  a11yLabel: string;
+}) {
+  if (!input.isSaved) {
+    return null;
+  }
+
+  return (
+    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">
+      <Check className="h-3.5 w-3.5" aria-hidden="true" />
+      <span className="sr-only">{input.a11yLabel}</span>
+    </span>
+  );
+}
+
 export function ProfileSettingsForm({
   messages,
   locale,
@@ -304,60 +352,67 @@ export function ProfileSettingsForm({
       ? messages.profileCompletionSaveAction
       : messages.settingsProfileSaveAction;
 
-  const requirementItems = useMemo(
-    () =>
-      [
-        {
-          key: "fullName",
-          label: messages.settingsFullNameLabel,
-          icon: UserRound,
-          complete: Boolean(normalizeTextValue(fullName)),
-        },
-        {
-          key: "universityCode",
-          label: messages.settingsUniversityCodeLabel,
-          icon: IdCard,
-          complete: Boolean(normalizeTextValue(universityCode)),
-        },
-        {
-          key: "gender",
-          label: messages.settingsGenderLabel,
-          icon: VenusAndMars,
-          complete: validateUserGender(gender).ok,
-        },
-        {
-          key: "phoneNumber",
-          label: messages.settingsPhoneLabel,
-          icon: Phone,
-          complete: phoneValidation.ok,
-        },
-        {
-          key: "nationality",
-          label: messages.settingsNationalityLabel,
-          icon: Globe2,
-          complete: Boolean(normalizeTextValue(nationality)),
-        },
-      ] satisfies {
-        key: keyof UserProfileFieldErrors;
-        label: string;
-        icon: LucideIcon;
-        complete: boolean;
-      }[],
-    [
-      fullName,
-      messages.settingsFullNameLabel,
-      messages.settingsGenderLabel,
-      messages.settingsNationalityLabel,
-      messages.settingsPhoneLabel,
-      messages.settingsUniversityCodeLabel,
-      gender,
-      nationality,
-      phoneValidation.ok,
-      universityCode,
-    ],
+  /* Keep a local snapshot of the last persisted profile values so each field can expose
+     compact saved-state checks without reintroducing heavyweight completion summary cards. */
+  const [savedSnapshot, setSavedSnapshot] = useState<SavedFieldSnapshot>(() =>
+    buildSavedFieldSnapshot({
+      fullName: initialFullName,
+      universityCode: initialUniversityCode,
+      phoneNumber: initialPhoneNumber,
+      phoneCountryIso2: defaultPhoneCountryIso2,
+      gender: initialGender,
+      nationality: initialNationality,
+    }),
   );
 
-  const missingRequirementCount = requirementItems.filter((item) => !item.complete).length;
+  useEffect(() => {
+    setSavedSnapshot(
+      buildSavedFieldSnapshot({
+        fullName: initialFullName,
+        universityCode: initialUniversityCode,
+        phoneNumber: initialPhoneNumber,
+        phoneCountryIso2: defaultPhoneCountryIso2,
+        gender: initialGender,
+        nationality: initialNationality,
+      }),
+    );
+  }, [
+    defaultPhoneCountryIso2,
+    initialFullName,
+    initialGender,
+    initialNationality,
+    initialPhoneNumber,
+    initialUniversityCode,
+  ]);
+
+  const normalizedFullName = useMemo(() => normalizeTextValue(fullName), [fullName]);
+  const normalizedUniversityCode = useMemo(
+    () => normalizeTextValue(universityCode),
+    [universityCode],
+  );
+  const normalizedNationality = useMemo(
+    () => normalizeTextValue(nationality),
+    [nationality],
+  );
+  const genderValidation = useMemo(() => validateUserGender(gender), [gender]);
+  const normalizedPhone = phoneValidation.ok
+    ? normalizePhoneForCompare(phoneValidation.value)
+    : "";
+
+  const fullNameIsSaved =
+    normalizedFullName.length > 0 && normalizedFullName === savedSnapshot.fullName;
+  const universityCodeIsSaved =
+    normalizedUniversityCode.length > 0 &&
+    normalizedUniversityCode === savedSnapshot.universityCode;
+  const phoneIsSaved =
+    normalizedPhone === savedSnapshot.phoneNumber &&
+    selectedPhoneCountry.iso2 === savedSnapshot.phoneCountryIso2 &&
+    (normalizedPhone.length > 0 || isAdmin);
+  const genderIsSaved =
+    genderValidation.ok && genderValidation.value === savedSnapshot.gender;
+  const nationalityIsSaved =
+    normalizedNationality.length > 0 &&
+    normalizedNationality === savedSnapshot.nationality;
 
   function clearFieldError(field: keyof UserProfileFieldErrors) {
     setFieldErrors((current) => {
@@ -485,6 +540,17 @@ export function ProfileSettingsForm({
         throw new Error("PROFILE_UPDATE_FAILED");
       }
 
+      setSavedSnapshot({
+        fullName: validation.value.fullName,
+        universityCode: validation.value.universityCode,
+        phoneNumber: phoneValidation.ok
+          ? normalizePhoneForCompare(phoneValidation.value)
+          : "",
+        phoneCountryIso2: selectedPhoneCountry.iso2,
+        gender: validation.value.gender,
+        nationality: validation.value.nationality,
+      });
+
       setSaveFeedback({
         tone: "success",
         message: messages.settingsProfileSaveSuccessStatus,
@@ -511,119 +577,63 @@ export function ProfileSettingsForm({
   }
 
   const panelClassName =
-    "rounded-[1.6rem] border border-white/30 bg-white/70 p-5 shadow-[0_20px_50px_rgba(2,6,23,0.08)] backdrop-blur-xl dark:border-white/8 dark:bg-slate-950/55";
+    "rounded-[1.35rem] border border-white/24 bg-white/72 p-4 shadow-[0_16px_40px_rgba(2,6,23,0.07)] backdrop-blur-xl dark:border-white/8 dark:bg-slate-950/55";
   const textFieldClassName =
-    "w-full rounded-[1.25rem] border border-slate-200/80 bg-white/90 px-4 py-3.5 text-sm text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.48),0_14px_28px_rgba(2,6,23,0.05)] outline-none transition focus:border-emerald-500/40 focus:bg-white dark:border-slate-700/70 dark:bg-slate-950/75 dark:focus:border-emerald-400/40";
+    "w-full rounded-[1.15rem] border border-slate-200/80 bg-white/90 px-4 py-3 text-sm text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.48),0_12px_24px_rgba(2,6,23,0.05)] outline-none transition focus:border-emerald-500/40 focus:bg-white dark:border-slate-700/70 dark:bg-slate-950/75 dark:focus:border-emerald-400/40";
 
   return (
-    <section className="relative rounded-[2.5rem] border border-white/25 bg-white/65 p-6 shadow-[0_30px_90px_rgba(2,6,23,0.08)] backdrop-blur-2xl dark:border-white/8 dark:bg-slate-950/45 md:p-8 lg:p-9">
+    <section className="relative rounded-[2rem] border border-white/24 bg-white/65 p-5 shadow-[0_24px_72px_rgba(2,6,23,0.08)] backdrop-blur-2xl dark:border-white/8 dark:bg-slate-950/45 md:p-6 lg:p-7">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.14),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(242,198,106,0.12),transparent_38%)]" />
 
       <div className="relative z-10">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl space-y-3">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">
               <Sparkles className="h-3.5 w-3.5" />
               {messages.settingsProfileTitle}
             </span>
 
-            <div className="space-y-2">
-              <h2 className="font-[family-name:var(--font-display)] text-3xl font-black tracking-[-0.04em] text-zinc-950 dark:text-white sm:text-[2.2rem]">
-                {formTitle}
-              </h2>
-              <p className="max-w-2xl text-sm leading-7 text-foreground-muted">
-                {formDescription}
-              </p>
-            </div>
-          </div>
-
-          <span
-            className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] ${
-              isAdmin
-                ? "border border-purple-500/25 bg-purple-500/10 text-purple-700 dark:border-purple-400/25 dark:bg-purple-400/10 dark:text-purple-200"
-                : profileCompleted
-                  ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200"
-                  : "border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-200"
-            }`}
-          >
-            {isAdmin
-              ? messages.profileCompletionAdminExemptBadge
-              : profileCompleted
-                ? messages.profileCompletionCompleteStatus
-                : messages.profileCompletionIncompleteStatus}
-          </span>
-        </div>
-
-        {!isAdmin && !profileCompleted ? (
-          <div className="mt-6 flex flex-col gap-3 rounded-[1.75rem] border border-amber-500/25 bg-[linear-gradient(135deg,rgba(245,158,11,0.12),rgba(255,255,255,0.72))] p-4 shadow-[0_18px_42px_rgba(245,158,11,0.12)] dark:bg-[linear-gradient(135deg,rgba(245,158,11,0.12),rgba(2,6,23,0.58))] sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/14 text-amber-700 dark:text-amber-200">
-                <ShieldAlert className="h-5 w-5" />
-              </span>
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-zinc-950 dark:text-white">
-                  {messages.profileCompletionRequiredNotice}
-                </p>
-                <p className="text-sm text-foreground-muted">
-                  {messages.profileCompletionRequiredDetail}
-                </p>
-              </div>
-            </div>
-
-            <span className="inline-flex w-fit items-center rounded-full border border-amber-500/25 bg-white/70 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700 dark:bg-slate-950/60 dark:text-amber-200">
-              {missingRequirementCount} {messages.settingsCompletionRemainingLabel}
-            </span>
-          </div>
-        ) : null}
-
-        <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {requirementItems.map((item) => (
-            <div
-              key={item.key}
-              className={`rounded-[1.35rem] border p-3.5 shadow-[0_16px_36px_rgba(2,6,23,0.06)] ${
-                item.complete
-                  ? "border-emerald-500/20 bg-emerald-500/8"
-                  : "border-slate-200/85 bg-white/80 dark:border-slate-700/70 dark:bg-slate-950/65"
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+                isAdmin
+                  ? "border border-purple-500/25 bg-purple-500/10 text-purple-700 dark:border-purple-400/25 dark:bg-purple-400/10 dark:text-purple-200"
+                  : profileCompleted
+                    ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200"
+                    : "border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-200"
               }`}
             >
-              <div className="flex items-center justify-between gap-3">
-                <span
-                  className={`inline-flex h-9 w-9 items-center justify-center rounded-2xl ${
-                    item.complete
-                      ? "bg-emerald-500/14 text-emerald-700 dark:text-emerald-200"
-                      : "bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  }`}
-                >
-                  <item.icon className="h-4.5 w-4.5" />
-                </span>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
-                    item.complete
-                      ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
-                      : "border border-slate-300/80 bg-white/80 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                  }`}
-                >
-                  {item.complete
-                    ? messages.settingsRequirementReady
-                    : messages.settingsRequirementRequired}
-                </span>
-              </div>
+              {isAdmin
+                ? messages.profileCompletionAdminExemptBadge
+                : profileCompleted
+                  ? messages.profileCompletionCompleteStatus
+                  : messages.profileCompletionIncompleteStatus}
+            </span>
+          </div>
 
-              <p className="mt-3 text-sm font-semibold text-zinc-950 dark:text-white">
-                {item.label}
-              </p>
-            </div>
-          ))}
+          <div className="space-y-1.5">
+            <h2 className="font-[family-name:var(--font-display)] text-2xl font-black tracking-[-0.04em] text-zinc-950 dark:text-white sm:text-[2rem]">
+              {formTitle}
+            </h2>
+            <p className="max-w-2xl text-sm leading-6 text-foreground-muted">
+              {formDescription}
+            </p>
+          </div>
         </div>
 
-        <form className="mt-9 space-y-7" onSubmit={handleSubmit} noValidate>
+        <form className="mt-6 space-y-6" onSubmit={handleSubmit} noValidate>
           {/* Required field flow for completion-gated profiles.
               Keep this exact top-to-bottom order in this form block when making future UI changes. */}
           <div className="grid gap-5 lg:grid-cols-2">
             <label className={`${panelClassName} block space-y-2.5`}>
-              <span className="flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-white">
-                <UserRound className="h-4.5 w-4.5 text-emerald-700 dark:text-emerald-200" />
-                {messages.settingsFullNameLabel}
+              <span className="flex items-center justify-between gap-3 text-sm font-semibold text-zinc-950 dark:text-white">
+                <span className="inline-flex items-center gap-2">
+                  <UserRound className="h-4.5 w-4.5 text-emerald-700 dark:text-emerald-200" />
+                  {messages.settingsFullNameLabel}
+                </span>
+                <FieldSavedIndicator
+                  isSaved={fullNameIsSaved}
+                  a11yLabel={messages.settingsProfileSaveSuccessStatus}
+                />
               </span>
               <input
                 type="text"
@@ -647,9 +657,15 @@ export function ProfileSettingsForm({
             </label>
 
             <label className={`${panelClassName} block space-y-2.5`}>
-              <span className="flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-white">
-                <IdCard className="h-4.5 w-4.5 text-emerald-700 dark:text-emerald-200" />
-                {messages.settingsUniversityCodeLabel}
+              <span className="flex items-center justify-between gap-3 text-sm font-semibold text-zinc-950 dark:text-white">
+                <span className="inline-flex items-center gap-2">
+                  <IdCard className="h-4.5 w-4.5 text-emerald-700 dark:text-emerald-200" />
+                  {messages.settingsUniversityCodeLabel}
+                </span>
+                <FieldSavedIndicator
+                  isSaved={universityCodeIsSaved}
+                  a11yLabel={messages.settingsProfileSaveSuccessStatus}
+                />
               </span>
               <input
                 type="text"
@@ -677,7 +693,7 @@ export function ProfileSettingsForm({
           </div>
 
           <section className={panelClassName}>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-white">
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-700 dark:text-emerald-200">
@@ -689,18 +705,10 @@ export function ProfileSettingsForm({
                   {messages.settingsPhoneHint}
                 </p>
               </div>
-
-              <span
-                className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
-                  phoneValidation.ok
-                    ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
-                    : "border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200"
-                }`}
-              >
-                {phoneValidation.ok
-                  ? messages.settingsRequirementReady
-                  : messages.settingsRequirementRequired}
-              </span>
+              <FieldSavedIndicator
+                isSaved={phoneIsSaved}
+                a11yLabel={messages.settingsProfileSaveSuccessStatus}
+              />
             </div>
 
             <div className="mt-5 space-y-3">
@@ -743,11 +751,6 @@ export function ProfileSettingsForm({
                     {phonePreview}
                   </span>
                 ) : null}
-                {phoneValidation.ok ? (
-                  <span className="inline-flex items-center rounded-full border border-emerald-500/18 bg-emerald-500/10 px-3 py-1 font-medium text-emerald-700 dark:border-emerald-400/18 dark:bg-emerald-400/10 dark:text-emerald-200">
-                    {messages.settingsRequirementReady}
-                  </span>
-                ) : null}
               </div>
 
               {fieldErrors.phoneNumber ? (
@@ -757,8 +760,19 @@ export function ProfileSettingsForm({
           </section>
 
           <div className={panelClassName}>
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-white">
+                <VenusAndMars className="h-4.5 w-4.5 text-emerald-700 dark:text-emerald-200" />
+                {messages.settingsGenderLabel}
+              </span>
+              <FieldSavedIndicator
+                isSaved={genderIsSaved}
+                a11yLabel={messages.settingsProfileSaveSuccessStatus}
+              />
+            </div>
             <SettingsCountrySelect
               label={messages.settingsGenderLabel}
+              labelVisuallyHidden
               value={gender}
               placeholder={messages.settingsGenderPlaceholder}
               searchPlaceholder={messages.settingsGenderSearchPlaceholder}
@@ -778,8 +792,19 @@ export function ProfileSettingsForm({
           </div>
 
           <div className={panelClassName}>
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-white">
+                <Globe2 className="h-4.5 w-4.5 text-emerald-700 dark:text-emerald-200" />
+                {messages.settingsNationalityLabel}
+              </span>
+              <FieldSavedIndicator
+                isSaved={nationalityIsSaved}
+                a11yLabel={messages.settingsProfileSaveSuccessStatus}
+              />
+            </div>
             <SettingsCountrySelect
               label={messages.settingsNationalityLabel}
+              labelVisuallyHidden
               value={nationality}
               placeholder={messages.settingsNationalityPlaceholder}
               searchPlaceholder={messages.settingsCountrySearchPlaceholder}

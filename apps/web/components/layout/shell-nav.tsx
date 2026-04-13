@@ -117,28 +117,25 @@ export function ShellNav({
       <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none" />
 
       {/* Header / Branding */}
-      <div className={`relative z-10 border-b border-white/5 ${isCollapsed ? 'p-5 flex items-center justify-center' : 'p-6 pb-6'} shrink-0`}>
+      <div className={`relative z-10 border-b border-white/5 ${isCollapsed ? 'p-5 flex items-center justify-center' : 'p-5 pb-5'} shrink-0`}>
         {/* The main protected-workspace logo lives in the sidebar header so the top toolbar can stay focused on controls and user context. */}
         <Link
           href={APP_ROUTES.home}
           title={messages.appName || "Zootopia Club"}
-          className={`group flex min-w-0 items-center ${isCollapsed ? "justify-center" : "gap-3"}`}
+          className={`group flex min-w-0 items-center ${isCollapsed ? "justify-center" : "gap-3.5"}`}
         >
-          <ZootopiaMark className={`${isCollapsed ? "h-11 w-11" : "h-12 w-12"} transition-transform duration-300 group-hover:scale-[1.03]`} />
+          <ZootopiaMark className={`${isCollapsed ? "h-11 w-11" : "h-10 w-10"} transition-transform duration-300 group-hover:scale-[1.03]`} />
           {!isCollapsed && (
             <div className="min-w-0">
-              <p className="mb-1 truncate text-[10px] font-black uppercase tracking-[0.25em] text-emerald-400/80">
-                {messages.tagline || "Powered by AI"}
-              </p>
-              <h1 className="truncate text-3xl font-black tracking-tight text-white transition-all duration-300">
-                {messages.appName || "ZOOTOPIA"}
+              <h1 className="truncate text-[1.45rem] font-black leading-none tracking-[-0.02em] text-white transition-all duration-300">
+                {messages.appName || "Zootopia Club"}
               </h1>
             </div>
           )}
         </Link>
 
         {!isCollapsed && (
-          <div className="mt-6 rounded-2xl bg-white/5 p-4 border border-white/5 backdrop-blur-md shadow-sm overflow-hidden flex flex-col gap-1">
+          <div className="mt-4 rounded-2xl border border-white/5 bg-white/5 p-3.5 backdrop-blur-md shadow-sm overflow-hidden flex flex-col gap-1">
             <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 truncate">
               {messages.signedInAs || "Signed in as"}
             </p>

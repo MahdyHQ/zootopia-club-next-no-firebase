@@ -6,15 +6,18 @@ import "server-only";
  * Per-storage-type env contract (Vercel-compatible, `.env.local` for local dev):
  *
  *   ZOOTOPIA_UPLOAD_RETENTION_MINUTES
- *     - Integer >= 0. Retention for uploaded source files (`documents/*`, `uploads/temp/*`).
+ *     - Integer >= 0. Retention for uploaded source files
+ *       (`users/{uid}/documents/...`, `users/{uid}/uploads/temp/...`, plus legacy paths).
  *     - Default: 15
  *
  *   ZOOTOPIA_RESULT_RETENTION_MINUTES
- *     - Integer >= 0. Retention for generated result artifacts (`assessment-results/*`).
+ *     - Integer >= 0. Retention for generated result artifacts
+ *       (`users/{uid}/assessment-results/...`, plus legacy paths).
  *     - Default: 1440 (1 day)
  *
  *   ZOOTOPIA_EXPORT_RETENTION_MINUTES
- *     - Integer >= 0. Retention for exported artifacts (`assessment-exports/*`).
+ *     - Integer >= 0. Retention for exported artifacts
+ *       (`users/{uid}/assessment-exports/...`, plus legacy paths).
  *     - Default: 15
  *
  * Optional per-type mode keys:
@@ -114,15 +117,26 @@ function parseLegacyRetentionMinutes() {
 export function resolveStorageRetentionScopeFromNamespace(
   namespace: string,
 ): StorageRetentionScope {
-  if (namespace === "assessment-results") {
+  const normalized = String(namespace || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const segments = normalized.split("/").filter((segment) => segment.length > 0);
+
+  const namespaceKey = segments[0] === "users"
+    ? (segments[2] === "uploads" && segments[3] === "temp"
+      ? "uploads/temp"
+      : (segments[2] ?? ""))
+    : (segments[0] === "uploads" && segments[1] === "temp"
+      ? "uploads/temp"
+      : (segments[0] ?? ""));
+
+  if (namespaceKey === "assessment-results") {
     return "results";
   }
 
-  if (namespace === "assessment-exports") {
+  if (namespaceKey === "assessment-exports") {
     return "exports";
   }
 
-  // uploads/temp and documents are both source-upload classes.
+  // uploads/temp and documents are both source-upload classes in legacy and canonical layouts.
   return "uploads";
 }
 

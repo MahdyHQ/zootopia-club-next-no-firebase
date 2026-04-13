@@ -356,6 +356,18 @@ export async function ensureZootopiaSchema(
     )
   `;
 
+  // Legacy bootstrap migrations created zc_entities without created_at.
+  // Keep ensureSchema self-healing so adapter metadata reads never crash.
+  await sql`
+    ALTER TABLE zc_entities
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `;
+
+  await sql`
+    ALTER TABLE zc_entities
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `;
+
   // Index for owner_uid queries (common pattern: "get all docs owned by user X")
   await sql`
     CREATE INDEX IF NOT EXISTS idx_zc_entities_owner
@@ -373,6 +385,12 @@ export async function ensureZootopiaSchema(
   await sql`
     CREATE INDEX IF NOT EXISTS idx_zc_entities_updated
     ON zc_entities (collection, updated_at DESC)
+  `;
+
+  // Index for created_at to support lightweight newest-first metadata queries.
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_zc_entities_created
+    ON zc_entities (collection, created_at DESC)
   `;
 
   debugLog("Schema ensured successfully");
@@ -1277,7 +1295,7 @@ export class PgWriteBatch {
     return this.ops.length;
   }
 
-  async commit(): Promise<void> {
+  async commit(retryOptions?: RetryOptions): Promise<void> {
     this._ensureNotCommitted();
     this.committed = true;
 
@@ -1285,28 +1303,33 @@ export class PgWriteBatch {
 
     debugLog(`BATCH COMMIT (${this.ops.length} ops)`);
 
-    await this.rootSql.begin(async (sql) => {
-      for (const op of this.ops) {
-        switch (op.type) {
-          case "set":
-            await op.ref._setWithSql(
-              sql as unknown as Sql,
-              op.data,
-              op.options,
-            );
-            break;
-          case "update":
-            await op.ref._updateWithSql(
-              sql as unknown as Sql,
-              op.data,
-            );
-            break;
-          case "delete":
-            await op.ref._deleteWithSql(sql as unknown as Sql);
-            break;
-        }
-      }
-    });
+    await withRetry(
+      `BATCH COMMIT (${this.ops.length} ops)`,
+      () =>
+        this.rootSql.begin(async (sql) => {
+          for (const op of this.ops) {
+            switch (op.type) {
+              case "set":
+                await op.ref._setWithSql(
+                  sql as unknown as Sql,
+                  op.data,
+                  op.options,
+                );
+                break;
+              case "update":
+                await op.ref._updateWithSql(
+                  sql as unknown as Sql,
+                  op.data,
+                );
+                break;
+              case "delete":
+                await op.ref._deleteWithSql(sql as unknown as Sql);
+                break;
+            }
+          }
+        }) as Promise<void>,
+      retryOptions,
+    );
   }
 
   private _ensureNotCommitted(): void {

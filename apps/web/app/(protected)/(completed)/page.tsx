@@ -37,7 +37,6 @@ export default async function HomePage() {
   let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
   let assessments = [] as Awaited<ReturnType<typeof listAssessmentGenerationsForUser>>;
   let infographics = [] as Awaited<ReturnType<typeof listInfographicGenerationsForUser>>;
-  let workspaceDataDegraded = false;
 
   try {
     [documents, assessments, infographics] = await Promise.all([
@@ -48,7 +47,6 @@ export default async function HomePage() {
         : Promise.resolve([]),
     ]);
   } catch (error) {
-    workspaceDataDegraded = true;
     console.warn("[home-page] failed to load workspace datasets; rendering safe fallbacks", {
       uid: user.uid,
       error: error instanceof Error ? error.name : "UNKNOWN",
@@ -60,12 +58,6 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
-      {workspaceDataDegraded ? (
-        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-200">
-          Some workspace datasets are temporarily unavailable. Showing fallback cards and empty states.
-        </div>
-      ) : null}
-
       {/* ═══════════════════════════════════════════════════════════════════
           ZONE 1 — UNIFIED HERO SURFACE
           Merges: title, stats, workspace nav, Hall of Honor, platform story,
