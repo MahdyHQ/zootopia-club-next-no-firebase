@@ -829,6 +829,7 @@ export function ConfirmEmailPanel({
   const [governance, setGovernance] = useState<VerificationResendGovernanceSnapshot | null>(null);
   const [isGovernanceLoading, setIsGovernanceLoading] = useState(false);
   const [hasAcceptedSend, setHasAcceptedSend] = useState(false);
+  const [governancePrimedEmail, setGovernancePrimedEmail] = useState<string | null>(null);
   const governanceRequestTokenRef = useRef(0);
   const previousCooldownRef = useRef(0);
   const submitInFlightRef = useRef(false);
@@ -1050,15 +1051,25 @@ export function ConfirmEmailPanel({
       setGovernance(null);
       setCooldownSeconds(0);
       setHasAcceptedSend(false);
+      setGovernancePrimedEmail(null);
       setIsGovernanceLoading(false);
       return;
     }
 
+    let cancelled = false;
+    setGovernancePrimedEmail(null);
+
     const timerId = window.setTimeout(() => {
-      void syncGovernanceState(normalizedEmail, { suppressStatus: true });
+      void syncGovernanceState(normalizedEmail, { suppressStatus: true })
+        .finally(() => {
+          if (!cancelled) {
+            setGovernancePrimedEmail(normalizedEmail);
+          }
+        });
     }, 180);
 
     return () => {
+      cancelled = true;
       window.clearTimeout(timerId);
     };
   }, [
@@ -1108,12 +1119,21 @@ export function ConfirmEmailPanel({
     ? null
     : mapGovernanceSnapshotToStatus(governance, messages);
 
+  const isGovernanceBlocked = Boolean(governance && !governance.allowed);
+  const isGovernancePriming =
+    supabaseConfigured
+    && supabaseAuthReady
+    && hasValidEmail
+    && governancePrimedEmail !== normalizedEmail;
+
   const disabled =
     !supabaseConfigured
     || !supabaseAuthReady
     || isSending
     || isFinalizing
     || isGovernanceLoading
+    || isGovernancePriming
+    || isGovernanceBlocked
     || !hasValidEmail;
 
   const blockingStatus =
@@ -1150,7 +1170,7 @@ export function ConfirmEmailPanel({
   const resendLabel =
     isFinalizing
       ? messages.confirmEmailFinalizingButton
-      : isSending || isGovernanceLoading
+      : isSending || isGovernanceLoading || isGovernancePriming
         ? messages.confirmEmailResendWorking
         : governance?.governanceCode === "VERIFICATION_RESEND_COOLDOWN_ACTIVE" && cooldownSeconds > 0
           ? `${messages.confirmEmailResendCooldownPrefix} ${cooldownSeconds}s`
@@ -1173,18 +1193,37 @@ export function ConfirmEmailPanel({
           title: messages.confirmEmailInvalidEmailTitle,
           body: messages.confirmEmailInvalidEmailBody,
         });
+      } else if (isGovernanceBlocked && governance) {
+        setStatus(
+          mapGovernanceSnapshotToStatus(governance, messages) ?? {
+            tone: "warning",
+            icon: "warning",
+            title: messages.confirmEmailRateLimitedTitle,
+            body: messages.confirmEmailRateLimitedBody,
+          },
+        );
+      } else if (isGovernancePriming) {
+        setStatus({
+          tone: "info",
+          icon: "working",
+          title: messages.confirmEmailWorkingTitle,
+          body: messages.confirmEmailWorkingBody,
+        });
       }
       return;
     }
 
     let nextGovernance = governance;
 
-    if (nextGovernance && !nextGovernance.allowed) {
+    if (!nextGovernance || !nextGovernance.allowed) {
       /* Re-read governance right before submit so the first click cannot be blocked by
-         a stale snapshot that was fetched during prior route history or cooldown drift. */
+         a stale snapshot that was fetched during prior route history or cooldown drift,
+         and so initialization races cannot send a blind POST before backend truth arrives. */
       const refreshedGovernance = await syncGovernanceState(normalizedEmail, {
         suppressStatus: true,
       });
+
+      setGovernancePrimedEmail(normalizedEmail);
 
       if (refreshedGovernance) {
         nextGovernance = refreshedGovernance;
@@ -1297,7 +1336,7 @@ export function ConfirmEmailPanel({
             <button
               type="submit"
               disabled={disabled}
-              aria-busy={isSending || isFinalizing || isGovernanceLoading}
+              aria-busy={isSending || isFinalizing || isGovernanceLoading || isGovernancePriming}
               className="mt-1 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 font-bold text-white shadow-[0_14px_30px_rgba(5,150,105,0.25)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(5,150,105,0.32)] active:scale-[0.98] disabled:opacity-50"
             >
               <span>{resendLabel}</span>

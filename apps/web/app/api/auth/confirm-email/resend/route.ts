@@ -15,6 +15,7 @@ import {
   markVerificationResendProviderAccepted,
   normalizeVerificationResendEmail,
   readVerificationResendGovernanceSnapshot,
+  rollbackVerificationResendAttempt,
   reserveVerificationResendAttempt,
   type VerificationResendGovernanceSnapshot,
 } from "@/lib/server/verification-resend-governance";
@@ -436,6 +437,21 @@ export async function POST(request: Request) {
   });
 
   if (error) {
+    // Provider rejected this request before delivery acceptance, so undo the
+    // previously reserved governance attempt to avoid burning user budget on
+    // sends that never actually happened.
+    await rollbackVerificationResendAttempt({ request, email }).catch((rollbackError) => {
+      console.warn(
+        "[confirm-email-resend] failed to roll back governance attempt after provider rejection",
+        rollbackError,
+      );
+    });
+
+    const rollbackAwareGovernance = await readVerificationResendGovernanceSnapshot({
+      request,
+      email,
+    }).catch(() => governance);
+
     const providerFailure = mapProviderFailureToApiError({
       error,
       flow,
@@ -468,7 +484,7 @@ export async function POST(request: Request) {
       failure.headers.set("Retry-After", String(providerFailure.retryAfterSeconds));
     }
 
-    return withGovernanceHeaders(failure, governance);
+    return withGovernanceHeaders(failure, rollbackAwareGovernance);
   }
 
   await markVerificationResendProviderAccepted({ email }).catch((markError) => {

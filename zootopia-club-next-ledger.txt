@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-12 (Confirm-email duplicate-param parsing + resend label truth hardening)
+Last Updated: 2026-04-13 (Resend provider-failure rollback + governance-truthful submit hardening)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 79e2ebd3950a82c77a14fa224660bc73e8e9c81c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -862,6 +862,13 @@ Confirm-Email Query/UX Hardening (2026-04-12):
 - Resend action label remains truthful per email session: starts as "Send verification email" and only flips to
   "Resend verification email" after a real provider-accepted send has been observed
 
+Resend Governance Correctness Hardening (2026-04-13):
+- Provider-rejected resend attempts are now rolled back so account/IP attempt budgets are not permanently consumed
+  when upstream delivery was never accepted.
+- Rollback remains best-effort: route still returns provider-classified errors if rollback itself fails.
+- Confirm-email panel now disables submit while governance is initializing and during governance-blocked states
+  (cooldown/account/ip/unavailable), preventing misleading early submits.
+
 Email Templates:
 - docs/auth-email/templates/zootopia-confirm-email-template-supabase.html
 - Custom branded confirmation email template
@@ -1528,6 +1535,72 @@ Risks / Notes:
 - Existing governance throttling/limits, cooldown windows, and backend authority are unchanged.
 - No secret handling, auth boundary, or provider credentials flow was altered.
 - Start task argument behavior remains unchanged (`npm run start --workspace @zootopia/web -- --hostname ... --port ...` still routes to the known script limitation).
+
+---
+
+2026-04-13 — Resend Attempt Rollback + Governance-Truthful Submit Hardening
+============================================================================
+Type: Auth Resend Governance Correctness / UX Safety / Backward-Compatible Hardening
+Scope: resend POST provider-failure branch, governance counter lifecycle helper, confirm-email panel submit-state gating
+
+Summary:
+- Implemented server-side rollback for resend attempts when the Supabase/Resend provider rejects delivery.
+- Preserved backend-authoritative governance while preventing permanent attempt-budget loss on provider non-acceptance.
+- Hardened confirm-email submit UX so button state mirrors governance truth and blocks first-submit races while
+  governance state is still initializing.
+
+Root Cause (code-verified):
+- POST resend path reserved attempts before calling provider; provider rejection branch returned classified errors
+  without reversing the already-reserved account/IP counters.
+- Confirm-email panel disabled state did not include governance-blocked snapshots and allowed a governance-null
+  initialization window where submit could proceed before first poll completed.
+
+Files Changed:
+- apps/web/lib/server/verification-resend-governance.ts
+- apps/web/app/api/auth/confirm-email/resend/route.ts
+- apps/web/components/auth/confirm-email-panel.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Added `rollbackVerificationResendAttempt({ request, email })` in governance module:
+  - no-op when mode is disabled
+  - decrements account attempt count (floor 0)
+  - decrements IP attempt count only when a real IP was detected
+  - keeps cooldown semantics unchanged (throttle pressure remains intact)
+- Provider error branch in resend POST now:
+  - executes best-effort rollback
+  - logs warning on rollback failure
+  - refreshes governance snapshot for response headers after rollback attempt
+  - still returns existing provider-classified failure response contract
+- Confirm-email panel now:
+  - tracks governance initialization readiness per active email
+  - disables submit while governance is priming
+  - disables submit when governance snapshot is blocked (`allowed=false`)
+  - forces pre-submit governance refresh when snapshot is missing or blocked
+  - keeps existing backend-authoritative status/error mapping and label logic
+
+Verification:
+- web-lint-post-polish: pass (1 pre-existing warning in apps/web/lib/server/zootopia-postgres-adapter.ts)
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+- Runtime rollback probe (provider failure, cooldown forced to 0 for deterministic branch reach):
+  - server env override: invalid service-role key + `ZOOTOPIA_EMAIL_VERIFICATION_COOLDOWN_SECONDS=0`
+  - before POST: accountUsed=0, ipUsed=0
+  - POST result: 503 `VERIFICATION_RESEND_UNAVAILABLE` (provider config/auth classification)
+  - after POST: accountUsed=0, ipUsed=0 (attempt rollback confirmed)
+- Runtime success-path probe (normal service key, cooldown forced to 0):
+  - before POST: accountUsed=0, ipUsed=0
+  - POST result: 200 `ok=true`, `providerAccepted=true`
+  - after POST: accountUsed=1, ipUsed=1 (normal consumption preserved)
+- Headless UI probe (mocked governance responses):
+  - priming window: submit button disabled early; Enter press produced 0 POST requests before poll completed
+  - blocked snapshot: submit button disabled, cooldown label visible, POST count remained 0
+
+Risks / Notes:
+- Governance/account/IP model and provider error classification remain intact; no security boundary was loosened.
+- Rollback is best-effort by design; provider error responses are returned even if rollback logging indicates a failure.
+- Deterministic provider-branch verification required a temporary local cooldown override (`=0`) to ensure POST reaches
+  provider branch before cooldown enforcement in this environment.
 
 ---
 

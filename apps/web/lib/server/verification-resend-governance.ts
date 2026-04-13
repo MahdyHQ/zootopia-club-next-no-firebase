@@ -934,6 +934,59 @@ export async function reserveVerificationResendAttempt(input: {
   }) as Promise<VerificationResendGovernanceSnapshot>;
 }
 
+/**
+ * Best-effort rollback for a previously reserved resend attempt.
+ *
+ * Used when the upstream provider rejects the resend request so user/IP budgets
+ * are not permanently consumed for deliveries that were never accepted.
+ * Cooldown timestamps are intentionally preserved to keep throttle pressure
+ * behavior consistent even across provider-side failures.
+ */
+export async function rollbackVerificationResendAttempt(input: {
+  request: Request;
+  email: string;
+}): Promise<void> {
+  const config = getVerificationResendGovernanceConfig();
+  if (config.mode === "disabled") {
+    return;
+  }
+
+  const subjectKeys = buildSubjectKeys({
+    request: input.request,
+    email: input.email,
+    config,
+  });
+
+  const sql = getZootopiaSql();
+
+  await sql.begin(async (tx) => {
+    const txSql = tx as unknown as ReturnType<typeof getZootopiaSql>;
+
+    await txSql`
+      UPDATE public.email_verification_resend_governance
+      SET
+        attempt_count = GREATEST(0, attempt_count - 1),
+        updated_at = NOW()
+      WHERE key_scope = 'account'
+        AND key_hash = ${subjectKeys.accountKeyHash}
+        AND attempt_count > 0
+    `;
+
+    // Mirror reserve semantics: only touch IP scope when a real IP was detected.
+    if (subjectKeys.ipDetected && subjectKeys.ipKeyHash !== null) {
+      await txSql`
+        UPDATE public.email_verification_resend_governance
+        SET
+          attempt_count = GREATEST(0, attempt_count - 1),
+          updated_at = NOW()
+        WHERE key_scope = 'ip'
+          AND key_hash = ${subjectKeys.ipKeyHash}
+          AND attempt_count > 0
+      `;
+    }
+  });
+}
+
 export async function markVerificationResendProviderAccepted(input: {
   email: string;
 }): Promise<void> {
