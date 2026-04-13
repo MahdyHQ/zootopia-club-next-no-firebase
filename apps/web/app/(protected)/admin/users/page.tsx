@@ -5,11 +5,22 @@ import { listUsers } from "@/lib/server/repository";
 import { requireAdminUser } from "@/lib/server/session";
 
 export default async function AdminUsersPage() {
-  const [adminUser, uiContext, users] = await Promise.all([
+  const [adminUser, uiContext] = await Promise.all([
     requireAdminUser(),
     getRequestUiContext(),
-    listUsers(),
   ]);
+
+  let users = [] as Awaited<ReturnType<typeof listUsers>>;
+  let usersDataDegraded = false;
+
+  try {
+    users = await listUsers();
+  } catch (error) {
+    usersDataDegraded = true;
+    console.warn("[admin-users-page] failed to load users; rendering fallback list", {
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -34,6 +45,12 @@ export default async function AdminUsersPage() {
       </section>
 
       <section className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-sm">
+        {usersDataDegraded ? (
+          <div className="mb-4 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-200">
+            User records are temporarily unavailable. The page is shown with a safe fallback state.
+          </div>
+        ) : null}
+
         <UsersTable
           messages={uiContext.messages}
           locale={uiContext.locale}

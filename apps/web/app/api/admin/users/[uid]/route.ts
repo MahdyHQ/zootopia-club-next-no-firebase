@@ -116,7 +116,26 @@ export async function DELETE(
     );
   }
 
-  const targetUser = await getUserByUid(targetUid);
+  let targetUser: Awaited<ReturnType<typeof getUserByUid>>;
+  try {
+    targetUser = await getUserByUid(targetUid);
+  } catch (error) {
+    console.error("[admin-users-mutation] target user lookup failed", {
+      action: "delete-user",
+      targetUid,
+      actingAdminUid: admin.uid,
+      routeHit: DELETE_USER_ROUTE,
+      failureCode: error instanceof Error ? error.name : "UNKNOWN",
+    });
+    return applyNoStore(
+      apiError(
+        "USER_LOOKUP_UNAVAILABLE",
+        "The selected user could not be resolved right now.",
+        503,
+      ),
+    );
+  }
+
   if (!targetUser) {
     return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
   }

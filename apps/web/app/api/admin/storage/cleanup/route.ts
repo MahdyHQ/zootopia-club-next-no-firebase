@@ -152,7 +152,26 @@ async function handleUserCleanup(admin: SessionUser, body: Record<string, unknow
     );
   }
 
-  const targetUser = await getUserByUid(targetUid);
+  let targetUser: Awaited<ReturnType<typeof getUserByUid>>;
+  try {
+    targetUser = await getUserByUid(targetUid);
+  } catch (error) {
+    console.error("[admin-storage-cleanup] target user lookup failed", {
+      action: "cleanup-user-storage",
+      targetUid,
+      actingAdminUid: admin.uid,
+      route: STORAGE_CLEANUP_ROUTE,
+      failureReason: error instanceof Error ? error.name : "UNKNOWN",
+    });
+    return applyNoStore(
+      apiError(
+        "USER_LOOKUP_UNAVAILABLE",
+        "The target user could not be resolved right now.",
+        503,
+      ),
+    );
+  }
+
   if (!targetUser) {
     return applyNoStore(apiError("USER_NOT_FOUND", "The target user was not found.", 404));
   }

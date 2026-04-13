@@ -11,13 +11,32 @@ import { getRuntimeFlags } from "@/lib/server/runtime";
 import { Button } from "@/components/ui/button";
 
 export default async function AdminPage() {
-  const usersPromise = listUsers();
-  const [uiContext, users, overview, activityLogs] = await Promise.all([
-    getRequestUiContext(),
-    usersPromise,
-    usersPromise.then((users) => getAdminOverviewData(users)),
-    listAdminActivityLogs(12),
-  ]);
+  const uiContext = await getRequestUiContext();
+  let users = [] as Awaited<ReturnType<typeof listUsers>>;
+  let overview: Awaited<ReturnType<typeof getAdminOverviewData>> = {
+    totalUsers: 0,
+    activeUsers: 0,
+    totalDocuments: 0,
+    totalAssessmentGenerations: 0,
+    totalInfographicGenerations: 0,
+  };
+  let activityLogs = [] as Awaited<ReturnType<typeof listAdminActivityLogs>>;
+  let dashboardDataDegraded = false;
+
+  try {
+    const usersPromise = listUsers();
+    [users, overview, activityLogs] = await Promise.all([
+      usersPromise,
+      usersPromise.then((resolvedUsers) => getAdminOverviewData(resolvedUsers)),
+      listAdminActivityLogs(12),
+    ]);
+  } catch (error) {
+    dashboardDataDegraded = true;
+    console.warn("[admin-page] failed to load dashboard datasets; rendering fallbacks", {
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+  }
+
   const runtimeFlags = getRuntimeFlags();
 
   return (
@@ -41,6 +60,12 @@ export default async function AdminPage() {
       </section>
 
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {dashboardDataDegraded ? (
+          <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4 text-sm font-medium text-amber-700 dark:text-amber-200 md:col-span-2 xl:col-span-4">
+            Some admin datasets are temporarily unavailable. The dashboard is showing safe fallback values.
+          </div>
+        ) : null}
+
         {[
           { label: uiContext.messages.metricUsers, value: overview.totalUsers, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
           { label: uiContext.messages.metricActiveUsers, value: overview.activeUsers, icon: Activity, color: "text-emerald-500", bg: "bg-emerald-500/10" },

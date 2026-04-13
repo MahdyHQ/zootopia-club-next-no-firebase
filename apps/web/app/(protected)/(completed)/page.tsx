@@ -34,18 +34,37 @@ export default async function HomePage() {
     getRequestUiContext(),
   ]);
   const canAccessInfographic = user.role === "admin";
-  const [documents, assessments, infographics] = await Promise.all([
-    listDocumentsForUser(user.uid),
-    listAssessmentGenerationsForUser(user.uid),
-    canAccessInfographic
-      ? listInfographicGenerationsForUser(user.uid)
-      : Promise.resolve([]),
-  ]);
+  let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
+  let assessments = [] as Awaited<ReturnType<typeof listAssessmentGenerationsForUser>>;
+  let infographics = [] as Awaited<ReturnType<typeof listInfographicGenerationsForUser>>;
+  let workspaceDataDegraded = false;
+
+  try {
+    [documents, assessments, infographics] = await Promise.all([
+      listDocumentsForUser(user.uid),
+      listAssessmentGenerationsForUser(user.uid),
+      canAccessInfographic
+        ? listInfographicGenerationsForUser(user.uid)
+        : Promise.resolve([]),
+    ]);
+  } catch (error) {
+    workspaceDataDegraded = true;
+    console.warn("[home-page] failed to load workspace datasets; rendering safe fallbacks", {
+      uid: user.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+  }
+
   const runtimeFlags = getRuntimeFlags();
   const siteContent = getSiteContent(uiContext.locale);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
+      {workspaceDataDegraded ? (
+        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-200">
+          Some workspace datasets are temporarily unavailable. Showing fallback cards and empty states.
+        </div>
+      ) : null}
 
       {/* ═══════════════════════════════════════════════════════════════════
           ZONE 1 — UNIFIED HERO SURFACE

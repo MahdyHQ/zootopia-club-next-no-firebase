@@ -43,21 +43,60 @@ export default async function HistoryPage() {
     requireCompletedUser(APP_ROUTES.history),
     getRequestUiContext(),
   ]);
-  const [documents, generations] = await Promise.all([
-    listDocumentsForUser(user.uid, 50),
-    listAssessmentGenerationsForUser(user.uid, 50),
-  ]);
+
+  let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
+  let generations = [] as Awaited<ReturnType<typeof listAssessmentGenerationsForUser>>;
+  let historyDataLoadDegraded = false;
+
+  try {
+    [documents, generations] = await Promise.all([
+      listDocumentsForUser(user.uid, 50),
+      listAssessmentGenerationsForUser(user.uid, 50),
+    ]);
+  } catch (error) {
+    historyDataLoadDegraded = true;
+    console.warn("[history-page] failed to load history datasets; rendering fallbacks", {
+      uid: user.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+  }
+
   const previewThemeMode = DEFAULT_ASSESSMENT_FILE_THEME_MODE;
-  const previews = generations.map((generation) =>
-    buildAssessmentPreview({
-      generation,
-      locale: uiContext.locale,
-      messages: uiContext.messages,
-    }),
+  const previewParseResults = generations.map((generation) => {
+    try {
+      return {
+        ok: true as const,
+        preview: buildAssessmentPreview({
+          generation,
+          locale: uiContext.locale,
+          messages: uiContext.messages,
+        }),
+      };
+    } catch (error) {
+      console.warn("[history-page] failed to build assessment preview item", {
+        generationId: generation.id,
+        error: error instanceof Error ? error.name : "UNKNOWN",
+      });
+
+      return {
+        ok: false as const,
+      };
+    }
+  });
+  const previews = previewParseResults.flatMap((result) =>
+    result.ok ? [result.preview] : [],
   );
+  const historyDataDegraded =
+    historyDataLoadDegraded || previewParseResults.some((result) => !result.ok);
 
   return (
     <div className="space-y-8">
+      {historyDataDegraded ? (
+        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-200">
+          Some history records are temporarily unavailable. Showing best-effort results.
+        </div>
+      ) : null}
+
       <section className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.78),rgba(241,249,247,0.62))] p-6 shadow-sm backdrop-blur-xl dark:border-white/6 dark:bg-[linear-gradient(145deg,rgba(4,12,21,0.72),rgba(3,10,18,0.56))] sm:p-8 lg:p-10">
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-emerald-400/18 blur-3xl" />
         <div className="relative z-10">

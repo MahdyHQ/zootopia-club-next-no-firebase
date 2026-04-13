@@ -33,6 +33,21 @@ type VerifiedSessionContext = {
   user: SessionUser;
 };
 
+function getErrorCode(error: unknown) {
+  if (typeof error === "object" && error && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.trim()) {
+      return code;
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.name || "Error";
+  }
+
+  return "UNKNOWN";
+}
+
 function normalizeRole(value: unknown): UserRole {
   return value === "admin" ? "admin" : "user";
 }
@@ -103,7 +118,19 @@ const getVerifiedSessionContext = cache(
       return null;
     }
 
-    const persistedUser = await getUserByUid(uid);
+    let persistedUser: Awaited<ReturnType<typeof getUserByUid>> = null;
+    try {
+      persistedUser = await getUserByUid(uid);
+    } catch (error) {
+      // Keep protected-route rendering resilient when repository lookup is temporarily
+      // unavailable by falling back to signed session claims for this request.
+      console.warn("[session] persisted user lookup failed; using session fallback", {
+        uid,
+        errorCode: getErrorCode(error),
+      });
+      persistedUser = null;
+    }
+
     const sessionUser = activeSession?.user as Record<string, unknown> | undefined;
 
     const normalizedUser: SessionUser = persistedUser

@@ -2053,6 +2053,74 @@ Risks / Notes:
 
 ---
 
+2026-04-13 — Admin/User Production Render Hardening + Extension-Noise Separation
+===============================================================================
+Type: Runtime stability hardening / role-boundary preservation / fallback rendering safety
+Scope: protected server-component data loading, admin API read-path error handling, session lookup resilience
+
+Summary:
+- Traced the reported production "Something went wrong" path from first-party source and separated it from browser-extension noise.
+- Confirmed the console `inpage.js` / `toncenter.com` "Origin not allowed" message is external injected-script noise and not Zootopia-owned code.
+- Hardened protected/admin server components and admin read routes to fail soft with fallback UI/data instead of crashing the full page on transient repository/runtime faults.
+- Preserved strict role separation and server-authoritative admin gates; no privilege widening was introduced.
+
+Root Cause (first-party, code-verified):
+- The dominant failure mode was fail-fast server rendering from unguarded async chains (`Promise.all`) and uncaught repository exceptions.
+- Admin and protected pages previously allowed non-critical data loaders to throw and bubble to global error boundary (`Something went wrong`).
+- Admin read APIs also had unwrapped repository calls in selected handlers, resulting in unstructured 500 failures during lookup/read turbulence.
+
+Noise vs Fault Separation:
+- External noise (not root cause): injected browser extension `inpage.js` call to `https://toncenter.com/api/v2/jsonRPC` with `Origin not allowed`.
+- Real app fault: unhandled first-party runtime/read failures in protected/admin render/data paths.
+
+Files Changed:
+- apps/web/lib/server/session.ts
+- apps/web/app/(protected)/admin/page.tsx
+- apps/web/app/(protected)/admin/users/page.tsx
+- apps/web/app/(protected)/admin/users/[uid]/page.tsx
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/app/(protected)/(completed)/upload/page.tsx
+- apps/web/app/(protected)/(completed)/assessment/page.tsx
+- apps/web/app/(protected)/(completed)/history/page.tsx
+- apps/web/app/(protected)/(completed)/infographic/page.tsx
+- apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx
+- apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx
+- apps/web/app/api/admin/overview/route.ts
+- apps/web/app/api/admin/users/route.ts
+- apps/web/app/api/admin/users/[uid]/credits/route.ts
+- apps/web/app/api/admin/users/[uid]/route.ts
+- apps/web/app/api/admin/storage/cleanup/route.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Session resilience:
+  - `getVerifiedSessionContext()` now catches repository user-lookup failures and falls back to signed session claims for this request instead of crashing protected rendering.
+- Protected/admin page resilience:
+  - Added guarded best-effort loaders with safe fallbacks for dashboard/user-workspace datasets.
+  - Added non-blocking fallback notices when data is degraded, while preserving page shell and route access rules.
+  - Admin user detail storage namespace summary now fails soft with fallback counts and warning state.
+  - History preview list now skips malformed records safely instead of failing the whole page.
+  - Assessment preview/result pages now gracefully return unavailable cards if generation fetch/preview-model construction fails.
+- Admin API resilience:
+  - Added structured error handling and stable 503 responses for transient read-path failures in overview/users/credits/user-lookup/storage cleanup lookup flows.
+
+Security / Role Boundary Verification:
+- Admin-only route ownership remains enforced by `requireAdminUser()` and admin route layout.
+- User/admin redirect and lane separation remain unchanged.
+- No backend authority moved to client.
+- No changes to `apps/web/lib/server/zootopia-postgres-adapter.ts` in this pass; adapter was analyzed as a dependency path only.
+
+Verification:
+- web-lint-post-polish: pass
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- Fallback UI may show empty-state data during transient backend/read turbulence by design, prioritizing render continuity over hard-fail screens.
+- Existing unrelated workspace change in `.env.example` was detected and left untouched.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve

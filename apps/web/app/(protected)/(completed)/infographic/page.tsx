@@ -57,13 +57,31 @@ export default async function InfographicPage() {
     );
   }
 
-  const [documents, generations] = await Promise.all([
-    listDocumentsForUser(user.uid),
-    listInfographicGenerationsForUser(user.uid),
-  ]);
+  let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
+  let generations = [] as Awaited<ReturnType<typeof listInfographicGenerationsForUser>>;
+  let infographicDataDegraded = false;
+
+  try {
+    [documents, generations] = await Promise.all([
+      listDocumentsForUser(user.uid),
+      listInfographicGenerationsForUser(user.uid),
+    ]);
+  } catch (error) {
+    infographicDataDegraded = true;
+    console.warn("[infographic-page] failed to load initial datasets; rendering fallbacks", {
+      uid: user.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+  }
 
   return (
     <div className="space-y-6">
+      {infographicDataDegraded ? (
+        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-200">
+          Some infographic data is temporarily unavailable. Showing best-effort content.
+        </div>
+      ) : null}
+
       <section className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-xl p-8 md:p-12 shadow-sm">
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
         

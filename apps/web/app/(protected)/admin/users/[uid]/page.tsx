@@ -367,30 +367,44 @@ export default async function AdminUserDetailPage({
   ]);
 
   const storageAvailable = hasRemoteBlobStorage();
-  const storageNamespaceSummaries = storageAvailable
-    ? await Promise.all(
-      USER_STORAGE_NAMESPACES.map(async (namespace) => {
-        const prefix = `${namespace}/${targetUid}`;
-        const descriptors = await listZootopiaPrivateObjectDescriptorsByPrefix(prefix);
-        const totalSizeBytes = descriptors.reduce(
-          (sum, descriptor) => sum + (descriptor.sizeBytes ?? 0),
-          0,
-        );
+  const fallbackStorageNamespaceSummaries = USER_STORAGE_NAMESPACES.map((namespace) => ({
+    namespace,
+    prefix: `${namespace}/${targetUid}`,
+    objectCount: 0,
+    totalSizeBytes: 0,
+  }));
 
-        return {
-          namespace,
-          prefix,
-          objectCount: descriptors.length,
-          totalSizeBytes,
-        };
-      }),
-    )
-    : USER_STORAGE_NAMESPACES.map((namespace) => ({
-      namespace,
-      prefix: `${namespace}/${targetUid}`,
-      objectCount: 0,
-      totalSizeBytes: 0,
-    }));
+  let storageNamespaceSummaries = fallbackStorageNamespaceSummaries;
+  let storageSummaryDegraded = false;
+
+  if (storageAvailable) {
+    try {
+      storageNamespaceSummaries = await Promise.all(
+        USER_STORAGE_NAMESPACES.map(async (namespace) => {
+          const prefix = `${namespace}/${targetUid}`;
+          const descriptors = await listZootopiaPrivateObjectDescriptorsByPrefix(prefix);
+          const totalSizeBytes = descriptors.reduce(
+            (sum, descriptor) => sum + (descriptor.sizeBytes ?? 0),
+            0,
+          );
+
+          return {
+            namespace,
+            prefix,
+            objectCount: descriptors.length,
+            totalSizeBytes,
+          };
+        }),
+      );
+    } catch (error) {
+      storageSummaryDegraded = true;
+      storageNamespaceSummaries = fallbackStorageNamespaceSummaries;
+      console.warn("[admin-user-detail] storage namespace summary load failed", {
+        targetUid,
+        errorCode: getErrorCode(error),
+      });
+    }
+  }
 
   const storageObjectCount = storageNamespaceSummaries.reduce(
     (sum, item) => sum + item.objectCount,
@@ -860,6 +874,12 @@ export default async function AdminUserDetailPage({
               </div>
             ))}
           </div>
+          {storageSummaryDegraded ? (
+            <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+              Storage namespace details are temporarily unavailable. Counts are shown in fallback mode.
+            </p>
+          ) : null}
+
           {!storageAvailable && (
             <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
               Remote storage is not available in this runtime, so object counts and sizes are not loaded.

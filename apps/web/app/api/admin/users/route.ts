@@ -12,9 +12,19 @@ export async function GET() {
     return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
   }
 
-  const payload: AdminUsersResponse = {
-    users: await listUsers(),
-  };
+  try {
+    const payload: AdminUsersResponse = {
+      users: await listUsers(),
+    };
 
-  return applyNoStore(apiSuccess(payload));
+    return applyNoStore(apiSuccess(payload));
+  } catch (error) {
+    console.error("[api-admin-users] failed to list users", {
+      adminUid: user.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+    return applyNoStore(
+      apiError("ADMIN_USERS_UNAVAILABLE", "Users are temporarily unavailable.", 503),
+    );
+  }
 }

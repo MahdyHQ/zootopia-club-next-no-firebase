@@ -12,11 +12,29 @@ export default async function UploadPage() {
     requireCompletedUser(APP_ROUTES.upload),
     getRequestUiContext(),
   ]);
-  const documents = await listDocumentsForUser(user.uid);
+  let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
+  let documentsDataDegraded = false;
+
+  try {
+    documents = await listDocumentsForUser(user.uid);
+  } catch (error) {
+    documentsDataDegraded = true;
+    console.warn("[upload-page] failed to load documents; rendering fallback list", {
+      uid: user.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+  }
+
   const canAccessInfographic = user.role === "admin";
 
   return (
     <div className="space-y-12 pb-8 min-w-0">
+      {documentsDataDegraded ? (
+        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-200">
+          Recent documents are temporarily unavailable. Upload actions are still available.
+        </div>
+      ) : null}
+
       {/* 1. Hero Upload Section - Dark Premium Glow Design */}
       <section className="relative flex flex-col items-center justify-center min-h-[65vh] w-full rounded-[2.5rem] bg-background-elevated/40 border border-white/5 backdrop-blur-2xl shadow-2xl overflow-hidden p-6 sm:p-12 lg:p-20 min-w-0">
         <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 50% 0%, #1e4d50 0%, transparent 60%)' }} />

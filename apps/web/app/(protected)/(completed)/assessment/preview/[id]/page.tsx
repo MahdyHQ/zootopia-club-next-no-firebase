@@ -45,9 +45,19 @@ export default async function AssessmentPreviewPage(props: {
     getRequestUiContext(),
     buildAssessmentFileQrDataUrl(),
   ]);
-  const generation = await getAssessmentGenerationForOwner(id, user.uid, {
-    includeExpired: true,
-  });
+  let generation: Awaited<ReturnType<typeof getAssessmentGenerationForOwner>> = null;
+  try {
+    generation = await getAssessmentGenerationForOwner(id, user.uid, {
+      includeExpired: true,
+    });
+  } catch (error) {
+    console.warn("[assessment-preview-page] failed to load generation; rendering unavailable state", {
+      assessmentId: id,
+      uid: user.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+    generation = null;
+  }
 
   if (!generation) {
     return renderUnavailableCard({
@@ -76,15 +86,32 @@ export default async function AssessmentPreviewPage(props: {
     route: "/assessment/preview/[id]",
   });
 
+  let preview: ReturnType<typeof buildAssessmentPreview>;
+  try {
+    preview = buildAssessmentPreview({
+      generation,
+      locale: uiContext.locale,
+      messages: uiContext.messages,
+    });
+  } catch (error) {
+    console.warn("[assessment-preview-page] failed to build preview model; rendering unavailable state", {
+      assessmentId: generation.id,
+      uid: user.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+
+    return renderUnavailableCard({
+      title: uiContext.messages.assessmentUnavailableTitle,
+      body: uiContext.messages.assessmentUnavailableBody,
+      cta: uiContext.messages.backToAssessmentStudio,
+    });
+  }
+
   return (
     <div className="space-y-6">
       <AssessmentPreviewShell
         messages={uiContext.messages}
-        preview={buildAssessmentPreview({
-          generation,
-          locale: uiContext.locale,
-          messages: uiContext.messages,
-        })}
+        preview={preview}
         initialThemeMode={resolveAssessmentFileThemeMode(
           searchParams.theme,
           /* Detached assessment preview pages intentionally start in light mode even when the

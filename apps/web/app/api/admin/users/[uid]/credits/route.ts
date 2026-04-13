@@ -84,14 +84,48 @@ export async function GET(
   }
 
   const { uid } = await context.params;
-  const user = await getUserByUid(uid);
+  let user: Awaited<ReturnType<typeof getUserByUid>>;
+  try {
+    user = await getUserByUid(uid);
+  } catch (error) {
+    console.error("[api-admin-user-credits] failed to load user record", {
+      targetUid: uid,
+      adminUid: admin.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+    return applyNoStore(
+      apiError(
+        "USER_LOOKUP_UNAVAILABLE",
+        "The selected user could not be resolved right now.",
+        503,
+      ),
+    );
+  }
+
   if (!user) {
     return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
   }
 
-  const state = await getAdminAssessmentCreditStateForUser(uid, {
-    ownerRole: user.role,
-  });
+  let state: Awaited<ReturnType<typeof getAdminAssessmentCreditStateForUser>>;
+  try {
+    state = await getAdminAssessmentCreditStateForUser(uid, {
+      ownerRole: user.role,
+    });
+  } catch (error) {
+    console.error("[api-admin-user-credits] failed to load credit state", {
+      targetUid: uid,
+      adminUid: admin.uid,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+    return applyNoStore(
+      apiError(
+        "ASSESSMENT_CREDIT_STATE_UNAVAILABLE",
+        "Unable to load assessment credit state for this user.",
+        503,
+      ),
+    );
+  }
+
   if (!state) {
     return applyNoStore(
       apiError(
