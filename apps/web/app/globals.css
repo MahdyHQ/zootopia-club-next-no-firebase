@@ -53,6 +53,12 @@
   --sidebar-accent-foreground: oklch(0.148 0.04 42);
   --sidebar-border: oklch(0.912 0.018 68);
   --sidebar-ring: oklch(0.65 0.06 50);
+  --scrollbar-track: rgba(60, 25, 8, 0.08);
+  --scrollbar-track-border: rgba(60, 25, 8, 0.04);
+  --scrollbar-thumb: rgba(217, 119, 6, 0.22);
+  --scrollbar-thumb-hover: rgba(217, 119, 6, 0.4);
+  --scrollbar-side-thumb: rgba(217, 119, 6, 0.28);
+  --scrollbar-side-thumb-hover: rgba(217, 119, 6, 0.5);
 }
 
 html[dir="rtl"] {
@@ -183,6 +189,13 @@ html[dir="rtl"] {
   --danger: #f87171;
   --shadow: 0 28px 60px rgba(0, 0, 0, 0.4);
   --glow-accent: 0 0 32px rgba(16, 185, 129, 0.25);
+  --scrollbar-track: rgba(8, 18, 28, 0.58);
+  --scrollbar-track-border: rgba(148, 163, 184, 0.12);
+  --scrollbar-thumb: rgba(16, 185, 129, 0.34);
+  --scrollbar-thumb-hover: rgba(52, 211, 153, 0.56);
+  --scrollbar-side-thumb: rgba(45, 212, 191, 0.44);
+  --scrollbar-side-thumb-hover: rgba(94, 234, 212, 0.7);
+  color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -202,6 +215,13 @@ html[dir="rtl"] {
     --danger: #f87171;
     --shadow: 0 28px 60px rgba(0, 0, 0, 0.4);
     --glow-accent: 0 0 32px rgba(16, 185, 129, 0.25);
+    --scrollbar-track: rgba(8, 18, 28, 0.58);
+    --scrollbar-track-border: rgba(148, 163, 184, 0.12);
+    --scrollbar-thumb: rgba(16, 185, 129, 0.34);
+    --scrollbar-thumb-hover: rgba(52, 211, 153, 0.56);
+    --scrollbar-side-thumb: rgba(45, 212, 191, 0.44);
+    --scrollbar-side-thumb-hover: rgba(94, 234, 212, 0.7);
+    color-scheme: dark;
   }
 }
 
@@ -210,6 +230,7 @@ html[dir="rtl"] {
 }
 
 html {
+  color-scheme: light;
   background: var(--background);
 }
 
@@ -221,6 +242,13 @@ body {
     radial-gradient(circle at top left, rgba(217, 119, 6, 0.11), transparent 40%),
     radial-gradient(circle at bottom right, rgba(180, 83, 9, 0.08), transparent 35%),
     var(--background);
+}
+
+/* Prevent full-page transition cascades when users manually switch theme in the shell controls. */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
 }
 
 /* Public auth hero image ownership:
@@ -278,43 +306,43 @@ body {
 
 .protected-workspace-background__base {
   background:
-    radial-gradient(circle at 16% 18%, rgba(45, 212, 191, 0.18), transparent 34%),
-    radial-gradient(circle at 86% 76%, rgba(242, 198, 106, 0.14), transparent 30%),
-    linear-gradient(180deg, rgba(3, 10, 18, 0.95) 0%, rgba(4, 11, 20, 0.92) 42%, rgba(2, 8, 16, 0.98) 100%);
+    radial-gradient(circle at 16% 18%, rgba(217, 119, 6, 0.14), transparent 36%),
+    radial-gradient(circle at 86% 76%, rgba(56, 189, 248, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255, 251, 245, 0.95) 0%, rgba(255, 246, 233, 0.94) 44%, rgba(246, 235, 218, 0.96) 100%);
 }
 
 .protected-workspace-background__image {
-  background-image: url("/my-app-background.png");
+  background-image: url("/my-app-background-light.png");
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  opacity: 0.44;
-  filter: brightness(0.84) saturate(0.86);
-  transform: scale(1.03);
+  opacity: 0.3;
+  filter: brightness(1.04) saturate(0.94);
+  transform: scale(1.02);
 }
 
 .protected-workspace-background__overlay {
   background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.06) 0%, rgba(4, 10, 18, 0.18) 22%, rgba(4, 10, 18, 0.54) 68%, rgba(2, 6, 23, 0.78) 100%),
-    radial-gradient(circle at 24% 22%, rgba(96, 165, 250, 0.12), transparent 26%),
-    radial-gradient(circle at 74% 76%, rgba(45, 212, 191, 0.08), transparent 28%);
-  backdrop-filter: blur(1.5px);
-  -webkit-backdrop-filter: blur(1.5px);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 251, 244, 0.24) 24%, rgba(244, 232, 214, 0.52) 68%, rgba(236, 223, 201, 0.72) 100%),
+    radial-gradient(circle at 24% 22%, rgba(56, 189, 248, 0.14), transparent 28%),
+    radial-gradient(circle at 74% 76%, rgba(217, 119, 6, 0.1), transparent 30%);
+  backdrop-filter: blur(0.9px);
+  -webkit-backdrop-filter: blur(0.9px);
 }
 
 .protected-workspace-background__grid {
   background-image:
-    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+    linear-gradient(rgba(148, 116, 82, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 116, 82, 0.08) 1px, transparent 1px);
   background-size: 72px 72px;
-  opacity: 0.16;
+  opacity: 0.14;
   mask-image: radial-gradient(circle at center, black 36%, transparent 86%);
   -webkit-mask-image: radial-gradient(circle at center, black 36%, transparent 86%);
-  animation: protected-workspace-grid-drift 24s linear infinite;
+  animation: protected-workspace-grid-drift 34s linear infinite;
 }
 
 .protected-workspace-background__noise {
-  opacity: 0.03;
+  opacity: 0.02;
   mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
@@ -329,11 +357,13 @@ body {
 .protected-workspace-background__beam,
 .protected-workspace-background__bubble {
   position: absolute;
+  transform: translateZ(0);
+  will-change: transform, opacity;
 }
 
 .protected-workspace-background__orb,
 .protected-workspace-background__beam {
-  opacity: 0.22;
+  opacity: 0.17;
 }
 
 .protected-workspace-background__bubble {
@@ -347,7 +377,7 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
     0 0 24px rgba(45, 212, 191, 0.08);
   opacity: 0;
-  animation: protected-workspace-bubble-rise 180s linear infinite;
+  animation: protected-workspace-bubble-rise 220s linear infinite;
 }
 
 .protected-workspace-background__bubble--alpha {
@@ -384,7 +414,7 @@ body {
 
 .protected-workspace-background__orb {
   border-radius: 999px;
-  filter: blur(72px);
+  filter: blur(64px);
   animation: protected-workspace-orb-drift 18s ease-in-out infinite;
 }
 
@@ -419,7 +449,7 @@ body {
   width: min(28rem, 48vw);
   background: linear-gradient(90deg, transparent 0%, rgba(148, 245, 227, 0.42) 50%, transparent 100%);
   filter: blur(0.3px);
-  animation: protected-workspace-beam-sweep 20s ease-in-out infinite;
+  animation: protected-workspace-beam-sweep 26s ease-in-out infinite;
 }
 
 .protected-workspace-background__beam--upper {
@@ -487,7 +517,15 @@ body {
   }
 }
 
+:root[data-theme="dark"] .protected-workspace-background__base {
+  background:
+    radial-gradient(circle at 16% 18%, rgba(45, 212, 191, 0.18), transparent 34%),
+    radial-gradient(circle at 86% 76%, rgba(242, 198, 106, 0.14), transparent 30%),
+    linear-gradient(180deg, rgba(3, 10, 18, 0.95) 0%, rgba(4, 11, 20, 0.92) 42%, rgba(2, 8, 16, 0.98) 100%);
+}
+
 :root[data-theme="dark"] .protected-workspace-background__image {
+  background-image: url("/my-app-background.png");
   opacity: 0.32;
   filter: brightness(0.7) saturate(0.78);
 }
@@ -504,7 +542,15 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .protected-workspace-background__base {
+    background:
+      radial-gradient(circle at 16% 18%, rgba(45, 212, 191, 0.18), transparent 34%),
+      radial-gradient(circle at 86% 76%, rgba(242, 198, 106, 0.14), transparent 30%),
+      linear-gradient(180deg, rgba(3, 10, 18, 0.95) 0%, rgba(4, 11, 20, 0.92) 42%, rgba(2, 8, 16, 0.98) 100%);
+  }
+
   :root[data-theme="system"] .protected-workspace-background__image {
+    background-image: url("/my-app-background.png");
     opacity: 0.32;
     filter: brightness(0.7) saturate(0.78);
   }
@@ -545,7 +591,13 @@ select {
     input[type="file"]
   ) {
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Keep shared interactive utility controls pointer-consistent even when rendered through non-default elements. */
@@ -3540,22 +3592,31 @@ html[dir="rtl"] .home-nav-card::before {
   }
 }
 
-/* Custom Scrollbars */
+/* Keep workspace scrollbars theme-aware so chrome controls and side rails stay visually consistent after theme flips. */
+.global-scrollbar,
+.side-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
 .global-scrollbar::-webkit-scrollbar {
   width: 10px;
 }
+
 .global-scrollbar::-webkit-scrollbar-track {
-  background: rgba(60, 25, 8, 0.08);
-  border-left: 1px solid rgba(60, 25, 8, 0.04);
+  background: var(--scrollbar-track);
+  border-left: 1px solid var(--scrollbar-track-border);
 }
+
 .global-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(217, 119, 6, 0.2);
+  background: var(--scrollbar-thumb);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+
 .global-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(217, 119, 6, 0.4);
+  background: var(--scrollbar-thumb-hover);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
@@ -3563,15 +3624,18 @@ html[dir="rtl"] .home-nav-card::before {
 .side-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
+
 .side-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .side-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(217, 119, 6, 0.2);
+  background: var(--scrollbar-side-thumb);
   border-radius: 4px;
 }
+
 .side-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(217, 119, 6, 0.5);
+  background: var(--scrollbar-side-thumb-hover);
 }
 
 .dark {

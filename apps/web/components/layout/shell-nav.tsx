@@ -112,12 +112,12 @@ export function ShellNav({
   ];
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-[2.5rem] border border-white/5 bg-background-elevated/40 backdrop-blur-2xl shadow-2xl transition-all duration-300 w-full text-foreground max-h-full">
+    <div className="relative flex h-full max-h-full w-full flex-col overflow-hidden rounded-[2.5rem] border border-border/60 bg-background-elevated/72 text-foreground shadow-2xl backdrop-blur-2xl transition-all duration-300">
       {/* Decorative gradient blur - Emerald glow mapped to background palette */}
       <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none" />
 
       {/* Header / Branding */}
-      <div className={`relative z-10 border-b border-white/5 ${isCollapsed ? 'p-5 flex items-center justify-center' : 'p-5 pb-5'} shrink-0`}>
+      <div className={`relative z-10 border-b border-border/60 ${isCollapsed ? 'p-5 flex items-center justify-center' : 'p-5 pb-5'} shrink-0`}>
         {/* The main protected-workspace logo lives in the sidebar header so the top toolbar can stay focused on controls and user context. */}
         <Link
           href={APP_ROUTES.home}
@@ -127,7 +127,7 @@ export function ShellNav({
           <ZootopiaMark className={`${isCollapsed ? "h-11 w-11" : "h-10 w-10"} transition-transform duration-300 group-hover:scale-[1.03]`} />
           {!isCollapsed && (
             <div className="min-w-0">
-              <h1 className="truncate text-[1.45rem] font-black leading-none tracking-[-0.02em] text-white transition-all duration-300">
+              <h1 className="truncate text-[1.45rem] font-black leading-none tracking-[-0.02em] text-foreground transition-all duration-300">
                 {messages.appName || "Zootopia Club"}
               </h1>
             </div>
@@ -135,11 +135,11 @@ export function ShellNav({
         </Link>
 
         {!isCollapsed && (
-          <div className="mt-4 rounded-2xl border border-white/5 bg-white/5 p-3.5 backdrop-blur-md shadow-sm overflow-hidden flex flex-col gap-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 truncate">
+          <div className="mt-4 flex flex-col gap-1 overflow-hidden rounded-2xl border border-border/60 bg-background/50 p-3.5 shadow-sm backdrop-blur-md">
+            <p className="truncate text-[10px] font-bold uppercase tracking-wider text-accent-strong">
               {messages.signedInAs || "Signed in as"}
             </p>
-            <p className="text-sm font-bold text-white truncate w-full" title={user.displayName || user.email || "User"}>
+            <p className="w-full truncate text-sm font-bold text-foreground" title={user.displayName || user.email || "User"}>
               {user.displayName || user.email?.split('@')[0] || "User"}
             </p>
           </div>
@@ -188,7 +188,7 @@ export function ShellNav({
                     ? `${link.label} • ${messages.comingSoonLabel}`
                     : undefined
                 }
-                className={`group flex items-center gap-3 flex-shrink-0 rounded-2xl border border-white/6 bg-white/[0.03] text-zinc-500 ${
+                className={`group flex items-center gap-3 flex-shrink-0 rounded-2xl border border-border/45 bg-background/35 text-foreground-muted ${
                   isCollapsed ? 'justify-center p-3.5 w-12 h-12' : 'px-4 py-3.5 text-[15px]'
                 }`}
               >
@@ -204,8 +204,8 @@ export function ShellNav({
               title={isCollapsed ? link.label : undefined}
               className={`group flex items-center gap-3 flex-shrink-0 rounded-2xl border transition-all duration-300 ${
                 active
-                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400 font-bold shadow-lg shadow-emerald-500/5"
-                  : "border-transparent text-zinc-400 hover:bg-white/5 hover:text-white font-medium"
+                  ? "border-emerald-500/20 bg-emerald-500/10 text-accent-strong font-bold shadow-lg"
+                  : "border-transparent text-foreground-muted hover:bg-background/55 hover:text-foreground font-medium"
               } ${isCollapsed ? 'justify-center p-3.5 w-12 h-12' : 'px-4 py-3.5 text-[15px]'}`}
             >
               {content}
@@ -215,10 +215,10 @@ export function ShellNav({
       </nav>
 
       {/* Footer Area */}
-      <div className={`relative z-10 shrink-0 border-t border-white/5 ${isCollapsed ? 'p-3 flex flex-col items-center gap-3' : 'p-5 space-y-4'}`}>
+      <div className={`relative z-10 shrink-0 border-t border-border/60 ${isCollapsed ? 'p-3 flex flex-col items-center gap-3' : 'p-5 space-y-4'}`}>
         {!isCollapsed ? (
            <>
-            <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 backdrop-blur-sm min-w-0">
+            <div className="min-w-0 rounded-2xl border border-border/60 bg-background/45 p-4 backdrop-blur-sm">
               {/* Language and theme belong together in the sidebar utility rail so the header can stay focused on navigation and account context.
                   Future shell polish should preserve this grouping instead of moving theme back into the top chrome. */}
               <div className="space-y-4">
@@ -246,12 +246,12 @@ export function ShellNav({
               </div>
             </div>
             
-            <div className="flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-3.5 backdrop-blur-sm min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500 truncate">
+            <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/55 bg-background/35 p-3.5 backdrop-blur-sm">
+                <p className="truncate text-[9px] font-black uppercase tracking-[0.2em] text-foreground-muted">
                   {messages.statusActive ? "Profile Status" : "State"}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center justify-center rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-white/10 text-zinc-300 truncate max-w-full">
+                  <span className="inline-flex max-w-full items-center justify-center rounded border border-border/55 bg-background/70 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-foreground-muted truncate">
                     {user.role === "admin" ? (messages.roleAdmin || "Admin") : (messages.roleUser || "User")}
                   </span>
                   <span className={`inline-flex items-center justify-center rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border truncate max-w-full ${
@@ -294,7 +294,7 @@ export function ShellNav({
                  system: messages.themeSystem || "System",
                }}
              />
-             <div className="w-full h-px bg-white/10 my-1" />
+             <div className="my-1 h-px w-full bg-border/80" />
              <SignOutButton
                label={messages.logout || "Sign Out"}
                redirectTo={user.role === "admin" ? APP_ROUTES.adminLogin : APP_ROUTES.login}

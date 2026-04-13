@@ -2266,6 +2266,63 @@ Risks / Notes:
 
 ---
 
+2026-04-13 — Theme Switch Performance + Protected Light Surface Polish
+=======================================================================
+Type: UI performance polish / theme-switch rendering stability / protected-workspace visual refinement
+Scope: theme toggle client behavior, global theme tokens/transitions/scrollbars, protected sidebar/header surfaces, protected background layering
+
+Summary:
+- Completed full-ledger read and source exploration before edits (including theme pipeline files and protected shell/background ownership).
+- Removed costly route refresh from theme toggle and switched to immediate DOM theme application (`data-theme` + `.dark` class + cookie write) to reduce visible switching lag.
+- Added a short theme-switch transition suppression guard to prevent full-page transition cascades during manual theme flips.
+- Integrated protected light-mode background image ownership (`/my-app-background-light.png`) with a subtle readability overlay while preserving existing dark/system-dark image ownership.
+- Updated protected sidebar and top header surfaces/icons/borders to use theme tokens for cleaner light-mode translucency without redesigning architecture.
+- Converted custom scrollbars to token-driven, theme-aware styling for both WebKit and Firefox engines.
+
+Files Changed:
+- apps/web/components/preferences/theme-toggle.tsx
+- apps/web/app/globals.css
+- apps/web/components/layout/shell-nav.tsx
+- apps/web/components/layout/protected-shell.tsx
+- zootopia-club-next-ledger.txt
+
+Root Cause (code-verified):
+- Theme switching previously triggered `router.refresh()` from the toggle, forcing a server roundtrip/re-render cycle for a purely visual preference change.
+- Theme DOM application only set `data-theme` client-side but relied on refresh for `.dark` class consistency, causing perceived lag/inconsistent style activation windows.
+- A broad global `transition: all` rule amplified repaint/reflow work across many interactive surfaces during token swaps.
+
+Behavioral Changes:
+- Theme toggle now:
+  - writes cookie
+  - applies `data-theme` immediately
+  - synchronizes `.dark` class immediately
+  - updates `color-scheme` immediately
+  - skips `router.refresh()` for normal theme toggles
+  - listens for system preference changes when current mode is `system`
+- Added `.theme-switching` guard in global CSS to disable transitions briefly during manual theme flip.
+- Narrowed broad interactive transition declaration from `all` to targeted properties (color/background/border/shadow/opacity/transform).
+- Added new scrollbar tokens for light and dark variants and wired `.global-scrollbar` + `.side-scrollbar` to tokenized colors.
+- Protected workspace background:
+  - light default now uses `/my-app-background-light.png`
+  - light overlay/base/grid tuned for readability and softer premium translucency
+  - dark/system-dark explicitly retain `/my-app-background.png` with prior dark treatment
+  - login/admin-login background ownership remains untouched (still isolated to auth media classes)
+- Protected sidebar/header visual polish:
+  - replaced hardcoded white/zinc shell accents with theme-tokenized foreground/border/background classes
+  - preserved structure/routes/actions while improving icon/text/border adaptation in light mode
+
+Verification:
+- web-lint-post-polish: pass
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- This pass intentionally avoids auth/business-logic/storage/API ownership changes and keeps modifications UI/theme-layer only.
+- Existing workspace CSS language-service warnings for Tailwind custom at-rules (`@custom-variant`, `@theme`, `@apply`) remain pre-existing/non-blocking.
+- Theme switch suppression is intentionally brief (220ms) and scoped to manual toggle events to avoid persistent animation disablement.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve

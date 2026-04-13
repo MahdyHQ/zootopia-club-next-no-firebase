@@ -3,8 +3,7 @@
 import { ENV_KEYS } from "@zootopia/shared-config";
 import type { ThemeMode } from "@zootopia/shared-types";
 import { Monitor, MoonStar, SunMedium } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type ThemeToggleProps = {
   value: ThemeMode;
@@ -21,6 +20,62 @@ const THEME_ICONS = {
   system: Monitor,
 } satisfies Record<ThemeMode, typeof SunMedium>;
 
+function resolveSystemTheme(): "light" | "dark" {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function resolveDisplayedTheme(
+  preferredTheme: ThemeMode,
+  availableModes: ThemeMode[],
+): ThemeMode {
+  if (availableModes.includes(preferredTheme)) {
+    return preferredTheme;
+  }
+
+  const systemTheme = resolveSystemTheme();
+  if (availableModes.includes(systemTheme)) {
+    return systemTheme;
+  }
+
+  return availableModes.includes("dark") ? "dark" : availableModes[0]!;
+}
+
+function applyThemeToDocument(
+  nextTheme: ThemeMode,
+  disableTransitions: boolean,
+  timerRef: { current: number | null },
+) {
+  const root = document.documentElement;
+  const darkClassActive =
+    nextTheme === "dark" ||
+    (nextTheme === "system" && resolveSystemTheme() === "dark");
+
+  /* Keep theme flips paint-cheap by suppressing transition interpolation for a single frame window.
+     This prevents the heavy protected-shell surfaces from animating every color token change at once. */
+  if (disableTransitions) {
+    root.classList.add("theme-switching");
+
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+
+    timerRef.current = window.setTimeout(() => {
+      root.classList.remove("theme-switching");
+      timerRef.current = null;
+    }, 220);
+  }
+
+  root.setAttribute("data-theme", nextTheme);
+  root.classList.toggle("dark", darkClassActive);
+  root.style.colorScheme = darkClassActive ? "dark" : "light";
+}
+
 function writeCookie(name: string, value: string) {
   const secure = window.location.protocol === "https:" ? "; secure" : "";
   document.cookie = `${name}=${value}; path=/; max-age=31536000; samesite=lax${secure}`;
@@ -33,32 +88,49 @@ export function ThemeToggle({
   variant = "default",
   modes,
 }: ThemeToggleProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [optimisticTheme, setOptimisticTheme] = useState<ThemeMode>(value);
+  const themeSwitchingTimerRef = useRef<number | null>(null);
   const compact = variant === "compact";
   const toolbar = variant === "toolbar";
   const cycleIcon = variant === "cycle-icon";
-  const availableModes = modes?.length ? [...new Set(modes)] : THEME_ORDER;
+  const availableModes = useMemo(
+    () => (modes?.length ? [...new Set(modes)] : THEME_ORDER),
+    [modes],
+  );
+
+  useEffect(() => {
+    setOptimisticTheme(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (optimisticTheme !== "system") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handlePreferenceChange = () => {
+      applyThemeToDocument("system", false, themeSwitchingTimerRef);
+    };
+
+    mediaQuery.addEventListener("change", handlePreferenceChange);
+    return () => {
+      mediaQuery.removeEventListener("change", handlePreferenceChange);
+    };
+  }, [optimisticTheme]);
+
   /* The protected sidebar now exposes only light/dark while older cookies may still carry
      "system". Resolve the visible selection from the active media preference so the relocated
      shell control stays truthful without reintroducing a third visible option. */
-  const displayedTheme =
-    availableModes.includes(value)
-      ? value
-      : typeof window !== "undefined" &&
-          window.matchMedia("(prefers-color-scheme: light)").matches &&
-          availableModes.includes("light")
-        ? "light"
-        : availableModes.includes("dark")
-          ? "dark"
-          : availableModes[0]!;
+  const displayedTheme = resolveDisplayedTheme(optimisticTheme, availableModes);
 
   function applyTheme(nextTheme: ThemeMode) {
+    if (nextTheme === optimisticTheme) {
+      return;
+    }
+
+    setOptimisticTheme(nextTheme);
     writeCookie(ENV_KEYS.themeCookie, nextTheme);
-    document.documentElement.setAttribute("data-theme", nextTheme);
-    startTransition(() => {
-      router.refresh();
-    });
+    applyThemeToDocument(nextTheme, true, themeSwitchingTimerRef);
   }
 
   if (cycleIcon) {
@@ -74,7 +146,6 @@ export function ThemeToggle({
             type="button"
             aria-label={`${label}: ${labels[displayedTheme]}`}
             title={`${label}: ${labels[displayedTheme]}`}
-            disabled={isPending}
             onClick={() => applyTheme(nextTheme)}
             className="toggle-button toggle-button--idle"
           >
@@ -102,7 +173,6 @@ export function ThemeToggle({
               type="button"
               aria-pressed={selected}
               aria-label={`${label}: ${labels[theme]}`}
-              disabled={isPending}
               onClick={() => applyTheme(theme)}
               className={`toggle-button ${
                 selected

@@ -169,16 +169,16 @@ export function ProtectedShell({
       <div className="flex w-full min-w-0 flex-1 flex-col h-full overflow-hidden relative z-10 transition-all duration-300">
         
         {/* Top Header */}
-        <header className="flex h-[4.5rem] shrink-0 items-center justify-between px-6 lg:px-10 z-30 transition-all border-b border-white/5 bg-background/20 backdrop-blur-md">
+        <header className="z-30 flex h-[4.5rem] shrink-0 items-center justify-between border-b border-border/60 bg-background-elevated/70 px-6 backdrop-blur-xl transition-all lg:px-10">
           <div className="flex items-center gap-4 min-w-0">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-background-elevated/50 border border-white/5 text-foreground hover:bg-background-strong hover:border-accent hover:text-accent lg:hidden transition-all shadow-sm focus:outline-none"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background-elevated/80 text-foreground shadow-sm transition-all hover:border-accent-strong hover:bg-background-strong hover:text-accent lg:hidden focus:outline-none"
             >
               <Menu className="h-5 w-5" />
             </button>
-          <div className="hidden lg:flex items-center gap-2 h-10 px-4 shrink-0 rounded-xl bg-white/5 border border-white/5 shadow-sm text-xs font-black uppercase tracking-widest text-foreground">
-               <Sparkles className="h-4 w-4 text-emerald-400" />
+          <div className="hidden h-10 shrink-0 items-center gap-2 rounded-xl border border-border/60 bg-background/55 px-4 text-xs font-black uppercase tracking-widest text-foreground shadow-sm lg:flex">
+               <Sparkles className="h-4 w-4 text-accent-strong" />
             <span className="truncate">{messages.appName || "Zootopia Club"}</span>
             </div>
           </div>
@@ -203,7 +203,7 @@ export function ProtectedShell({
              <div
                aria-label={`${siteContent.navigation.balanceLabel}: ${resolvedBalanceLabel}`}
                title={resolvedBalanceHint}
-               className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.06] px-3 text-foreground-muted shadow-sm"
+               className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/58 px-3 text-foreground-muted shadow-sm"
              >
                <WalletCards className="h-4.5 w-4.5 shrink-0 text-gold" />
                <div className="hidden xl:flex xl:flex-col xl:items-start xl:leading-none">
@@ -216,17 +216,17 @@ export function ProtectedShell({
                </div>
              </div>
 
-             <div className="hidden xl:flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 text-foreground-muted hover:text-foreground hover:border-white/20 transition-all cursor-pointer shadow-sm">
+             <div className="hidden h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-border/60 bg-background/55 text-foreground-muted shadow-sm transition-all hover:border-accent/60 hover:text-foreground xl:flex">
                <Search className="h-4.5 w-4.5" />
              </div>
-             <div className="hidden xl:flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 text-foreground-muted hover:text-foreground hover:border-white/20 transition-all cursor-pointer shadow-sm relative">
+             <div className="relative hidden h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-border/60 bg-background/55 text-foreground-muted shadow-sm transition-all hover:border-accent/60 hover:text-foreground xl:flex">
                <Bell className="h-4.5 w-4.5" />
                <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
              </div>
              
-             <div className="h-8 w-px bg-white/10 hidden sm:block mx-1" />
+             <div className="mx-1 hidden h-8 w-px bg-border/80 sm:block" />
              
-             <div className="flex items-center gap-3 px-2 sm:px-3 py-1.5 rounded-2xl bg-white/5 border border-white/5 shadow-sm cursor-pointer hover:bg-white/10 transition-colors max-w-[120px] sm:max-w-[200px]">
+             <div className="flex max-w-[120px] cursor-pointer items-center gap-3 rounded-2xl border border-border/60 bg-background/55 px-2 py-1.5 shadow-sm transition-colors hover:bg-background/70 sm:max-w-[200px] sm:px-3">
                 <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-black text-xs uppercase shadow-sm">
                   {user.displayName?.[0] || user.email?.[0] || "U"}
                   <span className="absolute -bottom-0.5 -right-0.5 rounded-full border border-background-strong bg-background p-[1px]">
