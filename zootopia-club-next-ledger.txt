@@ -1910,6 +1910,149 @@ Risks / Notes:
 
 ---
 
+2026-04-13 — Home Hero Polish Utilities (globals.css Additive Insert)
+=====================================================================
+Type: UI styling additive update / home-page-only utilities
+Scope: apps/web/app/globals.css insertion immediately before Custom Scrollbars section
+
+Summary:
+- Added the requested Home polish CSS block as a surgical insertion only.
+- Inserted exactly before the `/* Custom Scrollbars */` marker with no refactors or removals.
+- Kept changes route-scoped by class naming (`home-*`) so no existing non-home layout contracts are affected.
+
+Files Changed:
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+Behavioral Additions:
+- Added `@keyframes home-scroll-hint-bounce` and `.home-scroll-hint`.
+- Added `.home-zone-enter` and `@keyframes home-zone-fade-up`.
+- Added `.home-hero-divider` with dark/system theme variants.
+- Added `.home-stat-card` hover transitions with dark/system variants.
+- Added `.home-nav-card` directional hover rail with RTL flip support.
+- Added `.home-trust-pill` hover behavior.
+- Added `prefers-reduced-motion` overrides for all new animated/hover transforms.
+
+Verification:
+- web-lint-post-polish: pass (1 pre-existing warning in `apps/web/lib/server/zootopia-postgres-adapter.ts`)
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- CSS language-service diagnostics for Tailwind custom at-rules in `globals.css` are pre-existing workspace behavior and unrelated to this insertion.
+- No runtime/auth/data-flow logic changed in this pass.
+
+---
+
+2026-04-13 — Postgres Adapter PendingQuery Type Preservation Fix
+===============================================================
+Type: TypeScript build fix / adapter typing hardening / minimal compatibility patch
+Scope: apps/web/lib/server/zootopia-postgres-adapter.ts query-builder helper typing
+
+Summary:
+- Fixed root workspace build failure caused by an incompatible `PendingQuery` row mutability type in the Postgres adapter query builder.
+- Kept runtime SQL behavior unchanged and applied a surgical type-surface adjustment only.
+- Removed stale lint suppression comment tied to `declare global` singleton typing.
+
+Root Cause (code-verified):
+- `PgQuery._appendWhereClauses(...)` and `PgQuery._appendOrderBy(...)` accepted/returned `ReturnType<SqlExecutor>` directly.
+- During chained template composition, `postgres.js` inferred a narrower `PendingQuery<readonly ...>` variant in one branch.
+- Reassignment in `_getWithSql` then failed type-check against the broader mutable `PendingQuery<Row[]>` expectation.
+
+Files Changed:
+- apps/web/lib/server/zootopia-postgres-adapter.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Updated internal helper signatures to preserve caller query type with generics:
+  - `_appendWhereClauses<TQuery>(..., query: TQuery): TQuery`
+  - `_appendOrderBy<TQuery>(..., query: TQuery): TQuery`
+- Added internal cast boundaries inside both helpers to keep type-preserving chaining while avoiding `PendingQuery` variance conflicts.
+- Removed unused `// eslint-disable-next-line no-var` comment above `declare global` singleton declaration.
+
+Verification:
+- Root `npm run build`: pass
+  - @zootopia/api build: pass
+  - @zootopia/web build: pass
+  - @zootopia/shared-config build: pass
+  - @zootopia/shared-types build: pass
+  - @zootopia/shared-utils build: pass
+- web-lint-post-polish: pass
+
+Risks / Notes:
+- This is a type-only stabilization patch; SQL text, query semantics, and transaction behavior are unchanged.
+- Generic helper return typing is intentionally local to query construction to avoid leaking postgres.js internal generic variance to callers.
+
+---
+
+2026-04-13 — Confirm-Email Resend Label Boundary Hardening
+===========================================================
+Type: Auth UX correctness fix / confirm-email resend action-copy state guard
+Scope: confirm-email panel client state ownership for Send vs Resend label transitions
+
+Summary:
+- Fixed a confirm-email CTA copy regression where governance polling could flip the button label to "Resend verification email"
+  before the user had made a successful resend attempt on the current page.
+- Kept backend governance logic and API contracts unchanged.
+- Applied a minimal client-only state boundary fix to preserve cooldown/blocked/priming behavior.
+
+Root Cause (code-verified):
+- `syncGovernanceState(...)` merged persisted backend `governance.hasAcceptedSend` into local label state during GET polling.
+- That backend value is intentionally cross-session and cross-device, so a first page load for an email with historical accepted sends
+  could pre-switch the label to "Resend" even before any current-page submit.
+
+Files Changed:
+- apps/web/components/auth/confirm-email-panel.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Added page-scoped label state `hasAcceptedSendOnPage` with explicit confirm-email ownership comments.
+- Removed polling-driven label mutation in `syncGovernanceState(...)`.
+- Kept governance snapshot/cooldown refresh intact so throttle truth remains backend-driven.
+- Flip to resend label now occurs only after POST resend succeeds with provider acceptance.
+- Page-scoped resend-label state resets when the email becomes invalid/unset and when user edits the email input.
+
+Verification:
+- web-lint-post-polish: pass
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- This pass intentionally scopes only button copy transition logic; no auth/session/bootstrap behavior changed.
+- Existing governance blocked/cooldown labels and disablement gates remain unchanged.
+
+---
+
+2026-04-13 — Home Hall of Honor Wrapper Visual Neutralization
+==============================================================
+Type: UI polish / home section visual cleanup / surgical class-level edit
+Scope: Hall of Honor block in completed home page route
+
+Summary:
+- Removed the decorative parent-layer radial gradient from the Hall of Honor block so the wrapper is visually neutral.
+- Kept the inner Hall of Honor card treatment (border/background/hover/padding/radius) as the primary polished surface.
+- Preserved existing responsive layout behavior across mobile/tablet/desktop with no structural changes.
+
+Files Changed:
+- apps/web/app/(protected)/(completed)/page.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Removed Hall of Honor inline decorative overlay:
+  - `pointer-events-none absolute inset-0 rounded-[1.25rem] bg-[radial-gradient(...)]`
+- Left wrapper spacing (`px-6 pt-5 md:px-10 md:pt-6`) and card spacing/radius (`p-5`, `rounded-[1.25rem]`) unchanged to keep balanced alignment with surrounding home sections.
+
+Verification:
+- web-lint-post-polish: pass
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+
+Risks / Notes:
+- No business logic, routing, data flow, or component ownership changed.
+- Patch is component-local and does not touch shared/global styling contracts.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve

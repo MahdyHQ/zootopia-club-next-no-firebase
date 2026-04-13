@@ -828,7 +828,10 @@ export function ConfirmEmailPanel({
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [governance, setGovernance] = useState<VerificationResendGovernanceSnapshot | null>(null);
   const [isGovernanceLoading, setIsGovernanceLoading] = useState(false);
-  const [hasAcceptedSend, setHasAcceptedSend] = useState(false);
+  /* Confirm-email action copy is page-instance scoped.
+    Keep this false until this page successfully sends once so governance polling
+    from older sessions/devices cannot pre-flip the CTA to "Resend". */
+  const [hasAcceptedSendOnPage, setHasAcceptedSendOnPage] = useState(false);
   const [governancePrimedEmail, setGovernancePrimedEmail] = useState<string | null>(null);
   const governanceRequestTokenRef = useRef(0);
   const previousCooldownRef = useRef(0);
@@ -859,10 +862,6 @@ export function ConfirmEmailPanel({
 
       setGovernance(nextGovernance);
       setCooldownSeconds(nextGovernance.cooldownRemainingSeconds);
-      /* Preserve confirmed-send UI state once this browser session has observed
-        provider acceptance for the current email. This prevents a transient
-        polling snapshot from regressing the action label back to first-send. */
-      setHasAcceptedSend((previous) => previous || nextGovernance.hasAcceptedSend);
       return nextGovernance;
     } catch (nextError) {
       if (requestToken !== governanceRequestTokenRef.current) {
@@ -1050,7 +1049,7 @@ export function ConfirmEmailPanel({
     if (!supabaseConfigured || !supabaseAuthReady || !hasValidEmail) {
       setGovernance(null);
       setCooldownSeconds(0);
-      setHasAcceptedSend(false);
+      setHasAcceptedSendOnPage(false);
       setGovernancePrimedEmail(null);
       setIsGovernanceLoading(false);
       return;
@@ -1176,7 +1175,7 @@ export function ConfirmEmailPanel({
         ? messages.confirmEmailResendWorking
         : governance?.governanceCode === "VERIFICATION_RESEND_COOLDOWN_ACTIVE" && cooldownSeconds > 0
           ? `${messages.confirmEmailResendCooldownPrefix} ${cooldownSeconds}s`
-          : hasAcceptedSend
+          : hasAcceptedSendOnPage
             ? messages.confirmEmailResendAction
             : messages.confirmEmailSendAction;
 
@@ -1259,11 +1258,10 @@ export function ConfirmEmailPanel({
         fromRoute: returnRoute,
       });
 
-      // The server owns resend governance and provider delivery acceptance. Reflect exactly
-      // what the backend reports so the button state cannot drift from real throttling truth.
+      // Keep governance/cooldown truth anchored to backend snapshots.
+      // CTA copy state flips separately only after this page gets an accepted send.
       setGovernance(resendResult.governance);
       setCooldownSeconds(resendResult.governance.cooldownRemainingSeconds);
-      setHasAcceptedSend(resendResult.governance.hasAcceptedSend || resendResult.providerAccepted);
 
       if (!resendResult.accepted || !resendResult.providerAccepted) {
         throw createAuthFlowError(
@@ -1271,6 +1269,8 @@ export function ConfirmEmailPanel({
           "Verification provider did not accept this resend request.",
         );
       }
+
+      setHasAcceptedSendOnPage(true);
 
       setStatus({
         tone: "success",
@@ -1322,7 +1322,7 @@ export function ConfirmEmailPanel({
                   setEmail(event.target.value);
                   setGovernance(null);
                   setCooldownSeconds(0);
-                  setHasAcceptedSend(false);
+                  setHasAcceptedSendOnPage(false);
                   if (!isSending && !isFinalizing) {
                     setStatus(null);
                   }

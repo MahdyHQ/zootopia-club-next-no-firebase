@@ -3438,6 +3438,165 @@ html[dir="rtl"] .auth-hero-title {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   HOME PAGE POLISH — 2026-04-13
+   Additive utilities for the unified hero surface redesign.
+   These classes are consumed only by the home page.tsx and do not
+   affect any other route's layout, spacing, or visual behavior.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Subtle bounce for the scroll-down hint chevron.
+   Kept gentler than the default Tailwind animate-bounce to avoid
+   drawing too much attention away from the hero content. */
+@keyframes home-scroll-hint-bounce {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(3px);
+    opacity: 1;
+  }
+}
+
+.home-scroll-hint {
+  animation: home-scroll-hint-bounce 2s ease-in-out infinite;
+}
+
+/* Smooth fade-in for zone transitions as user scrolls.
+   Applied to Zone 2 and Zone 3 containers on the home page. */
+.home-zone-enter {
+  animation: home-zone-fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes home-zone-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Unified hero surface inner separator.
+   Used between sub-sections inside the home hero to create visual
+   breathing room without adding extra border elements. */
+.home-hero-divider {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--border) 20%,
+    var(--border) 80%,
+    transparent 100%
+  );
+  opacity: 0.5;
+}
+
+:root[data-theme="dark"] .home-hero-divider {
+  opacity: 0.3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .home-hero-divider {
+    opacity: 0.3;
+  }
+}
+
+/* Compact stat card hover glow for home page counters.
+   Scoped to .home-stat-card to avoid leaking into other metric surfaces. */
+.home-stat-card {
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 220ms ease,
+    transform 180ms ease;
+}
+
+.home-stat-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.08);
+}
+
+:root[data-theme="dark"] .home-stat-card:hover {
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .home-stat-card:hover {
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.12);
+  }
+}
+
+/* Home workspace nav card subtle hover indicator.
+   Shows a thin emerald left border on hover for directional affordance. */
+.home-nav-card {
+  position: relative;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 220ms ease,
+    transform 180ms ease;
+}
+
+.home-nav-card::before {
+  content: "";
+  position: absolute;
+  inset-block: 12%;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: var(--accent-strong);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+html[dir="rtl"] .home-nav-card::before {
+  border-radius: 999px 0 0 999px;
+}
+
+.home-nav-card:hover::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+/* Home trust footer — keep the privacy link pill consistent
+   with the emerald accent language used across protected surfaces. */
+.home-trust-pill {
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.home-trust-pill:hover {
+  transform: translateY(-1px);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-scroll-hint,
+  .home-zone-enter {
+    animation: none;
+  }
+
+  .home-stat-card:hover,
+  .home-nav-card:hover,
+  .home-trust-pill:hover {
+    transform: none;
+  }
+
+  .home-nav-card::before {
+    transition: none;
+  }
+}
+
 /* Custom Scrollbars */
 .global-scrollbar::-webkit-scrollbar {
   width: 10px;

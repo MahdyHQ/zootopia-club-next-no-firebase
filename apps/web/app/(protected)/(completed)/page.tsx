@@ -145,8 +145,7 @@ export default async function HomePage() {
             href={APP_ROUTES.hallOfHonor}
             className="group flex flex-col gap-4 rounded-[1.25rem] border border-white/15 bg-white/50 p-5 transition-all hover:-translate-y-0.5 hover:bg-white/70 hover:shadow-md dark:border-white/5 dark:bg-zinc-900/35 dark:hover:bg-zinc-900/55 md:flex-row md:items-center md:justify-between"
           >
-            {/* Decorative radial accents */}
-            <div className="pointer-events-none absolute inset-0 rounded-[1.25rem] bg-[radial-gradient(circle_at_top_right,rgba(242,198,106,0.12),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.08),transparent_40%)]" />
+            {/* Keep wrapper visually neutral so Hall of Honor content card remains the only emphasized surface. */}
 
             <div className="relative space-y-1.5">
               <p className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-gold">
