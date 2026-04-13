@@ -298,6 +298,8 @@
   "settingsSelfProfileTitle": "إدارة ملفك الشخصي",
   "settingsSelfProfileSubtitle": "تُحفَظ هذه التغييرات لحسابك فقط على الخادم.",
   "settingsProfileSaveAction": "حفظ الملف",
+  "settingsProfileSavePendingStatus": "جارٍ حفظ تحديثات الملف الشخصي...",
+  "settingsProfileSaveSuccessStatus": "تم حفظ الملف الشخصي بنجاح.",
   "settingsFullNameLabel": "الاسم الكامل",
   "settingsFullNamePlaceholder": "مثال: أحمد محمد علي حسن",
   "settingsFullNameHint": "استخدم الاسم الكامل الموجود في السجل الجامعي.",

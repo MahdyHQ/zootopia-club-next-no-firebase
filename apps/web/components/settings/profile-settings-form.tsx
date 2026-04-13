@@ -56,6 +56,8 @@ type ProfileSettingsFormProps = {
   isAdmin?: boolean;
 };
 
+type ProfileSaveFeedbackTone = "idle" | "pending" | "success" | "error";
+
 function normalizeTextValue(value: string) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
@@ -235,8 +237,15 @@ export function ProfileSettingsForm({
   const [gender, setGender] = useState(initialGender);
   const [nationality, setNationality] = useState(initialNationality);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<UserProfileFieldErrors>({});
+  const [saveFeedback, setSaveFeedback] = useState<{
+    tone: ProfileSaveFeedbackTone;
+    message: string | null;
+  }>({
+    tone: "idle",
+    message: null,
+  });
 
   const selectedPhoneCountry = useMemo(
     () => resolveProfileCountryOption(profileCountryOptions, selectedPhoneCountryIso2),
@@ -357,6 +366,15 @@ export function ProfileSettingsForm({
     });
   }
 
+  function resetSaveFeedback() {
+    setError(null);
+    setSaveFeedback((current) =>
+      current.tone === "idle"
+        ? current
+        : { tone: "idle", message: null },
+    );
+  }
+
   function handleNationalDigitsChange(rawInput: string) {
     const nationalDigits = rawInput.replace(/\D/g, "").slice(0, maxPhoneNationalDigits);
     const nextPhoneValue = nationalDigits
@@ -366,7 +384,7 @@ export function ProfileSettingsForm({
     if (nextPhoneValue === phoneValue) return;
 
     setPhoneValue(nextPhoneValue);
-    setError(null);
+    resetSaveFeedback();
     clearFieldError("phoneNumber");
   }
 
@@ -384,7 +402,7 @@ export function ProfileSettingsForm({
 
     setSelectedPhoneCountryIso2(nextCountry.iso2);
     setPhoneValue(nextPhoneValue);
-    setError(null);
+    resetSaveFeedback();
     clearFieldError("phoneNumber");
   }
 
@@ -392,6 +410,10 @@ export function ProfileSettingsForm({
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setSaveFeedback({
+      tone: "pending",
+      message: messages.settingsProfileSavePendingStatus,
+    });
 
     const validation = validateRequiredUserProfile({
       fullName,
@@ -403,6 +425,10 @@ export function ProfileSettingsForm({
     if (!validation.ok) {
       setFieldErrors(validation.fieldErrors);
       setError(validation.message);
+      setSaveFeedback({
+        tone: "error",
+        message: validation.message,
+      });
       setBusy(false);
       return;
     }
@@ -414,6 +440,10 @@ export function ProfileSettingsForm({
         phoneNumber: phoneValidation.error,
       }));
       setError(phoneValidation.error);
+      setSaveFeedback({
+        tone: "error",
+        message: phoneValidation.error,
+      });
       setBusy(false);
       return;
     }
@@ -455,14 +485,26 @@ export function ProfileSettingsForm({
         throw new Error("PROFILE_UPDATE_FAILED");
       }
 
+      setSaveFeedback({
+        tone: "success",
+        message: messages.settingsProfileSaveSuccessStatus,
+      });
+
       router.replace(payload.data.redirectTo);
       router.refresh();
     } catch (nextError) {
-      setError(
+      const failureMessage =
         nextError instanceof Error
           ? nextError.message
-          : messages.profileCompletionSaveFailed,
+          : messages.profileCompletionSaveFailed;
+
+      setError(
+        failureMessage,
       );
+      setSaveFeedback({
+        tone: "error",
+        message: failureMessage,
+      });
     } finally {
       setBusy(false);
     }
@@ -474,11 +516,11 @@ export function ProfileSettingsForm({
     "w-full rounded-[1.25rem] border border-slate-200/80 bg-white/90 px-4 py-3.5 text-sm text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.48),0_14px_28px_rgba(2,6,23,0.05)] outline-none transition focus:border-emerald-500/40 focus:bg-white dark:border-slate-700/70 dark:bg-slate-950/75 dark:focus:border-emerald-400/40";
 
   return (
-    <section className="relative rounded-[2.5rem] border border-white/25 bg-white/65 p-6 shadow-[0_30px_90px_rgba(2,6,23,0.08)] backdrop-blur-2xl dark:border-white/8 dark:bg-slate-950/45 md:p-8">
+    <section className="relative rounded-[2.5rem] border border-white/25 bg-white/65 p-6 shadow-[0_30px_90px_rgba(2,6,23,0.08)] backdrop-blur-2xl dark:border-white/8 dark:bg-slate-950/45 md:p-8 lg:p-9">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.14),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(242,198,106,0.12),transparent_38%)]" />
 
       <div className="relative z-10">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl space-y-3">
             <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">
               <Sparkles className="h-3.5 w-3.5" />
@@ -534,7 +576,7 @@ export function ProfileSettingsForm({
           </div>
         ) : null}
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {requirementItems.map((item) => (
             <div
               key={item.key}
@@ -574,10 +616,10 @@ export function ProfileSettingsForm({
           ))}
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit} noValidate>
+        <form className="mt-9 space-y-7" onSubmit={handleSubmit} noValidate>
           {/* Required field flow for completion-gated profiles.
               Keep this exact top-to-bottom order in this form block when making future UI changes. */}
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-5 lg:grid-cols-2">
             <label className={`${panelClassName} block space-y-2.5`}>
               <span className="flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-white">
                 <UserRound className="h-4.5 w-4.5 text-emerald-700 dark:text-emerald-200" />
@@ -588,6 +630,7 @@ export function ProfileSettingsForm({
                 value={fullName}
                 onChange={(event) => {
                   setFullName(event.target.value);
+                  resetSaveFeedback();
                   clearFieldError("fullName");
                 }}
                 placeholder={messages.settingsFullNamePlaceholder}
@@ -613,6 +656,7 @@ export function ProfileSettingsForm({
                 value={universityCode}
                 onChange={(event) => {
                   setUniversityCode(event.target.value);
+                  resetSaveFeedback();
                   clearFieldError("universityCode");
                 }}
                 placeholder={messages.settingsUniversityCodePlaceholder}
@@ -723,6 +767,7 @@ export function ProfileSettingsForm({
               icon={VenusAndMars}
               onChange={(nextValue) => {
                 setGender(nextValue as UserGender);
+                resetSaveFeedback();
                 clearFieldError("gender");
               }}
               error={fieldErrors.gender}
@@ -743,6 +788,7 @@ export function ProfileSettingsForm({
               icon={Globe2}
               onChange={(nextValue) => {
                 setNationality(nextValue);
+                resetSaveFeedback();
                 clearFieldError("nationality");
               }}
               error={fieldErrors.nationality}
@@ -752,18 +798,32 @@ export function ProfileSettingsForm({
             </p>
           </div>
 
-          {error ? (
-            <div className="rounded-[1.4rem] border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-700 shadow-[0_14px_34px_rgba(239,68,68,0.08)] dark:text-red-300">
-              <p>{error}</p>
-            </div>
-          ) : null}
-
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-foreground-muted">
-              {isAdmin
-                ? messages.settingsSelfProfileSubtitle
-                : messages.profileCompletionRequiredDetail}
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-foreground-muted">
+                {isAdmin
+                  ? messages.settingsSelfProfileSubtitle
+                  : messages.profileCompletionRequiredDetail}
+              </p>
+              {/* Keep save feedback adjacent to the action rail so submit truth stays visible
+                  without forcing users to scan to a distant alert region. */}
+              {saveFeedback.tone !== "idle" && saveFeedback.message ? (
+                <p
+                  className={`inline-flex max-w-full items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold ${
+                    saveFeedback.tone === "success"
+                      ? "border-emerald-500/22 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/22 dark:bg-emerald-400/10 dark:text-emerald-200"
+                      : saveFeedback.tone === "error"
+                        ? "border-red-500/22 bg-red-500/10 text-red-700 dark:border-red-400/22 dark:bg-red-400/10 dark:text-red-200"
+                        : "border-blue-500/22 bg-blue-500/10 text-blue-700 dark:border-blue-400/22 dark:bg-blue-400/10 dark:text-blue-200"
+                  }`}
+                >
+                  {saveFeedback.tone === "pending" ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : null}
+                  <span>{saveFeedback.message}</span>
+                </p>
+              ) : null}
+            </div>
 
             <button
               type="submit"

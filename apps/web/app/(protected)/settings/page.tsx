@@ -84,11 +84,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="space-y-10 animate-in fade-in duration-700 lg:space-y-11">
       <section className="relative overflow-hidden rounded-[2.5rem] border border-white/30 bg-[linear-gradient(135deg,rgba(255,255,255,0.88),rgba(241,249,247,0.72))] px-6 py-7 shadow-[0_26px_80px_rgba(2,6,23,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(145deg,rgba(5,14,23,0.72),rgba(3,11,19,0.62))] sm:px-8 sm:py-8">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.13),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(242,198,106,0.14),transparent_42%)]" />
 
-        <div className="relative z-10 max-w-5xl space-y-3">
+        <div className="relative z-10 max-w-5xl space-y-4">
           <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-400/12 dark:text-emerald-200">
             <Settings2 className="h-4 w-4" />
             {uiContext.messages.navSettings}
@@ -127,13 +127,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         />
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         <div className="inline-flex items-center gap-2 rounded-full border border-slate-300/70 bg-white/75 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/70 dark:text-slate-200">
           <Activity className="h-3.5 w-3.5" />
           {uiContext.messages.preferencesTitle}
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
           <section className="rounded-[1.9rem] border border-white/28 bg-[linear-gradient(160deg,rgba(255,255,255,0.9),rgba(244,249,248,0.8))] p-5 shadow-[0_20px_54px_rgba(2,6,23,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(150deg,rgba(8,18,29,0.74),rgba(4,12,21,0.66))]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">

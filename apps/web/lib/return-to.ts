@@ -4,6 +4,7 @@ import type { SessionUser } from "@zootopia/shared-types";
 const USER_RETURN_MATCHERS = [
   APP_ROUTES.home,
   APP_ROUTES.upload,
+  APP_ROUTES.history,
   APP_ROUTES.assessment,
   APP_ROUTES.infographic,
   APP_ROUTES.settings,

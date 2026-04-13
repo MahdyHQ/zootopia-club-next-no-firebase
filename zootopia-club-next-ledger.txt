@@ -1846,6 +1846,70 @@ Files Not Changed:
 
 ---
 
+2026-04-13 — Settings Save Feedback + Proxy Profile-Gate Drift Fix
+==================================================================
+Type: Redirect correctness / profile-completion gate hardening / settings UX polish
+Scope: proxy protected-route handling, returnTo whitelist parity, settings save action feedback, env redirect docs
+
+Summary:
+- Completed full-ledger read and source-level trace validation before edits.
+- Fixed the reported "completed profile still redirected to settings" behavior by removing stale-claim
+  profile-completion redirects from proxy and preserving completion authority in server route guards.
+- Added protected-route/returnTo parity for `/history` so route matching, sanitization, and env examples stay aligned.
+- Improved settings save UX with truthful near-button pending/success/error feedback tied to actual PATCH outcomes,
+  plus light spacing/rhythm polish without redesigning the page architecture.
+
+Root Cause (code-verified):
+- `apps/web/proxy.ts` enforced non-admin profile completion using JWT/session claims available in proxy context.
+- After successful profile updates, token claim state can lag persisted user state, producing false redirects for routes
+  covered by proxy matchers (`/`, `/upload`, `/assessment`, etc.).
+- `/history` asymmetry exposed this drift: it existed in app routes/nav but was absent from proxy/user returnTo matcher sets,
+  so behavior differed across protected pages.
+
+Files Changed:
+- apps/web/proxy.ts
+- apps/web/lib/return-to.ts
+- apps/web/components/settings/profile-settings-form.tsx
+- apps/web/app/(protected)/settings/page.tsx
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- .env.example
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Proxy changes:
+  - Added `/history` to `USER_PROTECTED_MATCHERS` and `config.matcher` coverage.
+  - Removed proxy-level profile-completion redirect branch that used potentially stale claims.
+  - Kept unauthenticated/login/admin protections in proxy, but made authenticated login redirect selection role-based
+    (completion-agnostic) to avoid claim-lag redirects back to settings.
+- Completion-gate ownership:
+  - Profile completion now remains enforced by server route ownership (`requireCompletedUser`) using persisted
+    session-backed user data, preventing claim-lag false redirects while preserving backend authority.
+- Return-to parity:
+  - Added `APP_ROUTES.history` to `USER_RETURN_MATCHERS` in `apps/web/lib/return-to.ts`.
+  - Updated `.env.example` user redirect examples to include `/history`.
+- Settings UX:
+  - Added submit feedback state in profile settings form (`idle | pending | success | error`).
+  - Surfaced pending/success/error text directly beside the submit action rail to keep save truth visible near the button.
+  - Added localized message keys:
+    - `settingsProfileSavePendingStatus`
+    - `settingsProfileSaveSuccessStatus`
+  - Applied minimal spacing adjustments in settings page and settings form to improve grouping/rhythm while preserving
+    existing visual language.
+
+Verification:
+- web-lint-post-polish: pass (1 pre-existing warning in `apps/web/lib/server/zootopia-postgres-adapter.ts`)
+- web-typecheck-post-polish: pass
+- web-build-post-polish: pass
+- Build output confirms `/history` route remains active and proxy is compiled.
+
+Risks / Notes:
+- This pass intentionally avoids reintroducing completion gating in proxy to prevent claim-lag regressions.
+- Server-side completion checks already remain authoritative on completed-route pages.
+- Confirm-email redirect/finalization logic was reviewed in source during this pass and left unchanged.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve

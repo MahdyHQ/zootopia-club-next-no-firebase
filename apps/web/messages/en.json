@@ -298,6 +298,8 @@
   "settingsSelfProfileTitle": "Manage your own profile",
   "settingsSelfProfileSubtitle": "Saved to your account on the server only.",
   "settingsProfileSaveAction": "Save profile",
+  "settingsProfileSavePendingStatus": "Saving profile changes...",
+  "settingsProfileSaveSuccessStatus": "Profile saved successfully.",
   "settingsFullNameLabel": "Full name",
   "settingsFullNamePlaceholder": "Example: Ahmed Mohamed Ali Hassan",
   "settingsFullNameHint": "Use the full name on your university record.",
