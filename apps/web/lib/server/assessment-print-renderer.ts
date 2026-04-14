@@ -21,7 +21,78 @@ import {
    this shared file-surface foundation before Puppeteer capture. Bump this whenever the shared
    assessment file layout changes materially so both lanes can invalidate stale source surfaces
    without collapsing back into one mixed route or cache contract. */
-export const ASSESSMENT_PRINT_LAYOUT_VERSION = "2026-04-06-compact-pdf-v23";
+export const ASSESSMENT_PRINT_LAYOUT_VERSION = "2026-04-14-pdf-content-guard-v24";
+
+export type AssessmentPrintRenderDiagnostics = {
+  bodyLoaded: boolean;
+  compositionBadgeCount: number;
+  contentSource: "generation-record";
+  htmlAnswerCardCount: number | null;
+  htmlHasExpectedContentBlocks: boolean | null;
+  htmlQuestionCardCount: number | null;
+  htmlQuestionTitleCount: number | null;
+  metadataCount: number;
+  questionCount: number;
+  questionPageCount: number;
+  sectionCount: number;
+};
+
+function countHtmlMarkerOccurrences(html: string, marker: string) {
+  let count = 0;
+  let cursor = 0;
+
+  while (cursor < html.length) {
+    const index = html.indexOf(marker, cursor);
+    if (index === -1) {
+      break;
+    }
+
+    count += 1;
+    cursor = index + marker.length;
+  }
+
+  return count;
+}
+
+export function buildAssessmentPrintRenderDiagnostics(input: {
+  preview: NormalizedAssessmentPreview;
+  html?: string | null;
+}): AssessmentPrintRenderDiagnostics {
+  const questionPages = buildAssessmentFileQuestionPages(input.preview.questions);
+  const renderedQuestionPageCount = Math.max(questionPages.length, 1);
+  const htmlQuestionCardCount =
+    typeof input.html === "string"
+      ? countHtmlMarkerOccurrences(input.html, 'class="question-card')
+      : null;
+  const htmlQuestionTitleCount =
+    typeof input.html === "string"
+      ? countHtmlMarkerOccurrences(input.html, 'class="question-title"')
+      : null;
+  const htmlAnswerCardCount =
+    typeof input.html === "string"
+      ? countHtmlMarkerOccurrences(input.html, 'class="answer-card"')
+      : null;
+
+  /* Export diagnostics intentionally stay shape-level instead of logging question text. This lets
+     the PDF lanes prove that real assessment body blocks reached the shared renderer without
+     leaking owner-scoped educational content into production logs or audit surfaces. */
+  return {
+    bodyLoaded: input.preview.questions.length > 0,
+    compositionBadgeCount: input.preview.compositionBadges.length,
+    contentSource: "generation-record",
+    htmlAnswerCardCount,
+    htmlHasExpectedContentBlocks:
+      typeof input.html === "string"
+        ? (htmlQuestionTitleCount ?? 0) > 0 && (htmlAnswerCardCount ?? 0) > 0
+        : null,
+    htmlQuestionCardCount,
+    htmlQuestionTitleCount,
+    metadataCount: input.preview.metadata.length,
+    questionCount: input.preview.questions.length,
+    questionPageCount: renderedQuestionPageCount,
+    sectionCount: renderedQuestionPageCount + 1,
+  };
+}
 
 function escapeHtml(value: string) {
   return value

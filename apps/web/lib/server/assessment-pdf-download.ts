@@ -4,9 +4,6 @@ import chromium from "@sparticuz/chromium";
 import { existsSync } from "node:fs";
 import puppeteer, { type Page } from "puppeteer-core";
 
-const EMOJI_FONT_URL =
-  "https://raw.githubusercontent.com/googlefonts/noto-emoji/main/fonts/NotoColorEmoji.ttf";
-
 const LOCAL_BROWSER_CANDIDATES = [
   process.env.ASSESSMENT_PDF_BROWSER_EXECUTABLE_PATH,
   process.env.PUPPETEER_EXECUTABLE_PATH,
@@ -32,8 +29,6 @@ const PDF_VIEWPORT = {
 } as const;
 
 const PDF_SURFACE_STABILITY_TIMEOUT_MS = 15_000;
-
-let fontProvisionPromise: Promise<void> | null = null;
 
 export type AssessmentPdfBufferFailureStage =
   | "browser-launch"
@@ -63,10 +58,6 @@ export class AssessmentPdfBufferError extends Error {
     this.causeError = input.causeError;
   }
 }
-
-type ChromiumRuntimeWithFont = typeof chromium & {
-  font: (input: string) => Promise<string>;
-};
 
 function createTaggedError(code: string, message: string) {
   const error = new Error(message) as ErrorWithCode;
@@ -123,23 +114,6 @@ function buildMissingLocalBrowserError() {
   );
 }
 
-async function provisionServerlessPdfFonts() {
-  if (fontProvisionPromise) {
-    return fontProvisionPromise;
-  }
-
-  /* The Linux serverless Chromium runtime exposes `font()` for emoji font hydration, but
-     monorepo type resolution can pick an older sibling package surface that omits that method.
-     Keep this cast local to the PDF export lane so build/typecheck stay honest without widening
-     the rest of the protected workspace to a looser Chromium type. */
-  fontProvisionPromise = (chromium as ChromiumRuntimeWithFont)
-    .font(EMOJI_FONT_URL)
-    .then(() => undefined)
-    .catch(() => undefined);
-
-  return fontProvisionPromise;
-}
-
 async function resolvePackagedChromiumExecutablePath() {
   const executablePath = await chromium.executablePath();
 
@@ -174,7 +148,11 @@ async function launchAssessmentPdfBrowser() {
        preserve the local-browser override above for development and the packaged serverless browser
        below for Linux serverless deployments (including Vercel). */
     chromium.setGraphicsMode = false;
-    await provisionServerlessPdfFonts();
+    /* Upstream @sparticuz/chromium removed `font()` after a serverless regression where invoking
+       it could blank all rendered text in screenshots and PDFs. The export HTML already ships its
+       own web-font stylesheet plus safe fallbacks, so keep the Pro Vercel lane off `font()` here.
+       Future agents should treat missing emoji glyphs as a smaller failure than blank assessment
+       bodies in owner-scoped PDF exports. */
 
     return puppeteer.launch({
       args: puppeteer.defaultArgs({

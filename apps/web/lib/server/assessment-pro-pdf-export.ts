@@ -14,6 +14,7 @@ import {
 } from "@/lib/server/assessment-pdf-download";
 import {
   ASSESSMENT_PRINT_LAYOUT_VERSION,
+  buildAssessmentPrintRenderDiagnostics,
   buildAssessmentPrintHtml,
 } from "@/lib/server/assessment-print-renderer";
 import { appendAdminLog, saveAssessmentGeneration } from "@/lib/server/repository";
@@ -25,6 +26,7 @@ export type AssessmentProPdfFailureStage =
   | "artifact-load"
   | "qr-build"
   | "html-render"
+  | "render-shape"
   | "pdf-buffer"
   | "artifact-store"
   | "generation-save"
@@ -181,6 +183,9 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
     ownerUid: input.user.uid,
     themeMode: input.themeMode,
   };
+  const previewDiagnostics = buildAssessmentPrintRenderDiagnostics({
+    preview: input.preview,
+  });
   let existingBuffer: Buffer | null = null;
 
   if (existingArtifact) {
@@ -207,7 +212,9 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
   logAssessmentProPdfEvent("info", "route-context-resolved", {
     ...logContext,
     canReuseExistingArtifact,
+    currentArtifactVersion: existingArtifact?.versionTag ?? null,
     hasExistingArtifact: Boolean(existingArtifact),
+    renderDiagnostics: previewDiagnostics,
   });
 
   if (!canReuseExistingArtifact) {
@@ -243,6 +250,30 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
         },
       });
     });
+    const renderDiagnostics = buildAssessmentPrintRenderDiagnostics({
+      preview: input.preview,
+      html,
+    });
+    logAssessmentProPdfEvent("info", "html-rendered", {
+      ...logContext,
+      documentBaseUrl,
+      renderDiagnostics,
+    });
+    /* The Pro lane persists a PDF artifact, so stale bad bytes are harder to introspect later than
+       Fast HTML cache entries. Guard the shared renderer here and fail fast if the HTML shell was
+       built without the question/answer markers that prove assessment body content reached capture. */
+    if (renderDiagnostics.bodyLoaded && !renderDiagnostics.htmlHasExpectedContentBlocks) {
+      throw createAssessmentProPdfExportError({
+        stage: "render-shape",
+        message: "Assessment Pro PDF HTML rendered without assessment body markers.",
+        error: new Error("ASSESSMENT_PDF_RENDER_BODY_MISSING"),
+        context: {
+          ...logContext,
+          documentBaseUrl,
+          renderDiagnostics,
+        },
+      });
+    }
     const pdfBuffer = await buildAssessmentPdfBuffer({
       html,
     }).catch((error) => {
@@ -265,6 +296,7 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
       ...logContext,
       byteLength: pdfBuffer.byteLength,
       documentBaseUrl,
+      renderDiagnostics,
     });
 
     const storedArtifact = await persistAssessmentExportArtifact({
@@ -343,6 +375,7 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
       byteLength: pdfBuffer.byteLength,
       fileName: expectedArtifactFileName,
       persistedArtifact: Boolean(storedArtifact),
+      renderDiagnostics,
     });
 
     return new Response(new Uint8Array(pdfBuffer), {
@@ -383,6 +416,7 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
     ...logContext,
     byteLength: (existingBuffer as Uint8Array).byteLength,
     fileName: downloadFileName,
+    renderDiagnostics: previewDiagnostics,
   });
 
   return new Response(new Uint8Array(existingBuffer as Uint8Array), {

@@ -1,6 +1,9 @@
 import { apiError } from "@/lib/server/api";
 import { buildAssessmentExportRouteContext } from "@/lib/server/assessment-export-route-context";
-import { buildAssessmentFastPdfResponse } from "@/lib/server/assessment-fast-pdf-export";
+import {
+  buildAssessmentFastPdfResponse,
+  describeAssessmentFastPdfFailure,
+} from "@/lib/server/assessment-fast-pdf-export";
 
 export const runtime = "nodejs";
 
@@ -20,7 +23,10 @@ export async function GET(
        independently without inheriting this route's speed-first constraints. */
     return await buildAssessmentFastPdfResponse(resolved);
   } catch (error) {
-    console.error("Assessment Fast PDF export failed.", error);
+    console.error("Assessment Fast PDF export failed.", {
+      assessmentId: id,
+      ...describeAssessmentFastPdfFailure(error),
+    });
     return apiError(
       "ASSESSMENT_FAST_PDF_EXPORT_FAILED",
       "The fast assessment PDF view could not be generated right now.",

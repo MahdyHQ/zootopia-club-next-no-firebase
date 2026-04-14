@@ -3581,6 +3581,99 @@ Risks / Notes:
 
 ---
 
+2026-04-14 — Assessment PDF Body Content Recovery (Pro + Fast Lanes)
+====================================================================
+Type: Export pipeline bug fix / Vercel serverless compatibility hardening / artifact cache resilience
+Scope: assessment PDF export lanes, shared print renderer diagnostics, Vercel Pro browser launch path
+
+Summary:
+- Completed mandatory ledger-first review, codebase-first tracing, Next.js docs verification, and subagent exploration before edits.
+- Verified from production-backed assessment data that the stored generation record, canonical result artifact, and cached print HTML still contained the real assessment questions and answers.
+- Isolated the content-loss symptom to export rendering/caching rather than preview/result data loading or owner-scope retrieval.
+- Fixed the Pro Vercel browser lane by removing the `@sparticuz/chromium.font()` call that is associated with upstream serverless PDF/text disappearance.
+- Added shared render diagnostics plus Fast-lane cache guards so shell-only HTML artifacts are not silently reused or persisted.
+- Bumped the shared print layout version so both Pro and Fast lanes regenerate stale export artifacts instead of continuing to serve previously bad output.
+
+Root Cause (code-verified):
+- Upstream assessment content was healthy:
+  - live generation record still had normalized `questions`
+  - canonical result artifact still had full body content
+  - cached `export-print-html` artifact still contained question titles and answer cards
+- The Pro lane still used `chromium.font()` inside the Linux/Vercel browser path. Upstream `@sparticuz/chromium` maintainers later removed that API after reports that invoking it could make PDF/screenshot text disappear in serverless rendering.
+- Once a malformed export artifact existed, the export lanes had no body-marker validation before reuse. That meant stale bad artifacts could survive even though the live generation record still had the full assessment body.
+- No auth/session/owner-scope bug was found. `buildAssessmentExportRouteContext()` still loads owner-scoped generations directly and `buildAssessmentPreview()` still derives preview/export content from the normalized generation record.
+
+Shared Failure Point Between Pro and Fast:
+- Shared print/export caching trusted prior artifacts too early and did not record whether the rendered export surface actually contained question/answer body markers.
+- Pro additionally had a Vercel/serverless Chromium regression vector via `chromium.font()`.
+- Fast did not show a code-verified upstream data-loss bug in the renderer source, so the durable fix there is:
+  - invalidate stale cached HTML
+  - log render diagnostics
+  - refuse to reuse/persist shell-only HTML when live question data exists
+
+Files Changed:
+- apps/web/lib/server/assessment-pdf-download.ts
+- apps/web/lib/server/assessment-print-renderer.ts
+- apps/web/lib/server/assessment-pro-pdf-export.ts
+- apps/web/lib/server/assessment-fast-pdf-export.ts
+- apps/web/app/api/assessment/export/pdf/fast/[id]/route.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- `assessment-pdf-download.ts`
+  - removed serverless `chromium.font()` usage from the Pro Vercel lane
+  - preserved local Chrome/Edge override behavior for development
+  - preserved packaged Chromium usage for Linux serverless runtimes
+- `assessment-print-renderer.ts`
+  - bumped `ASSESSMENT_PRINT_LAYOUT_VERSION` to `2026-04-14-pdf-content-guard-v24`
+  - added shared `buildAssessmentPrintRenderDiagnostics()` helper
+  - diagnostics now report:
+    - content source
+    - question count
+    - question page count
+    - section count
+    - metadata/composition badge counts
+    - HTML question-title / answer-card marker counts when HTML is available
+- `assessment-pro-pdf-export.ts`
+  - logs structured render diagnostics before PDF capture
+  - classifies render-shape failures separately from HTML render and PDF buffer failures
+  - regenerates under the new Pro layout version so stale malformed PDF artifacts are bypassed
+- `assessment-fast-pdf-export.ts`
+  - now logs structured lane-specific diagnostics
+  - wraps artifact load / QR build / HTML render / artifact store / generation save / audit-log failures
+  - validates cached/generated HTML body markers before reuse/persist
+  - regenerates under the new Fast layout version so stale HTML artifacts are bypassed
+- `apps/web/app/api/assessment/export/pdf/fast/[id]/route.ts`
+  - now emits structured failure details instead of raw error dumping
+
+Vercel-Specific Fix:
+- The Pro serverless PDF lane no longer calls `chromium.font()` before launching packaged Chromium.
+- This keeps the Vercel/Linux browser path aligned with the current upstream guidance trend away from that API after serverless text-disappearance reports.
+- Existing Chromium binary tracing remains intact; the built Pro route trace still includes:
+  - `al2023.tar.br`
+  - `chromium.br`
+  - `fonts.tar.br`
+  - `swiftshader.tar.br`
+
+Verification:
+- `npm run lint`: pass
+  - 2 pre-existing warnings remain in `apps/web/components/upload/upload-workspace.tsx`
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Targeted content-path verification retained from the production-backed investigation:
+  - cached debug HTML artifact still reports `questionTitleCount=10`, `answerCardCount=10`, `questionCardCount=10`
+  - fresh browser-generated PDF from that same HTML still exists and remains materially different from the previously bad stored Pro PDF artifact
+- Build output confirmation:
+  - Pro route still builds successfully in Next 16.2.2
+  - Pro route NFT output still carries the packaged Chromium Brotli payload required for Vercel serverless capture
+
+Risks / Notes:
+- This workstation cannot faithfully reproduce Vercel’s Linux serverless browser runtime end-to-end, so the Pro renderer correction is based on code verification, production artifact inspection, and upstream package evidence rather than a local Linux lambda simulation.
+- Fast-lane shell-only HTML reuse is now guarded, but Pro cached PDF bytes are not text-inspected after generation; the fix there is version invalidation plus removal of the known serverless text-blanking trigger.
+- Auth/session/owner boundaries were intentionally left unchanged.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve
