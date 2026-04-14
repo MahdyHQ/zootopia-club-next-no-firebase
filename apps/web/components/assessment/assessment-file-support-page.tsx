@@ -6,6 +6,7 @@ import type { AssessmentPreviewFileSurface } from "@/lib/assessment-preview-mode
 import { cn } from "@/lib/utils";
 
 import { AssessmentFileFooter } from "@/components/assessment/assessment-file-footer";
+import { AssessmentPreviewPageFooter } from "@/components/assessment/assessment-preview-page-footer";
 
 type AssessmentFileSupportPageProps = {
   supportPage: AssessmentPreviewFileSurface["supportPage"];
@@ -14,6 +15,7 @@ type AssessmentFileSupportPageProps = {
   pageNumber: number;
   sealAssetUrl: string;
   themeMode: "light" | "dark";
+  footerVariant?: "shared" | "preview";
 };
 
 function getSurfaceTone(dark: boolean) {
@@ -35,6 +37,7 @@ export function AssessmentFileSupportPage({
   pageNumber,
   sealAssetUrl,
   themeMode,
+  footerVariant = "shared",
 }: AssessmentFileSupportPageProps) {
   const dark = themeMode === "dark";
 
@@ -245,12 +248,21 @@ export function AssessmentFileSupportPage({
         {supportPage.closingLine}
       </p>
 
-      <AssessmentFileFooter
-        footerLine={footerLine}
-        pageNumber={pageNumber}
-        sealAssetUrl={sealAssetUrl}
-        themeMode={themeMode}
-      />
+      {footerVariant === "preview" ? (
+        <AssessmentPreviewPageFooter
+          footerLine={footerLine}
+          pageNumber={pageNumber}
+          sealAssetUrl={sealAssetUrl}
+          themeMode={themeMode}
+        />
+      ) : (
+        <AssessmentFileFooter
+          footerLine={footerLine}
+          pageNumber={pageNumber}
+          sealAssetUrl={sealAssetUrl}
+          themeMode={themeMode}
+        />
+      )}
     </section>
   );
 }

@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-14 (Next dev route-type cache cleanup fix + assessment footer refinement)
+Last Updated: 2026-04-14 (assessment preview-only footer split + screenshot-target footer redesign)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -116,10 +116,10 @@ Key verified facts:
 - Assessment hero/premium surfaces now use slightly higher translucency while
   preserving contrast for controls and text
 - Detached assessment preview/result pages now place their interactive export
-  controls in a dedicated full-width action panel beneath metadata, and the
-  shared file footer now uses tighter target-aligned strip proportions with
-  smaller Arabic typography and smaller responsive anchor sizing so preview and
-  export surfaces stay balanced across desktop, tablet, and mobile widths
+  controls in a dedicated full-width action panel beneath metadata; preview
+  footers now render through a dedicated preview-only component while
+  result/export keep their existing shared owners, allowing screenshot-targeted
+  preview footer composition changes without changing export HTML behavior
 - Web workspace `typecheck` and `build` now clear stale `.next/dev` cache state
   before invoking Next typegen/build so malformed dev-only route helper files do
   not poison later TypeScript or production build runs
@@ -777,6 +777,18 @@ Export Flow:
 - PDF generation uses Puppeteer (puppeteer-core + @sparticuz/chromium)
 - Export retention: 15 minutes (configurable)
 
+Detached Preview/Footer Ownership:
+- `/assessment/preview/[id]` and `/assessment/results/[id]` still share
+  `AssessmentPreviewShell` and `AssessmentResultViewer` for page chrome/body.
+- Preview-only footer ownership now branches inside
+  `apps/web/components/assessment/assessment-result-viewer.tsx` by `view`.
+- Preview route uses
+  `apps/web/components/assessment/assessment-preview-page-footer.tsx`.
+- Result route keeps `apps/web/components/assessment/assessment-file-footer.tsx`
+  as its shared footer owner.
+- Export/detached HTML footer ownership remains
+  `apps/web/lib/server/assessment-print-renderer.ts`.
+
 Assessment Retention:
 - Results: 1440 minutes (1 day, configurable)
 - Mode: expiry (automatic cleanup)
@@ -1058,6 +1070,8 @@ Application (apps/web/):
 - next.config.ts — Next.js configuration
 - app/ — App Router routes and layouts
 - components/ — React components
+- components/assessment/assessment-preview-page-footer.tsx — preview-route-only
+  footer surface for `/assessment/preview/[id]` (kept separate from result/export)
 - lib/ — Library code
 - lib/server/ — Server-side services
 - messages/ — AI prompt templates / i18n messages
@@ -4013,6 +4027,104 @@ Risks / Notes:
 - This fix treats the real-world failure mode as dev-cache corruption/staleness, which is what was reproducible and what poisoned build/typecheck in this workspace.
 - It does not attempt to patch Next-generated files directly or fight Next’s automatic tsconfig include management.
 - The cleanup is intentionally narrow to avoid unnecessary full-cache invalidation during ordinary builds.
+
+---
+
+2026-04-14 — Assessment Preview Footer Ownership Split + Preview-Only Target Redesign
+======================================================================================
+Type: UI composition fix / preview-only ownership split / export-preserving footer redesign
+Scope: detached assessment preview route footer path, preview support-page footer, viewer-level footer ownership
+
+Summary:
+- Re-opened the assessment footer after confirming the real problem was the live preview route UI, not the export footer.
+- Verified ownership directly in code and with an explorer subagent:
+  - `/assessment/preview/[id]` and `/assessment/results/[id]` both pass through `AssessmentPreviewShell`
+  - footer rendering actually lives in `AssessmentResultViewer` plus `AssessmentFileSupportPage`
+  - export already uses a separate server-side footer owner in `assessment-print-renderer.ts`
+- Split preview footer ownership locally at the viewer layer so preview can use its own dedicated footer component without changing the result-route shared footer or export HTML.
+- Matched the attached screenshot as closely as possible in the preview-only component: larger left seal, compact centered Arabic attribution lane, right-edge page badge, lighter premium strip styling, and stronger responsive down-scaling for phones/tablets.
+
+Ownership Verdict (code-verified):
+- Preview and export were not using the exact same render owner in this pass:
+  - preview/result shared the React footer path
+  - export used `apps/web/lib/server/assessment-print-renderer.ts`
+- The blocking coupling was preview vs result/support inside the live React viewer, not preview vs export.
+- Safe split applied:
+  - preview route now branches to a dedicated preview-only footer component
+  - result route keeps the shared `AssessmentFileFooter`
+  - export footer owner remains untouched
+
+Exact Preview-Only Changes:
+- Added `apps/web/components/assessment/assessment-preview-page-footer.tsx`
+  - dedicated preview footer surface with explicit left seal lane, dominant center text lane, and right badge lane
+  - responsive circle sizing tuned locally for preview-only use
+  - preview-specific Arabic typography scaling with smaller desktop/tablet text and further reduction on phones
+  - explicit physical emoji placement so the heart remains on the left and the laptop remains on the right of the Arabic line
+  - strong comments documenting that this component belongs only to `/assessment/preview/[id]`
+- `apps/web/components/assessment/assessment-preview-shell.tsx`
+  - now forwards `view` into `AssessmentResultViewer` so preview/result can diverge locally without route/auth rewiring
+- `apps/web/components/assessment/assessment-result-viewer.tsx`
+  - added preview-only footer branching keyed from `view === "preview"`
+  - preview question pages now render `AssessmentPreviewPageFooter`
+  - result pages still render `AssessmentFileFooter`
+- `apps/web/components/assessment/assessment-file-support-page.tsx`
+  - added `footerVariant`
+  - preview route support page now reuses the preview-only footer, while result/support shared footer behavior remains available through the default branch
+
+Responsive Preview Footer Behavior:
+- Desktop / large screens:
+  - footer stays horizontal and premium
+  - Arabic line keeps a compact one-line preference with the strongest width priority in the center lane
+  - page-number circle stays visually anchored toward the lower-right side
+- Tablet:
+  - same composition is preserved
+  - seal/page badge shrink modestly
+  - Arabic line remains smaller and tighter than the old shared preview strip
+- Mobile / small screens:
+  - seal and page badge shrink further
+  - Arabic text shrinks further
+  - wrapping is allowed only as a short controlled block inside the center lane
+  - preview no longer depends on the old shared footer geometry that was harder to align to the screenshot
+
+Files Changed:
+- apps/web/components/assessment/assessment-preview-page-footer.tsx
+- apps/web/components/assessment/assessment-preview-shell.tsx
+- apps/web/components/assessment/assessment-result-viewer.tsx
+- apps/web/components/assessment/assessment-file-support-page.tsx
+- zootopia-club-next-ledger.txt
+
+Files Intentionally Not Changed:
+- apps/web/components/assessment/assessment-file-footer.tsx
+- apps/web/lib/server/assessment-print-renderer.ts
+- apps/web/app/globals.css
+- auth/session/owner/export route handlers and repositories
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Preview-only ownership verification:
+  - preview shell now passes `view`
+  - preview viewer/support path now resolves to `AssessmentPreviewPageFooter`
+  - result viewer path still resolves to `AssessmentFileFooter`
+  - export footer owner remains `assessment-print-renderer.ts`
+- Visual verification:
+  - used the attached screenshot (`issues-images/Capture.PNG`) as the composition reference
+  - ran a temporary local browser-only harness route to render the new preview footer in isolation, then removed that route before finalizing the repo
+  - captured viewport checks at:
+    - desktop `1440x1200`
+    - tablet `834x1194`
+    - mobile `390x844`
+  - verified the preview footer kept:
+    - a dedicated left seal lane
+    - a compact center Arabic attribution lane
+    - a smaller responsive right page badge
+    - stronger size reduction on smaller screens than the previous shared preview footer path
+
+Risks / Notes:
+- The real `/assessment/preview/[id]` route remains owner/auth gated in this workspace, so final screenshot verification was done through an isolated local footer harness plus direct source-path verification rather than a live authenticated preview record.
+- Because export already had its own owner and was intentionally left untouched, this pass does not alter detached/export HTML output.
+- This entry supersedes only the preview-route part of the earlier 2026-04-14 shared-footer refinement notes; the shared result/export footer history remains valid.
 
 ---
 

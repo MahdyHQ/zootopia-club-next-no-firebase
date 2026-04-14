@@ -16,6 +16,7 @@ import {
 import type { AppMessages } from "@/lib/messages";
 
 import { AssessmentFileFooter } from "@/components/assessment/assessment-file-footer";
+import { AssessmentPreviewPageFooter } from "@/components/assessment/assessment-preview-page-footer";
 import { AssessmentFileSupportPage } from "@/components/assessment/assessment-file-support-page";
 
 interface AssessmentResultViewerProps {
@@ -23,6 +24,7 @@ interface AssessmentResultViewerProps {
   preview: NormalizedAssessmentPreview;
   qrCodeDataUrl: string;
   themeMode: AssessmentPreviewThemeMode;
+  view: "preview" | "result";
 }
 
 /* Preview and saved-result pages intentionally share one translucent file-surface language.
@@ -200,12 +202,18 @@ export function AssessmentResultViewer({
   preview,
   qrCodeDataUrl,
   themeMode,
+  view,
 }: AssessmentResultViewerProps) {
   const dark = themeMode === "dark";
   const questionPages = buildAssessmentFileQuestionPages(preview.questions);
   const sealAssetUrl = dark
     ? preview.fileSurface.sealDarkAssetUrl
     : preview.fileSurface.sealLightAssetUrl;
+  const footerThemeMode = dark ? "dark" : "light";
+  /* Preview and saved-result pages share the same question-card body, but preview now owns a
+     dedicated footer surface so it can match the screenshot target without changing result or
+     export/footer contracts. Keep this branch local to the viewer render path. */
+  const usePreviewOnlyFooter = view === "preview";
 
   return (
     <div className="space-y-6">
@@ -531,12 +539,21 @@ export function AssessmentResultViewer({
               </p>
             ) : null}
 
-            <AssessmentFileFooter
-              footerLine={preview.fileSurface.footerLine}
-              pageNumber={pageIndex + 1}
-              sealAssetUrl={sealAssetUrl}
-              themeMode={dark ? "dark" : "light"}
-            />
+            {usePreviewOnlyFooter ? (
+              <AssessmentPreviewPageFooter
+                footerLine={preview.fileSurface.footerLine}
+                pageNumber={pageIndex + 1}
+                sealAssetUrl={sealAssetUrl}
+                themeMode={footerThemeMode}
+              />
+            ) : (
+              <AssessmentFileFooter
+                footerLine={preview.fileSurface.footerLine}
+                pageNumber={pageIndex + 1}
+                sealAssetUrl={sealAssetUrl}
+                themeMode={footerThemeMode}
+              />
+            )}
           </section>
         ))}
 
@@ -546,7 +563,8 @@ export function AssessmentResultViewer({
           qrCodeDataUrl={qrCodeDataUrl}
           pageNumber={questionPages.length + 1}
           sealAssetUrl={sealAssetUrl}
-          themeMode={dark ? "dark" : "light"}
+          themeMode={footerThemeMode}
+          footerVariant={usePreviewOnlyFooter ? "preview" : "shared"}
         />
       </div>
     </div>

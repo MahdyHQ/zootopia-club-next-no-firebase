@@ -311,6 +311,7 @@ export function AssessmentPreviewShell({
           preview={preview}
           qrCodeDataUrl={qrCodeDataUrl}
           themeMode={themeMode}
+          view={view}
         />
       </div>
     </div>
