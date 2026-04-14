@@ -4128,6 +4128,30 @@ Risks / Notes:
 
 ---
 
+Date: 2026-04-14 (Update)
+Subject: Assessment Preview Page Footer Horizontal Redesign
+
+Goal/Trigger:
+- The user requested that the assessment preview page footer exactly match an attached screenshot of a 5-part horizontal layout.
+- Must preserve the left-to-right order: large circular seal, tiny heart icon, dominant Arabic sentence, tiny laptop icon, right page-number circle.
+- This must not redesign the export footer logic, keeping preview separated.
+
+Changes Made:
+- Refactored `apps/web/components/assessment/assessment-preview-page-footer.tsx` strictly into a 5-lane flexbox horizontal strip.
+- Lane 1: The seal has responsive sizing (`w-[3rem]` to `w-[4.5rem]`).
+- Lane 2: The heart emoji lane with static scale.
+- Lane 3: The Arabic text lane using `flex-row min-w-0 grow`, enforcing strong responsiveness and centered appearance.
+- Lane 4: The laptop emoji lane with static scale.
+- Lane 5: The right page circle badge scaled down from original shared values (`w-[2.5rem]` to `w-[3.5rem]`).
+- Tightened spacing and gaps (`gap-1.5` up to `gap-4`) to enforce a compact strip layout without wrapping down vertically excessively.
+
+Verification:
+- Ran `npm run typecheck --workspace @zootopia/web` and `npm run lint --workspace @zootopia/web` successfully.
+- Implemented and inspected visual scale factors to stay horizontal dynamically across screen sizes, avoiding vertical-looking stack collapse.
+- Export logic intentionally untouched.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve
