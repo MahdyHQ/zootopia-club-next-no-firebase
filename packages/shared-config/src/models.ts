@@ -6,7 +6,7 @@ const LEGACY_ASSESSMENT_MODEL_ALIASES: Record<string, string> = {
   /* Keep assessment model canonicalization here so legacy IDs stay backward-compatible while
      execution always lands on the restored current assessment lanes. */
   "google-balanced": "gemini-3.1-flash-lite-preview",
-  "gemini-2.5-flash-lite": "gemini-3.1-flash-lite-preview",
+  "gemini-2.5-flash": "gemini-2.5-flash-lite",
   "google-advanced": "gemini-2.5-pro",
   "qwen-balanced": "qwen3.5-flash",
   "qwen-flash-us": "qwen3.5-flash",
@@ -25,28 +25,28 @@ function resolveToolScopedAlias(toolScope: ToolScope, modelId: string) {
 }
 
 export const ASSESSMENT_MODEL_IDS = [
+  "gemini-2.5-flash-lite",
   "gemini-3.1-flash-lite-preview",
-  "gemini-2.5-flash",
   "gemini-2.5-pro",
   "qwen3.5-flash",
 ] as const;
 
 export const MODEL_CATALOG: AiModelDescriptor[] = [
   {
-    id: "gemini-3.1-flash-lite-preview",
+    id: "gemini-2.5-flash-lite",
     provider: "google",
-    label: "Gemini 3.1 Flash-Lite",
+    label: "Gemini 2.5 Flash-Lite",
     description:
-      "Low-latency Gemini lane for everyday assessment generation.",
+      "Fast Gemini lane tuned for everyday assessment generation.",
     runtimeEnvKey: "GOOGLE_AI_MODEL",
     toolScopes: ["assessment"],
   },
   {
-    id: "gemini-2.5-flash",
+    id: "gemini-3.1-flash-lite-preview",
     provider: "google",
-    label: "Gemini 2.5 Flash",
+    label: "Gemini 3.1 Flash-Lite",
     description:
-      "Balanced Gemini lane for reliable assessment quality with solid speed.",
+      "Low-latency Gemini lane for reliable assessment generation.",
     runtimeEnvKey: "GOOGLE_AI_MODEL",
     toolScopes: ["assessment"],
   },
@@ -69,9 +69,9 @@ export const MODEL_CATALOG: AiModelDescriptor[] = [
     toolScopes: ["assessment"],
   },
   {
-    id: "gemini-2.5-flash-lite",
+    id: "gemini-2.5-flash",
     provider: "google",
-    label: "Legacy Gemini 2.5 Flash-Lite",
+    label: "Legacy Gemini 2.5 Flash",
     description:
       "Legacy assessment model id retained only so older saved records remain readable.",
     runtimeEnvKey: "GOOGLE_AI_MODEL",

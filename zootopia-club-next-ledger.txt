@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-14 (upload single-surface hero depth refactor + redundant upload title-shell removal)
+Last Updated: 2026-04-14 (assessment model-id refresh + gemini-2.5-flash-lite default)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -83,6 +83,10 @@ Key verified facts:
 - Tool default models are now server-authoritative per real tool via
   `ZOOTOPIA_DEFAULT_MODEL_ASSESSMENT` and `ZOOTOPIA_DEFAULT_MODEL_INFOGRAPHIC`,
   with strict tool-scoped fallback validation
+- Assessment Gemini model catalog now treats `gemini-2.5-flash-lite` and
+  `gemini-3.1-flash-lite-preview` as active lanes, with
+  `gemini-2.5-flash-lite` as the built-in default; legacy
+  `gemini-2.5-flash` requests normalize to `gemini-2.5-flash-lite`
 - Assessment export/result artifact metadata now mirrors into
   `assessmentArtifactMetadata` documents for owner/kind/status/expiry queries
 - Upload records now persist normalized `fileExtension` and `contentSha256`
@@ -725,7 +729,7 @@ Assessment Model Defaults:
 - Frontend initial selected model is passed from the server page using the same
   resolver, but backend request validation still re-normalizes and re-validates
   the submitted model id
-- Fallback when env is missing/invalid/unsupported: `gemini-3.1-flash-lite-preview`
+- Fallback when env is missing/invalid/unsupported: `gemini-2.5-flash-lite`
 
 Credit System:
 - Daily credit limit: ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS (default 3)
@@ -875,7 +879,7 @@ Orchestration:
 Tool Model Catalog & Defaults:
 - Real tool scopes currently present in the repo: `assessment`, `infographic`
 - Shared catalog lives in `packages/shared-config/src/models.ts`
-- Built-in assessment default: `gemini-3.1-flash-lite-preview`
+- Built-in assessment default: `gemini-2.5-flash-lite`
 - Built-in infographic default: `google-balanced`
 - Server-authoritative per-tool env resolver lives in
   `apps/web/lib/server/ai/default-models.ts`
@@ -3388,6 +3392,55 @@ Verification:
 Risks / Notes:
 - This pass intentionally avoids shared protected background/global layout ownership and keeps changes confined to `/upload` route UI composition.
 - Live authenticated viewport QA was not executed in this pass; responsive safety is preserved by existing `max-w-3xl`, `min-w-0`, and prior breakpoint guards.
+
+---
+
+2026-04-14 — Assessment Model-ID Refresh + Gemini 2.5 Flash-Lite Default
+==========================================================================
+Type: Model catalog correction / default-model alignment / legacy compatibility hardening
+Scope: assessment model catalog, assessment runtime canonicalization, env template default
+
+Summary:
+- Completed mandatory ledger-first analysis and source validation before edits.
+- Corrected the assessment model catalog so `gemini-2.5-flash-lite` is a real active assessment lane instead of a legacy-only id.
+- Set `gemini-2.5-flash-lite` as the built-in assessment default while keeping `gemini-3.1-flash-lite-preview` active.
+- Preserved backward compatibility by canonicalizing legacy `gemini-2.5-flash` requests into `gemini-2.5-flash-lite`.
+
+Root Cause (code-verified):
+- Shared catalog marked `gemini-2.5-flash-lite` as legacy (`toolScopes: []`) and aliased it to `gemini-3.1-flash-lite-preview`.
+- Assessment runtime canonicalization in `execution.ts` mirrored this aliasing, preventing true lane selection for `gemini-2.5-flash-lite`.
+
+Files Changed:
+- packages/shared-config/src/models.ts
+- apps/web/lib/server/ai/execution.ts
+- .env.example
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- `packages/shared-config/src/models.ts`:
+  - assessment default order now starts with `gemini-2.5-flash-lite`
+  - `gemini-2.5-flash-lite` promoted to active assessment lane
+  - `gemini-2.5-flash` downgraded to legacy metadata-only id (`toolScopes: []`)
+  - legacy alias map now rewrites `gemini-2.5-flash` -> `gemini-2.5-flash-lite`
+- `apps/web/lib/server/ai/execution.ts`:
+  - runtime canonicalization now rewrites `gemini-2.5-flash` -> `gemini-2.5-flash-lite`
+  - provider dispatch now includes `gemini-2.5-flash-lite` as a live Google execution lane
+- `.env.example`:
+  - `ZOOTOPIA_DEFAULT_MODEL_ASSESSMENT` updated to `gemini-2.5-flash-lite`
+
+Verification:
+- Runtime catalog probe:
+  - `default=gemini-2.5-flash-lite`
+  - `active-25-lite=gemini-2.5-flash-lite`
+  - `active-31-lite=gemini-3.1-flash-lite-preview`
+  - `legacy-25-flash->gemini-2.5-flash-lite`
+- `shell: web-lint-post-polish`: pass (2 warnings, 0 errors; existing warnings in `apps/web/components/upload/upload-workspace.tsx`)
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- This pass intentionally avoids changing infographic defaults or provider env override contracts (`GOOGLE_AI_MODEL`, `GOOGLE_AI_ADVANCED_MODEL`, `QWEN_MODEL`).
+- Legacy record readability remains intact via preserved legacy descriptors and canonicalization guards.
 
 ---
 
