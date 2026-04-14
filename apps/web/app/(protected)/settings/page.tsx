@@ -1,10 +1,10 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import { Settings2, ShieldCheck } from "lucide-react";
-import Image from "next/image";
 
 import { LocaleToggle } from "@/components/preferences/locale-toggle";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
+import { IdentityAvatar } from "@/components/ui/identity-avatar";
 import {
   resolveAvatarDisplayName,
   resolveAvatarFallbackInitial,
@@ -49,23 +49,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             </span>
 
             <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/55 bg-white/62 px-2.5 py-1 shadow-sm dark:border-white/15 dark:bg-slate-950/48">
-              <span className="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-full border border-emerald-500/30 bg-emerald-500/20">
-                {settingsAvatarSrc ? (
-                  <Image
-                    src={settingsAvatarSrc}
-                    alt=""
-                    aria-hidden="true"
-                    width={32}
-                    height={32}
-                    sizes="32px"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-xs font-black uppercase text-emerald-400">
-                    {settingsAvatarInitial}
-                  </span>
-                )}
-              </span>
+              <IdentityAvatar
+                src={settingsAvatarSrc}
+                fallbackInitial={settingsAvatarInitial}
+                size={32}
+                sizes="32px"
+                containerClassName="h-8 w-8 border border-emerald-500/30 bg-emerald-500/20"
+                fallbackClassName="text-xs font-black uppercase text-emerald-400"
+              />
               <span className="max-w-[8.5rem] truncate text-[10px] font-black uppercase tracking-[0.18em] text-foreground-muted sm:max-w-[11rem]">
                 {settingsDisplayName}
               </span>

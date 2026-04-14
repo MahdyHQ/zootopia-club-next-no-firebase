@@ -31,8 +31,12 @@ export function AssessmentFileFooter({
      instead of collapsing into a narrow vertical strip between oversized side ornaments. */
   const sideAnchorSizeClassName =
     sideAnchorSize >= 96
-      ? "h-14 w-14 sm:h-20 sm:w-20 lg:h-24 lg:w-24"
-      : "h-12 w-12 sm:h-16 sm:w-16 lg:h-20 lg:w-20";
+      ? "h-11 w-11 sm:h-[4.4rem] sm:w-[4.4rem] lg:h-24 lg:w-24"
+      : "h-10 w-10 sm:h-14 sm:w-14 lg:h-20 lg:w-20";
+  const sideAnchorSizes =
+    sideAnchorSize >= 96
+      ? "(min-width: 1024px) 96px, (min-width: 640px) 70px, 44px"
+      : "(min-width: 1024px) 80px, (min-width: 640px) 56px, 40px";
   const sealImageStyle = {
     padding: `${ASSESSMENT_FILE_FOOTER_LAYOUT.sealImagePaddingPx}px`,
     transform: `scale(${ASSESSMENT_FILE_FOOTER_LAYOUT.sealImageScale})`,
@@ -41,6 +45,8 @@ export function AssessmentFileFooter({
   const footerTextStyle = {
     fontFamily: ASSESSMENT_FILE_FOOTER_LAYOUT.footerTextFontFamily,
     maxWidth: `${ASSESSMENT_FILE_FOOTER_LAYOUT.footerTextMaxWidthPx}px`,
+    overflowWrap: "normal",
+    wordBreak: "normal",
   } as const;
   const pageArcViewBox = ASSESSMENT_FILE_FOOTER_LAYOUT.pageArcViewBox;
   const pageArcCenter = pageArcViewBox / 2;
@@ -58,7 +64,7 @@ export function AssessmentFileFooter({
       dir="ltr"
       style={footerDirectionStyle}
       className={cn(
-        "mt-auto grid grid-cols-[auto,minmax(0,1fr),auto] items-center gap-2 rounded-[1.35rem] border px-3 py-2 sm:gap-[0.85rem] sm:rounded-[1.65rem] sm:px-4 sm:py-2.5",
+        "mt-auto grid grid-cols-[auto,minmax(0,1fr),auto] items-center gap-1.5 rounded-[1.05rem] border px-2.5 py-1.5 sm:gap-3 sm:rounded-[1.5rem] sm:px-4 sm:py-2.5",
         dark
           ? "border-emerald-200/15 bg-[linear-gradient(180deg,rgba(4,13,27,0.97),rgba(3,10,22,0.92))] text-white shadow-[inset_0_0_0_1px_rgba(94,234,212,0.12),0_12px_28px_rgba(1,4,14,0.18)]"
           : "border-emerald-700/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(246,251,249,0.82))] text-slate-900 shadow-[inset_0_0_0_1px_rgba(15,118,110,0.08),0_10px_22px_rgba(15,23,42,0.06)]",
@@ -81,7 +87,7 @@ export function AssessmentFileFooter({
           src={sealAssetUrl}
           alt=""
           fill
-          sizes={`${sideAnchorSize}px`}
+          sizes={sideAnchorSizes}
           className="object-contain"
           style={sealImageStyle}
         />
@@ -90,21 +96,21 @@ export function AssessmentFileFooter({
       <div className="min-w-0 flex-1 overflow-hidden text-center" dir="rtl">
         <p
           className={cn(
-            "inline-flex max-w-full flex-wrap items-center justify-center gap-1 text-center text-[0.58rem] font-semibold leading-[1.45] sm:gap-1.5 sm:text-[0.72rem]",
+            "mx-auto flex w-full max-w-full items-center justify-center gap-1 text-center text-[0.54rem] font-semibold leading-[1.3] sm:gap-1.5 sm:text-[0.7rem] lg:text-[0.74rem]",
             dark ? "text-white/88" : "text-slate-800/90",
           )}
         >
-          <span className="shrink-0">{footerLine.leadingEmoji}</span>
+          <span className="shrink-0 text-[0.95em] leading-none">{footerLine.leadingEmoji}</span>
           {/* Footer attribution text stays shared across preview/result/export surfaces.
-              Keep this center block readable and wrap-safe for Arabic without creating a second
-              footer wording path in another renderer. */}
+              Keep this center block as one compact horizontal sentence on phones: the emoji
+              anchors stay fixed while the Arabic copy alone wraps cleanly into one or two lines. */}
           <span
-            className="min-w-0 whitespace-normal break-words sm:text-balance"
+            className="min-w-0 flex-1 whitespace-normal text-center sm:text-balance"
             style={footerTextStyle}
           >
             {footerLine.text}
           </span>
-          <span className="shrink-0">{footerLine.trailingEmoji}</span>
+          <span className="shrink-0 text-[0.95em] leading-none">{footerLine.trailingEmoji}</span>
         </p>
       </div>
 
@@ -133,7 +139,7 @@ export function AssessmentFileFooter({
         </svg>
         <span
           className={cn(
-            "relative text-[0.9rem] font-black tracking-[0.16em] sm:text-[1rem] lg:text-[1.08rem]",
+            "relative text-[0.8rem] font-black tracking-[0.16em] sm:text-[0.95rem] lg:text-[1.08rem]",
             dark ? "text-emerald-50" : "text-emerald-700",
           )}
         >

@@ -3674,6 +3674,71 @@ Risks / Notes:
 
 ---
 
+2026-04-14 — Assessment Preview Footer + Avatar Stability Hardening
+===================================================================
+Type: UI hardening / responsive polish / local avatar resilience
+Scope: shared assessment file footer, detached HTML preview footer parity, protected compact avatars
+
+Summary:
+- Completed mandatory ledger-first review, current-code tracing, local Next.js image/CSS docs review, and subagent exploration before editing.
+- Confirmed the assessment preview/result route pages do not own the footer; the shared footer lives in the detached file renderer surfaces and must be changed centrally to avoid preview/export drift.
+- Confirmed compact avatar ownership is already centralized at the role/gender helper level, but the actual image rendering was duplicated across shell/settings with no image-load failure guard.
+- Applied a surgical UI hardening pass that keeps the premium file-surface look on large screens while making the footer materially tighter and calmer on narrow viewports.
+- Added one shared local-asset-first avatar wrapper so broken image placeholders degrade cleanly to initials instead of leaking through after unrelated route/session churn.
+
+Root Cause (code-verified):
+- Footer root cause:
+  - `AssessmentFileFooter` used a three-column layout with relatively large fixed side anchors on phones.
+  - The center attribution line used `inline-flex` plus `flex-wrap` and `break-words`, so the Arabic line could fragment awkwardly between the seal and page badge on narrow screens.
+  - Detached HTML preview/export footer CSS in `assessment-print-renderer.ts` used the same wrap-prone pattern, so screen-preview and React footer behavior risked drifting if only one surface changed.
+- Avatar root cause:
+  - Compact header/settings avatars already resolved to stable local assets (`admin`, `female`, `male`) and initials for unknown gender, so the issue was not role/gender policy drift.
+  - Both compact avatar surfaces rendered `next/image` directly with no shared `onError` recovery path.
+  - If a local asset request glitched or remounted under unrelated app/session churn, the shell/settings surfaces could show the browser broken-image placeholder instead of an intentional fallback badge.
+
+Files Changed:
+- apps/web/components/assessment/assessment-file-footer.tsx
+- apps/web/lib/server/assessment-print-renderer.ts
+- apps/web/components/ui/identity-avatar.tsx
+- apps/web/components/layout/protected-shell.tsx
+- apps/web/app/(protected)/settings/page.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- `assessment-file-footer.tsx`
+  - reduced mobile padding, gap, and page-number emphasis so the footer reads as a subtle page footer instead of a small card
+  - stepped the seal/page-badge anchors down more aggressively on phones while preserving the established larger desktop proportions
+  - removed wrap-prone `inline-flex`/`break-words` behavior from the Arabic attribution line
+  - kept the emoji anchors fixed while allowing only the Arabic sentence itself to wrap cleanly into one or two compact lines
+- `assessment-print-renderer.ts`
+  - aligned the detached HTML footer composition with the React footer so preview/export surfaces keep the same left-seal / center-line / right-page-badge contract
+  - added a screen-only narrow-width media query so detached HTML previews stay compact on phones without changing actual print geometry
+- `components/ui/identity-avatar.tsx`
+  - introduced one shared compact-avatar wrapper for authenticated surfaces
+  - keeps the current local avatar policy intact while using `unoptimized` direct local asset loading plus centralized `onError` fallback to initials
+  - remembers failed local sources for the current mount so unrelated rerenders do not re-surface a broken placeholder icon
+- `protected-shell.tsx` and `settings/page.tsx`
+  - now consume the shared avatar wrapper instead of duplicating raw image/fallback markup
+  - preserve existing role/gender mapping, compact sizing, and surrounding layout chrome
+
+Verification:
+- `npm run lint`: pass
+  - 2 pre-existing warnings remain in `apps/web/components/upload/upload-workspace.tsx`
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Code-path verification:
+  - preview/result page ownership remains unchanged; footer edits stay in shared file-surface renderers
+  - detached HTML footer compaction is screen-only at narrow widths, so print/export geometry is preserved
+  - owner/auth/session boundaries were not touched
+  - avatar role/gender policy remains: admin -> admin asset, female -> female asset, male -> male asset, unknown -> initials fallback
+
+Risks / Notes:
+- This pass hardens layout behavior and avatar fallback determinism, but I did not run an authenticated browser session in this workspace to visually inspect every preview breakpoint live.
+- The avatar wrapper intentionally stays local-asset-first and does not broaden support to arbitrary remote avatar URLs.
+- Export/auth/data contracts were intentionally left unchanged; this is a presentation-layer hardening pass only.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve

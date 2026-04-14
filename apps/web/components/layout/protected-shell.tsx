@@ -4,7 +4,6 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 import type { CSSProperties } from "react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Menu, Search, Bell, Sparkles, CheckCircle2, ChevronLeft, ChevronRight, ArrowUp, HandCoins, WalletCards } from "lucide-react";
 import type {
   ApiResult,
@@ -20,6 +19,7 @@ import {
 } from "@/lib/avatar";
 import type { AppMessages } from "@/lib/messages";
 import { getSiteContent } from "@/lib/site-content";
+import { IdentityAvatar } from "@/components/ui/identity-avatar";
 import { ProtectedSignatureSeal } from "./protected-signature-seal";
 import { ShellNav } from "./shell-nav";
 
@@ -252,26 +252,18 @@ export function ProtectedShell({
              <div className="mx-1 hidden h-8 w-px bg-border/80 sm:block" />
              
              <div className="flex max-w-[120px] cursor-pointer items-center gap-3 rounded-2xl border border-border/60 bg-background/55 px-2 py-1.5 shadow-sm transition-colors hover:bg-background/70 sm:max-w-[200px] sm:px-3">
-                <span className="relative flex h-7 w-7 shrink-0 overflow-hidden rounded-full border border-emerald-500/30 bg-emerald-500/20 shadow-sm">
-                  {headerAvatarSrc ? (
-                    <Image
-                      src={headerAvatarSrc}
-                      alt=""
-                      aria-hidden="true"
-                      width={28}
-                      height={28}
-                      sizes="28px"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-xs font-black uppercase text-emerald-400">
-                      {headerAvatarInitial}
-                    </span>
-                  )}
+                <IdentityAvatar
+                  src={headerAvatarSrc}
+                  fallbackInitial={headerAvatarInitial}
+                  size={28}
+                  sizes="28px"
+                  containerClassName="h-7 w-7 border border-emerald-500/30 bg-emerald-500/20 shadow-sm"
+                  fallbackClassName="text-xs font-black uppercase text-emerald-400"
+                >
                   <span className="absolute -bottom-0.5 -right-0.5 rounded-full border border-background-strong bg-background p-[1px]">
                     <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
                   </span>
-                </span>
+                </IdentityAvatar>
                 <span className="text-sm font-bold truncate text-foreground pr-1 hidden sm:block">
                   {user.displayName || user.email?.split('@')[0]}
                 </span>

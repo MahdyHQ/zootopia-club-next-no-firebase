@@ -1938,14 +1938,14 @@ export function buildAssessmentPrintHtml(input: {
       .assessment-file-footer {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         /* Footer anchors must remain physically LTR regardless of surrounding RTL support-copy
            containers so the seal stays on the left and the page badge stays on the right. */
         direction: ltr;
         unicode-bidi: isolate;
         border: 1px solid ${dark ? "rgba(94, 234, 212, 0.18)" : "rgba(15, 118, 110, 0.14)"};
         border-radius: 18px;
-        padding: 8px 12px;
+        padding: 7px 11px;
         background:
           linear-gradient(${dark
             ? "180deg, rgba(4, 13, 27, 0.97), rgba(3, 10, 22, 0.92)"
@@ -1992,29 +1992,33 @@ export function buildAssessmentPrintHtml(input: {
       }
 
       .footer-line {
-        display: inline-flex;
-        flex-wrap: wrap;
+        display: flex;
         align-items: center;
         justify-content: center;
-        gap: 3px 6px;
+        gap: 6px;
         width: 100%;
         margin: 0;
         text-align: center;
         font-size: 10.8px;
-        line-height: 1.32;
+        line-height: 1.3;
         font-weight: 700;
         color: var(--ink);
       }
 
       .footer-line-text {
+        display: block;
         min-width: 0;
+        flex: 1 1 auto;
         max-width: ${footerTextMaxWidth};
         white-space: normal;
+        overflow-wrap: normal;
+        word-break: normal;
         font-family: ${footerTextFontFamily};
       }
 
       .footer-emoji {
         flex: none;
+        line-height: 1;
       }
 
       .footer-page-badge {
@@ -2045,6 +2049,32 @@ export function buildAssessmentPrintHtml(input: {
 
       .footer-page-number--dynamic::before {
         content: counter(page);
+      }
+
+      /* Detached screen previews can be opened on phones before export. Keep the shared footer
+         compact there without touching real print geometry so the Arabic attribution stays
+         horizontal and readable while the PDF lane keeps its established page chrome. */
+      @media screen and (max-width: 720px) {
+        .screen-footer.assessment-file-footer {
+          gap: 8px;
+          padding: 6px 9px;
+          border-radius: 15px;
+        }
+
+        .screen-footer .footer-seal,
+        .screen-footer .footer-page-badge {
+          width: 48px;
+          height: 48px;
+        }
+
+        .screen-footer .footer-line {
+          font-size: 9.7px;
+          line-height: 1.28;
+        }
+
+        .screen-footer .footer-page-number {
+          font-size: 14px;
+        }
       }
 
       .print-hint {
