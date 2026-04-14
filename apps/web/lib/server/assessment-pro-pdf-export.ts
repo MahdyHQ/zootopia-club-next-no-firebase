@@ -13,14 +13,14 @@ import {
   buildAssessmentPdfBuffer,
 } from "@/lib/server/assessment-pdf-download";
 import {
-  ASSESSMENT_PRINT_LAYOUT_VERSION,
-  buildAssessmentPrintRenderDiagnostics,
-  buildAssessmentPrintHtml,
-} from "@/lib/server/assessment-print-renderer";
+  ASSESSMENT_PRO_PRINT_RENDERER_VERSION,
+  buildAssessmentProPrintRenderDiagnostics,
+  buildAssessmentProPrintHtml,
+} from "@/lib/server/assessment-pro-print-renderer";
 import { appendAdminLog, saveAssessmentGeneration } from "@/lib/server/repository";
 import { getServerRuntimeOrigin } from "@/lib/server/runtime-base-url";
 
-export const ASSESSMENT_PRO_PDF_LANE_VERSION = `pro-${ASSESSMENT_PRINT_LAYOUT_VERSION}`;
+export const ASSESSMENT_PRO_PDF_LANE_VERSION = ASSESSMENT_PRO_PRINT_RENDERER_VERSION;
 
 export type AssessmentProPdfFailureStage =
   | "artifact-load"
@@ -183,7 +183,7 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
     ownerUid: input.user.uid,
     themeMode: input.themeMode,
   };
-  const previewDiagnostics = buildAssessmentPrintRenderDiagnostics({
+  const previewDiagnostics = buildAssessmentProPrintRenderDiagnostics({
     preview: input.preview,
   });
   let existingBuffer: Buffer | null = null;
@@ -228,7 +228,7 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
     });
     const documentBaseUrl = getServerRuntimeOrigin();
     const html = await Promise.resolve().then(() =>
-      buildAssessmentPrintHtml({
+      buildAssessmentProPrintHtml({
         preview: input.preview,
         themeMode: input.themeMode,
         qrCodeDataUrl,
@@ -250,7 +250,7 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
         },
       });
     });
-    const renderDiagnostics = buildAssessmentPrintRenderDiagnostics({
+    const renderDiagnostics = buildAssessmentProPrintRenderDiagnostics({
       preview: input.preview,
       html,
     });
@@ -260,7 +260,7 @@ export async function buildAssessmentProPdfResponse(input: AssessmentExportRoute
       renderDiagnostics,
     });
     /* The Pro lane persists a PDF artifact, so stale bad bytes are harder to introspect later than
-       Fast HTML cache entries. Guard the shared renderer here and fail fast if the HTML shell was
+       Fast HTML cache entries. Guard the Pro renderer here and fail fast if the HTML shell was
        built without the question/answer markers that prove assessment body content reached capture. */
     if (renderDiagnostics.bodyLoaded && !renderDiagnostics.htmlHasExpectedContentBlocks) {
       throw createAssessmentProPdfExportError({

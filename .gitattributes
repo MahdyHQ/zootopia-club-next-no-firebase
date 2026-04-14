@@ -1,6 +1,9 @@
 * text=auto
 
+# Keep repository source/config text normalized to LF in Git and in checked-out worktrees.
+# Future agents should extend this list deliberately instead of relying on Windows defaults.
 .gitattributes text eol=lf
+.editorconfig text eol=lf
 .gitignore text eol=lf
 
 *.ts text eol=lf
@@ -16,5 +19,12 @@
 *.html text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.txt text eol=lf
+*.sql text eol=lf
+*.rules text eol=lf
 *.svg text eol=lf
 *.sh text eol=lf
+
+# Windows command scripts can keep CRLF when they are introduced in the repo.
+*.bat text eol=crlf
+*.cmd text eol=crlf

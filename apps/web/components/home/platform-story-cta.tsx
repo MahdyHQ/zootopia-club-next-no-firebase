@@ -5,6 +5,7 @@ import { ArrowDownToLine, CircleHelp, Sparkles, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 
@@ -12,6 +13,10 @@ const ROADMAP_IMAGE_SRC = "/zootopiaclub-inphographic-plan.png";
 
 export function PlatformStoryCta() {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
+  /* The roadmap viewer belongs to the viewport, not to the Home hero card. Rendering the popup
+     into `document.body` prevents overflow/blur ancestors on the Home page from clipping the
+     modal frame or hiding the close control on production browsers. */
+  const viewerRoot = typeof document === "undefined" ? null : document.body;
 
   useEffect(() => {
     if (!isViewerOpen) {
@@ -74,7 +79,8 @@ export function PlatformStoryCta() {
         </div>
       </section>
 
-      {isViewerOpen ? (
+      {isViewerOpen && viewerRoot
+        ? createPortal(
         <div className="home-story-modal fixed inset-0 z-[130] flex items-center justify-center p-2 sm:p-6" onClick={() => setIsViewerOpen(false)}>
           <div className="home-story-modal__backdrop absolute inset-0" aria-hidden />
 
@@ -93,7 +99,10 @@ export function PlatformStoryCta() {
               onClick={() => setIsViewerOpen(false)}
               aria-label="إغلاق العرض"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4 shrink-0" />
+              <span className="hidden text-[11px] font-black tracking-[0.08em] sm:inline">
+                إغلاق
+              </span>
             </button>
 
             {/* This scroll container keeps the roadmap preview and actions accessible on short/mobile viewports
@@ -114,7 +123,6 @@ export function PlatformStoryCta() {
                   height={2048}
                   sizes="(max-width: 640px) 95vw, (max-width: 1024px) 88vw, 980px"
                   className="mx-auto block h-auto w-full max-w-[980px] rounded-[1.2rem] border border-border-strong object-contain dark:border-white/15"
-                  priority
                 />
               </div>
 
@@ -139,8 +147,10 @@ export function PlatformStoryCta() {
               </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        viewerRoot,
+      )
+        : null}
     </>
   );
 }

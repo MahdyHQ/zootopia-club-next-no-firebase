@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-14 (assessment preview-only footer split + screenshot-target footer redesign)
+Last Updated: 2026-04-14 (Home CTA Vercel motion hardening + roadmap viewer portal close control + assessment PDF renderer content migration completion)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -107,9 +107,12 @@ Key verified facts:
 - Home protected page spacing is now slightly tighter on small screens with a
   centered fold-discovery cue that keeps subtle motion and honors reduced-motion
   preferences
-- Home roadmap image preview now uses a safer viewport-contained modal surface
-  (clear close control, centered layout, internal scroll lane) and Journey page
-  light-mode surfaces/text now use coherent high-contrast daytime styling
+- Home protected page platform-story CTA now keeps its elevated interaction cue
+  visible in touch-first production contexts, and its roadmap viewer renders
+  through a viewport-owned portal with a more visible close control so the Home
+  hero's overflow/blur shell cannot clip the popup on Vercel/mobile browsers
+- Journey page light-mode surfaces/text now use coherent high-contrast daytime
+  styling
 - Upload hero now presents a single premium intake surface with unified internal
   layering and a restrained upper-left depth hover reaction, replacing the prior
   redundant route-level title shell
@@ -117,9 +120,12 @@ Key verified facts:
   preserving contrast for controls and text
 - Detached assessment preview/result pages now place their interactive export
   controls in a dedicated full-width action panel beneath metadata; preview
-  footers now render through a dedicated preview-only component while
-  result/export keep their existing shared owners, allowing screenshot-targeted
-  preview footer composition changes without changing export HTML behavior
+  footers now render through a dedicated preview-only component while the
+  Fast and Pro PDF lanes each own their own server-side renderer file
+  (`assessment-fast-print-renderer.ts` / `assessment-pro-print-renderer.ts`),
+  and now preserve the old shared renderer content inside lane-owned files
+  without hidden final-renderer coupling; Pro keeps the absolute-base-url /
+  non-interactive capture contract while Fast stays browser-print-first
 - Web workspace `typecheck` and `build` now clear stale `.next/dev` cache state
   before invoking Next typegen/build so malformed dev-only route helper files do
   not poison later TypeScript or production build runs
@@ -759,17 +765,19 @@ Assessment Retrieval:
 
 Export Flow:
 - GET /api/assessment/export/* — Export assessment
-- Formats: PDF, JSON
+- Formats: PDF, JSON, Markdown, DOCX
 - Locale and theme variants supported
 - `/api/assessment/export/pdf/[id]` is compatibility-only and redirects to the
   explicit Fast or Pro lane using canonical runtime origin
 - `/api/assessment/export/pdf/fast/[id]` stays the lightweight owner-scoped
-  browser-print HTML lane
+  browser-print HTML lane and now owns
+  `apps/web/lib/server/assessment-fast-print-renderer.ts`
 - `/api/assessment/export/pdf/pro/[id]` is the owner-scoped Puppeteer lane for
-  real downloadable PDFs, runs on Node.js with `maxDuration = 120`, and now
-  traces the hoisted workspace-root `@sparticuz/chromium/bin/**/*` payload so
-  Vercel lambdas receive the packaged browser binary even when npm workspaces
-  do not create `apps/web/node_modules`
+  real downloadable PDFs, runs on Node.js with `maxDuration = 120`, owns
+  `apps/web/lib/server/assessment-pro-print-renderer.ts`, and now traces the
+  hoisted workspace-root `@sparticuz/chromium/bin/**/*` payload so Vercel
+  lambdas receive the packaged browser binary even when npm workspaces do not
+  create `apps/web/node_modules`
 - Pro PDF failures are now logged with internal stage classification
   (`route-context`, `artifact-load`, `qr-build`, `html-render`, `pdf-buffer`,
   `artifact-store`, `generation-save`, `audit-log`) while the UI still returns
@@ -786,8 +794,10 @@ Detached Preview/Footer Ownership:
   `apps/web/components/assessment/assessment-preview-page-footer.tsx`.
 - Result route keeps `apps/web/components/assessment/assessment-file-footer.tsx`
   as its shared footer owner.
-- Export/detached HTML footer ownership remains
-  `apps/web/lib/server/assessment-print-renderer.ts`.
+- Fast export HTML/footer ownership now lives in
+  `apps/web/lib/server/assessment-fast-print-renderer.ts`.
+- Pro export HTML/footer ownership now lives in
+  `apps/web/lib/server/assessment-pro-print-renderer.ts`.
 
 Assessment Retention:
 - Results: 1440 minutes (1 day, configurable)
@@ -4149,6 +4159,290 @@ Verification:
 - Ran `npm run typecheck --workspace @zootopia/web` and `npm run lint --workspace @zootopia/web` successfully.
 - Implemented and inspected visual scale factors to stay horizontal dynamically across screen sizes, avoiding vertical-looking stack collapse.
 - Export logic intentionally untouched.
+
+---
+
+Date: 2026-04-14 (Update)
+Subject: Pro PDF Correct-Answer Checkmark Missing Inside Circle (Vercel Runtime-Safe Fix)
+
+Goal/Trigger:
+- The Pro PDF export lane showed the correct-answer circle but the inner check mark was visually missing in exported PDFs.
+- User requested investigation of the real Pro rendering path (not preview-only), plus a motion/runtime audit for Vercel compatibility.
+
+Root Cause (Verified):
+- The shared export renderer (`assessment-print-renderer.ts`) emitted the check mark as a Unicode glyph (`&#10003;`) inside `.choice-correct-badge`.
+- Pro export captures that HTML through headless Chromium/Puppeteer on Vercel.
+- In that capture path, the badge circle styling rendered but the Unicode mark was fragile/inconsistent, causing an effectively empty circle in Pro output.
+- The issue was not caused by preview UI markup, auth ownership checks, or route ownership.
+
+Structural Fix Applied:
+- Replaced the Unicode glyph check mark in shared print/export choice markup with an explicit inline SVG path inside `.choice-correct-badge`.
+- Added dedicated SVG rules (`.choice-correct-check` and `.choice-correct-check path`) for deterministic stroke rendering in Chromium PDF capture.
+- Kept the rest of the answer-option visual hierarchy unchanged.
+- Added `htmlCorrectBadgeCount` to print-render diagnostics so logs can quickly distinguish:
+  - missing badge markup vs
+  - present badge markup with render degradation.
+- Bumped shared print layout version to force Pro/Fast artifact invalidation and prevent stale cached exports:
+  - `ASSESSMENT_PRINT_LAYOUT_VERSION`: `2026-04-14-pro-checkmark-svg-v25`
+
+Files Changed:
+- apps/web/lib/server/assessment-print-renderer.ts
+- zootopia-club-next-ledger.txt
+
+Files Intentionally Not Changed:
+- apps/web/app/api/assessment/export/pdf/pro/[id]/route.ts
+- apps/web/lib/server/assessment-pro-pdf-export.ts
+- apps/web/lib/server/assessment-pdf-download.ts
+- apps/web/lib/server/assessment-fast-pdf-export.ts
+- preview/result UI components and auth/owner guard boundaries
+
+Motion/Vercel Runtime Audit Findings:
+- Pro/Fast PDF export chain is server-only and does not depend on Framer Motion or client hydration.
+- No motion library code runs in `apps/web/lib/server/**` export generation.
+- Existing Vercel Pro-lane Chromium packaging and launch constraints remain intact (`@sparticuz/chromium` tracing, Node runtime, `maxDuration` route budget).
+- No confirmed motion-runtime regression requiring code changes in this pass.
+
+Verification:
+- `npm run lint --workspace @zootopia/web`: pass
+- `npm run typecheck --workspace @zootopia/web`: pass
+- `npm run build --workspace @zootopia/web`: pass
+- Build artifact verification confirmed the Pro/Fast server chunk now contains:
+  - inline SVG check markup (`choice-correct-check`)
+  - updated layout version (`2026-04-14-pro-checkmark-svg-v25`)
+  - no remaining Unicode `&#10003;` checkmark path in the print renderer output chunk
+- Pro route ownership and owner-scoped export boundaries remain unchanged.
+
+Risk/Notes:
+- Local standalone QA runtime in this workspace currently reports missing durable backend flags (`supabase_admin_runtime`, `supabase_database_url`), so an authenticated end-to-end Pro export fetch was not re-run in this pass.
+- The renderer fix is applied at the shared HTML source that both Fast and Pro lanes use, and version bump forces regenerated artifacts in production paths.
+
+---
+
+2026-04-14 — Assessment Pro/Fast PDF Renderer Ownership Split
+==============================================================
+Type: Architecture refactor / renderer ownership split / export-lane decoupling
+Scope: assessment PDF export routes, lane renderers, lane versioning, ledger truth refresh
+
+Summary:
+- Read the ledger first, reviewed the current Next.js 16 route-handler docs, traced the full export chain, and used an explorer subagent before editing.
+- Verified the existing lane split already existed at `route -> lane export helper`, but both Fast and Pro still terminated in the same monolithic `assessment-print-renderer.ts`.
+- Split final render ownership so each lane now owns its own dedicated renderer file while preserving the existing export data-loading, auth, owner-scope, artifact persistence, preview shaping, and user-facing error boundaries.
+- Kept the current HTML/CSS output behavior intentionally aligned with the prior shared renderer so this pass stays architectural first and regression-averse.
+
+Prior Coupling (code-verified before refactor):
+- `/api/assessment/export/pdf/pro/[id]` and `/api/assessment/export/pdf/fast/[id]` already had separate route handlers and export helpers.
+- Both helpers still imported:
+  - `ASSESSMENT_PRINT_LAYOUT_VERSION`
+  - `buildAssessmentPrintRenderDiagnostics()`
+  - `buildAssessmentPrintHtml()`
+  from `apps/web/lib/server/assessment-print-renderer.ts`
+- That meant final HTML composition, render-shape diagnostics, and cache invalidation still shared one renderer owner even though the route and artifact contracts were lane-specific.
+
+New Renderer Ownership:
+- Pro lane final HTML owner:
+  - `apps/web/lib/server/assessment-pro-print-renderer.ts`
+- Fast lane final HTML owner:
+  - `apps/web/lib/server/assessment-fast-print-renderer.ts`
+- Pro export helper now imports only the Pro renderer:
+  - `apps/web/lib/server/assessment-pro-pdf-export.ts`
+- Fast export helper now imports only the Fast renderer:
+  - `apps/web/lib/server/assessment-fast-pdf-export.ts`
+- The old shared final-owner file was removed:
+  - `apps/web/lib/server/assessment-print-renderer.ts`
+
+What Stayed Shared vs What Became Lane-Specific:
+- Stayed shared:
+  - `assessment-export-route-context.ts` for auth, profile gating, owner-scoped generation loading, locale/theme resolution
+  - `assessment-artifact-storage.ts` for owner-safe artifact read/write and storage-path assertions
+  - `assessment-preview.ts` and `assessment-exporter.ts` for preview shaping plus JSON/Markdown/DOCX export payload generation
+  - `assessment-file-branding.ts`, `assessment-file-layout.ts`, and question-display helpers for low-level file-surface tokens, pagination logic, and normalized question rendering data
+- Became lane-specific:
+  - final HTML composition file
+  - renderer diagnostics export names
+  - renderer version constants and artifact invalidation ownership
+
+Files Created:
+- apps/web/lib/server/assessment-fast-print-renderer.ts
+- apps/web/lib/server/assessment-pro-print-renderer.ts
+
+Files Changed:
+- apps/web/lib/server/assessment-fast-pdf-export.ts
+- apps/web/lib/server/assessment-pro-pdf-export.ts
+- zootopia-club-next-ledger.txt
+
+Files Removed:
+- apps/web/lib/server/assessment-print-renderer.ts
+
+Backward-Compatibility Notes:
+- `/api/assessment/export/pdf/[id]` remains a compatibility-only redirect route and still maps `surface=print` to Fast, otherwise to Pro, using canonical runtime origin.
+- Auth/session/profile-completion/owner boundaries remain in `buildAssessmentExportRouteContext()` and were not widened or relocated.
+- Pro still owns Puppeteer capture and PDF artifact persistence.
+- Fast still owns browser-print HTML response and HTML artifact persistence.
+- JSON, Markdown, and DOCX exports still read from `buildAssessmentPreview()` / `assessment-exporter.ts` and were not rewired through the PDF renderer split.
+- Preview/result UI footer ownership remains unchanged from the earlier preview-only footer split; this pass only changes the server-side PDF renderer owners.
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Code-path verification:
+  - Pro route -> `assessment-pro-pdf-export.ts` -> `assessment-pro-print-renderer.ts`
+  - Fast route -> `assessment-fast-pdf-export.ts` -> `assessment-fast-print-renderer.ts`
+  - Legacy `/api/assessment/export/pdf/[id]` route remains redirect-only
+  - `assessment-export-route-context.ts` remains the shared auth/owner gate for both PDF lanes
+  - JSON/Markdown/DOCX export routes still point to `assessment-exporter.ts` and do not import either PDF renderer
+- Runtime QA note:
+  - authenticated end-to-end export fetches were not re-run in this workspace because the local environment still lacks the durable backend state needed for a truthful real-user export session; verification here is code-path plus lint/typecheck/build level
+
+Risks / Notes:
+- The new Pro/Fast renderer files intentionally begin as parity copies of the previous shared renderer so future lane-specific design changes can happen independently without changing this split’s behavior profile.
+- Historical ledger entries before this one that reference `assessment-print-renderer.ts` describe the pre-split architecture and should now be read as superseded history rather than current ownership.
+
+---
+
+2026-04-14 — Assessment PDF Renderer Content Migration Completion
+=================================================================
+Type: Architecture completion / renderer-content migration / lane-contract cleanup
+Scope: Pro/Fast lane renderers, renderer cache versioning, ledger truth refresh
+
+Summary:
+- Read the ledger first, reviewed the live Pro/Fast export chain, compared the split renderer files against the old shared renderer reference attached for this task, and used an explorer subagent before editing.
+- Code-verified that the structural split from the earlier refactor was already present and that both lane-specific renderer files already contained the old shared renderer's full HTML/CSS/render body.
+- Completed the migration by making the renderer contracts intentionally lane-correct instead of leaving them as near-blind parity copies with Pro-only concerns still exposed in the Fast file.
+
+What Was Verified From The Old Renderer Reference:
+- The old shared renderer's major behavior was already present in both lane-owned files at the start of this pass:
+  - cover layout, summary panel, metadata ribbon, composition badges
+  - question-card rendering, true/false pills, paired MCQ grid, answer/rationale cards
+  - science blocks, support page, footer composition, static-section page numbering, print CSS, and auto-print script
+- No missing render branches, placeholder sections, or half-migrated CSS blocks were found in the live Pro/Fast renderer files.
+
+What This Pass Changed:
+- `apps/web/lib/server/assessment-pro-print-renderer.ts`
+  - bumped the Pro renderer version constant to a new content-migration-specific value
+  - clarified the file-level ownership comments so the renderer is explicitly the Pro lane's final HTML owner
+  - changed the default `autoPrint` behavior to `false` because the Pro renderer's primary caller is backend Puppeteer capture, not an interactive browser-print page
+- `apps/web/lib/server/assessment-fast-print-renderer.ts`
+  - bumped the Fast renderer version constant to a new content-migration-specific value
+  - clarified the file-level ownership comments so the renderer is explicitly the Fast browser-print lane's final HTML owner
+  - removed the Pro-only `documentBaseUrl` input contract and the optional `<base>` tag path from the Fast renderer because the authenticated browser-print lane does not need Puppeteer-style absolute asset rebasing
+  - replaced the lingering Pro/Chromium-only badge comment with an accurate cross-lane explanation
+- `zootopia-club-next-ledger.txt`
+  - refreshed current-truth wording
+  - recorded this completion pass distinctly from the earlier renderer ownership split
+
+What Stayed Shared vs Lane-Specific:
+- Stayed shared:
+  - `assessment-export-route-context.ts` for auth, profile gating, owner-safe generation lookup, locale, and theme resolution
+  - `assessment-preview.ts` plus `assessment-exporter.ts` for preview shaping and JSON/Markdown/DOCX export behavior
+  - `assessment-file-branding.ts`, `assessment-file-layout.ts`, and `assessment-question-display.ts` for small low-level file-surface tokens, pagination, and normalized question-display helpers
+- Stayed lane-specific:
+  - final HTML composition ownership
+  - renderer version constants and cache invalidation
+  - Pro-only absolute-base-url / Puppeteer-capture assumptions
+  - Fast-only browser-print default behavior
+
+Backward-Compatibility Notes:
+- No auth/session/profile-completion/owner-scope checks were moved or weakened.
+- `/api/assessment/export/pdf/pro/[id]` still resolves shared route context and calls the Pro export helper, which still calls the Pro renderer.
+- `/api/assessment/export/pdf/fast/[id]` still resolves shared route context and calls the Fast export helper, which still calls the Fast renderer.
+- `/api/assessment/export/pdf/[id]` remains a compatibility-only redirect route.
+- JSON, Markdown, and DOCX export paths remain owned by `assessment-exporter.ts` and were not rewired.
+- Preview rendering ownership remains unchanged.
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Code-path verification:
+  - Pro route -> `assessment-pro-pdf-export.ts` -> `assessment-pro-print-renderer.ts`
+  - Fast route -> `assessment-fast-pdf-export.ts` -> `assessment-fast-print-renderer.ts`
+  - compatibility route remains redirect-only
+  - no imports of the deleted `assessment-print-renderer.ts` remain under `apps/web`
+- Behavioral-parity verification:
+  - line-by-line comparison against the live split renderer files confirmed the old shared renderer body was already preserved in both lanes before the contract cleanup
+  - this pass intentionally avoided redesigning markup/CSS structure and focused on lane ownership clarity plus safe cache invalidation
+
+Risks / Notes:
+- Because the main old-renderer body was already present in both split files, this pass was intentionally surgical and did not duplicate or rewrite the large HTML/CSS surface unnecessarily.
+- Version bumps on the lane renderers ensure stale cached artifacts do not masquerade as current output after the contract cleanup.
+
+---
+
+2026-04-14 — Home Platform Story CTA Vercel Motion Hardening + Roadmap Viewer Close Control
+==============================================================================================
+Type: Production-safe Home interaction fix / Vercel investigation / modal containment hardening
+Scope: Home CTA ownership, roadmap viewer modal, CTA interaction cues, ledger truth refresh
+
+Summary:
+- Read the ledger first, reviewed the relevant Next.js server/client-components guidance, traced the protected Home page ownership, and used an explorer subagent before editing.
+- Verified that the affected CTA is owned by `apps/web/components/home/platform-story-cta.tsx` and mounted from the protected Home route in `apps/web/app/(protected)/(completed)/page.tsx`.
+- Verified that this CTA does **not** use Framer Motion or `motion/react`; the visible movement is CSS-driven from `apps/web/app/globals.css`.
+- Verified from Vercel build logs that the latest production deployment compiled successfully with Next.js 16.2.2 and did not report missing motion-library, bundling, or hydration-boundary failures.
+- Hardened the Home popup so it renders through `document.body` instead of staying nested inside the Home hero surface, and upgraded the close control so the roadmap viewer is easier to dismiss on desktop and mobile without adding heavy runtime cost.
+
+Root Cause Classification (verified facts vs inference):
+- Verified facts:
+  - The CTA animation is CSS-only, not Framer Motion.
+  - `framer-motion` and `motion` exist in the workspace manifests, but this specific Home CTA does not import or depend on them.
+  - The latest production deployment inspected during this task (`dpl_8w8G4wCcgmPwEmY3i95eCtWkckpx`, Git commit `fb1ef9a777d3857cfb8d2c3ef93f2c7a172fd387`) built successfully on Vercel with no missing dependency or motion-bundling errors.
+  - The protected Home hero that owns the CTA is an `overflow-hidden` + `backdrop-blur-2xl` surface.
+- Code-based inference used for the fix:
+  - The roadmap viewer was rendered inline under that Home hero shell, which is a brittle place for a viewport-style floating overlay because production browsers can differ in how clipping, blur, and stacking contexts affect the popup and its controls.
+  - The CTA's strongest premium interaction cue depended on `:hover`, which is less reliable on touch-first production devices even when local desktop testing looks correct.
+- Additional deployment note:
+  - Vercel production was ahead of the local checkout used for this task, so deployment drift was also observed during investigation. That drift was recorded, but the code fix here targeted the source-level containment and interaction weaknesses rather than assuming a missing package problem.
+
+What Changed:
+- `apps/web/components/home/platform-story-cta.tsx`
+  - kept the component client-owned
+  - rendered the roadmap viewer through `createPortal(..., document.body)` so the popup belongs to the viewport instead of the Home hero card
+  - preserved existing `Escape` and backdrop-dismiss behavior
+  - upgraded the close control with a visible Arabic label on larger screens while keeping the icon compact on smaller screens
+  - removed eager `priority` loading from the modal roadmap image so opening the viewer does not force unnecessary first-load work on the Home page
+- `apps/web/app/globals.css`
+  - added touch-safe CTA interaction hooks (`touch-action: manipulation`)
+  - mirrored the elevated CTA state while the dialog is open via `[aria-expanded="true"]`, so production/touch contexts still show a crisp motion cue even when hover is absent
+  - added small `will-change` hints to the CTA orbit/sheen and modal panel for smoother lightweight transforms
+  - upgraded the roadmap viewer close button sizing, spacing, depth, and hover/focus feel so it reads as an intentional premium dismiss control without redesigning the rest of the Home section
+- `zootopia-club-next-ledger.txt`
+  - refreshed current-truth wording
+  - recorded the real production diagnosis and the exact verification boundary for this pass
+
+What Did Not Change:
+- No auth/session/profile-completion/owner boundaries were moved or weakened.
+- No Framer Motion migration or new animation library was added because the CTA was already CSS-owned and did not need heavier runtime JS.
+- No unrelated Home sections, route ownership, or server/export flows were redesigned.
+
+Performance Notes:
+- Kept the interaction lightweight and CSS-first.
+- Used `react-dom` portal support already available through React instead of adding a new modal library.
+- Removed the roadmap image `priority` flag so the large asset stays lazy until the popup is actually opened.
+- Avoided new global listeners beyond the existing temporary `Escape` handler that only exists while the viewer is open.
+
+Files Changed:
+- apps/web/components/home/platform-story-cta.tsx
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Vercel production build-log verification:
+  - inspected deployment `dpl_8w8G4wCcgmPwEmY3i95eCtWkckpx`
+  - build completed successfully on Next.js 16.2.2
+  - no missing `framer-motion` / `motion` / bundling errors were reported
+- Code-path verification:
+  - Home protected route still owns the CTA through `PlatformStoryCta`
+  - roadmap viewer now renders via `document.body` portal instead of inside the overflow-hidden Home hero shell
+  - close behavior remains controlled through close button, backdrop click, and `Escape`
+- Runtime QA note:
+  - the affected Home page is protected/auth-gated in this workspace, so final verification here is build/code-path/Vercel-log based rather than a live authenticated production browser session
+
+Risks / Notes:
+- Because this pass could not reuse a live authenticated Vercel session, the exact original production visual symptom remains reconstructed from the source, logs, and deployment state rather than screen-recorded end-to-end reproduction.
+- The fix intentionally addresses the most credible production weaknesses without bloating the Home page or changing its current visual identity.
 
 ---
 

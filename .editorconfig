@@ -1,0 +1,14 @@
+root = true
+
+# Keep repo text files aligned with the LF policy enforced by .gitattributes so Windows editors
+# do not reintroduce line-ending churn that later shows up as git add warnings.
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{bat,cmd}]
+end_of_line = crlf

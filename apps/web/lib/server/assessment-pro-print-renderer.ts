@@ -17,17 +17,22 @@ import {
   splitMultipleResponseAnswers,
 } from "@/lib/assessment-question-display";
 
-/* The Fast browser-print lane caches rendered HTML artifacts, and the Pro lane currently reuses
-   this shared file-surface foundation before Puppeteer capture. Bump this whenever the shared
-   assessment file layout changes materially so both lanes can invalidate stale source surfaces
-   without collapsing back into one mixed route or cache contract. */
-export const ASSESSMENT_PRINT_LAYOUT_VERSION = "2026-04-14-pdf-content-guard-v24";
+/* This file owns the Pro assessment PDF HTML surface that Puppeteer captures into the
+   downloadable premium PDF artifact. It preserves the former shared renderer design as the
+   Pro lane's source of truth so future premium PDF changes stay lane-owned instead of leaking
+   back through a hidden shared final renderer. */
 
-export type AssessmentPrintRenderDiagnostics = {
+/* Pro PDF artifacts must invalidate when the Pro capture surface changes materially. Keep this
+   version lane-specific so renderer-content migration and later premium design work can rev
+   without forcing Fast browser-print artifact churn. */
+export const ASSESSMENT_PRO_PRINT_RENDERER_VERSION = "pro-2026-04-14-renderer-content-migration-v2";
+
+export type AssessmentProPrintRenderDiagnostics = {
   bodyLoaded: boolean;
   compositionBadgeCount: number;
   contentSource: "generation-record";
   htmlAnswerCardCount: number | null;
+  htmlCorrectBadgeCount: number | null;
   htmlHasExpectedContentBlocks: boolean | null;
   htmlQuestionCardCount: number | null;
   htmlQuestionTitleCount: number | null;
@@ -54,10 +59,10 @@ function countHtmlMarkerOccurrences(html: string, marker: string) {
   return count;
 }
 
-export function buildAssessmentPrintRenderDiagnostics(input: {
+export function buildAssessmentProPrintRenderDiagnostics(input: {
   preview: NormalizedAssessmentPreview;
   html?: string | null;
-}): AssessmentPrintRenderDiagnostics {
+}): AssessmentProPrintRenderDiagnostics {
   const questionPages = buildAssessmentFileQuestionPages(input.preview.questions);
   const renderedQuestionPageCount = Math.max(questionPages.length, 1);
   const htmlQuestionCardCount =
@@ -72,15 +77,20 @@ export function buildAssessmentPrintRenderDiagnostics(input: {
     typeof input.html === "string"
       ? countHtmlMarkerOccurrences(input.html, 'class="answer-card"')
       : null;
+  const htmlCorrectBadgeCount =
+    typeof input.html === "string"
+      ? countHtmlMarkerOccurrences(input.html, 'class="choice-correct-badge"')
+      : null;
 
   /* Export diagnostics intentionally stay shape-level instead of logging question text. This lets
-     the PDF lanes prove that real assessment body blocks reached the shared renderer without
+     the PDF lanes prove that real assessment body blocks reached the Pro lane renderer without
      leaking owner-scoped educational content into production logs or audit surfaces. */
   return {
     bodyLoaded: input.preview.questions.length > 0,
     compositionBadgeCount: input.preview.compositionBadges.length,
     contentSource: "generation-record",
     htmlAnswerCardCount,
+    htmlCorrectBadgeCount,
     htmlHasExpectedContentBlocks:
       typeof input.html === "string"
         ? (htmlQuestionTitleCount ?? 0) > 0 && (htmlAnswerCardCount ?? 0) > 0
@@ -109,12 +119,24 @@ function renderChoiceItem(input: {
 }) {
   const choiceClassName = input.isCorrect ? "choice-item choice-item--correct" : "choice-item";
   const markerClassName = input.isCorrect ? "choice-marker choice-marker--correct" : "choice-marker";
+  /* Pro PDFs run through headless Chromium where lightweight Unicode glyphs can disappear even
+     when the badge circle itself paints correctly. Keep the checkmark as inline SVG markup so
+     the mark remains deterministic across Vercel serverless capture and browser-print reuse. */
+  const correctBadge = input.isCorrect
+    ? `
+      <span class="choice-correct-badge" aria-hidden="true">
+        <svg class="choice-correct-check" viewBox="0 0 12 12" focusable="false">
+          <path d="M2.35 6.1 4.85 8.6 9.65 3.8" />
+        </svg>
+      </span>
+    `.trim()
+    : "";
 
   return `
     <div class="${choiceClassName}">
       <span class="${markerClassName}">${escapeHtml(input.marker ? `${input.marker})` : "•")}</span>
       <span class="choice-text">${escapeHtml(input.text)}</span>
-      ${input.isCorrect ? '<span class="choice-correct-badge" aria-hidden="true">&#10003;</span>' : ""}
+      ${correctBadge}
     </div>
   `.trim();
 }
@@ -522,7 +544,7 @@ function renderAssessmentFileFooter(input: {
   `.trim();
 }
 
-export function buildAssessmentPrintHtml(input: {
+export function buildAssessmentProPrintHtml(input: {
   preview: NormalizedAssessmentPreview;
   themeMode: AssessmentPreviewThemeMode;
   qrCodeDataUrl: string;
@@ -530,11 +552,14 @@ export function buildAssessmentPrintHtml(input: {
   documentBaseUrl?: string | null;
   pageNumberMode?: "css" | "pdf-template" | "static-sections";
 }) {
+  /* The Pro renderer primarily feeds backend Puppeteer capture, so keep browser auto-print
+     disabled by default here. Future agents can opt back in explicitly for manual debugging
+     without changing the server-owned Pro PDF export path. */
   const {
     preview,
     themeMode,
     qrCodeDataUrl,
-    autoPrint = true,
+    autoPrint = false,
     documentBaseUrl,
     pageNumberMode = "static-sections",
   } = input;
@@ -1441,9 +1466,22 @@ export function buildAssessmentPrintHtml(input: {
         border: 1px solid ${dark ? "rgba(167, 243, 208, 0.24)" : "rgba(16, 185, 129, 0.22)"};
         background: ${dark ? "rgba(110, 231, 183, 0.12)" : "rgba(255, 255, 255, 0.88)"};
         color: ${dark ? "#ecfeff" : "#0f766e"};
-        font-size: 10px;
-        font-weight: 800;
+        line-height: 1;
         box-shadow: ${dark ? "0 0 16px rgba(45, 212, 191, 0.14)" : "0 8px 18px rgba(16, 185, 129, 0.1)"};
+      }
+
+      .choice-correct-check {
+        width: 11px;
+        height: 11px;
+        display: block;
+      }
+
+      .choice-correct-check path {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
 
       .supplemental-copy {

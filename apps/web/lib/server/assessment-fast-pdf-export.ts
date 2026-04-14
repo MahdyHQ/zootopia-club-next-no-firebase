@@ -9,13 +9,13 @@ import { buildAssessmentGeneratedFileName } from "@/lib/server/export-file-namin
 import { buildAssessmentFileQrDataUrl } from "@/lib/server/assessment-file-qr";
 import type { AssessmentExportRouteContext } from "@/lib/server/assessment-export-route-context";
 import {
-  ASSESSMENT_PRINT_LAYOUT_VERSION,
-  buildAssessmentPrintRenderDiagnostics,
-  buildAssessmentPrintHtml,
-} from "@/lib/server/assessment-print-renderer";
+  ASSESSMENT_FAST_PRINT_RENDERER_VERSION,
+  buildAssessmentFastPrintRenderDiagnostics,
+  buildAssessmentFastPrintHtml,
+} from "@/lib/server/assessment-fast-print-renderer";
 import { appendAdminLog, saveAssessmentGeneration } from "@/lib/server/repository";
 
-export const ASSESSMENT_FAST_PDF_LANE_VERSION = `fast-${ASSESSMENT_PRINT_LAYOUT_VERSION}`;
+export const ASSESSMENT_FAST_PDF_LANE_VERSION = ASSESSMENT_FAST_PRINT_RENDERER_VERSION;
 
 export type AssessmentFastPdfFailureStage =
   | "artifact-load"
@@ -175,7 +175,7 @@ export async function buildAssessmentFastPdfResponse(input: AssessmentExportRout
   const existingHtml = existingBuffer
     ? new TextDecoder().decode(existingBuffer)
     : null;
-  const existingRenderDiagnostics = buildAssessmentPrintRenderDiagnostics({
+  const existingRenderDiagnostics = buildAssessmentFastPrintRenderDiagnostics({
     preview: input.preview,
     html: existingHtml,
   });
@@ -204,7 +204,7 @@ export async function buildAssessmentFastPdfResponse(input: AssessmentExportRout
       });
     });
     const html = await Promise.resolve().then(() =>
-      buildAssessmentPrintHtml({
+      buildAssessmentFastPrintHtml({
         preview: input.preview,
         themeMode: input.themeMode,
         qrCodeDataUrl,
@@ -218,7 +218,7 @@ export async function buildAssessmentFastPdfResponse(input: AssessmentExportRout
         context: logContext,
       });
     });
-    const renderDiagnostics = buildAssessmentPrintRenderDiagnostics({
+    const renderDiagnostics = buildAssessmentFastPrintRenderDiagnostics({
       preview: input.preview,
       html,
     });
