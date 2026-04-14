@@ -510,12 +510,14 @@ function renderAssessmentFileFooter(input: {
       <div class="footer-line-wrap">
         ${renderFooterLine(input.footerLine)}
       </div>
-      ${renderPageBadge({
-        number: input.pageNumberText,
-        dynamic:
-          input.variant === "print" &&
-          (input.enableDynamicPageNumber ?? true),
-      })}
+      <div class="footer-page-zone">
+        ${renderPageBadge({
+          number: input.pageNumberText,
+          dynamic:
+            input.variant === "print" &&
+            (input.enableDynamicPageNumber ?? true),
+        })}
+      </div>
     </footer>
   `.trim();
 }
@@ -1936,16 +1938,19 @@ export function buildAssessmentPrintHtml(input: {
          left seal, centered Arabic attribution line, and right page-number badge. Future agents
          should evolve this shared footer rather than forking the HTML and React file surfaces. */
       .assessment-file-footer {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-rows: 1fr auto;
+        align-items: stretch;
+        column-gap: 12px;
         /* Footer anchors must remain physically LTR regardless of surrounding RTL support-copy
            containers so the seal stays on the left and the page badge stays on the right. */
         direction: ltr;
         unicode-bidi: isolate;
         border: 1px solid ${dark ? "rgba(94, 234, 212, 0.18)" : "rgba(15, 118, 110, 0.14)"};
         border-radius: 18px;
-        padding: 7px 11px;
+        min-height: calc(${footerSideAnchorSize} + 8px);
+        padding: 8px 12px 6px;
         background:
           linear-gradient(${dark
             ? "180deg, rgba(4, 13, 27, 0.97), rgba(3, 10, 22, 0.92)"
@@ -1967,6 +1972,9 @@ export function buildAssessmentPrintHtml(input: {
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        align-self: center;
         width: ${footerSideAnchorSize};
         height: ${footerSideAnchorSize};
         flex: none;
@@ -1987,15 +1995,21 @@ export function buildAssessmentPrintHtml(input: {
       }
 
       .footer-line-wrap {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         min-width: 0;
         flex: 1;
       }
 
       .footer-line {
-        display: flex;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
-        justify-content: center;
-        gap: 6px;
+        column-gap: 6px;
+        row-gap: 2px;
         width: 100%;
         margin: 0;
         text-align: center;
@@ -2008,17 +2022,29 @@ export function buildAssessmentPrintHtml(input: {
       .footer-line-text {
         display: block;
         min-width: 0;
-        flex: 1 1 auto;
         max-width: ${footerTextMaxWidth};
         white-space: normal;
         overflow-wrap: normal;
         word-break: normal;
+        text-align: center;
         font-family: ${footerTextFontFamily};
       }
 
       .footer-emoji {
         flex: none;
         line-height: 1;
+      }
+
+      /* The page badge needs a dedicated full-height lane so it can visually land in the lower
+         right of the footer card instead of floating on the same baseline as the seal/text. */
+      .footer-page-zone {
+        grid-column: 3;
+        grid-row: 1 / span 2;
+        display: flex;
+        min-height: 100%;
+        align-items: flex-end;
+        justify-content: flex-end;
+        padding-bottom: 4px;
       }
 
       .footer-page-badge {
@@ -2056,8 +2082,9 @@ export function buildAssessmentPrintHtml(input: {
          horizontal and readable while the PDF lane keeps its established page chrome. */
       @media screen and (max-width: 720px) {
         .screen-footer.assessment-file-footer {
-          gap: 8px;
-          padding: 6px 9px;
+          min-height: 60px;
+          column-gap: 8px;
+          padding: 6px 9px 5px;
           border-radius: 15px;
         }
 
@@ -2070,6 +2097,11 @@ export function buildAssessmentPrintHtml(input: {
         .screen-footer .footer-line {
           font-size: 9.7px;
           line-height: 1.28;
+          column-gap: 4px;
+        }
+
+        .screen-footer .footer-page-zone {
+          padding-bottom: 1px;
         }
 
         .screen-footer .footer-page-number {
@@ -2239,7 +2271,7 @@ export function buildAssessmentPrintHtml(input: {
            non-shrinking trailing block. This protects against print reflow pushing only the footer
            onto a following page when content density fluctuates near page boundaries. */
         .page-number-mode-static-sections .screen-footer {
-          display: flex;
+          display: grid;
           margin-top: 0;
           flex-shrink: 0;
           break-inside: avoid;
@@ -2402,7 +2434,7 @@ export function buildAssessmentPrintHtml(input: {
         }
 
         .page-number-mode-css .print-footer {
-          display: flex;
+          display: grid;
           position: fixed;
           /* Fixed print footer must sit against the physical page end, not inside the content
              box margin. Offsetting by the configured page margins prevents the visible dead band

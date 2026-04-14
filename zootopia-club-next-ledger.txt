@@ -3739,6 +3739,132 @@ Risks / Notes:
 
 ---
 
+2026-04-14 — Assessment Footer Composition Rebuild (Lower-Right Badge Geometry)
+================================================================================
+Type: UI layout correction / preview-export footer parity / structural composition fix
+Scope: shared assessment file footer in live preview, detached/export HTML footer, print-mode footer overrides
+
+Summary:
+- Re-opened the assessment footer after the prior mobile-tightening pass because the footer still behaved like a single baseline row instead of the intended premium three-part composition.
+- Confirmed the real issue was structural: the seal, Arabic attribution line, and page badge were still sharing one ordinary row, which kept the badge vertically centered and left the attribution line fighting for width between two fixed ornaments.
+- Rebuilt the footer in both owners so the page badge now has its own dedicated lower-right lane while the Arabic text owns the center track between the seal and badge.
+- Kept the fix local to the shared footer implementations only; no preview routing, export business logic, auth, or owner-scope behavior changed.
+
+Prior Failure Mode (code-verified):
+- `assessment-file-footer.tsx` still rendered the seal, text, and page badge in one simple three-column row.
+- `assessment-print-renderer.ts` mirrored that with separate HTML/CSS that also treated the footer as one baseline row.
+- As a result:
+  - the Arabic sentence could still feel cramped or vertically fragmented on narrow widths
+  - the page-number circle sat like a centered inline ornament instead of visually landing in the lower-right area of the footer card
+  - preview, detached HTML preview, and actual print/PDF output were at risk of drifting because print mode had its own `display:flex` overrides on top of the footer CSS
+
+Exact Structural / CSS Fix Applied:
+- `apps/web/components/assessment/assessment-file-footer.tsx`
+  - rebuilt the footer into a true grid composition with:
+    - left seal lane
+    - center attribution lane
+    - right badge lane
+  - added explicit `grid-rows-[1fr_auto]` and full-height badge alignment so the page badge is visually anchored at the lower-right instead of vertical center
+  - changed the Arabic attribution line from a wrap-prone inline row into a three-cell grid (`emoji / text / emoji`) so only the text block wraps
+  - preserved the shared seal asset scaling and page arc geometry
+- `apps/web/lib/server/assessment-print-renderer.ts`
+  - mirrored the same structure in detached/export HTML by adding a dedicated `.footer-page-zone`
+  - converted footer CSS from row-style flex layout to the same three-zone grid geometry
+  - updated both print-mode overrides:
+    - `.page-number-mode-static-sections .screen-footer`
+    - `.page-number-mode-css .print-footer`
+    so they keep `display: grid` and do not revert the rebuilt layout back to flex
+
+Files Changed:
+- apps/web/components/assessment/assessment-file-footer.tsx
+- apps/web/lib/server/assessment-print-renderer.ts
+- zootopia-club-next-ledger.txt
+
+Responsive Behavior:
+- Desktop / large screens:
+  - footer now reads as a balanced horizontal composition
+  - seal remains centered on the left lane
+  - Arabic attribution stays centered in the dominant middle track
+  - page-number circle now sits toward the lower-right side of the footer card
+- Tablet:
+  - keeps the same three-zone composition with reduced spacing and anchor size
+  - text remains centered and structurally protected from ornament collision
+- Mobile:
+  - seal and page badge shrink to compact sizes
+  - attribution wraps only inside the center track instead of collapsing into a narrow vertical-looking strip
+  - footer keeps the same composition logic instead of falling back to a broken inline row
+
+Verification:
+- `npm run lint`: pass
+  - 2 pre-existing warnings remain in `apps/web/components/upload/upload-workspace.tsx`
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Code-path verification:
+  - live preview/footer owner remains `assessment-file-footer.tsx`
+  - detached/export HTML footer owner remains `assessment-print-renderer.ts`
+  - both static-section screen footers and fixed print footers now preserve the rebuilt grid composition
+  - no auth/session/owner/export data contracts changed
+
+Risks / Notes:
+- This pass corrects footer geometry structurally, but I did not complete a live authenticated breakpoint screenshot pass from this workspace, so final visual QA on desktop/tablet/mobile still needs a real browser check against the intended screenshot.
+- This entry supersedes the footer-specific part of the earlier 2026-04-14 “Assessment Preview Footer + Avatar Stability Hardening” note; the earlier avatar hardening remains valid.
+
+---
+
+2026-04-14 — Upload Workspace Input Hardening and UX Cleanup
+============================================================
+Type: UI/client-state hardening / upload surface enhancement / accessibility cleanup
+Scope: protected upload workspace surface only
+
+Summary:
+- Reviewed `apps/web/components/upload/upload-workspace.tsx` end-to-end against the current upload route and shared upload policy before editing.
+- Confirmed the upload route/auth/business logic did not need changes; the issues were local to the client upload surface itself.
+- Hardened the single upload workspace so the UI now truly supports both browse and drag/drop intake, resets cleanly after failed validation, and avoids stale/duplicated local document ordering after a successful upload.
+- Kept the work surgical and local to the upload workspace component; no auth, owner scope, storage, or API contract changes were made.
+
+Root Causes (code-verified):
+- The component copy promised “Drag and drop files here” but the implementation only supported click-to-browse through a hidden form submit path.
+- `title` and `description` props existed on the component but were not consumed, which was producing avoidable lint noise and made the API misleading.
+- The file picker only reset on successful upload, so selecting the same file again after a validation failure could fail to retrigger the input change event.
+- Local document insertion was not defensive against duplicate IDs, which made the optimistic upload surface more fragile if a refetch or repeated success path reintroduced the newest record.
+
+Exact Fix Applied:
+- `apps/web/components/upload/upload-workspace.tsx`
+  - replaced the hidden form-submit flow with one shared `uploadSelectedFile()` helper so browse-click and drag/drop now share the same validation, warning, retry, and fetch path
+  - added real drag-enter / drag-over / drag-leave / drop handling with a depth counter so the glass shell can highlight cleanly without flickering during nested drag events
+  - added a shared file-input reset helper so the same file can be retried after validation failures as well as after completed uploads
+  - consumed the existing optional `title` and `description` props instead of leaving them unused, while preserving the default localized “browse” emphasis when no custom title is supplied
+  - added defensive document prepend logic that de-duplicates by document ID before placing the newest upload at the top of the local workspace list
+  - hardened busy-state behavior so the full-surface overlay and destructive active-document removal action do not compete with in-flight uploads/removals
+  - added small accessibility improvements with keyboard activation, live-region roles for warnings/progress, and alert semantics for failures
+
+Files Changed:
+- apps/web/components/upload/upload-workspace.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Browse upload still works through the same `/api/uploads` route, but now uses a simpler direct input-change path instead of a hidden form submit.
+- Dragging a file over the upload surface now gives a clear active-state highlight and dropping a file uses the same validation/request flow as browse upload.
+- Re-selecting the same file after a validation error now works reliably because the input value is reset even when the request never starts.
+- The recent-upload list prepends the newest document without duplicating an existing record with the same ID.
+- The component API is cleaner because `title` and `description` are now real, honored props instead of unused inputs.
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Code-path verification:
+  - upload requests still post to `/api/uploads`
+  - no route, auth, or storage-layer code changed
+  - upload validation still flows through `validateUploadDescriptor()`
+  - upload page ownership remains unchanged; this pass stays inside the shared workspace component
+
+Risks / Notes:
+- This pass improves the upload surface behavior and accessibility, but I did not run a live browser drag/drop interaction in this workspace, so one manual UI sanity pass on `/upload` is still worthwhile.
+- The accepted file extension list remains local to this component for now; if additional upload surfaces appear later, that accept string may be worth centralizing alongside the shared upload policy.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve

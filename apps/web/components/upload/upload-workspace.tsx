@@ -8,13 +8,14 @@ import type {
   UploadResponse,
 } from "@zootopia/shared-types";
 import { validateUploadDescriptor } from "@zootopia/shared-utils";
-import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import type { ChangeEvent, DragEvent, KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { BrainCircuit, PieChart, Trash2, UploadCloud } from "lucide-react";
 
 import type { AppMessages } from "@/lib/messages";
 import { SUPPORTED_UPLOAD_FORMAT_BADGES } from "@/lib/upload";
+import { cn } from "@/lib/utils";
 
 type UploadWorkspaceProps = {
   messages: AppMessages;
@@ -33,6 +34,18 @@ function formatDocumentSize(sizeBytes: number) {
     return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
   }
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const uploadAcceptValue = ".pdf,.docx,.xlsx,.xls,.txt,.csv,.png,.jpg,.jpeg,.webp";
+
+function prependWorkspaceDocument(
+  currentDocuments: DocumentRecord[],
+  nextDocument: DocumentRecord,
+) {
+  return [
+    nextDocument,
+    ...currentDocuments.filter((document) => document.id !== nextDocument.id),
+  ];
 }
 
 /*
@@ -87,27 +100,51 @@ export function UploadWorkspace({
   description,
   canAccessInfographic = false,
 }: UploadWorkspaceProps) {
+  const fileInputId = useId();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef(0);
   const [documents, setDocuments] = useState(initialDocuments);
   const [pending, setPending] = useState(false);
   const [removingDocumentId, setRemovingDocumentId] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const customTitle = title?.trim() || null;
+  const resolvedTitle = customTitle || messages.uploadDropzoneTitle;
+  const resolvedDescription = description?.trim() || messages.uploadDropzoneFormats;
   const latestDocument = documents[0] ?? null;
   const activeDocument =
     documents.find((document) => document.isActive) ?? latestDocument;
+  const isBusy = pending || removingDocumentId !== null;
 
   useEffect(() => {
     setDocuments(initialDocuments);
   }, [initialDocuments]);
 
-  async function handleUpload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const file = form.get("file");
+  useEffect(() => {
+    if (!pending) {
+      return;
+    }
 
-    if (!(file instanceof File)) {
-      setError(messages.uploadSelectFile);
+    dragDepthRef.current = 0;
+    setIsDragActive(false);
+  }, [pending]);
+
+  function resetFilePicker() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function isFileDrag(event: DragEvent<HTMLElement>) {
+    return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+  }
+
+  /* UploadWorkspace promises both browse-click and drag/drop intake on the protected /upload
+     route. Keep all file-entry paths funneled through this one request helper so validation,
+     warning handling, retries, and future upload instrumentation never drift between input modes. */
+  async function uploadSelectedFile(file: File) {
+    if (isBusy) {
       return;
     }
 
@@ -118,6 +155,7 @@ export function UploadWorkspace({
         sizeBytes: file.size,
       });
     } catch (validationError) {
+      resetFilePicker();
       setError(
         validationError instanceof Error
           ? validationError.message
@@ -144,17 +182,96 @@ export function UploadWorkspace({
         throw new Error(payload.ok ? "UPLOAD_FAILED" : payload.error.message);
       }
 
-      setDocuments((current) => [payload.data.document, ...current]);
       setWarnings(payload.data.warnings);
+      setDocuments((current) =>
+        prependWorkspaceDocument(current, payload.data.document),
+      );
       onDocumentCreated?.(payload.data.document);
-      formElement.reset();
     } catch (uploadError) {
       setError(
         uploadError instanceof Error ? uploadError.message : messages.uploadFailed,
       );
     } finally {
+      resetFilePicker();
       setPending(false);
     }
+  }
+
+  function handleFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    void uploadSelectedFile(file);
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLDivElement>) {
+    if (isBusy || !isFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDragActive(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    if (isBusy || !isFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+
+    if (!isDragActive) {
+      setIsDragActive(true);
+    }
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (isBusy || !isFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+
+    if (dragDepthRef.current === 0) {
+      setIsDragActive(false);
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    if (isBusy || !isFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = 0;
+    setIsDragActive(false);
+
+    const file = event.dataTransfer.files?.[0];
+    if (!file) {
+      setError(messages.uploadSelectFile);
+      return;
+    }
+
+    void uploadSelectedFile(file);
+  }
+
+  function handleOverlayKeyDown(event: KeyboardEvent<HTMLLabelElement>) {
+    if (isBusy) {
+      return;
+    }
+
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    fileInputRef.current?.click();
   }
 
   async function handleRemoveActiveDocument() {
@@ -164,6 +281,7 @@ export function UploadWorkspace({
 
     setRemovingDocumentId(activeDocument.id);
     setError(null);
+    setWarnings([]);
 
     try {
       const response = await fetch(
@@ -191,7 +309,20 @@ export function UploadWorkspace({
   }
 
   return (
-    <div className={uploadShellClassName}>
+    <div
+      className={cn(
+        uploadShellClassName,
+        isDragActive && [
+          "border-sky-400/70 bg-white/[0.34]",
+          "shadow-[inset_0_1.5px_0_rgba(255,255,255,0.95),inset_0_0_0_1px_rgba(56,189,248,0.18),0_12px_28px_rgba(56,189,248,0.1),0_28px_60px_rgba(148,163,184,0.14)]",
+          "dark:border-cyan-300/28 dark:bg-[rgba(8,24,40,0.5)] dark:shadow-[inset_0_1.5px_0_rgba(255,255,255,0.09),inset_0_0_0_1px_rgba(34,211,238,0.12),0_14px_30px_rgba(2,6,23,0.26),0_30px_64px_rgba(2,6,23,0.28)]",
+        ],
+      )}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/*
         Decorative depth overlays — pointer-events-none, purely visual.
         Top-left radial: simulates ambient light catching the upper corner.
@@ -220,13 +351,19 @@ export function UploadWorkspace({
         {/* Title & subtitle */}
         <div className="text-center">
           <h3 className="text-base font-semibold text-foreground sm:text-lg dark:text-white">
-            {messages.uploadDropzoneTitle}{" "}
-            <span className="text-sky-700 underline decoration-sky-300/60 underline-offset-4 transition-colors group-hover:text-sky-800 group-hover:decoration-sky-400 dark:text-cyan-200 dark:decoration-cyan-200/30 dark:group-hover:decoration-cyan-200">
-              {messages.uploadDropzoneBrowse}
-            </span>
+            {customTitle ? (
+              resolvedTitle
+            ) : (
+              <>
+                {resolvedTitle}{" "}
+                <span className="text-sky-700 underline decoration-sky-300/60 underline-offset-4 transition-colors group-hover:text-sky-800 group-hover:decoration-sky-400 dark:text-cyan-200 dark:decoration-cyan-200/30 dark:group-hover:decoration-cyan-200">
+                  {messages.uploadDropzoneBrowse}
+                </span>
+              </>
+            )}
           </h3>
           <p className="mt-2 text-sm leading-6 text-foreground-muted dark:text-white/58">
-            {messages.uploadDropzoneFormats}
+            {resolvedDescription}
           </p>
         </div>
 
@@ -248,34 +385,45 @@ export function UploadWorkspace({
           the outer shell IS the visual surface. This eliminates the nested-card feeling.
         */}
         <label
-          htmlFor="file-upload"
-          className="absolute inset-0 z-20 cursor-pointer rounded-[inherit]"
+          htmlFor={fileInputId}
+          role="button"
+          tabIndex={isBusy ? -1 : 0}
+          aria-disabled={isBusy}
+          onKeyDown={handleOverlayKeyDown}
+          className={cn(
+            "absolute inset-0 z-20 cursor-pointer rounded-[inherit] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-4 focus-visible:ring-offset-transparent dark:focus-visible:ring-cyan-300/40",
+            isBusy && "pointer-events-none",
+          )}
           aria-label={messages.uploadDropzoneTitle}
         >
-          <form id="upload-form" onSubmit={handleUpload} className="hidden">
-            <input
-              id="file-upload"
-              type="file"
-              name="file"
-              accept=".pdf,.docx,.xlsx,.xls,.txt,.csv,.png,.jpg,.jpeg,.webp"
-              onChange={(e) => {
-                if (e.target.files && e.target.files.length > 0) {
-                  e.target.form?.requestSubmit();
-                }
-              }}
-            />
-          </form>
+          <input
+            ref={fileInputRef}
+            id={fileInputId}
+            type="file"
+            name="file"
+            accept={uploadAcceptValue}
+            disabled={isBusy}
+            className="hidden"
+            onChange={handleFileInputChange}
+          />
         </label>
 
         {/* Dashed border indicator — decorative outline only, not a box */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-4 rounded-[1.6rem] border border-dashed border-slate-300/40 dark:border-white/10" />
+        <div
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-4 rounded-[1.6rem] border border-dashed border-slate-300/40 transition-colors duration-200 dark:border-white/10",
+            isDragActive &&
+              "border-sky-400/55 dark:border-cyan-300/28",
+          )}
+        />
 
         {/* ── Status states — rendered below the dropzone content ── */}
         <div className="relative z-30 w-full space-y-5" onClick={(e) => e.stopPropagation()}>
 
           {/* Error */}
           {error && (
-            <div className="flex items-start gap-3 rounded-xl border border-danger/20 bg-danger/10 p-4">
+            <div role="alert" className="flex items-start gap-3 rounded-xl border border-danger/20 bg-danger/10 p-4">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="mt-0.5 h-5 w-5 shrink-0 text-danger" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
@@ -287,7 +435,7 @@ export function UploadWorkspace({
 
           {/* Warnings */}
           {warnings.length > 0 && (
-            <div className="space-y-2 rounded-xl border border-amber-400/25 bg-amber-400/8 p-4">
+            <div role="status" aria-live="polite" className="space-y-2 rounded-xl border border-amber-400/25 bg-amber-400/8 p-4">
               <h4 className="text-sm font-semibold text-foreground">{messages.uploadWarningsTitle}</h4>
               <ul className="list-inside list-disc space-y-1">
                 {warnings.map((w, i) => (
@@ -299,7 +447,7 @@ export function UploadWorkspace({
 
           {/* Uploading */}
           {pending && (
-            <div className="space-y-3">
+            <div role="status" aria-live="polite" className="space-y-3">
               <h4 className="text-sm font-semibold text-foreground dark:text-white">{messages.uploadUploading}</h4>
               <div className={`${uploadWorkspacePanelClassName} flex flex-col gap-2 p-4`}>
                 <div className="flex items-center gap-3">
@@ -389,8 +537,8 @@ export function UploadWorkspace({
                     <button
                       type="button"
                       onClick={handleRemoveActiveDocument}
-                      disabled={removingDocumentId === activeDocument.id}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger transition-all hover:-translate-y-0.5 hover:bg-danger/20"
+                      disabled={isBusy}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger transition-all hover:-translate-y-0.5 hover:bg-danger/20 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Trash2 className="h-4 w-4" />
                       {removingDocumentId === activeDocument.id
