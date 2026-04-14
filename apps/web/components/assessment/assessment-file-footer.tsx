@@ -25,18 +25,12 @@ export function AssessmentFileFooter({
   className,
 }: AssessmentFileFooterProps) {
   const dark = themeMode === "dark";
-  const sideAnchorSize = ASSESSMENT_FILE_FOOTER_LAYOUT.sideAnchorSizePx;
   /* Preview/result footers now use a true three-zone composition: the seal keeps its own left
      lane, the Arabic attribution owns the center width, and the page badge gets a dedicated
-     bottom-right lane instead of being vertically centered like ordinary inline content. */
-  const sideAnchorSizeClassName =
-    sideAnchorSize >= 96
-      ? "h-12 w-12 sm:h-[4.5rem] sm:w-[4.5rem] lg:h-24 lg:w-24"
-      : "h-10 w-10 sm:h-14 sm:w-14 lg:h-20 lg:w-20";
-  const sideAnchorSizes =
-    sideAnchorSize >= 96
-      ? "(min-width: 1024px) 96px, (min-width: 640px) 72px, 48px"
-      : "(min-width: 1024px) 80px, (min-width: 640px) 56px, 40px";
+     bottom-right lane. Keep these responsive anchor sizes aligned with the detached HTML footer
+     media queries so preview/result pages and export HTML shrink with the same silhouette. */
+  const sideAnchorSizeClassName = "h-11 w-11 sm:h-14 sm:w-14 lg:h-20 lg:w-20";
+  const sideAnchorSizes = "(min-width: 1024px) 80px, (min-width: 640px) 56px, 44px";
   const sealImageStyle = {
     padding: `${ASSESSMENT_FILE_FOOTER_LAYOUT.sealImagePaddingPx}px`,
     transform: `scale(${ASSESSMENT_FILE_FOOTER_LAYOUT.sealImageScale})`,
@@ -65,7 +59,7 @@ export function AssessmentFileFooter({
       dir="ltr"
       style={footerDirectionStyle}
       className={cn(
-        "mt-auto grid min-h-[4.1rem] grid-cols-[auto,minmax(0,1fr),auto] grid-rows-[1fr_auto] items-stretch gap-x-2 rounded-[1.12rem] border px-2.5 py-1.5 sm:min-h-[5.3rem] sm:gap-x-3 sm:rounded-[1.5rem] sm:px-4 sm:py-2 lg:min-h-[6.5rem]",
+        "mt-auto grid min-h-[3.75rem] grid-cols-[auto,minmax(0,1fr),auto] grid-rows-[1fr_auto] items-stretch gap-x-1.5 rounded-[1rem] border px-2 py-1 sm:min-h-[4.7rem] sm:gap-x-2 sm:rounded-[1.3rem] sm:px-3 sm:py-1.5 lg:min-h-[5.35rem] lg:gap-x-2.5 lg:rounded-[1.45rem] lg:px-3.5 lg:py-[0.45rem]",
         dark
           ? "border-emerald-200/15 bg-[linear-gradient(180deg,rgba(4,13,27,0.97),rgba(3,10,22,0.92))] text-white shadow-[inset_0_0_0_1px_rgba(94,234,212,0.12),0_12px_28px_rgba(1,4,14,0.18)]"
           : "border-emerald-700/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(246,251,249,0.82))] text-slate-900 shadow-[inset_0_0_0_1px_rgba(15,118,110,0.08),0_10px_22px_rgba(15,23,42,0.06)]",
@@ -73,8 +67,8 @@ export function AssessmentFileFooter({
       )}
     >
       {/* This shared file footer keeps the left seal, centered Arabic attribution line, and
-          right page-number arc on one baseline so detached preview pages and paged exports stay
-          visually aligned instead of drifting into separate footer treatments. */}
+          right page-number arc inside one shared strip so detached preview pages and paged
+          exports stay visually aligned instead of drifting into separate footer treatments. */}
       <span
         className={cn(
           "relative row-span-2 flex shrink-0 self-center items-center justify-center overflow-hidden rounded-full border",
@@ -97,16 +91,16 @@ export function AssessmentFileFooter({
       <div className="row-span-2 flex min-w-0 items-center justify-center overflow-hidden text-center" dir="rtl">
         <p
           className={cn(
-            "mx-auto grid w-full max-w-full grid-cols-[auto,minmax(0,1fr),auto] items-center gap-x-1 gap-y-0.5 text-center text-[0.56rem] font-semibold leading-[1.34] sm:gap-x-1.5 sm:text-[0.72rem] lg:text-[0.78rem]",
+            "mx-auto grid w-full max-w-full grid-cols-[auto,minmax(0,1fr),auto] items-center gap-x-1 gap-y-0 text-center text-[0.49rem] font-semibold leading-[1.18] sm:gap-x-1 sm:text-[0.58rem] sm:leading-[1.14] lg:gap-x-1.5 lg:text-[0.66rem] lg:leading-[1.12]",
             dark ? "text-white/88" : "text-slate-800/90",
           )}
         >
           <span className="shrink-0 text-[0.95em] leading-none">{footerLine.leadingEmoji}</span>
           {/* Footer attribution text stays shared across preview/result/export surfaces.
-              Keep the center lane structurally dominant so the Arabic sentence stays between the
-              ornaments and wraps as one controlled block instead of fragmenting vertically. */}
+              Keep the center lane structurally dominant and typographically compact so the Arabic
+              sentence stays between the ornaments as one premium strip on normal widths. */}
           <span
-            className="min-w-0 whitespace-normal text-center sm:text-balance"
+            className="min-w-0 whitespace-normal text-center sm:whitespace-nowrap"
             style={footerTextStyle}
           >
             {footerLine.text}
@@ -115,7 +109,7 @@ export function AssessmentFileFooter({
         </p>
       </div>
 
-      <div className="row-span-2 flex min-h-full items-end justify-end self-stretch pb-0.5 sm:pb-0.75 lg:pb-1">
+      <div className="row-span-2 flex min-h-full items-end justify-end self-stretch pb-0 sm:pb-0.5 lg:pb-[0.2rem]">
         <span
           className={cn(
             "relative flex shrink-0 items-center justify-center",
@@ -141,7 +135,7 @@ export function AssessmentFileFooter({
           </svg>
           <span
             className={cn(
-              "relative text-[0.82rem] font-black tracking-[0.16em] sm:text-[0.98rem] lg:text-[1.08rem]",
+              "relative text-[0.7rem] font-black tracking-[0.12em] sm:text-[0.82rem] lg:text-[0.95rem]",
               dark ? "text-emerald-50" : "text-emerald-700",
             )}
           >

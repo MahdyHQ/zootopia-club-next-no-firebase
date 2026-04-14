@@ -7,13 +7,16 @@
     "dev": "npm run dev:local",
     "dev:local": "next dev --turbopack",
     "build": "npm run build:local",
+    "prebuild:local": "node ./scripts/reset-next-dev-cache.mjs",
     "build:local": "node --max-old-space-size=16384 -e \"const{spawnSync}=require('node:child_process');const nextBin=require.resolve('next/dist/bin/next');const result=spawnSync(process.execPath,[nextBin,'build'],{stdio:'inherit'});process.exit(result.status??1);\"",
     "postbuild": "node ./scripts/normalize-standalone.mjs",
+    "prebuild:vercel": "node ./scripts/reset-next-dev-cache.mjs",
     "build:vercel": "next build",
     "start": "npm run start:local",
     "start:local": "next start",
     "start:vercel": "next start",
     "lint": "eslint .",
+    "pretypecheck": "node ./scripts/reset-next-dev-cache.mjs",
     "typecheck": "next typegen && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

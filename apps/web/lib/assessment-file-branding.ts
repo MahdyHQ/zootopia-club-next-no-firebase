@@ -23,16 +23,17 @@ export const ASSESSMENT_FILE_SIGNATURE_IMAGE_ASSET_URL = "/signature.png";
    pages and the shared print/PDF HTML can stay visually aligned without each renderer drifting
    into its own seal size or page-badge proportions. */
 export const ASSESSMENT_FILE_FOOTER_LAYOUT = {
-  /* Keep both side anchors visually balanced: the left institutional seal and the right
-     page-number arc should occupy identical slots on one baseline. The larger footprint gives
-     the footer a stronger premium balance without introducing extra wording blocks. */
-  sideAnchorSizePx: 96,
+  /* The shared footer now aims for a more print-like strip than a large ornamental card.
+     Keep the side anchors compact enough that the Arabic attribution can stay on one elegant
+     line on normal detached preview/export widths without the seal or page badge overpowering it. */
+  sideAnchorSizePx: 80,
   /* The seal asset itself contains generous transparent margins, so we intentionally zoom it
     inside the circular frame to restore the stamp-like visual strength across preview/export. */
-  sealImageScale: 3.35,
+  sealImageScale: 3.22,
   sealImagePaddingPx: 0,
-  /* Footer text can wrap up to two lines for readability in Arabic while remaining centered. */
-  footerTextMaxWidthPx: 468,
+  /* Let the center lane claim a little more width so desktop/tablet footers can keep the Arabic
+     line horizontal more often, while mobile still falls back to a short controlled wrap. */
+  footerTextMaxWidthPx: 520,
   footerTextFontFamily:
    "'Aref Ruqaa', 'Amiri', 'Alexandria', 'Segoe UI', Tahoma, Arial, sans-serif",
   pageArcViewBox: 96,

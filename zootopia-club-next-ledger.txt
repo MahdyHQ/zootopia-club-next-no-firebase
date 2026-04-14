@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-14 (assessment Pro PDF Vercel Chromium trace fix + staged diagnostics)
+Last Updated: 2026-04-14 (Next dev route-type cache cleanup fix + assessment footer refinement)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -117,8 +117,12 @@ Key verified facts:
   preserving contrast for controls and text
 - Detached assessment preview/result pages now place their interactive export
   controls in a dedicated full-width action panel beneath metadata, and the
-  shared file footer uses lighter mobile anchor sizing so attribution text no
-  longer collapses into narrow vertical fragments on phones
+  shared file footer now uses tighter target-aligned strip proportions with
+  smaller Arabic typography and smaller responsive anchor sizing so preview and
+  export surfaces stay balanced across desktop, tablet, and mobile widths
+- Web workspace `typecheck` and `build` now clear stale `.next/dev` cache state
+  before invoking Next typegen/build so malformed dev-only route helper files do
+  not poison later TypeScript or production build runs
 - Assessment Pro PDF export now traces the hoisted Chromium Brotli payload from
   the workspace root for Vercel, uses explicit `maxDuration = 120`, and emits
   stage-classified internal diagnostics without exposing raw failure details to
@@ -3862,6 +3866,153 @@ Verification:
 Risks / Notes:
 - This pass improves the upload surface behavior and accessibility, but I did not run a live browser drag/drop interaction in this workspace, so one manual UI sanity pass on `/upload` is still worthwhile.
 - The accepted file extension list remains local to this component for now; if additional upload surfaces appear later, that accept string may be worth centralizing alongside the shared upload policy.
+
+---
+
+2026-04-14 — Assessment Footer Target-Alignment Pass (Compact Typography + Responsive Ornament Scaling)
+========================================================================================================
+Type: UI polish / preview-export footer refinement / screenshot-target alignment
+Scope: shared assessment file footer tokens, live React footer, detached/export HTML footer CSS
+
+Summary:
+- Re-opened the shared assessment footer after the structural lower-right badge rebuild because the composition was now correct, but the scale still read too heavy versus the intended premium print-strip target.
+- Verified again that the correct ownership remains local to the shared footer system:
+  - `apps/web/lib/assessment-file-branding.ts`
+  - `apps/web/components/assessment/assessment-file-footer.tsx`
+  - `apps/web/lib/server/assessment-print-renderer.ts`
+- Kept the three-zone structure intact and instead tuned the shared proportions, typography, and responsive scaling so the footer reads like a tighter professional strip rather than a larger ornamental card.
+- Preserved preview/export/auth/owner logic completely; this pass is presentation-only.
+
+Prior Mismatch (code-verified):
+- The footer was already structurally correct after the lower-right badge rebuild, but the seal and page-number circles were still visually large.
+- The Arabic attribution line was still too prominent relative to the ornaments and container height, which made the whole footer feel heavier than the target composition.
+- Detached/export HTML still needed the same responsive compaction logic as the live React footer to prevent preview/export drift.
+
+Target-Alignment Work Applied:
+- `apps/web/lib/assessment-file-branding.ts`
+  - reduced shared `sideAnchorSizePx` from `96` to `80`
+  - slightly reduced seal zoom from `3.35` to `3.22`
+  - increased `footerTextMaxWidthPx` from `468` to `520` so the center lane can hold a horizontal Arabic line more often on normal desktop/tablet widths
+- `apps/web/components/assessment/assessment-file-footer.tsx`
+  - kept the shared three-zone strip layout intact
+  - reduced container min-height, border radius, horizontal gap, and padding across breakpoints
+  - reduced Arabic attribution typography substantially and tightened line-height
+  - switched the center text lane to `sm:whitespace-nowrap` so desktop/tablet widths prefer one clean line, while phones still allow controlled wrapping
+  - reduced page-number typography and lower-right bottom inset so the badge reads elegant rather than oversized
+  - aligned live preview anchor sizes to `44px / 56px / 80px` across mobile / tablet / desktop
+- `apps/web/lib/server/assessment-print-renderer.ts`
+  - mirrored the same compact strip treatment in detached/export HTML
+  - reduced base footer gap, padding, corner radius, Arabic font size, line-height, and page-number sizing
+  - changed detached screen-preview footer text to `white-space: nowrap` by default so normal preview widths match the intended horizontal composition more closely
+  - added an intermediate screen-only tablet compaction layer at `max-width: 980px`
+  - tightened the existing phone compaction layer at `max-width: 720px` with smaller circles, smaller Arabic text, and controlled wrap fallback
+
+Files Changed:
+- apps/web/lib/assessment-file-branding.ts
+- apps/web/components/assessment/assessment-file-footer.tsx
+- apps/web/lib/server/assessment-print-renderer.ts
+- zootopia-club-next-ledger.txt
+
+Responsive Behavior:
+- Desktop / large screens:
+  - footer now reads as a lower-profile premium strip
+  - Arabic line is smaller and more likely to remain on one clean centered line
+  - page badge still lands visually toward the lower-right side without dominating the strip
+- Tablet:
+  - same composition is preserved
+  - circles shrink to `56px`
+  - Arabic typography and spacing are reduced so the center lane keeps a cleaner horizontal rhythm
+- Mobile / small screens:
+  - circles shrink to `44px`
+  - text becomes materially smaller and can wrap only as a compact short block
+  - spacing is tightened enough to avoid a card-like footer footprint
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Code-path verification:
+  - live preview/footer owner remains `assessment-file-footer.tsx`
+  - detached/export HTML footer owner remains `assessment-print-renderer.ts`
+  - shared sizing source remains `assessment-file-branding.ts`
+  - no auth/session/owner/export data contracts changed
+
+Risks / Notes:
+- The only attachment available in this workspace for this pass (`issues-images/Capture.PNG`) still showed the earlier export-panel/error state rather than a footer reference, so target alignment was based on the written composition requirements plus the current footer code rather than a true footer screenshot.
+- I did not complete an authenticated browser screenshot pass of a live preview/export record in this workspace, so desktop/tablet/mobile verification is code-level plus build-level rather than final visual QA from a signed-in session.
+- This entry supersedes the footer-sizing part of the earlier 2026-04-14 footer notes; the shared three-zone structure from those passes remains valid and this entry records the scale/typography refinement on top of it.
+
+---
+
+2026-04-14 — Next Dev Route-Type Cache Cleanup for Stable Typecheck/Build
+=========================================================================
+Type: Build reliability fix / Next.js typegen hygiene / workspace script hardening
+Scope: web workspace package scripts, Next dev cache cleanup helper, build/typecheck stability
+
+Summary:
+- Investigated a reported TypeScript/build failure pointing at `.next/dev/types/routes.d.ts` with a syntax error on `PageProps<AppRoute extends AppRoutes>`.
+- Verified the actual broken file was a malformed dev-only generated helper under `.next/dev/types`, while the clean production-generated route helper under `.next/types/routes.d.ts` remained valid.
+- Confirmed Next 16.2.2 automatically re-adds `.next/dev/types/**/*.ts` to `apps/web/tsconfig.json`, so simply removing that include is not durable.
+- Applied the smallest safe fix by clearing only the stale `.next/dev` cache before the web workspace `typecheck`, `build:local`, and `build:vercel` scripts.
+- Preserved runtime code, route logic, auth behavior, preview/export behavior, and all business logic; this is a tooling/cache hygiene fix only.
+
+Root Cause (code-verified):
+- The failure came from a malformed stale dev helper file:
+  - `apps/web/.next/dev/types/routes.d.ts`
+- The bad dev file contained a duplicated trailing global helper block starting after the valid closing `}` of `declare global`, which produced:
+  - `TS1005 ';' expected`
+  - `TS1005 ',' expected`
+  - `TS1128 Declaration or statement expected`
+- The corresponding production route helper:
+  - `apps/web/.next/types/routes.d.ts`
+  was valid and did not contain the duplicate tail.
+- Running `next typegen` from a clean state did not reproduce the corruption, which indicates the practical issue is stale/interrupted `.next/dev` state poisoning later typecheck/build runs.
+- Because Next 16 automatically re-adds `.next/dev/types/**/*.ts` to the app tsconfig, build/typecheck must tolerate that include instead of fighting it.
+
+Official-Docs Alignment:
+- Checked local Next.js docs at:
+  - `node_modules/next/dist/docs/01-app/03-api-reference/05-config/02-typescript.md`
+- Confirmed Next documents route-aware global helpers as generated during `next dev`, `next build`, and `next typegen`.
+- Confirmed the supported remedy in this repo is to keep the generated-type flow intact while removing stale dev-cache artifacts before those commands run.
+
+Files Changed:
+- apps/web/package.json
+- apps/web/scripts/reset-next-dev-cache.mjs
+- zootopia-club-next-ledger.txt
+
+Exact Fix Applied:
+- `apps/web/scripts/reset-next-dev-cache.mjs`
+  - new narrow cleanup helper that removes only `apps/web/.next/dev`
+  - intentionally does not wipe the entire `.next` directory so the fix stays focused on malformed dev-only route helpers
+- `apps/web/package.json`
+  - added `pretypecheck`
+  - added `prebuild:local`
+  - added `prebuild:vercel`
+  - all three now run the narrow dev-cache cleanup helper before invoking Next typegen/build
+
+Behavioral Changes:
+- `npm run typecheck` now clears stale `.next/dev` state before `next typegen && tsc -p tsconfig.json --noEmit`
+- `npm run build` / `npm run build:local` now clear stale `.next/dev` state before `next build`
+- `npm run build:vercel` now does the same cleanup before its direct `next build`
+- No page routes, APIs, export lanes, auth boundaries, or data contracts changed
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+- Stale-cache regression proof:
+  - manually created a bogus `apps/web/.next/dev/types/routes.d.ts` containing invalid text
+  - ran `npm run typecheck`
+  - observed `pretypecheck` remove `apps/web/.next/dev`
+  - typecheck completed successfully
+  - repeated the same stale-cache poisoning before `npm run build`
+  - observed `prebuild:local` remove `apps/web/.next/dev`
+  - build completed successfully
+
+Risks / Notes:
+- This fix treats the real-world failure mode as dev-cache corruption/staleness, which is what was reproducible and what poisoned build/typecheck in this workspace.
+- It does not attempt to patch Next-generated files directly or fight Next’s automatic tsconfig include management.
+- The cleanup is intentionally narrow to avoid unnecessary full-cache invalidation during ordinary builds.
 
 ---
 

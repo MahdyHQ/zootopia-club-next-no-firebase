@@ -1942,15 +1942,15 @@ export function buildAssessmentPrintHtml(input: {
         grid-template-columns: auto minmax(0, 1fr) auto;
         grid-template-rows: 1fr auto;
         align-items: stretch;
-        column-gap: 12px;
+        column-gap: 10px;
         /* Footer anchors must remain physically LTR regardless of surrounding RTL support-copy
            containers so the seal stays on the left and the page badge stays on the right. */
         direction: ltr;
         unicode-bidi: isolate;
         border: 1px solid ${dark ? "rgba(94, 234, 212, 0.18)" : "rgba(15, 118, 110, 0.14)"};
-        border-radius: 18px;
-        min-height: calc(${footerSideAnchorSize} + 8px);
-        padding: 8px 12px 6px;
+        border-radius: 16px;
+        min-height: calc(${footerSideAnchorSize} + 4px);
+        padding: 7px 10px 5px;
         background:
           linear-gradient(${dark
             ? "180deg, rgba(4, 13, 27, 0.97), rgba(3, 10, 22, 0.92)"
@@ -2008,13 +2008,13 @@ export function buildAssessmentPrintHtml(input: {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
-        column-gap: 6px;
-        row-gap: 2px;
+        column-gap: 5px;
+        row-gap: 0;
         width: 100%;
         margin: 0;
         text-align: center;
-        font-size: 10.8px;
-        line-height: 1.3;
+        font-size: 9.8px;
+        line-height: 1.14;
         font-weight: 700;
         color: var(--ink);
       }
@@ -2023,7 +2023,7 @@ export function buildAssessmentPrintHtml(input: {
         display: block;
         min-width: 0;
         max-width: ${footerTextMaxWidth};
-        white-space: normal;
+        white-space: nowrap;
         overflow-wrap: normal;
         word-break: normal;
         text-align: center;
@@ -2044,7 +2044,7 @@ export function buildAssessmentPrintHtml(input: {
         min-height: 100%;
         align-items: flex-end;
         justify-content: flex-end;
-        padding-bottom: 4px;
+        padding-bottom: 3px;
       }
 
       .footer-page-badge {
@@ -2067,9 +2067,9 @@ export function buildAssessmentPrintHtml(input: {
 
       .footer-page-number {
         position: relative;
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 900;
-        letter-spacing: 0.16em;
+        letter-spacing: 0.12em;
         font-variant-numeric: tabular-nums;
       }
 
@@ -2077,12 +2077,12 @@ export function buildAssessmentPrintHtml(input: {
         content: counter(page);
       }
 
-      /* Detached screen previews can be opened on phones before export. Keep the shared footer
-         compact there without touching real print geometry so the Arabic attribution stays
-         horizontal and readable while the PDF lane keeps its established page chrome. */
-      @media screen and (max-width: 720px) {
+      /* Detached screen previews can be opened on tablets and phones before export. Keep the
+         shared footer compact there without touching real print geometry so the Arabic line stays
+         close to the target premium strip while export PDF sizing remains stable. */
+      @media screen and (max-width: 980px) {
         .screen-footer.assessment-file-footer {
-          min-height: 60px;
+          min-height: 68px;
           column-gap: 8px;
           padding: 6px 9px 5px;
           border-radius: 15px;
@@ -2090,13 +2090,13 @@ export function buildAssessmentPrintHtml(input: {
 
         .screen-footer .footer-seal,
         .screen-footer .footer-page-badge {
-          width: 48px;
-          height: 48px;
+          width: 56px;
+          height: 56px;
         }
 
         .screen-footer .footer-line {
-          font-size: 9.7px;
-          line-height: 1.28;
+          font-size: 9.1px;
+          line-height: 1.16;
           column-gap: 4px;
         }
 
@@ -2105,7 +2105,40 @@ export function buildAssessmentPrintHtml(input: {
         }
 
         .screen-footer .footer-page-number {
-          font-size: 14px;
+          font-size: 13.6px;
+        }
+      }
+
+      @media screen and (max-width: 720px) {
+        .screen-footer.assessment-file-footer {
+          min-height: 54px;
+          column-gap: 6px;
+          padding: 5px 7px 4px;
+          border-radius: 13px;
+        }
+
+        .screen-footer .footer-seal,
+        .screen-footer .footer-page-badge {
+          width: 44px;
+          height: 44px;
+        }
+
+        .screen-footer .footer-line {
+          font-size: 8.4px;
+          line-height: 1.22;
+          column-gap: 3px;
+        }
+
+        .screen-footer .footer-line-text {
+          white-space: normal;
+        }
+
+        .screen-footer .footer-page-zone {
+          padding-bottom: 0;
+        }
+
+        .screen-footer .footer-page-number {
+          font-size: 12.4px;
         }
       }
 
