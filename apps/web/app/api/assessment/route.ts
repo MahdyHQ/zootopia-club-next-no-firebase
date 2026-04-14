@@ -733,9 +733,28 @@ export async function POST(request: Request) {
     ownerRole: user.role,
   };
   let resultArtifact: Awaited<ReturnType<typeof persistAssessmentResultArtifact>> = null;
+  let artifactPersistenceDegraded = false;
 
+  /* Canonical-result storage is an optimization layer for future cache hits/export reuse.
+     The durable assessment record + credit commit remain the source of truth, so a transient
+     storage write failure must not discard an already successful model generation. */
   try {
     resultArtifact = await persistAssessmentResultArtifact(baseGeneration);
+  } catch (artifactError) {
+    artifactPersistenceDegraded = true;
+    console.warn("Assessment canonical-result artifact persistence failed; continuing finalization without cached artifact.", {
+      ...baseDiagnosticContext,
+      layer: "artifact",
+      subsystem: "artifact-storage",
+      operation: "persist-assessment-result-artifact",
+      modelId: normalized.modelId,
+      canonicalModelId,
+      inputMode,
+      error: artifactError instanceof Error ? artifactError.message : String(artifactError),
+    });
+  }
+
+  try {
     const savedGeneration = await saveAssessmentGenerationWithCreditCommit({
       generation: {
         ...baseGeneration,
@@ -781,6 +800,8 @@ export async function POST(request: Request) {
       metadata: {
         inputMode,
         modelId: savedGeneration.generation.modelId,
+        canonicalResultArtifactPersisted: Boolean(resultArtifact),
+        artifactPersistenceDegraded,
         dailyCreditsRemaining: savedGeneration.credits.remainingCount ?? "admin-exempt",
       },
     }).catch((logError) => {

@@ -20,7 +20,7 @@ export default async function InfographicPage() {
   if (user.role !== "admin") {
     return (
       <div className="space-y-6">
-        <section className="relative overflow-hidden rounded-[2.5rem] border border-amber-500/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.76),rgba(255,247,237,0.66))] p-8 shadow-sm backdrop-blur-xl dark:bg-[linear-gradient(145deg,rgba(14,9,4,0.72),rgba(18,11,3,0.62))]">
+        <section className="relative overflow-hidden rounded-[2.5rem] border border-amber-500/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.68),rgba(255,247,237,0.56))] p-8 shadow-sm backdrop-blur-xl dark:bg-[linear-gradient(145deg,rgba(14,9,4,0.62),rgba(18,11,3,0.52))]">
           <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
 
           <div className="relative z-10 max-w-3xl">
@@ -83,7 +83,7 @@ export default async function InfographicPage() {
         </div>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-xl p-8 md:p-12 shadow-sm">
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/52 dark:bg-zinc-950/34 backdrop-blur-xl p-8 md:p-12 shadow-sm">
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl" />
         
         <div className="relative z-10">

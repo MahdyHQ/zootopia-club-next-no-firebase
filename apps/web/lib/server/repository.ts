@@ -1110,23 +1110,37 @@ async function syncAssessmentArtifactMetadataForGeneration(input: {
       ? await input.transaction.get(existingQuery)
       : await existingQuery.get();
     const staleIds = new Set(existingSnapshot.docs.map((doc) => doc.id));
+
+    if (input.transaction) {
+      // Keep transaction writes sequential so finalization fails deterministically on the first
+      // bad metadata mutation instead of leaving floating write promises inside one commit scope.
+      for (const record of nextRecords) {
+        const recordRef = metadataCollection.doc(record.id);
+        await input.transaction.set(recordRef, omitUndefinedOwnerRole(record), {
+          merge: true,
+        });
+        staleIds.delete(record.id);
+      }
+
+      for (const staleId of staleIds) {
+        const staleRef = metadataCollection.doc(staleId);
+        await input.transaction.delete(staleRef);
+      }
+
+      return;
+    }
+
     const writes: Promise<void>[] = [];
 
     for (const record of nextRecords) {
       const recordRef = metadataCollection.doc(record.id);
-      writes.push(
-        input.transaction
-          ? input.transaction.set(recordRef, omitUndefinedOwnerRole(record), {
-              merge: true,
-            })
-          : recordRef.set(omitUndefinedOwnerRole(record), { merge: true }),
-      );
+      writes.push(recordRef.set(omitUndefinedOwnerRole(record), { merge: true }));
       staleIds.delete(record.id);
     }
 
     for (const staleId of staleIds) {
       const staleRef = metadataCollection.doc(staleId);
-      writes.push(input.transaction ? input.transaction.delete(staleRef) : staleRef.delete());
+      writes.push(staleRef.delete());
     }
 
     await Promise.all(writes);
@@ -1163,9 +1177,17 @@ async function deleteAssessmentArtifactMetadataForGeneration(input: {
       return;
     }
 
+    if (input.transaction) {
+      for (const doc of snapshot.docs) {
+        const docRef = metadataCollection.doc(doc.id);
+        await input.transaction.delete(docRef);
+      }
+      return;
+    }
+
     const deletions = snapshot.docs.map((doc) => {
       const docRef = metadataCollection.doc(doc.id);
-      return input.transaction ? input.transaction.delete(docRef) : docRef.delete();
+      return docRef.delete();
     });
     await Promise.all(deletions);
     return;
@@ -3559,7 +3581,7 @@ export async function beginAssessmentGenerationIdempotency(input: {
           ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       };
 
-      transaction.set(lockRef, nextRecord, { merge: true });
+      await transaction.set(lockRef, nextRecord, { merge: true });
       outcome = "started";
     });
   } else {
@@ -3659,7 +3681,7 @@ export async function completeAssessmentGenerationIdempotency(input: {
         return;
       }
 
-      transaction.set(
+      await transaction.set(
         lockRef,
         {
           ownerUid: input.token.ownerUid,
@@ -3731,7 +3753,7 @@ export async function clearAssessmentGenerationIdempotencyLock(input: {
         return;
       }
 
-      transaction.delete(lockRef);
+      await transaction.delete(lockRef);
     });
     return;
   }
@@ -4126,7 +4148,7 @@ export async function reserveAssessmentDailyCreditAttempt(
           activeReservations.length !== ledger.pendingReservations.length ||
           ledger.dailyLimit !== computation.dailyLimit
         ) {
-          transaction.set(
+          await transaction.set(
             creditsRef,
             {
               ...ledger,
@@ -4157,7 +4179,7 @@ export async function reserveAssessmentDailyCreditAttempt(
           activeReservations.length !== ledger.pendingReservations.length ||
           ledger.dailyLimit !== computation.dailyLimit
         ) {
-          transaction.set(
+          await transaction.set(
             creditsRef,
             {
               ...ledger,
@@ -4187,7 +4209,7 @@ export async function reserveAssessmentDailyCreditAttempt(
         (entry) => entry.source === "extra",
       ).length;
 
-      transaction.set(
+      await transaction.set(
         creditsRef,
         {
           ...ledger,
@@ -4383,7 +4405,7 @@ export async function releaseAssessmentDailyCreditReservation(input: {
         return;
       }
 
-      transaction.set(
+      await transaction.set(
         documentRef,
         {
           ...ledger,
@@ -4667,21 +4689,21 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
         updatedAt: nowIso,
       };
 
-      transaction.set(generationRef, omitUndefinedOwnerRole(normalizedRecord), {
+      await transaction.set(generationRef, omitUndefinedOwnerRole(normalizedRecord), {
         merge: true,
       });
       await syncAssessmentArtifactMetadataForGeneration({
         generation: normalizedRecord,
         transaction,
       });
-      transaction.set(creditsRef, nextLedger, { merge: true });
+      await transaction.set(creditsRef, nextLedger, { merge: true });
 
       if (
         nextAccount.manualCredits !== account.manualCredits ||
         nextAccount.assessmentAccess !== account.assessmentAccess ||
         nextAccount.dailyLimitOverride !== account.dailyLimitOverride
       ) {
-        transaction.set(
+        await transaction.set(
           accountRef,
           {
             ...nextAccount,
@@ -4702,7 +4724,7 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
           ?? getZootopiaDatabase()
             .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
             .doc(nextGrant.id);
-        transaction.set(
+        await transaction.set(
           grantRef,
           {
             ...nextGrant,

@@ -83,20 +83,20 @@ export default async function HomePage() {
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-700">
+    <div className="space-y-5 animate-in fade-in duration-700 md:space-y-6">
       {/* ═══════════════════════════════════════════════════════════════════
           ZONE 1 — UNIFIED HERO SURFACE
           Merges: title, stats, workspace nav, Hall of Honor, platform story,
           runtime status, and scroll hint into one cohesive container.
           ═══════════════════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-2xl shadow-xl shadow-emerald-900/5">
+      <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/34 dark:bg-zinc-950/34 backdrop-blur-2xl shadow-xl shadow-emerald-900/5">
 
         {/* Ambient background gradients — subtle, not distracting */}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-teal-900/8" />
         <div className="pointer-events-none absolute -top-20 -right-20 h-72 w-72 rounded-full bg-emerald-500/8 blur-3xl" />
 
         {/* ── Header: title + stat counters ─────────────────────────── */}
-        <div className="relative z-10 p-6 pb-0 md:p-10 md:pb-0">
+        <div className="relative z-10 p-5 pb-0 md:p-10 md:pb-0">
           <div className="flex flex-col gap-3">
             <span className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
               <MonitorPlay className="h-3.5 w-3.5" />
@@ -109,7 +109,7 @@ export default async function HomePage() {
         </div>
 
         {/* ── Workspace navigation cards ────────────────────────────── */}
-        <div className="relative z-10 px-6 pt-6 md:px-10 md:pt-8">
+        <div className="relative z-10 px-5 pt-5 md:px-10 md:pt-8">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { href: APP_ROUTES.upload, label: uiContext.messages.navUpload, title: uiContext.messages.uploadWorkspaceTitle, icon: UploadCloud },
@@ -120,7 +120,7 @@ export default async function HomePage() {
               card.locked ? (
                 <article
                   key={i}
-                  className="rounded-[1.25rem] border border-amber-500/12 bg-white/30 p-5 dark:bg-zinc-900/20"
+                  className="rounded-[1.25rem] border border-amber-500/12 bg-white/24 p-5 dark:bg-zinc-900/16"
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <card.icon className="h-4.5 w-4.5 text-amber-500" />
@@ -136,7 +136,7 @@ export default async function HomePage() {
                 <Link
                   key={i}
                   href={card.href}
-                  className="group rounded-[1.25rem] border border-white/15 bg-white/40 p-5 transition-all hover:-translate-y-0.5 hover:bg-white/70 hover:shadow-md dark:border-white/5 dark:bg-zinc-900/30 dark:hover:bg-zinc-900/50"
+                  className="group rounded-[1.25rem] border border-white/15 bg-white/34 p-5 transition-all hover:-translate-y-0.5 hover:bg-white/60 hover:shadow-md dark:border-white/5 dark:bg-zinc-900/24 dark:hover:bg-zinc-900/42"
                 >
                   <card.icon className="mb-3 h-4.5 w-4.5 text-emerald-500" />
                   <h2 className="font-[family-name:var(--font-display)] text-base font-bold tracking-tight text-zinc-900 dark:text-white">
@@ -149,10 +149,10 @@ export default async function HomePage() {
         </div>
 
         {/* ── Hall of Honor — compact inline block ──────────────────── */}
-        <div className="relative z-10 px-6 pt-5 md:px-10 md:pt-6">
+        <div className="relative z-10 px-5 pt-4 md:px-10 md:pt-6">
           <Link
             href={APP_ROUTES.hallOfHonor}
-            className="group flex flex-col gap-4 rounded-[1.25rem] border border-white/15 bg-white/50 p-5 transition-all hover:-translate-y-0.5 hover:bg-white/70 hover:shadow-md dark:border-white/5 dark:bg-zinc-900/35 dark:hover:bg-zinc-900/55 md:flex-row md:items-center md:justify-between"
+            className="group flex flex-col gap-4 rounded-[1.25rem] border border-white/15 bg-white/44 p-5 transition-all hover:-translate-y-0.5 hover:bg-white/62 hover:shadow-md dark:border-white/5 dark:bg-zinc-900/30 dark:hover:bg-zinc-900/48 md:flex-row md:items-center md:justify-between"
           >
             {/* Keep wrapper visually neutral so Hall of Honor content card remains the only emphasized surface. */}
 
@@ -185,12 +185,12 @@ export default async function HomePage() {
         </div>
 
         {/* ── Platform Story CTA ───────────────────────────────────── */}
-        <div className="relative z-10 px-6 pt-5 md:px-10 md:pt-6">
+        <div className="relative z-10 px-5 pt-4 md:px-10 md:pt-6">
           <PlatformStoryCta />
         </div>
 
         {/* ── Runtime status pills + scroll hint ───────────────────── */}
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-4 px-6 pb-6 pt-6 md:px-10 md:pb-8 md:pt-8">
+        <div className="relative z-10 flex flex-col gap-3 px-5 pb-5 pt-5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-4 md:px-10 md:pb-8 md:pt-8">
           {/* Status pills */}
           <div className="flex flex-wrap gap-2">
             {[
@@ -212,10 +212,13 @@ export default async function HomePage() {
             ))}
           </div>
 
-          {/* Subtle scroll hint */}
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-zinc-400 dark:text-zinc-500">
+          {/* Home fold-discovery cue: keep this subtle and centered on mobile to signal more content below without competing with status pills. */}
+          <span
+            aria-label={uiContext.locale === "ar" ? "هذه الصفحة تحتوي على محتوى إضافي بالأسفل" : "This page contains more content below"}
+            className="inline-flex items-center justify-center gap-1.5 self-center rounded-full border border-white/20 bg-white/45 px-3 py-1 text-[11px] font-medium tracking-wide text-zinc-500 dark:border-white/10 dark:bg-zinc-900/40 dark:text-zinc-400 md:self-auto"
+          >
             {uiContext.locale === "ar" ? "مرر للأسفل" : "Scroll down"}
-            <ChevronDown className="h-3 w-3 animate-bounce" />
+            <ChevronDown className="h-3 w-3 animate-[bounce_1.8s_ease-in-out_infinite] motion-reduce:animate-none" />
           </span>
         </div>
       </section>
@@ -227,7 +230,7 @@ export default async function HomePage() {
       <section className="grid gap-5 xl:grid-cols-2">
 
         {/* ── Recent Documents ──────────────────────────────────────── */}
-        <div className="rounded-[2rem] border border-white/15 bg-white/50 p-6 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/40 md:p-8">
+        <div className="rounded-[2rem] border border-white/15 bg-white/44 p-5 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/34 md:p-8">
           <div className="mb-5 flex items-center gap-3">
             <Database className="h-5 w-5 text-blue-500" />
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
@@ -246,7 +249,7 @@ export default async function HomePage() {
               documents.slice(0, 4).map((document) => (
                 <div
                   key={document.id}
-                  className="flex flex-col justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/40 p-4 transition-all hover:bg-white/70 sm:flex-row sm:items-center dark:border-white/5 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/60"
+                  className="flex flex-col justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 sm:flex-row sm:items-center dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
                 >
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 rounded-lg bg-blue-100 p-1.5 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
@@ -280,7 +283,7 @@ export default async function HomePage() {
         </div>
 
         {/* ── Recent Assessments ────────────────────────────────────── */}
-        <div className="rounded-[2rem] border border-white/15 bg-white/50 p-6 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/40 md:p-8">
+        <div className="rounded-[2rem] border border-white/15 bg-white/44 p-5 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/34 md:p-8">
           <div className="mb-5 flex items-center gap-3">
             <BrainCircuit className="h-5 w-5 text-purple-500" />
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
@@ -298,7 +301,7 @@ export default async function HomePage() {
               assessments.slice(0, 4).map((generation) => (
                 <div
                   key={generation.id}
-                  className="flex items-center justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/40 p-4 transition-all hover:bg-white/70 dark:border-white/5 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/60"
+                  className="flex items-center justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
                 >
                   <p className="truncate pr-3 font-bold text-zinc-900 dark:text-white">
                     {generation.title}
@@ -317,12 +320,12 @@ export default async function HomePage() {
           ZONE 3 — WORKSPACE SNAPSHOT
           Keep stats below the hero so the title area stays cleaner on all widths.
           ═══════════════════════════════════════════════════════════════════ */}
-      <section className="rounded-[2rem] border border-white/15 bg-white/50 p-5 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/40 sm:p-6">
+      <section className="rounded-[2rem] border border-white/15 bg-white/44 p-5 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/34 sm:p-6">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {homeStats.map((stat) => (
             <div
               key={stat.key}
-              className="rounded-[1.25rem] border border-white/15 bg-white/55 p-4 backdrop-blur-xl dark:border-white/5 dark:bg-zinc-900/45"
+              className="rounded-[1.25rem] border border-white/15 bg-white/48 p-4 backdrop-blur-xl dark:border-white/5 dark:bg-zinc-900/38"
             >
               <div className={`mb-2 inline-flex rounded-lg p-1.5 ${stat.bg}`}>
                 <stat.icon className={`h-4 w-4 ${stat.color}`} />
@@ -345,7 +348,7 @@ export default async function HomePage() {
       <section className="space-y-5">
 
         {/* ── Primary Upload CTA ───────────────────────────────────── */}
-        <div className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-white/50 p-6 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/40 md:p-8">
+        <div className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-white/44 p-5 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/34 md:p-8">
           {/* Subtle background icon */}
           <div className="pointer-events-none absolute right-6 top-6 opacity-[0.04]">
             <UploadCloud className="h-36 w-36 -rotate-12 text-emerald-500" />
@@ -374,11 +377,11 @@ export default async function HomePage() {
         </div>
 
         {/* ── Trust & Privacy footer ───────────────────────────────── */}
-        <div className="rounded-[1.25rem] border border-emerald-500/20 bg-emerald-500/[0.06] p-4 dark:border-emerald-400/20 dark:bg-emerald-500/8">
+        <div className="rounded-[1.25rem] border border-emerald-500/20 bg-emerald-500/[0.05] p-4 dark:border-emerald-400/20 dark:bg-emerald-500/7">
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href={APP_ROUTES.privacy}
-              className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-white/60 px-3 py-1.5 text-sm font-semibold text-emerald-700 transition-colors hover:bg-white/90 dark:border-emerald-300/25 dark:bg-zinc-950/50 dark:text-emerald-200 dark:hover:bg-zinc-900"
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-white/54 px-3 py-1.5 text-sm font-semibold text-emerald-700 transition-colors hover:bg-white/82 dark:border-emerald-300/25 dark:bg-zinc-950/44 dark:text-emerald-200 dark:hover:bg-zinc-900"
             >
               <ShieldCheck className="h-4 w-4" />
               {siteContent.navigation.privacy}

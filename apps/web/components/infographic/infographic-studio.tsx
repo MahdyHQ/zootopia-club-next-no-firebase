@@ -235,7 +235,7 @@ export function InfographicStudio({
         </section>
 
         {/* Preview Section */}
-        <section className="flex flex-col rounded-[2rem] border border-border bg-background-elevated p-8 shadow-sm">
+        <section className="flex flex-col rounded-[2rem] border border-border bg-background-elevated/84 p-8 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold/10 text-gold">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-4 w-4" strokeWidth="2.5">
@@ -323,7 +323,7 @@ export function InfographicStudio({
               {generations.map((generation) => (
                 <div
                   key={generation.id}
-                  className="group flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-border bg-background-elevated px-6 py-4 transition-all hover:border-accent hover:shadow-sm"
+                  className="group flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl border border-border bg-background-elevated/78 px-6 py-4 transition-all hover:border-accent hover:shadow-sm"
                 >
                   <div className="flex items-center gap-4">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent transition-colors group-hover:bg-accent group-hover:text-white">

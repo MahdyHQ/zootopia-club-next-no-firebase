@@ -108,41 +108,41 @@ export default function JourneyPage() {
       {/* Keep this spiritual opening as the very first Journey hero block.
           It defines the page's emotional tone and must stay before all roadmap/chip/story sections. */}
       <section className="surface-card relative overflow-hidden px-6 py-8 sm:px-8 sm:py-9 lg:px-10">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.16),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.84),rgba(2,6,23,0.92)_68%)]" />
-        <div className="relative mx-auto max-w-4xl rounded-[1.9rem] border border-emerald-300/25 bg-slate-950/50 px-5 py-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_16px_42px_rgba(2,6,23,0.38)] sm:px-8 sm:py-8">
-          <p className="font-[family-name:var(--font-amiri)] text-3xl leading-[1.95] text-emerald-100 sm:text-4xl">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.16),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(217,119,6,0.16),transparent_68%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.16),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.84),rgba(2,6,23,0.92)_68%)]" />
+        <div className="relative mx-auto max-w-4xl rounded-[1.9rem] border border-emerald-300/30 bg-background-strong/86 px-5 py-6 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.48),0_16px_42px_rgba(60,25,8,0.16)] sm:px-8 sm:py-8 dark:border-emerald-300/25 dark:bg-slate-950/50 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_16px_42px_rgba(2,6,23,0.38)]">
+          <p className="font-[family-name:var(--font-amiri)] text-3xl leading-[1.95] text-emerald-700 sm:text-4xl dark:text-emerald-100">
             بسم الله الرحمن الرحيم
           </p>
-          <p className="mt-3 font-[family-name:var(--font-amiri)] text-2xl leading-[1.95] text-white sm:text-3xl">
+          <p className="mt-3 font-[family-name:var(--font-amiri)] text-2xl leading-[1.95] text-foreground sm:text-3xl dark:text-white">
             هذا المشروع تم بفضل الله أولاً وأخيراً
           </p>
-          <p className="mt-3 font-[family-name:var(--font-amiri)] text-xl leading-[2.05] text-emerald-100 sm:text-2xl">
+          <p className="mt-3 font-[family-name:var(--font-amiri)] text-xl leading-[2.05] text-emerald-700 sm:text-2xl dark:text-emerald-100">
             اللهم صلِّ وسلم وزد وبارك على سيدنا محمد صلى الله عليه وسلم
           </p>
         </div>
       </section>
 
       <section className="surface-card relative overflow-hidden px-6 py-8 sm:px-8 sm:py-10 lg:px-10">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.2),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.82),rgba(2,6,23,0.9)_62%),radial-gradient(circle_at_center,rgba(45,212,191,0.12),transparent_55%)]" />
-        <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(to_right,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.08)_1px,transparent_1px)] [background-size:26px_26px]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.16),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(217,119,6,0.12),transparent_62%),radial-gradient(circle_at_center,rgba(45,212,191,0.12),transparent_55%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.2),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.82),rgba(2,6,23,0.9)_62%),radial-gradient(circle_at_center,rgba(45,212,191,0.12),transparent_55%)]" />
+        <div className="pointer-events-none absolute inset-0 opacity-24 [background-image:linear-gradient(to_right,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.08)_1px,transparent_1px)] [background-size:26px_26px] dark:opacity-40" />
 
         <div className="relative space-y-7">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/35 bg-emerald-400/10 px-4 py-2 text-xs font-black tracking-[0.16em] text-emerald-100">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/35 bg-emerald-400/10 px-4 py-2 text-xs font-black tracking-[0.16em] text-emerald-800 dark:text-emerald-100">
             <Sparkles className="h-4 w-4" />
             رحلة بناء منصة Zootopia Club
           </div>
 
           <div className="space-y-4">
-            <h1 className="font-[family-name:var(--font-display)] text-4xl font-black leading-[1.2] tracking-tight text-white sm:text-5xl lg:max-w-4xl">
+            <h1 className="font-[family-name:var(--font-display)] text-4xl font-black leading-[1.2] tracking-tight text-foreground sm:text-5xl lg:max-w-4xl dark:text-white">
               حكاية بناء منصة تعليمية: رؤية إنسانية، تنفيذ احترافي، وأثر يخدم الطلاب
             </h1>
-            <p className="max-w-3xl text-lg leading-9 text-emerald-50/90">
+            <p className="max-w-3xl text-lg leading-9 text-foreground-muted dark:text-emerald-50/90">
               هذه الصفحة توثق أصل الفكرة، ومسار التطوير، وقصة التمويل، وخريطة التنفيذ، والرؤية القادمة،
               لتكون مرجعاً رسمياً لرحلة المنصة داخل المنتج نفسه.
             </p>
-            <p className="max-w-3xl rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-base leading-8 text-emerald-50">
+            <p className="max-w-3xl rounded-2xl border border-border-strong bg-background-strong/80 px-4 py-3 text-base leading-8 text-foreground dark:border-white/20 dark:bg-white/10 dark:text-emerald-50">
               هذا المشروع تم بفضل الله أولاً وأخيراً، ثم بجهد بشري متواصل قاده
-              <span className="font-extrabold text-white"> ابن عبدالله يوسف </span>
+              <span className="font-extrabold text-foreground dark:text-white"> ابن عبدالله يوسف </span>
               من الرؤية إلى الإطلاق.
             </p>
           </div>
@@ -151,7 +151,7 @@ export default function JourneyPage() {
             {FOUNDER_ROLES.map((role) => (
               <span
                 key={role}
-                className="inline-flex items-center rounded-full border border-emerald-200/25 bg-emerald-300/10 px-3.5 py-1.5 text-sm font-bold text-emerald-100"
+                className="inline-flex items-center rounded-full border border-emerald-200/35 bg-emerald-300/16 px-3.5 py-1.5 text-sm font-bold text-emerald-800 dark:border-emerald-200/25 dark:bg-emerald-300/10 dark:text-emerald-100"
               >
                 {role}
               </span>
@@ -163,8 +163,8 @@ export default function JourneyPage() {
       <section className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <article className="surface-card p-6 sm:p-7">
           <div className="flex items-center gap-3">
-            <HandCoins className="h-5 w-5 text-emerald-300" />
-            <p className="section-label text-emerald-100">التمويل والاستدامة</p>
+            <HandCoins className="h-5 w-5 text-emerald-500 dark:text-emerald-300" />
+            <p className="section-label text-emerald-700 dark:text-emerald-100">التمويل والاستدامة</p>
           </div>
           <p className="mt-4 text-base leading-8 text-foreground">
             القصة المالية في هذه الرحلة واضحة: تمويل ذاتي مباشر في البداية، ثم تحمل تكلفة تشغيل شهرية
@@ -172,14 +172,14 @@ export default function JourneyPage() {
           </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <div className="rounded-[1.4rem] border border-emerald-300/25 bg-emerald-500/10 p-4">
-              <p className="text-xs font-black tracking-[0.16em] text-emerald-200">تكلفة البداية</p>
-              <p className="mt-2 text-3xl font-black text-white">70$</p>
-              <p className="mt-2 text-sm leading-7 text-emerald-100/90">استثمار أولي لإطلاق البنية الفعلية.</p>
+              <p className="text-xs font-black tracking-[0.16em] text-emerald-700 dark:text-emerald-200">تكلفة البداية</p>
+              <p className="mt-2 text-3xl font-black text-emerald-900 dark:text-white">70$</p>
+              <p className="mt-2 text-sm leading-7 text-emerald-800/90 dark:text-emerald-100/90">استثمار أولي لإطلاق البنية الفعلية.</p>
             </div>
             <div className="rounded-[1.4rem] border border-cyan-300/25 bg-cyan-500/10 p-4">
-              <p className="text-xs font-black tracking-[0.16em] text-cyan-200">تكلفة شهرية</p>
-              <p className="mt-2 text-3xl font-black text-white">15$</p>
-              <p className="mt-2 text-sm leading-7 text-cyan-100/90">تشغيل واستضافة وخدمات داعمة للاستمرارية.</p>
+              <p className="text-xs font-black tracking-[0.16em] text-cyan-700 dark:text-cyan-200">تكلفة شهرية</p>
+              <p className="mt-2 text-3xl font-black text-cyan-900 dark:text-white">15$</p>
+              <p className="mt-2 text-sm leading-7 text-cyan-800/90 dark:text-cyan-100/90">تشغيل واستضافة وخدمات داعمة للاستمرارية.</p>
             </div>
           </div>
         </article>
@@ -194,7 +194,7 @@ export default function JourneyPage() {
             في هذه الرحلة كان الحضور القيادي والتنفيذي لشخص واحد واضحاً: وضع الرؤية، تخطيط المسار،
             التمويل، التصميم، البرمجة، والتنفيذ الكامل حتى الإطلاق.
           </p>
-          <p className="mt-4 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm leading-7 text-emerald-100">
+          <p className="mt-4 rounded-2xl border border-border bg-background-strong/72 px-4 py-3 text-sm leading-7 text-foreground-muted dark:border-white/15 dark:bg-white/5 dark:text-emerald-100">
             الذكاء الاصطناعي ظهر كأداة مساعدة ضمن العمل، وليس كبطل القصة.
           </p>
         </article>
@@ -203,14 +203,14 @@ export default function JourneyPage() {
       {/* This timeline structure intentionally keeps one card-per-step with stable spacing,
           so the same DOM can be exported to high-quality PDF later without layout ownership drift. */}
       <section className="surface-card relative overflow-hidden px-6 py-8 sm:px-8 sm:py-10">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.14),transparent_38%),radial-gradient(circle_at_bottom,rgba(2,6,23,0.9),rgba(2,6,23,0.96)_70%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.14),transparent_38%),radial-gradient(circle_at_bottom,rgba(217,119,6,0.14),transparent_70%)] dark:bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.14),transparent_38%),radial-gradient(circle_at_bottom,rgba(2,6,23,0.9),rgba(2,6,23,0.96)_70%)]" />
         <div className="relative space-y-8">
           <div className="space-y-3">
-            <p className="section-label text-emerald-100">خارطة الطريق التنفيذية</p>
-            <h2 className="font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-white sm:text-4xl">
+            <p className="section-label text-emerald-700 dark:text-emerald-100">خارطة الطريق التنفيذية</p>
+            <h2 className="font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-foreground sm:text-4xl dark:text-white">
               من الفكرة إلى الإطلاق: مسار منظم بمحطات واضحة
             </h2>
-            <p className="max-w-3xl text-base leading-8 text-emerald-50/85">
+            <p className="max-w-3xl text-base leading-8 text-foreground-muted dark:text-emerald-50/85">
               تم تحويل محتوى الإنفوجرافيك إلى رحلة سردية منظمة، مع إبراز كل محطة كقرار تنفيذي في مسار
               بناء المنتج.
             </p>
@@ -233,26 +233,26 @@ export default function JourneyPage() {
                     <span className="absolute left-[0.58rem] top-8 h-5 w-5 rounded-full border border-emerald-200/50 bg-emerald-300/30 shadow-[0_0_22px_rgba(45,212,191,0.65)] lg:hidden" />
 
                     <div
-                      className={`rounded-[1.7rem] border border-white/12 bg-slate-950/55 p-5 shadow-[0_14px_35px_rgba(0,0,0,0.28)] backdrop-blur-xl ${
+                      className={`rounded-[1.7rem] border border-border-strong bg-background-strong/84 p-5 shadow-[0_14px_35px_rgba(60,25,8,0.14)] backdrop-blur-xl dark:border-white/12 dark:bg-slate-950/55 dark:shadow-[0_14px_35px_rgba(0,0,0,0.28)] ${
                         isLeft ? "lg:col-start-1" : "lg:col-start-3"
                       }`}
                     >
                       <div dir="rtl" className="space-y-3">
                         <div className="flex items-center gap-3">
-                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-200/30 bg-emerald-300/10 text-emerald-200">
+                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-200/35 bg-emerald-300/14 text-emerald-700 dark:border-emerald-200/30 dark:bg-emerald-300/10 dark:text-emerald-200">
                             <Icon className="h-5 w-5" />
                           </span>
-                          <h3 className="text-xl font-black tracking-tight text-white">{milestone.title}</h3>
+                          <h3 className="text-xl font-black tracking-tight text-foreground dark:text-white">{milestone.title}</h3>
                         </div>
-                        <p className="text-sm leading-7 text-emerald-50/85">{milestone.body}</p>
-                        <p className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-2 text-sm font-bold text-cyan-100">
+                        <p className="text-sm leading-7 text-foreground-muted dark:text-emerald-50/85">{milestone.body}</p>
+                        <p className="rounded-xl border border-cyan-300/35 bg-cyan-200/45 px-3 py-2 text-sm font-bold text-cyan-900 dark:border-cyan-300/20 dark:bg-cyan-400/10 dark:text-cyan-100">
                           {milestone.highlight}
                         </p>
                       </div>
                     </div>
 
                     <div className="hidden lg:flex lg:col-start-2 lg:items-center lg:justify-center">
-                      <span className="relative inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-200/55 bg-emerald-300/25 text-emerald-100 shadow-[0_0_34px_rgba(45,212,191,0.6)]">
+                      <span className="relative inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-300/55 bg-emerald-300/30 text-emerald-700 shadow-[0_0_30px_rgba(45,212,191,0.45)] dark:border-emerald-200/55 dark:bg-emerald-300/25 dark:text-emerald-100 dark:shadow-[0_0_34px_rgba(45,212,191,0.6)]">
                         <span className="absolute inset-1.5 rounded-full border border-emerald-100/40" />
                         <Icon className="relative h-5 w-5" />
                       </span>
@@ -266,31 +266,31 @@ export default function JourneyPage() {
       </section>
 
       <section className="surface-card relative overflow-hidden px-6 py-8 sm:px-8 sm:py-9">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.2),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.78),rgba(2,6,23,0.92)_68%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.16),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(217,119,6,0.12),transparent_68%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.2),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.78),rgba(2,6,23,0.92)_68%)]" />
         <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-center">
           <div className="space-y-4">
-            <p className="section-label text-emerald-100">التوقيع المؤسس</p>
-            <h2 className="font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-white sm:text-4xl">
+            <p className="section-label text-emerald-700 dark:text-emerald-100">التوقيع المؤسس</p>
+            <h2 className="font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-foreground sm:text-4xl dark:text-white">
               ابن عبدالله يوسف
             </h2>
-            <p className="text-base leading-8 text-emerald-50/90">
+            <p className="text-base leading-8 text-foreground-muted dark:text-emerald-50/90">
               رحلة هذه المنصة ليست مجرد تنفيذ تقني، بل نموذج لقيادة منتج متكاملة: رؤية، تخطيط، تمويل،
               بناء، وإدارة جودة حتى الإطلاق.
             </p>
-            <p className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm leading-7 text-emerald-50">
+            <p className="rounded-2xl border border-border-strong bg-background-strong/80 px-4 py-3 text-sm leading-7 text-foreground dark:border-white/20 dark:bg-white/10 dark:text-emerald-50">
               إن رأيت قيمة في هذه الرحلة، فدعم الاستمرارية هو دعم لخدمة تعليمية جادة لطلاب كلية العلوم.
             </p>
           </div>
 
-          <div className="space-y-4 rounded-[1.8rem] border border-emerald-200/25 bg-emerald-400/10 p-5">
-            <p className="text-xs font-black tracking-[0.17em] text-emerald-100">مسارات مباشرة</p>
+          <div className="space-y-4 rounded-[1.8rem] border border-emerald-200/30 bg-emerald-400/14 p-5 dark:border-emerald-200/25 dark:bg-emerald-400/10">
+            <p className="text-xs font-black tracking-[0.17em] text-emerald-700 dark:text-emerald-100">مسارات مباشرة</p>
             <Button asChild className="w-full justify-center rounded-full">
               <Link href={APP_ROUTES.donation}>
                 <HandCoins className="h-4 w-4" />
                 دعم استمرارية المنصة
               </Link>
             </Button>
-            <Button asChild variant="outline" className="w-full justify-center rounded-full border-emerald-300/30 bg-transparent text-emerald-100 hover:bg-emerald-400/10">
+            <Button asChild variant="outline" className="w-full justify-center rounded-full border-emerald-300/30 bg-transparent text-emerald-700 hover:bg-emerald-400/12 dark:text-emerald-100 dark:hover:bg-emerald-400/10">
               <Link href={APP_ROUTES.contact}>
                 <BookOpenCheck className="h-4 w-4" />
                 تواصل معنا

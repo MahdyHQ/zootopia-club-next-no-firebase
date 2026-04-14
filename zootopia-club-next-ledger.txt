@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-13 (locale default env + home/assessment/auth visual polish)
+Last Updated: 2026-04-14 (upload single-surface hero depth refactor + redundant upload title-shell removal)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -69,7 +69,7 @@ Domain Purpose: AI-powered document analysis, assessment generation, and
 2. CURRENT TRUTH SNAPSHOT
 ================================================================================
 
-As of 2026-04-13, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
+As of 2026-04-14, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
 using Supabase as the unified backend provider (Postgres database, Auth, Storage).
 
 Key verified facts:
@@ -100,8 +100,23 @@ Key verified facts:
   `ZOOTOPIA_DEFAULT_LANGUAGE` (`en|ar`, invalid/missing fails closed to `en`)
 - Home page stat counters now render in a lower workspace snapshot section so
   the hero title lane remains clean across breakpoints
+- Home protected page spacing is now slightly tighter on small screens with a
+  centered fold-discovery cue that keeps subtle motion and honors reduced-motion
+  preferences
+- Home roadmap image preview now uses a safer viewport-contained modal surface
+  (clear close control, centered layout, internal scroll lane) and Journey page
+  light-mode surfaces/text now use coherent high-contrast daytime styling
+- Upload hero now presents a single premium intake surface with unified internal
+  layering and a restrained upper-left depth hover reaction, replacing the prior
+  redundant route-level title shell
 - Assessment hero/premium surfaces now use slightly higher translucency while
   preserving contrast for controls and text
+- Protected Home/Assessment/Infographic/Settings/Upload/History wrappers now
+  share a lighter translucency baseline so background ambience reads through
+  consistently without reducing form/control legibility
+- Exhausted daily-credit messaging now includes localized EN/AR escalation
+  guidance to contact developer/admin Elmahdy Abdallah for private or urgent
+  credits, rendered only in the exhausted-credit state
 - Public auth pages now include tighter mobile overlap guards and restrained
   overlay/shadow density for cleaner stacking behavior
 - Email verification via Supabase with Resend provider support
@@ -3122,6 +3137,257 @@ Risks / Notes:
 - No auth/session/provider authority changes were introduced; this pass is preference bootstrap + presentation-layer only.
 - Locale cookies still remain the primary persisted preference source.
 - Existing unrelated working-tree changes were left untouched.
+
+---
+
+2026-04-14 — Assessment Finalization Durability Hardening (Artifact Degradation + Transaction Await Safety)
+===========================================================================================================
+Type: Backend reliability hardening / finalization durability / transaction determinism
+Scope: assessment create route finalization path, repository transaction-backed assessment/idempotency/credit helpers
+
+Summary:
+- Completed ledger-first and source-first analysis for `/api/assessment` finalization failures that surface as `ASSESSMENT_FINALIZATION_FAILED`.
+- Hardened the finalization boundary so canonical-result artifact upload failures no longer discard a successful model generation.
+- Removed non-awaited transaction mutations in assessment-critical repository paths so commit-time failures surface deterministically.
+- Serialized artifact-metadata mirror writes/deletes when running inside a transaction to avoid floating mutation promises during one commit scope.
+
+Root Cause (code-verified):
+- `/api/assessment` grouped canonical artifact persistence and durable generation+credit commit in one finalization `try` block. Any transient storage upload failure (before durable save) triggered the same 500 finalization response path.
+- Assessment/idempotency/credit transaction paths contained multiple fire-and-forget `transaction.set(...)` / `transaction.delete(...)` calls plus transaction-scoped metadata sync fan-out via `Promise.all(...)`, reducing deterministic error propagation during finalization.
+
+Files Changed:
+- apps/web/app/api/assessment/route.ts
+- apps/web/lib/server/repository.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Assessment create route (`/api/assessment`):
+  - Canonical result artifact persistence is now best-effort.
+  - If artifact upload fails, finalization continues with durable DB save + credit commit.
+  - Success log metadata now records:
+    - `canonicalResultArtifactPersisted`
+    - `artifactPersistenceDegraded`
+- Repository transaction safety:
+  - Added explicit `await` to transaction mutations in assessment/idempotency credit lifecycle paths:
+    - `beginAssessmentGenerationIdempotency(...)`
+    - `completeAssessmentGenerationIdempotency(...)`
+    - `clearAssessmentGenerationIdempotencyLock(...)`
+    - `reserveAssessmentDailyCreditAttempt(...)`
+    - `releaseAssessmentDailyCreditReservation(...)`
+    - `saveAssessmentGenerationWithCreditCommit(...)`
+  - Transaction-scoped artifact metadata sync/delete now executes sequential writes when a transaction object is provided.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- File diagnostics on edited files: no errors
+- Attempted runtime QA command:
+  - `shell: assessment-actions-auth-qa`: failed in local workspace because `.tmp/assessment-actions-auth-qa.mjs` imports `firebase-admin` which is not installed in this environment (`ERR_MODULE_NOT_FOUND`).
+
+Risks / Notes:
+- Canonical-result artifact cache can now be absent when storage upload fails, but durable generation records remain saved and export routes can still regenerate output from persisted generation payloads.
+- Auth boundaries, owner-scope enforcement, and reserve/release/commit credit authority remain backend-owned.
+
+---
+
+2026-04-14 — Protected Workspace Translucency Normalization + Exhausted-Credit Escalation Copy (EN/AR)
+=======================================================================================================
+Type: UI polish / localization refinement / protected-surface consistency
+Scope: protected page wrappers and shared surface translucency, exhausted-credit user messaging in active locale
+
+Summary:
+- Completed mandatory ledger-first and source-first analysis with an Explore subagent before edits.
+- Applied a subtle protected-surface translucency pass across shared background/surface rules and page-level wrappers so the workspace backdrop breathes through more consistently.
+- Preserved readability by keeping input, selector, and action controls relatively solid while reducing wrapper/card opacity only.
+- Added localized exhausted-credit support/escalation wording in English and Arabic, with a secondary supportive line shown only in the exhausted-credit state.
+- Preserved auth/credit/admin enforcement logic; this pass is visual and localized copy only.
+
+Files Changed:
+- apps/web/app/globals.css
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/app/(protected)/(completed)/assessment/page.tsx
+- apps/web/app/(protected)/(completed)/infographic/page.tsx
+- apps/web/app/(protected)/(completed)/upload/page.tsx
+- apps/web/app/(protected)/(completed)/history/page.tsx
+- apps/web/app/(protected)/(completed)/assessment/preview/[id]/page.tsx
+- apps/web/app/(protected)/(completed)/assessment/results/[id]/page.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- apps/web/components/infographic/infographic-studio.tsx
+- apps/web/app/(protected)/settings/page.tsx
+- apps/web/components/settings/profile-settings-form.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Shared protected background and surfaces:
+  - Increased protected background image visibility (`0.38 -> 0.42`) in light/dark/system variants.
+  - Reduced protected overlay veil density in light/dark/system variants.
+  - Updated `.surface-strong` to a slightly more translucent glass treatment with restrained blur.
+  - Reduced `assessment-premium-panel` alpha values in light/dark/system variants.
+- Protected pages:
+  - Home, Assessment, Infographic, Settings, Upload, and History wrappers/cards now use slightly lower fill opacity for a calmer unified glass language.
+  - Assessment preview/result unavailable fallback cards now match the lighter protected surface tone.
+- Exhausted-credit messaging:
+  - EN/AR `assessmentDailyCreditsExhaustedBody` now includes escalation guidance.
+  - Added EN/AR key: `assessmentDailyCreditsExhaustedSupportNote`.
+  - Assessment Studio credits panel now renders the support note as a secondary line only when credits are exhausted.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- Source-level localization verification:
+  - EN/AR exhausted-credit body + support-note keys confirmed in message files.
+  - Exhausted-only secondary-line rendering confirmed in Assessment Studio source.
+- Source-level translucency verification:
+  - Updated wrapper/surface classes confirmed across Home, Assessment, Infographic, Settings, Upload, History, and shared globals.
+
+Risks / Notes:
+- Shared global protected-surface tuning (`globals.css`) affects all protected routes, including admin surfaces that depend on the same background/surface system.
+- This pass intentionally avoids making form fields more transparent; wrappers were tuned while field/control readability remains prioritized.
+
+---
+
+2026-04-14 — Home Mobile Spacing Tightening + Subtle Fold-Discovery Cue (UI-Only)
+==============================================================================
+Type: UI polish / responsive spacing refinement / discoverability cue enhancement
+Scope: protected Home page spacing rhythm on mobile and scroll-discovery hint presentation
+
+Summary:
+- Completed mandatory ledger-first and source-first analysis with an Explore subagent before edits.
+- Applied a surgical Home-only spacing pass that tightens small-screen padding/gaps by one step while preserving existing desktop/tablet spacing and route behavior.
+- Refined the existing scroll hint into a cleaner fold-discovery cue with gentler motion, mobile-centered placement, and reduced-motion support.
+- Preserved auth, repository, API, credit, and database logic ownership; this pass is presentation-only.
+
+Files Changed:
+- apps/web/app/(protected)/(completed)/page.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Home mobile spacing:
+  - top-level section rhythm changed from `space-y-6` to `space-y-5` on mobile (`md` unchanged)
+  - key hero/content paddings reduced by one step (`6 -> 5`) on mobile only
+  - recent-activity cards and upload CTA now use slightly tighter mobile padding while preserving `md:p-8`
+- Fold-discovery cue:
+  - status row now stacks on mobile and keeps previous row behavior on `md+`
+  - scroll cue is centered on mobile for clearer near-fold discoverability
+  - cue now uses a gentler bounce cadence (`1.8s`) with `motion-reduce:animate-none`
+  - cue includes localized accessibility labeling for EN/AR screen-reader context
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- Edited-file diagnostics: no errors.
+
+Risks / Notes:
+- This pass intentionally avoids shared/global CSS token rewrites to keep changes isolated to Home route composition classes.
+- Visual behavior is now slightly denser on very small screens by design; desktop spacing and content ownership remain unchanged.
+
+---
+
+2026-04-14 — Journey Modal Safety Hardening + Journey Light-Mode Visual Coherence (UI-Only)
+=============================================================================================
+Type: UI/UX hardening / modal safety / light-mode readability polish
+Scope: Home roadmap preview modal opened by Journey CTA + Journey public route light-mode surfaces
+
+Summary:
+- Completed mandatory ledger-first and source-first analysis with an Explore subagent before edits.
+- Traced the user-reported image preview path and confirmed it is rendered by `PlatformStoryCta` on Home (not inside `/journey` route ownership).
+- Hardened the roadmap image modal container to stay centered, viewport-contained, and scroll-safe with a clear always-visible close control.
+- Polished Journey route light-mode text/surface classes to remove low-contrast dark-biased styling while preserving dark mode via explicit `dark:` variants.
+- Preserved auth, business, API, and database logic; this pass is visual and interaction safety only.
+
+Root Cause (code-verified):
+- Home roadmap preview modal used dark-leaning hardcoded surfaces/controls (`bg-slate-950/90`, white-on-dark close/action styles), which produced weak readability and mismatched look in light mode.
+- Modal composition relied on absolute close placement + fixed dark shell accents without theme-aware defaults, increasing risk of overlap/collision on smaller viewports.
+- Journey public route used many hardcoded dark-tone text/surface classes (`text-white`, `text-emerald-100`, `bg-slate-950/...`) that degraded daytime contrast coherence.
+
+Files Changed:
+- apps/web/components/home/platform-story-cta.tsx
+- apps/web/app/globals.css
+- apps/web/app/(site)/journey/page.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Roadmap preview modal hardening (Home CTA path):
+  - modal wrapper now centers on all breakpoints with viewport edge padding
+  - panel now enforces viewport-safe max-height and internal scroll lane
+  - close button now has a dedicated class with logical corner anchoring (`inset-inline-end`) for RTL/LTR-safe placement
+  - image shell keeps responsive max-height containment and no uncontrolled overflow
+  - Journey action button inside modal now uses theme-aware CSS variant styling (light + dark/system-dark)
+- Modal visual polish:
+  - default (light) backdrop/shell/image-surface styles now align with warm daytime palette
+  - dark/system-dark overrides preserve existing premium dark visual language
+  - panel isolation + scroll containment reduces layered collisions and clipping risk
+- Journey route light-mode polish:
+  - replaced dark-biased text/surface classes with theme-aware foreground/background classes plus explicit `dark:` fallbacks
+  - harmonized hero blocks, milestone cards, chips, callouts, and CTA side panel for coherent daytime readability
+  - retained dark-mode visual intent with scoped `dark:` classes
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- Runtime QA environment:
+  - standalone production server run on `http://127.0.0.1:3020` via `node apps/web/.next/standalone/server.js`
+  - health probe passed: `/api/health` returned `ok=true`
+- Automated viewport QA report:
+  - local temporary Puppeteer report generated during this pass (Journey light mode + Home modal access checks)
+  - Journey route (`/journey`) validated across narrow-mobile/tablet/laptop/desktop with no horizontal overflow
+  - Home modal live-open verification was auth-gated in this environment (`/` redirected to `/login` in all tested viewports), so modal open/close geometry was validated by source-level interaction path and layout constraints on edited code
+
+Risks / Notes:
+- Protected Home modal runtime interaction remains dependent on authenticated session availability for full in-browser E2E confirmation.
+- This pass intentionally avoids introducing new dialog libraries and keeps bundle/runtime impact minimal by hardening existing modal primitives.
+
+---
+
+2026-04-14 — Upload Hero Single-Surface Depth Refactor (UI-Only)
+=================================================================
+Type: UI/UX refinement / visual hierarchy simplification / responsive depth polish
+Scope: `/upload` hero shell ownership and intake surface layering
+
+Summary:
+- Completed mandatory ledger-first, docs check, subagent-first exploration, and direct source verification before edits.
+- Refactored `/upload` hero to present one authoritative premium surface by removing the redundant route-level title pill and flattening the nested header/body shell split.
+- Added a restrained upper-left directional depth reaction on the main upload shell hover to simulate pushing deeper into the room without heavy motion.
+- Softened inner dropzone and active-document decorative glow intensity so the page reads as one cohesive container rather than stacked slabs.
+- Preserved upload workflow, auth gates, API contracts, storage, and business logic.
+
+Root Cause (code-verified):
+- Upload route rendered a decorative title capsule above the intake shell while `UploadWorkspace` rendered separate high-contrast header/body tint blocks plus strong nested glows.
+- Combined layers produced a card-within-card impression that reduced clarity of the single primary action surface.
+
+Files Changed:
+- apps/web/components/upload/upload-workspace.tsx
+- apps/web/app/(protected)/(completed)/upload/page.tsx
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Upload hero title pill was removed from the route page so `UploadWorkspace` remains the single focal surface.
+- Main upload shell now includes a subtle upper-left depth illusion:
+  - micro hover shift (`translate-x`/`translate-y`)
+  - directional inset + outer shadow blend
+  - restrained motion with `motion-reduce` safeguards
+- Header/body backgrounds inside `UploadWorkspace` were unified into one shell-owned surface (`z-10` content over a shared shell depth layer).
+- Dropzone and active-document accent glows were reduced to keep visual hierarchy cleaner while preserving affordance and readability.
+- All decorative depth layers remain non-interactive (`pointer-events-none`) and behind actionable content.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- Edited-file diagnostics:
+  - apps/web/components/upload/upload-workspace.tsx: no errors
+  - apps/web/app/(protected)/(completed)/upload/page.tsx: no errors
+
+Risks / Notes:
+- This pass intentionally avoids shared protected background/global layout ownership and keeps changes confined to `/upload` route UI composition.
+- Live authenticated viewport QA was not executed in this pass; responsive safety is preserved by existing `max-w-3xl`, `min-w-0`, and prior breakpoint guards.
 
 ---
 

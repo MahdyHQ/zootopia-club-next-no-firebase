@@ -97,7 +97,7 @@ export default async function HistoryPage() {
         </div>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.78),rgba(241,249,247,0.62))] p-6 shadow-sm backdrop-blur-xl dark:border-white/6 dark:bg-[linear-gradient(145deg,rgba(4,12,21,0.72),rgba(3,10,18,0.56))] sm:p-8 lg:p-10">
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.7),rgba(241,249,247,0.54))] p-6 shadow-sm backdrop-blur-xl dark:border-white/6 dark:bg-[linear-gradient(145deg,rgba(4,12,21,0.64),rgba(3,10,18,0.48))] sm:p-8 lg:p-10">
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-emerald-400/18 blur-3xl" />
         <div className="relative z-10">
           <div className="mb-4 flex items-center gap-3">
@@ -136,7 +136,7 @@ export default async function HistoryPage() {
               {documents.map((document) => (
                 <article
                   key={document.id}
-                  className="rounded-[1.4rem] border border-border bg-background-elevated/80 px-5 py-4 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
+                  className="rounded-[1.4rem] border border-border bg-background-elevated/72 px-5 py-4 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
                 >
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
@@ -188,7 +188,7 @@ export default async function HistoryPage() {
               {previews.map((preview) => (
                 <article
                   key={preview.id}
-                  className="rounded-[1.4rem] border border-border bg-background-elevated/80 px-5 py-5 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
+                  className="rounded-[1.4rem] border border-border bg-background-elevated/72 px-5 py-5 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
                 >
                   <div className="flex flex-col gap-5">
                     <div className="min-w-0">

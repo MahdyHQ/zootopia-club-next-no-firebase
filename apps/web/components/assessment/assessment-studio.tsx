@@ -835,13 +835,20 @@ export function AssessmentStudio({
                           ? messages.assessmentDailyCreditsExhaustedTitle
                           : `${creditSummary.remainingCount} ${messages.assessmentDailyCreditsRemainingLabel}`}
                     </h3>
-                    <p className="mt-2 text-sm leading-6 text-foreground-muted">
-                      {creditSummary.isAdminExempt
-                        ? messages.assessmentDailyCreditsAdminExemptBody
-                        : creditsExhausted
-                          ? messages.assessmentDailyCreditsExhaustedInline
-                          : messages.assessmentDailyCreditsRenewsTomorrow}
-                    </p>
+                    <div className="mt-2 space-y-1 text-sm leading-6 text-foreground-muted">
+                      <p>
+                        {creditSummary.isAdminExempt
+                          ? messages.assessmentDailyCreditsAdminExemptBody
+                          : creditsExhausted
+                            ? messages.assessmentDailyCreditsExhaustedInline
+                            : messages.assessmentDailyCreditsRenewsTomorrow}
+                      </p>
+                      {creditSummary.isAdminExempt || !creditsExhausted ? null : (
+                        <p className="text-[0.92em] text-foreground-muted/90">
+                          {messages.assessmentDailyCreditsExhaustedSupportNote}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2 sm:justify-end">

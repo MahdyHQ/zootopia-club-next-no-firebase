@@ -37,7 +37,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
   return (
     <div className="space-y-7 animate-in fade-in duration-700 lg:space-y-8">
-      <section className="relative overflow-hidden rounded-[2.1rem] border border-white/24 bg-[linear-gradient(135deg,rgba(255,255,255,0.88),rgba(241,249,247,0.72))] px-5 py-6 shadow-[0_22px_64px_rgba(2,6,23,0.07)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(145deg,rgba(5,14,23,0.72),rgba(3,11,19,0.62))] sm:px-7 sm:py-7">
+      <section className="relative overflow-hidden rounded-[2.1rem] border border-white/24 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(241,249,247,0.62))] px-5 py-6 shadow-[0_22px_64px_rgba(2,6,23,0.07)] backdrop-blur-xl dark:border-white/10 dark:bg-[linear-gradient(145deg,rgba(5,14,23,0.64),rgba(3,11,19,0.54))] sm:px-7 sm:py-7">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.13),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(242,198,106,0.14),transparent_42%)]" />
 
         <div className="relative z-10 max-w-5xl space-y-3.5">
@@ -48,7 +48,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               {uiContext.messages.navSettings}
             </span>
 
-            <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/55 bg-white/70 px-2.5 py-1 shadow-sm dark:border-white/15 dark:bg-slate-950/55">
+            <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/55 bg-white/62 px-2.5 py-1 shadow-sm dark:border-white/15 dark:bg-slate-950/48">
               <span className="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-full border border-emerald-500/30 bg-emerald-500/20">
                 {settingsAvatarSrc ? (
                   <Image
@@ -107,9 +107,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
       {/* Keep preferences in a single compact strip so settings stays dense and readable
           while preserving theme/locale controls on this page. */}
-      <section className="rounded-[1.4rem] border border-white/20 bg-white/65 p-4 shadow-[0_18px_48px_rgba(2,6,23,0.07)] backdrop-blur-xl dark:border-white/8 dark:bg-slate-950/45 sm:p-5">
+      <section className="rounded-[1.4rem] border border-white/20 bg-white/56 p-4 shadow-[0_18px_48px_rgba(2,6,23,0.07)] backdrop-blur-xl dark:border-white/8 dark:bg-slate-950/38 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-300/70 bg-white/75 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/70 dark:text-slate-200">
+          <span className="inline-flex items-center gap-2 rounded-full border border-slate-300/70 bg-white/68 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/64 dark:text-slate-200">
             <Settings2 className="h-3.5 w-3.5" />
             {uiContext.messages.preferencesTitle}
           </span>

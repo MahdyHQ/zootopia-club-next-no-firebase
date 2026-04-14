@@ -577,12 +577,12 @@ export function ProfileSettingsForm({
   }
 
   const panelClassName =
-    "rounded-[1.35rem] border border-white/24 bg-white/72 p-4 shadow-[0_16px_40px_rgba(2,6,23,0.07)] backdrop-blur-xl dark:border-white/8 dark:bg-slate-950/55";
+    "rounded-[1.35rem] border border-white/24 bg-white/64 p-4 shadow-[0_16px_40px_rgba(2,6,23,0.07)] backdrop-blur-xl dark:border-white/8 dark:bg-slate-950/48";
   const textFieldClassName =
     "w-full rounded-[1.15rem] border border-slate-200/80 bg-white/90 px-4 py-3 text-sm text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.48),0_12px_24px_rgba(2,6,23,0.05)] outline-none transition focus:border-emerald-500/40 focus:bg-white dark:border-slate-700/70 dark:bg-slate-950/75 dark:focus:border-emerald-400/40";
 
   return (
-    <section className="relative rounded-[2rem] border border-white/24 bg-white/65 p-5 shadow-[0_24px_72px_rgba(2,6,23,0.08)] backdrop-blur-2xl dark:border-white/8 dark:bg-slate-950/45 md:p-6 lg:p-7">
+    <section className="relative rounded-[2rem] border border-white/24 bg-white/56 p-5 shadow-[0_24px_72px_rgba(2,6,23,0.08)] backdrop-blur-2xl dark:border-white/8 dark:bg-slate-950/38 md:p-6 lg:p-7">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.14),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(242,198,106,0.12),transparent_38%)]" />
 
       <div className="relative z-10">

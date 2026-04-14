@@ -1,6 +1,6 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import Link from "next/link";
-import { UploadCloud, FileText, BrainCircuit, PieChart, ArrowRight, Zap } from "lucide-react";
+import { FileText, BrainCircuit, PieChart, ArrowRight, Zap } from "lucide-react";
 
 import { UploadWorkspace } from "@/components/upload/upload-workspace";
 import { getRequestUiContext } from "@/lib/server/request-context";
@@ -8,7 +8,7 @@ import { listDocumentsForUser } from "@/lib/server/repository";
 import { requireCompletedUser } from "@/lib/server/session";
 
 const uploadQuickActionCardClassName =
-  "group relative overflow-hidden rounded-3xl border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.58),rgba(255,248,242,0.26))] p-6 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.84),0_24px_54px_rgba(148,163,184,0.14)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-white/70 hover:bg-[linear-gradient(145deg,rgba(255,255,255,0.68),rgba(247,250,252,0.34))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_28px_64px_rgba(148,163,184,0.18)] dark:border-white/10 dark:bg-[linear-gradient(145deg,rgba(6,18,31,0.46),rgba(2,10,20,0.22))] dark:text-white dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_44px_rgba(2,6,23,0.2)] dark:hover:border-white/16 dark:hover:bg-[linear-gradient(145deg,rgba(8,24,39,0.56),rgba(3,12,22,0.26))] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_24px_56px_rgba(2,6,23,0.28)]";
+  "group relative overflow-hidden rounded-3xl border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.5),rgba(255,248,242,0.18))] p-6 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.84),0_24px_54px_rgba(148,163,184,0.14)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-white/70 hover:bg-[linear-gradient(145deg,rgba(255,255,255,0.58),rgba(247,250,252,0.26))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_28px_64px_rgba(148,163,184,0.18)] dark:border-white/10 dark:bg-[linear-gradient(145deg,rgba(6,18,31,0.38),rgba(2,10,20,0.16))] dark:text-white dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_44px_rgba(2,6,23,0.2)] dark:hover:border-white/16 dark:hover:bg-[linear-gradient(145deg,rgba(8,24,39,0.46),rgba(3,12,22,0.2))] dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_24px_56px_rgba(2,6,23,0.28)]";
 
 export default async function UploadPage() {
   const [user, uiContext] = await Promise.all([
@@ -38,29 +38,23 @@ export default async function UploadPage() {
         </div>
       ) : null}
 
-      <section className="relative flex min-w-0 min-h-[65vh] w-full flex-col items-center justify-center overflow-hidden p-4 sm:p-8 lg:p-14">
-
-        <div className="relative z-10 flex w-full min-w-0 flex-col items-center text-center">
-          <div className="mb-8 flex items-center gap-2 rounded-full border border-white/60 bg-white/45 px-4 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_12px_28px_rgba(148,163,184,0.12)] backdrop-blur-xl sm:mb-10 dark:border-white/10 dark:bg-white/[0.04] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-            <UploadCloud className="h-5 w-5 text-accent-strong dark:text-emerald-400" />
-            <h2 className="text-sm font-bold uppercase tracking-[0.25em] text-foreground/80 dark:text-zinc-200">
-              {uiContext.messages.navUpload?.toUpperCase() || "UPLOAD RESEARCH DATA"}
-            </h2>
-          </div>
-
-          {/* UploadWorkspace owns the single translucent intake shell for this route.
-              Keep the page wrapper neutral so layered ghost slabs do not reappear behind Document intake. */}
-          <div className="w-full min-w-0 max-w-[100vw] overflow-x-hidden">
-            <UploadWorkspace
-              messages={uiContext.messages}
-              initialDocuments={documents}
-              canAccessInfographic={canAccessInfographic}
-            />
-          </div>
+      {/*
+        Hero section — no additional card or shell here.
+        UploadWorkspace IS the single premium surface; this wrapper is purely a
+        centering/spacing container. Do not add background, border, or shadow to
+        this section or the inner div, or a ghost slab will reappear behind the card.
+      */}
+      <section className="relative flex min-w-0 min-h-[60vh] w-full flex-col items-center justify-center p-4 sm:p-8 lg:p-12">
+        <div className="relative z-10 w-full min-w-0 max-w-[100vw] overflow-x-hidden">
+          <UploadWorkspace
+            messages={uiContext.messages}
+            initialDocuments={documents}
+            canAccessInfographic={canAccessInfographic}
+          />
         </div>
       </section>
 
-      {/* 2. Secondary Metrics & Quick Links (Demoted) */}
+      {/* Quick action links */}
       <section className="relative px-2">
         <div className="mb-6 flex items-center gap-3">
           <Zap className="h-6 w-6 text-foreground-muted dark:text-zinc-300/80" />
