@@ -385,7 +385,10 @@ function resolveAssessmentErrorMessage(
     case "ASSESSMENT_PROVIDER_MODEL_UNAVAILABLE":
     case "ASSESSMENT_PROVIDER_ROUTE_MISMATCH":
     case "ASSESSMENT_PROVIDER_AUTH_FAILED":
+    case "ASSESSMENT_PROVIDER_UPSTREAM_UNAVAILABLE":
       return messages.assessmentFieldProviderUnavailable;
+    case "ASSESSMENT_PROVIDER_BILLING_ARREARS":
+    case "ASSESSMENT_PROVIDER_QUOTA_EXHAUSTED":
     case "ASSESSMENT_PROVIDER_RATE_LIMITED":
       return messages.assessmentFieldProviderRateLimited;
     case "ASSESSMENT_PROVIDER_TIMEOUT":
@@ -406,7 +409,7 @@ function resolveAssessmentErrorMessage(
     case "UNAUTHENTICATED":
       return messages.supabaseAuthUnavailable;
     default:
-      return error.message || messages.assessmentFieldGenericError;
+      return messages.assessmentFieldGenericError;
   }
 }
 

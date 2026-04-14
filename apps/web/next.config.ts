@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
     // lightweight HTML surface while the premium lane keeps its bundled PDF browser binary.
     "/api/assessment/export/pdf/pro/\\[id\\]": [
       "./node_modules/@sparticuz/chromium/bin/**/*",
+      /* npm workspaces hoist Chromium into the monorepo root in this repo, while
+         outputFileTracingIncludes paths stay relative to `apps/web`. Keep both
+         candidate paths traced so the deployed Vercel lambda always receives the
+         packaged browser payload instead of depending on a non-existent nested install. */
+      "../../node_modules/@sparticuz/chromium/bin/**/*",
     ],
   },
   // Local development sometimes reaches the dev server through 127.0.0.1 even when

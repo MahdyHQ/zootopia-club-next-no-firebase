@@ -57,8 +57,11 @@ export type AssessmentExecutionErrorCode =
   | "ASSESSMENT_PROVIDER_MODEL_UNAVAILABLE"
   | "ASSESSMENT_PROVIDER_ROUTE_MISMATCH"
   | "ASSESSMENT_PROVIDER_AUTH_FAILED"
+  | "ASSESSMENT_PROVIDER_BILLING_ARREARS"
+  | "ASSESSMENT_PROVIDER_QUOTA_EXHAUSTED"
   | "ASSESSMENT_PROVIDER_RATE_LIMITED"
   | "ASSESSMENT_PROVIDER_TIMEOUT"
+  | "ASSESSMENT_PROVIDER_UPSTREAM_UNAVAILABLE"
   | "ASSESSMENT_PROVIDER_EXECUTION_FAILED"
   | "ASSESSMENT_PROVIDER_RESPONSE_INVALID";
 
@@ -1186,6 +1189,56 @@ function isProviderModelUnavailableError(snapshot: ProviderErrorSnapshot) {
   );
 }
 
+function hasProviderBillingArrearsSignal(snapshot: ProviderErrorSnapshot) {
+  const message = snapshot.providerMessage.toLowerCase();
+  const code = snapshot.providerCode;
+  const type = snapshot.providerType;
+
+  return (
+    code.includes("arrearage") ||
+    type.includes("arrearage") ||
+    code.includes("insufficient_balance") ||
+    code.includes("insufficient_funds") ||
+    message.includes("arrearage") ||
+    message.includes("insufficient balance") ||
+    message.includes("insufficient funds") ||
+    message.includes("payment required") ||
+    (message.includes("billing") && message.includes("required"))
+  );
+}
+
+function hasProviderQuotaExhaustedSignal(snapshot: ProviderErrorSnapshot) {
+  const message = snapshot.providerMessage.toLowerCase();
+  const code = snapshot.providerCode;
+  const type = snapshot.providerType;
+
+  return (
+    code.includes("insufficient_quota") ||
+    code.includes("quota_exceeded") ||
+    code.includes("resource_exhausted") ||
+    type.includes("resource_exhausted") ||
+    type.includes("quota_exceeded") ||
+    message.includes("quota exhausted") ||
+    message.includes("quota exceeded") ||
+    message.includes("resource exhausted")
+  );
+}
+
+function hasProviderRateLimitSignal(snapshot: ProviderErrorSnapshot) {
+  const message = snapshot.providerMessage.toLowerCase();
+  const code = snapshot.providerCode;
+
+  return (
+    snapshot.httpStatus === 429 ||
+    code.includes("throttling") ||
+    code.includes("rate_limit") ||
+    code.includes("too_many_requests") ||
+    message.includes("rate limit") ||
+    message.includes("too many requests") ||
+    message.includes("throttle")
+  );
+}
+
 /* This provider classifier keeps user-facing failures stable while splitting actionable
    infrastructure causes (auth, throttling, timeout, model mismatch) from generic runtime
    failures so routes and QA can distinguish transient outages from configuration issues. */
@@ -1213,7 +1266,11 @@ function buildProviderExecutionError(input: {
     snapshot.httpStatus === 401 ||
     snapshot.httpStatus === 403 ||
     code.includes("invalid_api_key") ||
+    code.includes("permission_denied") ||
+    code.includes("unauthenticated") ||
     code.includes("access_denied") ||
+    type.includes("permission_denied") ||
+    type.includes("unauthenticated") ||
     message.includes("api key") ||
     message.includes("not authorized")
   ) {
@@ -1225,35 +1282,26 @@ function buildProviderExecutionError(input: {
     });
   }
 
-  /* DashScope can reject Qwen requests with `arrearage` when provider billing/quota is
-     exhausted. Classify this as a capacity limit (not a transport execution failure) so
-     callers receive a stable retry/exhaustion signal instead of a generic 502. */
-  if (
-    code.includes("arrearage") ||
-    type.includes("arrearage") ||
-    message.includes("arrearage") ||
-    message.includes("insufficient balance") ||
-    message.includes("insufficient funds") ||
-    message.includes("billing")
-  ) {
+  // Billing arrears is its own class so operations can distinguish payment issues from quota throttling.
+  if (hasProviderBillingArrearsSignal(snapshot)) {
     return createAssessmentExecutionError({
-      code: "ASSESSMENT_PROVIDER_RATE_LIMITED",
-      message: `The selected ${input.providerLabel} model runtime does not have enough provider quota right now.`,
+      code: "ASSESSMENT_PROVIDER_BILLING_ARREARS",
+      message: `The selected ${input.providerLabel} model runtime currently has a provider billing issue.`,
+      status: 402,
+      context: providerHttpContext,
+    });
+  }
+
+  if (hasProviderQuotaExhaustedSignal(snapshot)) {
+    return createAssessmentExecutionError({
+      code: "ASSESSMENT_PROVIDER_QUOTA_EXHAUSTED",
+      message: `The selected ${input.providerLabel} model runtime has exhausted the available provider quota.`,
       status: 429,
       context: providerHttpContext,
     });
   }
 
-  if (
-    snapshot.httpStatus === 429 ||
-    code.includes("throttling") ||
-    code.includes("limit") ||
-    code.includes("quota") ||
-    code.includes("insufficient_quota") ||
-    message.includes("rate limit") ||
-    message.includes("too many requests") ||
-    message.includes("quota")
-  ) {
+  if (hasProviderRateLimitSignal(snapshot)) {
     return createAssessmentExecutionError({
       code: "ASSESSMENT_PROVIDER_RATE_LIMITED",
       message: `The selected ${input.providerLabel} model is rate limited right now.`,
@@ -1265,6 +1313,7 @@ function buildProviderExecutionError(input: {
   if (
     snapshot.httpStatus === 408 ||
     snapshot.httpStatus === 504 ||
+    snapshot.httpStatus === 524 ||
     code.includes("timeout") ||
     type.includes("deadline_exceeded") ||
     type.includes("requesttimeout") ||
@@ -1283,6 +1332,15 @@ function buildProviderExecutionError(input: {
     return createAssessmentExecutionError({
       code: "ASSESSMENT_PROVIDER_MODEL_UNAVAILABLE",
       message: `The configured ${input.providerLabel} model id is unavailable for the current provider runtime.`,
+      status: 503,
+      context: providerHttpContext,
+    });
+  }
+
+  if (snapshot.httpStatus >= 500) {
+    return createAssessmentExecutionError({
+      code: "ASSESSMENT_PROVIDER_UPSTREAM_UNAVAILABLE",
+      message: `The selected ${input.providerLabel} model upstream service is temporarily unavailable.`,
       status: 503,
       context: providerHttpContext,
     });
@@ -1443,14 +1501,17 @@ async function executeGoogleAssessmentModel(input: {
     }
 
     throw createAssessmentExecutionError({
-      code: "ASSESSMENT_PROVIDER_EXECUTION_FAILED",
-      message: "The selected Google model could not complete the assessment request right now.",
-      status: 502,
+      code: "ASSESSMENT_PROVIDER_UPSTREAM_UNAVAILABLE",
+      message: "The selected Google model upstream service is temporarily unavailable.",
+      status: 503,
       context: {
         layer: "provider-execution",
         subsystem: "google-runtime",
         operation: "invoke-google-generate-content",
         ...contextBase,
+        upstreamType:
+          normalizeProviderErrorToken((error as { name?: unknown } | null)?.name) ||
+          "network_error",
       },
     });
   }
@@ -1620,14 +1681,17 @@ async function executeQwenAssessmentModel(input: {
     }
 
     throw createAssessmentExecutionError({
-      code: "ASSESSMENT_PROVIDER_EXECUTION_FAILED",
-      message: "The selected Qwen model could not complete the assessment request right now.",
-      status: 502,
+      code: "ASSESSMENT_PROVIDER_UPSTREAM_UNAVAILABLE",
+      message: "The selected Qwen model upstream service is temporarily unavailable.",
+      status: 503,
       context: {
         layer: "provider-execution",
         subsystem: "qwen-runtime",
         operation: "invoke-qwen-chat-completion",
         ...contextBase,
+        upstreamType:
+          normalizeProviderErrorToken((error as { name?: unknown } | null)?.name) ||
+          "network_error",
       },
     });
   }

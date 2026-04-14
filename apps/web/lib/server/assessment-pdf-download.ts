@@ -35,9 +35,78 @@ const PDF_SURFACE_STABILITY_TIMEOUT_MS = 15_000;
 
 let fontProvisionPromise: Promise<void> | null = null;
 
+export type AssessmentPdfBufferFailureStage =
+  | "browser-launch"
+  | "page-create"
+  | "surface-render"
+  | "pdf-generate";
+
+type ErrorWithCode = Error & {
+  code?: string;
+};
+
+export class AssessmentPdfBufferError extends Error {
+  readonly stage: AssessmentPdfBufferFailureStage;
+  readonly errorCode: string;
+  readonly causeError: unknown;
+
+  constructor(input: {
+    stage: AssessmentPdfBufferFailureStage;
+    message: string;
+    errorCode: string;
+    causeError: unknown;
+  }) {
+    super(input.message);
+    this.name = "AssessmentPdfBufferError";
+    this.stage = input.stage;
+    this.errorCode = input.errorCode;
+    this.causeError = input.causeError;
+  }
+}
+
 type ChromiumRuntimeWithFont = typeof chromium & {
   font: (input: string) => Promise<string>;
 };
+
+function createTaggedError(code: string, message: string) {
+  const error = new Error(message) as ErrorWithCode;
+  error.name = code;
+  error.code = code;
+
+  return error;
+}
+
+function getErrorCode(error: unknown) {
+  if (typeof error === "object" && error && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.trim()) {
+      return code;
+    }
+  }
+
+  if (error instanceof Error && error.name) {
+    return error.name;
+  }
+
+  return "UNKNOWN";
+}
+
+function wrapAssessmentPdfBufferError(
+  stage: AssessmentPdfBufferFailureStage,
+  message: string,
+  error: unknown,
+) {
+  if (error instanceof AssessmentPdfBufferError) {
+    return error;
+  }
+
+  return new AssessmentPdfBufferError({
+    stage,
+    message,
+    errorCode: getErrorCode(error),
+    causeError: error,
+  });
+}
 
 function findLocalBrowserExecutablePath() {
   return LOCAL_BROWSER_CANDIDATES.find((candidate) => existsSync(candidate)) ?? null;
@@ -48,7 +117,8 @@ function canUsePackagedChromiumRuntime() {
 }
 
 function buildMissingLocalBrowserError() {
-  return new Error(
+  return createTaggedError(
+    "ASSESSMENT_PDF_LOCAL_BROWSER_MISSING",
     "Assessment Pro PDF export requires a local Chrome or Edge executable on this development machine. Install Chrome/Edge or set ASSESSMENT_PDF_BROWSER_EXECUTABLE_PATH. The packaged @sparticuz/chromium fallback is reserved for Linux server runtimes such as Vercel serverless functions.",
   );
 }
@@ -74,7 +144,8 @@ async function resolvePackagedChromiumExecutablePath() {
   const executablePath = await chromium.executablePath();
 
   if (!executablePath || !existsSync(executablePath)) {
-    throw new Error(
+    throw createTaggedError(
+      "ASSESSMENT_PDF_EXECUTABLE_MISSING",
       "Assessment Pro PDF export could not resolve the packaged Chromium executable. Preserve the @sparticuz/chromium bin payload inside the standalone server bundle for the Pro lane.",
     );
   }
@@ -83,36 +154,44 @@ async function resolvePackagedChromiumExecutablePath() {
 }
 
 async function launchAssessmentPdfBrowser() {
-  const localExecutablePath = findLocalBrowserExecutablePath();
-  if (localExecutablePath) {
+  try {
+    const localExecutablePath = findLocalBrowserExecutablePath();
+    if (localExecutablePath) {
+      return puppeteer.launch({
+        defaultViewport: PDF_VIEWPORT,
+        executablePath: localExecutablePath,
+        headless: true,
+      });
+    }
+
+    if (!canUsePackagedChromiumRuntime()) {
+      throw buildMissingLocalBrowserError();
+    }
+
+    /* The Pro PDF lane reuses the shared file-surface HTML foundation, so this serverless Chromium
+       fallback keeps premium PDF generation inside the same apps/web backend without coupling the
+       lightweight Fast browser-print lane to a packaged browser requirement. Future agents should
+       preserve the local-browser override above for development and the packaged serverless browser
+       below for Linux serverless deployments (including Vercel). */
+    chromium.setGraphicsMode = false;
+    await provisionServerlessPdfFonts();
+
     return puppeteer.launch({
+      args: puppeteer.defaultArgs({
+        args: chromium.args,
+        headless: "shell",
+      }),
       defaultViewport: PDF_VIEWPORT,
-      executablePath: localExecutablePath,
-      headless: true,
-    });
-  }
-
-  if (!canUsePackagedChromiumRuntime()) {
-    throw buildMissingLocalBrowserError();
-  }
-
-  /* The Pro PDF lane reuses the shared file-surface HTML foundation, so this serverless Chromium
-     fallback keeps premium PDF generation inside the same apps/web backend without coupling the
-     lightweight Fast browser-print lane to a packaged browser requirement. Future agents should
-     preserve the local-browser override above for development and the packaged serverless browser
-      below for Linux serverless deployments (including Vercel). */
-  chromium.setGraphicsMode = false;
-  await provisionServerlessPdfFonts();
-
-  return puppeteer.launch({
-    args: puppeteer.defaultArgs({
-      args: chromium.args,
+      executablePath: await resolvePackagedChromiumExecutablePath(),
       headless: "shell",
-    }),
-    defaultViewport: PDF_VIEWPORT,
-    executablePath: await resolvePackagedChromiumExecutablePath(),
-    headless: "shell",
-  });
+    });
+  } catch (error) {
+    throw wrapAssessmentPdfBufferError(
+      "browser-launch",
+      "Assessment Pro PDF browser launch failed.",
+      error,
+    );
+  }
 }
 
 async function waitForAssessmentPdfSurface(page: Page, html: string) {
@@ -163,25 +242,52 @@ export async function buildAssessmentPdfBuffer(input: {
   const browser = await launchAssessmentPdfBrowser();
 
   try {
-    const page = await browser.newPage();
+    let page: Page;
+    try {
+      page = await browser.newPage();
+    } catch (error) {
+      throw wrapAssessmentPdfBufferError(
+        "page-create",
+        "Assessment Pro PDF page creation failed.",
+        error,
+      );
+    }
+
     try {
       await page.emulateMediaType("print");
-      await waitForAssessmentPdfSurface(page, input.html);
+      try {
+        await waitForAssessmentPdfSurface(page, input.html);
+      } catch (error) {
+        throw wrapAssessmentPdfBufferError(
+          "surface-render",
+          "Assessment Pro PDF HTML surface failed to stabilize.",
+          error,
+        );
+      }
 
-      const pdfBytes = await page.pdf({
-        /* The shared print renderer now owns page footers directly inside the HTML page surface.
-           Keep Chromium header/footer injection disabled so the Pro lane captures the same footer
-           geometry, page number arc, and centered Arabic line that the Fast lane shows in-browser. */
-        displayHeaderFooter: false,
-        margin: {
-          top: "0",
-          right: "0",
-          bottom: "0",
-          left: "0",
-        },
-        preferCSSPageSize: true,
-        printBackground: true,
-      });
+      let pdfBytes: Uint8Array;
+      try {
+        pdfBytes = await page.pdf({
+          /* The shared print renderer now owns page footers directly inside the HTML page surface.
+             Keep Chromium header/footer injection disabled so the Pro lane captures the same footer
+             geometry, page number arc, and centered Arabic line that the Fast lane shows in-browser. */
+          displayHeaderFooter: false,
+          margin: {
+            top: "0",
+            right: "0",
+            bottom: "0",
+            left: "0",
+          },
+          preferCSSPageSize: true,
+          printBackground: true,
+        });
+      } catch (error) {
+        throw wrapAssessmentPdfBufferError(
+          "pdf-generate",
+          "Assessment Pro PDF bytes could not be generated.",
+          error,
+        );
+      }
 
       return Buffer.from(pdfBytes);
     } finally {

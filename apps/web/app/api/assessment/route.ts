@@ -41,6 +41,8 @@ export const maxDuration = 120;
 const ASSESSMENT_IDEMPOTENCY_KEY_MAX_LENGTH = 200;
 const ASSESSMENT_ROUTE = "/api/assessment" as const;
 const ASSESSMENT_FLOW = "assessment-create" as const;
+const ASSESSMENT_FINALIZATION_GENERIC_MESSAGE =
+  "The assessment finished, but it could not be finalized safely. No daily credit was used.";
 
 type AssessmentSessionLane = "anonymous" | "admin" | "user";
 type AssessmentRequestLane =
@@ -199,6 +201,84 @@ function buildDeterministicAssessmentGenerationId(input: {
     .digest("hex");
 
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
+
+function resolveInternalAssessmentErrorCode(error: unknown) {
+  if (error && typeof error === "object") {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.trim().length > 0) {
+      return code.trim();
+    }
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message.trim();
+  }
+
+  return "UNKNOWN_ASSESSMENT_FINALIZATION_ERROR";
+}
+
+function classifyAssessmentFinalizationFailure(error: unknown) {
+  const internalCode = resolveInternalAssessmentErrorCode(error);
+
+  switch (internalCode) {
+    case "ASSESSMENT_ACCESS_DISABLED":
+      return {
+        code: "ASSESSMENT_ACCESS_DISABLED",
+        message: "Assessment generation is disabled for this account.",
+        status: 403,
+        internalCode,
+        internalCategory: "access-control",
+      } as const;
+    case "ASSESSMENT_DAILY_CREDIT_RESERVATION_MISSING":
+      return {
+        code: "ASSESSMENT_FINALIZATION_FAILED",
+        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
+        status: 409,
+        internalCode,
+        internalCategory: "credit-reservation-missing",
+      } as const;
+    case "ASSESSMENT_DAILY_CREDIT_LIMIT_CONFLICT":
+      return {
+        code: "ASSESSMENT_FINALIZATION_FAILED",
+        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
+        status: 409,
+        internalCode,
+        internalCategory: "credit-conflict",
+      } as const;
+    case "ASSESSMENT_DAILY_CREDIT_RESERVATION_REQUIRED":
+      return {
+        code: "ASSESSMENT_FINALIZATION_FAILED",
+        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
+        status: 500,
+        internalCode,
+        internalCategory: "credit-reservation-required",
+      } as const;
+    case "ASSESSMENT_OWNER_MISMATCH":
+      return {
+        code: "ASSESSMENT_FINALIZATION_FAILED",
+        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
+        status: 403,
+        internalCode,
+        internalCategory: "ownership-mismatch",
+      } as const;
+    case "ZOOTOPIA_DURABLE_PERSISTENCE_REQUIRED":
+      return {
+        code: "ASSESSMENT_FINALIZATION_FAILED",
+        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
+        status: 503,
+        internalCode,
+        internalCategory: "durable-persistence-unavailable",
+      } as const;
+    default:
+      return {
+        code: "ASSESSMENT_FINALIZATION_FAILED",
+        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
+        status: 500,
+        internalCode,
+        internalCategory: "unknown-finalization-failure",
+      } as const;
+  }
 }
 
 export async function POST(request: Request) {
@@ -438,6 +518,22 @@ export async function POST(request: Request) {
     });
 
     if (!resolvedDocument) {
+      const linkedDocumentFailureClass =
+        document.mimeType.toLowerCase() === "application/pdf" && document.storagePath
+          ? "ASSESSMENT_LINKED_DOCUMENT_STORAGE_UNAVAILABLE"
+          : "ASSESSMENT_LINKED_DOCUMENT_CONTEXT_UNAVAILABLE";
+
+      console.warn("Assessment linked-document input is unavailable for selected model.", {
+        ...baseDiagnosticContext,
+        layer: "request",
+        subsystem: "linked-document",
+        operation: "resolve-linked-document-input",
+        modelId: normalized.modelId,
+        canonicalModelId,
+        documentId: normalized.documentId,
+        linkedDocumentFailureClass,
+      });
+
       return respondAssessmentError({
         code: "DOCUMENT_CONTEXT_UNAVAILABLE",
         message:
@@ -451,6 +547,7 @@ export async function POST(request: Request) {
           modelId: normalized.modelId,
           canonicalModelId,
           documentId: normalized.documentId,
+          linkedDocumentFailureClass,
         },
       });
     }
@@ -556,6 +653,42 @@ export async function POST(request: Request) {
     });
   }
 
+  const creditLifecycle = {
+    reservationRequired: user.role !== "admin",
+    reservationReserved: Boolean(creditReservation.reservation),
+    reservationReleased: false,
+    creditCommitted: false,
+  };
+
+  const releaseReservedCredit = async (stage: "execution" | "finalization") => {
+    if (!creditReservation.reservation) {
+      return;
+    }
+
+    try {
+      await releaseAssessmentDailyCreditReservation({
+        user: {
+          uid: user.uid,
+          role: user.role,
+        },
+        reservation: creditReservation.reservation,
+      });
+      creditLifecycle.reservationReleased = true;
+    } catch (releaseError) {
+      console.error("Assessment credit reservation release failed unexpectedly.", {
+        ...baseDiagnosticContext,
+        layer: "credits",
+        subsystem: "assessment-route",
+        operation: `release-assessment-credit-reservation-${stage}`,
+        modelId: normalized.modelId,
+        canonicalModelId,
+        inputMode,
+        releaseError:
+          releaseError instanceof Error ? releaseError.message : String(releaseError),
+      });
+    }
+  };
+
   let generation: Awaited<ReturnType<typeof generateAssessment>>;
   const executionLane: "admin" | "user" = isAdmin ? "admin" : "user";
 
@@ -604,13 +737,7 @@ export async function POST(request: Request) {
       requestLane: executionLane,
     });
   } catch (error) {
-    await releaseAssessmentDailyCreditReservation({
-      user: {
-        uid: user.uid,
-        role: user.role,
-      },
-      reservation: creditReservation.reservation,
-    });
+    await releaseReservedCredit("execution");
 
     if (idempotencyToken) {
       await clearAssessmentGenerationIdempotencyLock({
@@ -637,6 +764,7 @@ export async function POST(request: Request) {
       console.warn("Assessment generation provider/runtime failure.", {
         code: error.code,
         status: error.status,
+        creditLifecycle,
         ...executionContext,
       });
 
@@ -660,6 +788,10 @@ export async function POST(request: Request) {
           upstreamStatus: executionContext.upstreamStatus ?? null,
           upstreamCode: executionContext.upstreamCode ?? null,
           upstreamType: executionContext.upstreamType ?? null,
+          creditReservationRequired: creditLifecycle.reservationRequired,
+          creditReservationReserved: creditLifecycle.reservationReserved,
+          creditReservationReleased: creditLifecycle.reservationReleased,
+          creditCommitted: creditLifecycle.creditCommitted,
         },
       }).catch((logError) => {
         console.warn("Assessment failure lifecycle log failed unexpectedly.", {
@@ -698,6 +830,10 @@ export async function POST(request: Request) {
         modelId: normalized.modelId,
         canonicalModelId,
         inputMode,
+        creditReservationRequired: creditLifecycle.reservationRequired,
+        creditReservationReserved: creditLifecycle.reservationReserved,
+        creditReservationReleased: creditLifecycle.reservationReleased,
+        creditCommitted: creditLifecycle.creditCommitted,
       },
     }).catch((logError) => {
       console.warn("Assessment generic failure lifecycle log failed unexpectedly.", {
@@ -734,6 +870,7 @@ export async function POST(request: Request) {
   };
   let resultArtifact: Awaited<ReturnType<typeof persistAssessmentResultArtifact>> = null;
   let artifactPersistenceDegraded = false;
+  let durableGenerationPersisted = false;
 
   /* Canonical-result storage is an optimization layer for future cache hits/export reuse.
      The durable assessment record + credit commit remain the source of truth, so a transient
@@ -771,6 +908,8 @@ export async function POST(request: Request) {
       },
       reservation: creditReservation.reservation,
     });
+    durableGenerationPersisted = true;
+    creditLifecycle.creditCommitted = true;
 
     if (idempotencyToken) {
       await completeAssessmentGenerationIdempotency({
@@ -800,9 +939,15 @@ export async function POST(request: Request) {
       metadata: {
         inputMode,
         modelId: savedGeneration.generation.modelId,
+        provider: savedGeneration.generation.meta.provider,
         canonicalResultArtifactPersisted: Boolean(resultArtifact),
         artifactPersistenceDegraded,
+        durableGenerationPersisted,
         dailyCreditsRemaining: savedGeneration.credits.remainingCount ?? "admin-exempt",
+        creditReservationRequired: creditLifecycle.reservationRequired,
+        creditReservationReserved: creditLifecycle.reservationReserved,
+        creditReservationReleased: creditLifecycle.reservationReleased,
+        creditCommitted: creditLifecycle.creditCommitted,
       },
     }).catch((logError) => {
       console.warn("Assessment success lifecycle log failed unexpectedly.", {
@@ -818,13 +963,7 @@ export async function POST(request: Request) {
 
     return apiSuccess<AssessmentCreateResponse>(savedGeneration, 201);
   } catch (error) {
-    await releaseAssessmentDailyCreditReservation({
-      user: {
-        uid: user.uid,
-        role: user.role,
-      },
-      reservation: creditReservation.reservation,
-    });
+    await releaseReservedCredit("finalization");
 
     if (idempotencyToken) {
       await clearAssessmentGenerationIdempotencyLock({
@@ -851,24 +990,33 @@ export async function POST(request: Request) {
       });
     }
 
-    if (error instanceof Error && error.message === "ASSESSMENT_ACCESS_DISABLED") {
-      return respondAssessmentError({
-        code: "ASSESSMENT_ACCESS_DISABLED",
-        message: "Assessment generation is disabled for this account.",
-        status: 403,
-        context: {
-          ...baseDiagnosticContext,
-          layer: "request",
-          subsystem: "credits",
-          operation: "save-assessment-generation-with-credit-commit",
-          modelId: normalized.modelId,
-          canonicalModelId,
-          inputMode,
-        },
-      });
-    }
+    const classifiedFinalizationFailure = classifyAssessmentFinalizationFailure(error);
+    const finalizationFailureContext = {
+      ...baseDiagnosticContext,
+      layer: "persistence",
+      subsystem: "repository",
+      operation: "save-assessment-generation-with-credit-commit",
+      modelId: normalized.modelId,
+      canonicalModelId,
+      provider: baseGeneration.meta.provider,
+      inputMode,
+      internalFailureCode: classifiedFinalizationFailure.internalCode,
+      internalFailureCategory: classifiedFinalizationFailure.internalCategory,
+      creditLifecycle,
+      canonicalResultArtifactPersisted: Boolean(resultArtifact),
+      artifactPersistenceDegraded,
+      durableGenerationPersisted,
+    };
 
-    console.error("Assessment finalization failed unexpectedly.", error);
+    const finalizationLogMethod =
+      classifiedFinalizationFailure.status >= 500 ? console.error : console.warn;
+    finalizationLogMethod("Assessment finalization failed with classified reason.", {
+      ...finalizationFailureContext,
+      responseCode: classifiedFinalizationFailure.code,
+      responseStatus: classifiedFinalizationFailure.status,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+
     await appendAdminLog({
       actorUid: user.uid,
       actorRole: user.role,
@@ -879,11 +1027,21 @@ export async function POST(request: Request) {
       resourceId: baseGeneration.id,
       route: "/api/assessment",
       metadata: {
-        failureCode: "ASSESSMENT_FINALIZATION_FAILED",
-        failureStatus: 500,
+        failureCode: classifiedFinalizationFailure.code,
+        failureStatus: classifiedFinalizationFailure.status,
+        internalFailureCode: classifiedFinalizationFailure.internalCode,
+        internalFailureCategory: classifiedFinalizationFailure.internalCategory,
         modelId: normalized.modelId,
         canonicalModelId,
+        provider: baseGeneration.meta.provider,
         inputMode,
+        canonicalResultArtifactPersisted: Boolean(resultArtifact),
+        artifactPersistenceDegraded,
+        durableGenerationPersisted,
+        creditReservationRequired: creditLifecycle.reservationRequired,
+        creditReservationReserved: creditLifecycle.reservationReserved,
+        creditReservationReleased: creditLifecycle.reservationReleased,
+        creditCommitted: creditLifecycle.creditCommitted,
       },
     }).catch((logError) => {
       console.warn("Assessment finalization failure lifecycle log failed unexpectedly.", {
@@ -899,18 +1057,10 @@ export async function POST(request: Request) {
     });
 
     return respondAssessmentError({
-      code: "ASSESSMENT_FINALIZATION_FAILED",
-      message: "The assessment finished, but it could not be finalized safely. No daily credit was used.",
-      status: 500,
-      context: {
-        ...baseDiagnosticContext,
-        layer: "persistence",
-        subsystem: "repository",
-        operation: "save-assessment-generation-with-credit-commit",
-        modelId: normalized.modelId,
-        canonicalModelId,
-        inputMode,
-      },
+      code: classifiedFinalizationFailure.code,
+      message: classifiedFinalizationFailure.message,
+      status: classifiedFinalizationFailure.status,
+      context: finalizationFailureContext,
     });
   }
 }

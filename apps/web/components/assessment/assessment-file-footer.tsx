@@ -26,8 +26,13 @@ export function AssessmentFileFooter({
 }: AssessmentFileFooterProps) {
   const dark = themeMode === "dark";
   const sideAnchorSize = ASSESSMENT_FILE_FOOTER_LAYOUT.sideAnchorSizePx;
+  /* Preview/result footers keep the full export-grade seal/page anchors on larger screens, but
+     step them down on phones so the shared Arabic attribution can hold one to two readable lines
+     instead of collapsing into a narrow vertical strip between oversized side ornaments. */
   const sideAnchorSizeClassName =
-    sideAnchorSize >= 96 ? "h-24 w-24" : "h-20 w-20";
+    sideAnchorSize >= 96
+      ? "h-14 w-14 sm:h-20 sm:w-20 lg:h-24 lg:w-24"
+      : "h-12 w-12 sm:h-16 sm:w-16 lg:h-20 lg:w-20";
   const sealImageStyle = {
     padding: `${ASSESSMENT_FILE_FOOTER_LAYOUT.sealImagePaddingPx}px`,
     transform: `scale(${ASSESSMENT_FILE_FOOTER_LAYOUT.sealImageScale})`,
@@ -53,7 +58,7 @@ export function AssessmentFileFooter({
       dir="ltr"
       style={footerDirectionStyle}
       className={cn(
-        "mt-auto flex items-center gap-[0.85rem] rounded-[1.65rem] border px-4 py-2.5",
+        "mt-auto grid grid-cols-[auto,minmax(0,1fr),auto] items-center gap-2 rounded-[1.35rem] border px-3 py-2 sm:gap-[0.85rem] sm:rounded-[1.65rem] sm:px-4 sm:py-2.5",
         dark
           ? "border-emerald-200/15 bg-[linear-gradient(180deg,rgba(4,13,27,0.97),rgba(3,10,22,0.92))] text-white shadow-[inset_0_0_0_1px_rgba(94,234,212,0.12),0_12px_28px_rgba(1,4,14,0.18)]"
           : "border-emerald-700/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(246,251,249,0.82))] text-slate-900 shadow-[inset_0_0_0_1px_rgba(15,118,110,0.08),0_10px_22px_rgba(15,23,42,0.06)]",
@@ -85,7 +90,7 @@ export function AssessmentFileFooter({
       <div className="min-w-0 flex-1 overflow-hidden text-center" dir="rtl">
         <p
           className={cn(
-            "inline-flex flex-wrap items-center justify-center gap-1.5 text-center text-[0.68rem] font-semibold leading-[1.35] sm:text-[0.72rem]",
+            "inline-flex max-w-full flex-wrap items-center justify-center gap-1 text-center text-[0.58rem] font-semibold leading-[1.45] sm:gap-1.5 sm:text-[0.72rem]",
             dark ? "text-white/88" : "text-slate-800/90",
           )}
         >
@@ -93,7 +98,10 @@ export function AssessmentFileFooter({
           {/* Footer attribution text stays shared across preview/result/export surfaces.
               Keep this center block readable and wrap-safe for Arabic without creating a second
               footer wording path in another renderer. */}
-          <span className="min-w-0 whitespace-normal text-balance" style={footerTextStyle}>
+          <span
+            className="min-w-0 whitespace-normal break-words sm:text-balance"
+            style={footerTextStyle}
+          >
             {footerLine.text}
           </span>
           <span className="shrink-0">{footerLine.trailingEmoji}</span>
@@ -125,7 +133,7 @@ export function AssessmentFileFooter({
         </svg>
         <span
           className={cn(
-            "relative text-[1.08rem] font-black tracking-[0.16em]",
+            "relative text-[0.9rem] font-black tracking-[0.16em] sm:text-[1rem] lg:text-[1.08rem]",
             dark ? "text-emerald-50" : "text-emerald-700",
           )}
         >

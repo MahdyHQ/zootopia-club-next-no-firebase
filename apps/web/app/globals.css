@@ -1415,6 +1415,29 @@ html[dir="rtl"] .field-control {
   inset-inline-end: 0.85rem;
 }
 
+/* Detached preview/result pages need a wider action lane than history cards because the
+   export block, theme toggle, and transient auth-status feedback all coexist there. Keep
+   these overrides scoped to the preview shell so shared export logic and history layouts do
+   not inherit a wider grid or a different status-card presentation by accident. */
+.assessment-preview-shell__actions-block .assessment-export-actions {
+  width: 100%;
+}
+
+.assessment-preview-shell__actions-block .auth-status {
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .assessment-preview-shell__actions-block .assessment-export-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .assessment-preview-shell__actions-block .assessment-export-actions__action--preview-lane,
+  .assessment-preview-shell__actions-block .assessment-export-actions__action--full-width {
+    grid-column: auto;
+  }
+}
+
 :root[data-theme="dark"] .assessment-export-actions__action {
   border-color: rgba(148, 163, 184, 0.16);
   background: linear-gradient(145deg, rgba(6, 15, 24, 0.86), rgba(9, 19, 31, 0.72));
@@ -1546,12 +1569,6 @@ html[dir="rtl"] .field-control {
 
   .assessment-export-actions__action--full-width {
     grid-column: auto;
-  }
-}
-
-@media (min-width: 1280px) {
-  .assessment-preview-shell__actions-rail {
-    transform: translateX(0.65rem);
   }
 }
 

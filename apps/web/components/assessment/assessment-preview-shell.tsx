@@ -158,104 +158,86 @@ export function AssessmentPreviewShell({
           </div>
         </header>
 
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-4">
-            <span
-              className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
-                dark
-                  ? "bg-blue-500/14 text-blue-100"
-                  : "bg-blue-50 text-blue-700"
-              }`}
-            >
-              <LibraryBig className="me-2 h-3.5 w-3.5" />
-              {view === "preview"
-                ? messages.assessmentPreviewTitle
-                : messages.assessmentResultViewerTitle}
-            </span>
-            <div>
-              <h1 className="max-w-4xl text-balance text-3xl font-bold tracking-tight sm:text-4xl">
-                {preview.title}
-              </h1>
-              {/* This is the shared file-surface summary block for both detached preview and result
-                  pages. Keep the SUMMARY badge, restrained gradients, and theme-aware copy here so
-                  the on-screen file header stays aligned with the Pro export cover without becoming
-                  a one-off tweak inside one page or inside the question/result renderer below. */}
-              <div className={`assessment-file-summary mt-4 ${dark ? "assessment-file-summary--dark" : ""}`}>
-                <span className="assessment-file-summary__badge">{summaryBadgeLabel}</span>
-                <p className="assessment-file-summary__body">{preview.summary}</p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {preview.compositionBadges.map((badge) => (
-                  <span
-                    key={badge.key}
-                    className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
-                      badge.tone === "type"
-                        ? dark
-                          ? "border-cyan-200/22 bg-cyan-300/12 text-cyan-50"
-                          : "border-cyan-200 bg-cyan-50 text-cyan-700"
-                        : dark
-                          ? "border-emerald-200/20 bg-emerald-300/12 text-emerald-50"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    }`}
-                  >
-                    {badge.label}
-                    {badge.value ? ` · ${badge.value}` : ""}
-                  </span>
-                ))}
-              </div>
+        <div className="space-y-4">
+          <span
+            className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
+              dark
+                ? "bg-blue-500/14 text-blue-100"
+                : "bg-blue-50 text-blue-700"
+            }`}
+          >
+            <LibraryBig className="me-2 h-3.5 w-3.5" />
+            {view === "preview"
+              ? messages.assessmentPreviewTitle
+              : messages.assessmentResultViewerTitle}
+          </span>
+          <div>
+            <h1 className="max-w-4xl text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+              {preview.title}
+            </h1>
+            {/* This is the shared file-surface summary block for both detached preview and result
+                pages. Keep the SUMMARY badge, restrained gradients, and theme-aware copy here so
+                the on-screen file header stays aligned with the Pro export cover without becoming
+                a one-off tweak inside one page or inside the question/result renderer below. */}
+            <div className={`assessment-file-summary mt-4 ${dark ? "assessment-file-summary--dark" : ""}`}>
+              <span className="assessment-file-summary__badge">{summaryBadgeLabel}</span>
+              <p className="assessment-file-summary__body">{preview.summary}</p>
             </div>
-            <div className="flex flex-wrap gap-2 text-sm font-semibold">
-              <span
-                className={`inline-flex rounded-full px-3 py-1 ${
-                  dark ? "bg-white/10 text-white/80" : "bg-slate-900/5 text-slate-700"
-                }`}
-              >
-                {preview.modeLabel}
-              </span>
-              <span
-                className={`inline-flex rounded-full px-3 py-1 ${
-                  dark ? "bg-white/10 text-white/80" : "bg-slate-900/5 text-slate-700"
-                }`}
-              >
-                {preview.difficultyLabel}
-              </span>
-              <span
-                className={`inline-flex rounded-full px-3 py-1 ${
-                  dark ? "bg-white/10 text-white/80" : "bg-slate-900/5 text-slate-700"
-                }`}
-              >
-                {preview.languageLabel}
-              </span>
-              <span
-                className={`inline-flex rounded-full px-3 py-1 ${
-                  preview.status === "expired"
-                    ? dark
-                      ? "bg-amber-500/16 text-amber-100"
-                      : "bg-amber-50 text-amber-700"
-                    : dark
-                      ? "bg-emerald-500/16 text-emerald-100"
-                      : "bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {preview.statusLabel}
-              </span>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {preview.compositionBadges.map((badge) => (
+                <span
+                  key={badge.key}
+                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+                    badge.tone === "type"
+                      ? dark
+                        ? "border-cyan-200/22 bg-cyan-300/12 text-cyan-50"
+                        : "border-cyan-200 bg-cyan-50 text-cyan-700"
+                      : dark
+                        ? "border-emerald-200/20 bg-emerald-300/12 text-emerald-50"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {badge.label}
+                  {badge.value ? ` · ${badge.value}` : ""}
+                </span>
+              ))}
             </div>
           </div>
-
-          <div className="assessment-preview-shell__actions-rail flex flex-col gap-3 xl:items-end">
-            <AssessmentPreviewThemeToggle
-              value={themeMode}
-              messages={messages}
-              onChange={setThemeMode}
-            />
-            <AssessmentExportActions
-              messages={messages}
-              preview={preview}
-              themeMode={themeMode}
-              showPreviewLink={view === "result"}
-              showResultLink={view === "preview"}
-              pdfCtaPriority={view === "preview" ? "hero" : "default"}
-            />
+          <div className="flex flex-wrap gap-2 text-sm font-semibold">
+            <span
+              className={`inline-flex rounded-full px-3 py-1 ${
+                dark ? "bg-white/10 text-white/80" : "bg-slate-900/5 text-slate-700"
+              }`}
+            >
+              {preview.modeLabel}
+            </span>
+            <span
+              className={`inline-flex rounded-full px-3 py-1 ${
+                dark ? "bg-white/10 text-white/80" : "bg-slate-900/5 text-slate-700"
+              }`}
+            >
+              {preview.difficultyLabel}
+            </span>
+            <span
+              className={`inline-flex rounded-full px-3 py-1 ${
+                dark ? "bg-white/10 text-white/80" : "bg-slate-900/5 text-slate-700"
+              }`}
+            >
+              {preview.languageLabel}
+            </span>
+            <span
+              className={`inline-flex rounded-full px-3 py-1 ${
+                preview.status === "expired"
+                  ? dark
+                    ? "bg-amber-500/16 text-amber-100"
+                    : "bg-amber-50 text-amber-700"
+                  : dark
+                    ? "bg-emerald-500/16 text-emerald-100"
+                    : "bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {preview.statusLabel}
+            </span>
           </div>
         </div>
 
@@ -292,6 +274,37 @@ export function AssessmentPreviewShell({
             </div>
           </article>
         </div>
+
+        <section
+          className={`assessment-preview-shell__actions-panel rounded-[1.65rem] border px-4 py-4 sm:px-5 sm:py-5 ${
+            dark
+              ? "border-white/10 bg-white/[0.05]"
+              : "border-slate-200 bg-white/80"
+          }`}
+        >
+          {/* This dedicated actions panel belongs to detached preview/result pages only.
+              Keep the theme toggle, export links, and transient status feedback together here so
+              responsive fixes can widen the interaction lane without changing the owner-scoped
+              export routes or the separate history-page action presentation. */}
+          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+            <AssessmentPreviewThemeToggle
+              value={themeMode}
+              messages={messages}
+              onChange={setThemeMode}
+            />
+          </div>
+
+          <div className="assessment-preview-shell__actions-block mt-4">
+            <AssessmentExportActions
+              messages={messages}
+              preview={preview}
+              themeMode={themeMode}
+              showPreviewLink={view === "result"}
+              showResultLink={view === "preview"}
+              pdfCtaPriority={view === "preview" ? "hero" : "default"}
+            />
+          </div>
+        </section>
 
         <AssessmentResultViewer
           messages={messages}

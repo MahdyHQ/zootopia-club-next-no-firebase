@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-14 (assessment model-id refresh + gemini-2.5-flash-lite default)
+Last Updated: 2026-04-14 (assessment Pro PDF Vercel Chromium trace fix + staged diagnostics)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -115,6 +115,14 @@ Key verified facts:
   redundant route-level title shell
 - Assessment hero/premium surfaces now use slightly higher translucency while
   preserving contrast for controls and text
+- Detached assessment preview/result pages now place their interactive export
+  controls in a dedicated full-width action panel beneath metadata, and the
+  shared file footer uses lighter mobile anchor sizing so attribution text no
+  longer collapses into narrow vertical fragments on phones
+- Assessment Pro PDF export now traces the hoisted Chromium Brotli payload from
+  the workspace root for Vercel, uses explicit `maxDuration = 120`, and emits
+  stage-classified internal diagnostics without exposing raw failure details to
+  the user-facing response
 - Protected Home/Assessment/Infographic/Settings/Upload/History wrappers now
   share a lighter translucency baseline so background ambience reads through
   consistently without reducing form/control legibility
@@ -749,6 +757,19 @@ Export Flow:
 - GET /api/assessment/export/* — Export assessment
 - Formats: PDF, JSON
 - Locale and theme variants supported
+- `/api/assessment/export/pdf/[id]` is compatibility-only and redirects to the
+  explicit Fast or Pro lane using canonical runtime origin
+- `/api/assessment/export/pdf/fast/[id]` stays the lightweight owner-scoped
+  browser-print HTML lane
+- `/api/assessment/export/pdf/pro/[id]` is the owner-scoped Puppeteer lane for
+  real downloadable PDFs, runs on Node.js with `maxDuration = 120`, and now
+  traces the hoisted workspace-root `@sparticuz/chromium/bin/**/*` payload so
+  Vercel lambdas receive the packaged browser binary even when npm workspaces
+  do not create `apps/web/node_modules`
+- Pro PDF failures are now logged with internal stage classification
+  (`route-context`, `artifact-load`, `qr-build`, `html-render`, `pdf-buffer`,
+  `artifact-store`, `generation-save`, `audit-log`) while the UI still returns
+  the same professional generic failure message
 - PDF generation uses Puppeteer (puppeteer-core + @sparticuz/chromium)
 - Export retention: 15 minutes (configurable)
 
@@ -895,6 +916,8 @@ Prompt Templates:
 PDF Generation:
 - Uses Puppeteer (puppeteer-core)
 - @sparticuz/chromium for serverless Chrome
+- Vercel Pro PDF tracing must include the workspace-root Chromium Brotli payload
+  because this repo hoists the package to root `node_modules`
 - Local executable override: ASSESSMENT_PDF_BROWSER_EXECUTABLE_PATH
 - PUPPETEER_EXECUTABLE_PATH for local development
 
@@ -1241,6 +1264,120 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-14 — Assessment Pro PDF Vercel Chromium Trace Fix + Stage Diagnostics
+==============================================================================
+Type: Production bug fix / Vercel serverless compatibility / export diagnostics hardening
+Scope: owner-scoped Pro PDF export route, shared browser-backed PDF capture path, Next standalone trace config
+
+Summary:
+- Completed mandatory ledger-first analysis, current-code comparison, Next.js docs review, Vercel project/log inspection, screenshot review, and subagent exploration before editing.
+- Verified the failing path is the premium Puppeteer-backed Pro lane (`/api/assessment/export/pdf/pro/[id]`), while the generic alias route and Fast browser-print lane remain separate and owner-scoped.
+- Fixed the Vercel deployment incompatibility by tracing the hoisted workspace-root `@sparticuz/chromium/bin/**/*` payload into the Pro route bundle instead of assuming a nested `apps/web/node_modules` install.
+- Added internal stage-classified diagnostics so production logs now distinguish browser-launch, render, PDF-capture, artifact, and audit/save failures without leaking internals to the UI.
+- Preserved the existing user-safe response contract: failed exports still return `ASSESSMENT_PDF_EXPORT_FAILED` with the professional generic message only.
+
+Root Cause (code-verified):
+- `apps/web/next.config.ts` already attempted to trace Chromium binaries for `/api/assessment/export/pdf/pro/[id]`, but the include path only targeted `./node_modules/@sparticuz/chromium/bin/**/*` relative to `apps/web`.
+- In this npm workspace, `@sparticuz/chromium` is hoisted to the monorepo root (`../../node_modules/...` from `apps/web`), so the deployed Pro route bundle on Vercel did not reliably receive the packaged Brotli Chromium payload (`chromium.br`, `al2023.tar.br`, `fonts.tar.br`, `swiftshader.tar.br`).
+- The Pro lane depends on that payload when no local browser executable exists, which is exactly the Vercel serverless case. That made the Pro route fail during browser startup/executable resolution even though preview/data/auth flows remained intact.
+
+Files Changed:
+- apps/web/next.config.ts
+- apps/web/app/api/assessment/export/pdf/pro/[id]/route.ts
+- apps/web/lib/server/assessment-pdf-download.ts
+- apps/web/lib/server/assessment-pro-pdf-export.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Vercel trace fix:
+  - Pro route output-file tracing now includes both the app-local and hoisted workspace-root Chromium bin paths
+  - Pro route standalone/serverless bundles now keep the packaged Chromium payload even when npm workspaces hoist the dependency
+- Pro route runtime:
+  - `runtime = "nodejs"` preserved
+  - `maxDuration = 120` added explicitly for the browser-backed premium lane
+- Internal diagnostics:
+  - unexpected shared export-context failures now log as `route-context` before returning the same safe 500 response
+  - Pro route failure logs now emit structured stage details via `describeAssessmentProPdfFailure(...)`
+  - browser-backed PDF capture now classifies `browser-launch`, `page-create`, `surface-render`, and `pdf-generate`
+  - Pro export orchestration now classifies `artifact-load`, `qr-build`, `html-render`, `pdf-buffer`, `artifact-store`, `generation-save`, and `audit-log`
+  - successful Pro export paths now emit concise lifecycle logs for context resolution, fresh artifact generation, and cache reuse
+- Safety boundaries preserved:
+  - owner/session/export context validation flow unchanged
+  - generic alias route and Fast lane behavior unchanged
+  - UI still receives the same clean failure message with no sensitive internals
+
+Verification:
+- Source verification:
+  - confirmed `apps/web/node_modules/@sparticuz/chromium/bin` does not exist in this workspace
+  - confirmed root `node_modules/@sparticuz/chromium/bin` contains the required Brotli payload files
+- Vercel verification:
+  - inspected the live Vercel project/logs for `zootopia-club-next-no-firebase-web`
+  - confirmed repeated production 500s on the Pro export route before the fix
+- Build verification:
+  - `npm run lint`: pass with 2 pre-existing warnings in `apps/web/components/upload/upload-workspace.tsx`
+  - `npm run typecheck`: pass
+  - `npm run build`: pass
+  - post-build trace verification: `apps/web/.next/server/app/api/assessment/export/pdf/pro/[id]/route.js.nft.json` now contains the hoisted Chromium payload entries (`al2023.tar.br`, `chromium.br`, `fonts.tar.br`, `swiftshader.tar.br`)
+
+Risks / Notes:
+- This pass intentionally avoids broad export-architecture changes and keeps the existing Pro/Fast lane separation intact.
+- A live authenticated end-to-end production click on the fixed route was not executed from this session because the route is owner-scoped and the workspace contains unrelated in-progress changes that should not be deployed blindly.
+- The strongest deployment-safe proof in this pass is the combination of live Vercel investigation, code-path verification, and post-build route-trace confirmation that the previously missing Chromium payload is now bundled for the Pro lambda.
+
+2026-04-14 — Assessment Preview Action-Panel Reflow + Mobile Footer Readability Fix (UI-Only)
+================================================================================================
+Type: UI polish / responsive layout hardening / detached preview-result surface cleanup
+Scope: detached assessment preview/result shell actions placement, preview-only export grid sizing, shared file footer mobile readability
+
+Summary:
+- Completed mandatory ledger-first, docs-first, and source-first analysis, plus an Explore subagent pass, before editing.
+- Verified that `/assessment/preview/[id]` only renders `AssessmentPreviewShell`; the real responsive ownership lives in the shared shell, shared export-actions CSS, and shared file footer.
+- Replaced the unstable right-side preview action rail with a dedicated full-width action panel rendered below the metadata cards, keeping all export/theme behavior intact.
+- Scoped preview-only export-grid overrides so action buttons and inline status/error feedback have stable horizontal space without altering history-page action layouts.
+- Reduced the visual weight of the shared file footer on phones by shrinking the side anchors and removing mobile text balancing, preventing the Arabic attribution from collapsing into one-word vertical fragments.
+
+Root Issue (code-verified):
+- `apps/web/components/assessment/assessment-preview-shell.tsx` placed `AssessmentExportActions` in an `xl` right-side rail (`assessment-preview-shell__actions-rail`) next to the title/summary lane, which left the action block too narrow for multiple export buttons plus `AuthStatus` feedback.
+- Shared export-actions CSS in `apps/web/app/globals.css` assumed a capped-width action grid (`width: min(100%, 34.75rem)`) and preview-lane buttons that span full rows, which worked in cards/history contexts but felt cramped inside the detached preview shell.
+- `apps/web/components/assessment/assessment-file-footer.tsx` kept large left/right ornaments at all breakpoints while using `text-balance` in the center attribution span, causing phone layouts to squeeze the Arabic footer copy into awkward narrow wrapping.
+
+Files Changed:
+- apps/web/components/assessment/assessment-preview-shell.tsx
+- apps/web/components/assessment/assessment-file-footer.tsx
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Preview/result action area:
+  - removed the detached preview/result right-side action rail
+  - introduced a dedicated bordered actions panel beneath the generated/expires metadata cards
+  - kept the theme toggle, export buttons, and inline status/error feedback together inside that full-width panel
+- Preview-only export layout:
+  - preview/result shell action blocks now force the export grid to use the full available panel width
+  - preview/result shell action blocks switch to a stable two-column grid from `md` upward
+  - preview/result shell action blocks allow preview-lane and formerly full-width buttons to sit in the grid instead of stacking as a narrow sidebar column
+  - preview/result shell `AuthStatus` feedback now inherits the full action-panel width, preventing tall narrow message strips
+- Shared file footer:
+  - mobile side anchors now step down in size while desktop/export-grade sizing remains on larger breakpoints
+  - footer container spacing and page-number typography are lighter on phones
+  - mobile footer attribution text no longer uses `text-balance`; wrapping stays normal on phones and balanced on `sm+`
+
+Verification:
+- `npm run lint:web`: pass with 2 pre-existing warnings in `apps/web/components/upload/upload-workspace.tsx` (`title` and `description` unused)
+- `npm run typecheck:web`: pass
+- `npm run build:web`: pass
+- Runtime smoke:
+  - `npx next start --hostname 127.0.0.1 --port 3020` served successfully and `/api/health` returned `ok=true`
+  - unauthenticated request to `/assessment/preview/layout-qa` redirected to `/login` (307), confirming the detached preview route is auth-gated in this session
+- Responsive verification status:
+  - source-level verification completed for large-screen action-panel placement, preview-only grid behavior, full-width status-card scope, and mobile footer sizing/wrapping guards
+  - full authenticated browser visual QA of a real preview record was not possible in this session because the preview route remained owner-auth gated
+
+Risks / Notes:
+- This pass intentionally does not touch backend/export/auth/business logic; all export URLs, theme query handling, and PDF fetch behavior remain unchanged.
+- Preview-only action-grid overrides are scoped under the detached preview shell so history-card export actions keep their prior layout.
+- `AssessmentFileFooter` is shared by preview, result, and support pages, so the lighter mobile footer geometry now applies consistently across all detached file-surface pages.
 
 2026-04-12 — Verification Baseline Reconfirm (Current)
 =======================================================
@@ -3452,3 +3589,4 @@ chronology. Mark outdated assumptions as superseded or legacy when appropriate.
 ================================================================================
 END OF LEDGER
 ================================================================================
+
