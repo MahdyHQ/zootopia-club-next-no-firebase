@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-14 (Home CTA Vercel motion hardening + roadmap viewer portal close control + assessment PDF renderer content migration completion)
+Last Updated: 2026-04-14 (User password policy hardening + forgot/reset + in-account password change flow)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -78,6 +78,14 @@ Key verified facts:
 - Supabase Auth provides identity (email/password only)
 - Two credential providers: user-credentials and admin-credentials
 - Admin access controlled by email allowlist (ZOOTOPIA_ADMIN_EMAILS)
+- Auth bootstrap now fails closed when Supabase still reports email as unconfirmed
+  (user + admin flows), and confirm-email callback success UI now requires
+  provider-confirmed email state before Auth.js session handoff
+- Regular-user password lifecycle now includes server-authoritative forgot-password,
+  recovery reset, and in-account password-change flows with explicit admin-lane
+  separation and password-security metadata persistence
+- Public auth surfaces now include `/forgot-password` and `/reset-password`, and
+  signup/reset/settings password entry points share one policy validator contract
 - Profile completion gating blocks incomplete profiles from protected features
 - AI providers: Google AI (Gemini) and DashScope (Qwen/Alibaba)
 - Tool default models are now server-authoritative per real tool via
@@ -145,7 +153,7 @@ Key verified facts:
 - Admin panel includes user management, storage management, governance dashboard
 - Database uses Supabase Postgres with RLS policies
 - Migration management via scripts/supabase/apply-migrations.mjs
-- 10 migration files tracked in supabase/migrations (latest adds artifact-metadata indexing + document file-extension backfill)
+- 11 migration files tracked in supabase/migrations (latest adds user password security event/state persistence)
 
 ================================================================================
 3. PROJECT PURPOSE & PLATFORM DIRECTION
@@ -432,7 +440,7 @@ Environment File Strategy:
 
 Route Groups:
 - (protected): Requires authentication + profile completion
-- (public): Public pages (login, confirm email)
+- (public): Public pages (login, forgot/reset password, confirm email)
 - (site): Public marketing/info pages
 
 Complete Route Tree:
@@ -453,6 +461,8 @@ Protected Routes (requires auth):
 
 Public Routes (no auth):
   /login                      → Login page
+  /forgot-password            → Password reset email request page
+  /reset-password             → Password recovery completion page
   /confirm-email              → Email confirmation page
   /coming-soon                → Feature preview placeholder
 
@@ -465,6 +475,9 @@ Site Routes (public marketing):
 API Routes:
   /api/auth/[...nextauth]     → Auth.js handler
   /api/auth/confirm-email/resend  → Email verification resend
+  /api/auth/password/forgot   → Request password reset email (regular users)
+  /api/auth/password/recovery → Validate/complete recovery token flow
+  /api/auth/password/change   → In-account password change (regular users)
   /api/assessment             → POST: Create assessment
   /api/assessment/[id]        → GET: Get single assessment
   /api/assessment/credits     → GET: Daily credit status
@@ -500,6 +513,8 @@ Frontend-Owned (Client Pages):
 - apps/web/app/(protected)/admin/users/[uid]/page.tsx — User management
 - apps/web/app/(protected)/admin/storage/page.tsx — Storage management
 - apps/web/app/(public)/login/page.tsx — Login page
+- apps/web/app/(public)/forgot-password/page.tsx — Forgot-password page
+- apps/web/app/(public)/reset-password/page.tsx — Reset-password page
 - apps/web/app/(public)/confirm-email/page.tsx — Email confirmation
 - apps/web/app/(site)/** — Marketing pages
 
@@ -595,10 +610,11 @@ User Login Flow:
    d. Recency check: auth_time must be within 5 minutes
    e. Admin block: If email in ZOOTOPIA_ADMIN_EMAILS, reject with ADMIN_LOGIN_REQUIRED
    f. Provider check: Must be password provider
-   g. User upsert: upsertUserFromAuth() creates/updates profile in Postgres
-   h. Status check: User must be active (not suspended)
-4. JWT callback populates token with uid, role, status, profile completion
-5. Session callback syncs token to session object
+  g. Email confirmation check: token/user must be confirmed (fail-closed AUTH_EMAIL_NOT_CONFIRMED)
+  h. User upsert: upsertUserFromAuth() creates/updates profile in Postgres
+  i. Status check: User must be active (not suspended)
+4. JWT callback populates token with uid, role, status, profile completion, and confirmation claims
+5. Session callback syncs token to session object and projects emailVerified from JWT claims
 6. Client receives session cookie
 
 Admin Login Flow:
@@ -606,8 +622,16 @@ Admin Login Flow:
 2. Client calls signIn("admin-credentials", { idToken })
 3. Server checks email against ZOOTOPIA_ADMIN_EMAILS allowlist
 4. If not in allowlist, reject
-5. If in allowlist, proceed with same verification as user flow
-6. JWT populated with role: "admin"
+5. If in allowlist, proceed with same verification as user flow, including email-confirmation enforcement
+6. JWT populated with role/status/profile and confirmation claims
+
+Regular User Password Lifecycle (2026-04-14 hardening):
+1. Forgot-password request enters `/api/auth/password/forgot` (email validation + IP/account throttling)
+2. Admin/allowlisted identities are blocked from user reset lane (`ADMIN_PASSWORD_FLOW_UNSUPPORTED`)
+3. Recovery callback flow finalizes token/session on `/reset-password`, then `/api/auth/password/recovery` validates token identity server-side
+4. Password recovery completion records security metadata (`recovery_reset`) without storing raw password/hash data
+5. In-account password changes run through `/api/auth/password/change` with current-password verification and policy enforcement
+6. Settings password change enforces an immediate re-authentication boundary after success
 
 Session Configuration:
 - Strategy: JWT (no database sessions)
@@ -866,6 +890,9 @@ Migrations (supabase/migrations/):
 10. 20260414153000_assessment_artifact_metadata_index_and_document_extension.sql
   - Adds assessment artifact metadata query indexes + backfills assessmentArtifactMetadata mirror rows
   - Backfills missing document fileExtension metadata and adds file-extension query index
+11. 20260414230000_user_password_security_events.sql
+  - Adds `user_password_security_events` append-only telemetry table for password reset/change events
+  - Adds `user_password_security_state` latest-state table with backend-only deny-all RLS for anon/authenticated
 
 Migration Application:
 - scripts/supabase/apply-migrations.mjs
@@ -960,7 +987,12 @@ Email Confirmation:
 - /confirm-email page handles email verification
 - Supabase sends confirmation email via Resend
 - User clicks link → redirected to /confirm-email
-- Finalization redirects to NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT
+- Finalization now verifies provider-confirmed email state before Auth.js bootstrap
+- Only confirmed callbacks proceed to role/profile redirect resolution
+
+Password Recovery Callbacks:
+- `/forgot-password` requests reset emails through `/api/auth/password/forgot` with privacy-preserving success responses
+- `/reset-password` validates callback tokens, enforces user-only lane ownership, and completes password updates with password-security metadata persistence
 
 Auth Flow Redirects:
 - Login success → default redirect or profile completion check
@@ -1189,6 +1221,9 @@ Implemented & Active:
 - [x] User authentication (email/password via Supabase)
 - [x] Admin authentication (separate provider, email allowlist)
 - [x] Email verification with resend governance
+- [x] Regular-user forgot-password and recovery reset flow
+- [x] In-account regular-user password change with forced re-authentication handoff
+- [x] Unified regular-user password policy enforcement across sign-up/reset/settings
 - [x] Profile completion gating
 - [x] Document upload with retention policies
 - [x] AI assessment generation with credit limits
@@ -4443,6 +4478,104 @@ Verification:
 Risks / Notes:
 - Because this pass could not reuse a live authenticated Vercel session, the exact original production visual symptom remains reconstructed from the source, logs, and deployment state rather than screen-recorded end-to-end reproduction.
 - The fix intentionally addresses the most credible production weaknesses without bloating the Home page or changing its current visual identity.
+
+---
+
+2026-04-14 — Auth Confirmation Authority Hardening + Confirm-Email Callback Truth Guard
+========================================================================================
+Type: Auth/session consistency fix / email-confirmation authority hardening / redirect-loop prevention
+Scope: Auth.js credential bootstrap gates, Supabase decoded-token claim projection, confirm-email callback finalization handoff
+
+Summary:
+- Completed mandatory ledger-first and source-first investigation before edits, including direct tracing of login, confirm-email, callback finalization, session projection, proxy gating, and admin/user lane separation.
+- Confirmed the inconsistency came from a trust gap: app bootstrap could treat callback completion as success without enforcing provider-confirmed email state at the server bootstrap boundary.
+- Implemented fail-closed confirmation enforcement for both `user-credentials` and `admin-credentials` bootstrap paths.
+- Added callback-time provider truth guard so `/confirm-email` no longer shows success or performs Auth.js handoff unless Supabase reports the account email as confirmed.
+- Preserved role/lane boundaries and existing admin/user separation logic.
+
+Root Cause (code-verified):
+- `auth.ts` credential bootstrap path verified token recency/provider/status but did not enforce confirmed-email state before profile upsert/session bootstrap.
+- Session projection also hardcoded `emailVerified: null`, hiding confirmation-state truth in Auth.js session surfaces.
+- `/confirm-email` callback flow finalized token/session exchange but did not require a provider-confirmed email check before success handoff.
+
+Files Changed:
+- apps/web/auth.ts
+- apps/web/components/auth/confirm-email-panel.tsx
+- apps/web/lib/server/auth-tracing.ts
+- apps/web/lib/server/auth-types.ts
+- apps/web/lib/server/supabase-admin.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- `supabase-admin.ts` now stamps explicit confirmation claims from live Supabase user state into decoded token payloads (`email_verified`, `email_confirmed_at`, `emailVerified`).
+- `auth.ts` now:
+  - adds explicit `AUTH_STAGE_EMAIL_CONFIRMATION` tracing
+  - fails closed with `AUTH_EMAIL_NOT_CONFIRMED` for user/admin credential bootstrap when provider state is unconfirmed
+  - propagates confirmation truth into JWT/session projection instead of forcing `emailVerified: null`
+- `confirm-email-panel.tsx` now:
+  - validates callback-produced token against `supabase.auth.getUser(idToken)` confirmation state before Auth.js bootstrap
+  - maps `AUTH_EMAIL_NOT_CONFIRMED` to actionable invalid-link/refresh-confirmation UX messaging
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `npm run lint --workspace @zootopia/web`: pass
+- `npm run typecheck --workspace @zootopia/web`: pass
+- `npm run build --workspace @zootopia/web`: pass
+
+Risks / Notes:
+- A stale concurrent Next build process was detected once during verification and was cleared before the final successful build run.
+- This pass intentionally does not alter proxy role gating ownership or profile-completion ownership; those remain in their existing server-authoritative boundaries.
+- No admin privilege widening or client-side secret exposure was introduced.
+
+---
+
+2026-04-14 — User Password Policy + Forgot/Reset + Settings Password Change Hardening
+========================================================================================
+Type: Auth hardening / password lifecycle expansion / user-lane security boundary enforcement
+Scope: Public auth pages, user password APIs, settings security UI, shared route/policy contracts, migration persistence
+
+Summary:
+- Implemented a full regular-user password lifecycle with strict admin-lane separation: forgot-password request, recovery validation/completion, and in-account password change.
+- Added `/forgot-password` and `/reset-password` public pages with secure callback finalization and explicit policy-safe password update UX.
+- Added `/api/auth/password/forgot`, `/api/auth/password/recovery`, and `/api/auth/password/change` server routes with stable API error contracts and fail-closed admin blocking.
+- Added password security metadata persistence for reset/change events without storing raw passwords or password hashes.
+- Enforced shared regular-user password policy at sign-up (`login-panel.tsx`), recovery reset, and settings password-change surfaces.
+
+Files Changed:
+- packages/shared-config/src/routes.ts
+- packages/shared-utils/src/validation.ts
+- apps/web/lib/password-policy.ts
+- apps/web/lib/server/password-security-events.ts
+- supabase/migrations/20260414230000_user_password_security_events.sql
+- apps/web/app/api/auth/password/forgot/route.ts
+- apps/web/app/api/auth/password/recovery/route.ts
+- apps/web/app/api/auth/password/change/route.ts
+- apps/web/components/auth/forgot-password-panel.tsx
+- apps/web/components/auth/reset-password-panel.tsx
+- apps/web/app/(public)/forgot-password/page.tsx
+- apps/web/app/(public)/reset-password/page.tsx
+- apps/web/components/auth/login-panel.tsx
+- apps/web/components/settings/password-change-panel.tsx
+- apps/web/app/(protected)/settings/page.tsx
+- apps/web/proxy.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- User sign-up now blocks weak passwords before provider submission and surfaces localized policy guidance.
+- Login surface now links to forgot-password and pre-fills email into the recovery request flow.
+- Recovery route now validates token identity server-side, blocks admin identities, and persists completion metadata.
+- Settings now exposes an in-account password change panel for non-admin users and enforces immediate re-authentication handoff after success.
+- Proxy matcher now treats forgot/reset/confirm/login as auth-entry routes and redirects already-authenticated sessions away from them.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Existing unrelated diagnostics in `apps/web/lib/server/assessment-print-renderer.ts` were pre-existing and not modified in this pass.
+- Recovery/security event persistence is intentionally best-effort safe; completion route returns explicit `PASSWORD_RECOVERY_COMPLETE_FAILED` if metadata write fails.
 
 ---
 

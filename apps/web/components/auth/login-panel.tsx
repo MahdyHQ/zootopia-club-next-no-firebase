@@ -2,6 +2,7 @@
 
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { ApiResult, Locale, SessionUser } from "@zootopia/shared-types";
+import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
 import { Eye, EyeOff, LoaderCircle, LogIn, Mail, Shield, UserPlus } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
@@ -35,6 +36,10 @@ import {
   primeEphemeralSupabaseClient,
 } from "@/lib/supabase/client";
 import { buildClientAuthDeviceLabelMetadata } from "@/lib/auth-device-label";
+import {
+  getPasswordPolicyErrorMessage,
+  getPasswordPolicyHint,
+} from "@/lib/password-policy";
 
 type LoginPanelProps = {
   messages: AppMessages;
@@ -62,8 +67,10 @@ function buildLocalText(locale: Locale) {
       signInButton: "دخول آمن",
       signUpButton: "إنشاء حساب",
       passwordsMismatch: "كلمتا المرور غير متطابقتين.",
+      passwordPolicyTitle: "كلمة المرور الجديدة لا تحقق سياسة الأمان.",
       emailVerificationRequired:
         "تم إنشاء الحساب. راجع بريدك الإلكتروني لتأكيد الحساب ثم عد لتسجيل الدخول.",
+      forgotPasswordAction: "نسيت كلمة المرور؟",
     };
   }
 
@@ -78,8 +85,10 @@ function buildLocalText(locale: Locale) {
     signInButton: "Secure sign-in",
     signUpButton: "Create account",
     passwordsMismatch: "Passwords do not match.",
+    passwordPolicyTitle: "New password does not meet policy requirements.",
     emailVerificationRequired:
       "Account created. Verify your email, then return to sign in.",
+    forgotPasswordAction: "Forgot password?",
   };
 }
 
@@ -426,6 +435,27 @@ export function LoginPanel({
       return;
     }
 
+    if (mode === "sign_up") {
+      const passwordPolicy = validateUserPasswordPolicy({
+        password,
+        email: email.trim(),
+      });
+
+      if (!passwordPolicy.ok) {
+        setStatus({
+          tone: "warning",
+          icon: "warning",
+          title: localText.passwordPolicyTitle,
+          body: getPasswordPolicyErrorMessage({
+            locale,
+            code: passwordPolicy.code,
+            fallback: passwordPolicy.error,
+          }),
+        });
+        return;
+      }
+    }
+
     setPhase("authenticating");
     setStatus({
       tone: "info",
@@ -712,9 +742,20 @@ export function LoginPanel({
               className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 placeholder:text-foreground-muted/80"
               placeholder="••••••••"
               required
-              minLength={8}
+              minLength={mode === "sign_up" ? 12 : 1}
             />
           </label>
+
+          {mode === "sign_in" ? (
+            <div className="-mt-1 flex justify-end">
+              <Link
+                href={`${APP_ROUTES.forgotPassword}?email=${encodeURIComponent(email.trim())}`}
+                className="text-xs font-semibold text-emerald-700 transition hover:text-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200"
+              >
+                {localText.forgotPasswordAction}
+              </Link>
+            </div>
+          ) : null}
 
           {mode === "sign_up" ? (
             <label className="space-y-2 block">
@@ -744,8 +785,12 @@ export function LoginPanel({
                 className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 placeholder:text-foreground-muted/80"
                 placeholder="••••••••"
                 required
-                minLength={8}
+                minLength={12}
               />
+
+              <p className="rounded-2xl border border-border bg-background/60 px-3.5 py-3 text-xs leading-5 text-foreground-muted">
+                {getPasswordPolicyHint(locale)}
+              </p>
             </label>
           ) : null}
 

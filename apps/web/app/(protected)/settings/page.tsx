@@ -4,6 +4,7 @@ import { Settings2, ShieldCheck } from "lucide-react";
 import { LocaleToggle } from "@/components/preferences/locale-toggle";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
+import { PasswordChangePanel } from "@/components/settings/password-change-panel";
 import { IdentityAvatar } from "@/components/ui/identity-avatar";
 import {
   resolveAvatarDisplayName,
@@ -95,6 +96,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           isAdmin={user.role === "admin"}
         />
       </section>
+
+      {user.role !== "admin" ? (
+        <PasswordChangePanel locale={uiContext.locale} />
+      ) : null}
 
       {/* Keep preferences in a single compact strip so settings stays dense and readable
           while preserving theme/locale controls on this page. */}

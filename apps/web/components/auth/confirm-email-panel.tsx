@@ -195,6 +195,29 @@ function normalizeVerificationType(value: string | null) {
   return null;
 }
 
+function isSupabaseEmailConfirmed(user: unknown) {
+  if (!user || typeof user !== "object") {
+    return false;
+  }
+
+  const userRecord = user as Record<string, unknown>;
+  const confirmedAt =
+    typeof userRecord.email_confirmed_at === "string"
+      ? toOptionalString(userRecord.email_confirmed_at)
+      : null;
+
+  if (confirmedAt) {
+    return true;
+  }
+
+  const explicitConfirmation =
+    (typeof userRecord.email_confirmed === "boolean" ? userRecord.email_confirmed : null)
+    ?? (typeof userRecord.email_verified === "boolean" ? userRecord.email_verified : null)
+    ?? (typeof userRecord.emailVerified === "boolean" ? userRecord.emailVerified : null);
+
+  return explicitConfirmation === true;
+}
+
 function readHashFinalizePayload(hash: string): ConfirmEmailFinalizePayload {
   const normalizedHash = hash.startsWith("#") ? hash.slice(1) : hash;
   const params = new URLSearchParams(normalizedHash);
@@ -578,6 +601,13 @@ function mapConfirmEmailFailure(
   // of which specific backend code triggered them.
 
   switch (failure.normalizedCode) {
+    case "AUTH_EMAIL_NOT_CONFIRMED":
+      return {
+        tone: "warning",
+        icon: "warning",
+        title: messages.confirmEmailInvalidLinkTitle,
+        body: messages.confirmEmailInvalidLinkBody,
+      };
     case "AUTH_NETWORK_FAILURE":
       return {
         tone: "danger",
@@ -951,6 +981,20 @@ export function ConfirmEmailPanel({
           throw createAuthFlowError(
             "AUTH_SESSION_CREATION_FAILED",
             "Supabase confirmation callback did not produce a session token.",
+          );
+        }
+
+        const { data: confirmedUserData, error: confirmedUserError } = await supabase.auth.getUser(idToken);
+        if (confirmedUserError) {
+          throw confirmedUserError;
+        }
+
+        /* Callback token exchange alone is not sufficient for success UI.
+           Only continue when Supabase user state confirms email verification. */
+        if (!isSupabaseEmailConfirmed(confirmedUserData.user)) {
+          throw createAuthFlowError(
+            "AUTH_EMAIL_NOT_CONFIRMED",
+            "Supabase still reports this account email as unconfirmed.",
           );
         }
 

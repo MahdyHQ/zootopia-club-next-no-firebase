@@ -18,6 +18,13 @@ const USER_PROTECTED_MATCHERS = [
 
 const ADMIN_PROTECTED_MATCHERS = [APP_ROUTES.admin];
 
+const USER_AUTH_ENTRY_MATCHERS = [
+  APP_ROUTES.login,
+  APP_ROUTES.forgotPassword,
+  APP_ROUTES.resetPassword,
+  APP_ROUTES.confirmEmail,
+];
+
 type ProxySessionUser = {
   uid?: unknown;
   id?: unknown;
@@ -114,7 +121,7 @@ function proxyHandler(request: NextRequest) {
   // persisted session-backed user data. Keeping this out of proxy prevents false redirects
   // when JWT claims lag right after settings updates.
 
-  if (hasActiveSession && pathname === APP_ROUTES.login) {
+  if (hasActiveSession && matchesRoute(pathname, USER_AUTH_ENTRY_MATCHERS)) {
     return NextResponse.redirect(new URL(redirectDecision.path, request.url));
   }
 
@@ -139,6 +146,9 @@ export const config = {
   matcher: [
     "/",
     "/login",
+    "/forgot-password",
+    "/reset-password",
+    "/confirm-email",
     "/admin/login",
     "/upload/:path*",
     "/history/:path*",

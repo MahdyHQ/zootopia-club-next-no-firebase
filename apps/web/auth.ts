@@ -21,6 +21,7 @@ import {
 import {
   AUTH_STAGE_ADMIN_ALLOWLIST,
   AUTH_STAGE_ADMIN_CLAIM,
+  AUTH_STAGE_EMAIL_CONFIRMATION,
   AUTH_STAGE_JWT_CALLBACK,
   AUTH_STAGE_PROVIDER_CHECK,
   AUTH_STAGE_RECENT_SIGNIN,
@@ -56,6 +57,7 @@ type AuthorizedUser = {
   id: string;
   uid: string;
   email: string | null;
+  emailVerified?: boolean | null;
   name: string | null;
   image: string | null;
   displayName: string | null;
@@ -228,6 +230,55 @@ function normalizeStatus(value: unknown): UserStatus {
 
 function normalizeString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizeBooleanClaim(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (value === 1) {
+      return true;
+    }
+
+    if (value === 0) {
+      return false;
+    }
+
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized === "true" || normalized === "1" || normalized === "yes") {
+    return true;
+  }
+
+  if (normalized === "false" || normalized === "0" || normalized === "no") {
+    return false;
+  }
+
+  return null;
+}
+
+function resolveDecodedTokenEmailVerified(decodedToken: Record<string, unknown>) {
+  const explicitVerification =
+    normalizeBooleanClaim(decodedToken.email_verified)
+    ?? normalizeBooleanClaim(decodedToken.emailVerified);
+
+  if (explicitVerification !== null) {
+    return explicitVerification;
+  }
+
+  return Boolean(normalizeString(decodedToken.email_confirmed_at));
 }
 
 function normalizeOptionalCredentialString(value: string, maxLength: number) {
@@ -662,6 +713,23 @@ async function authorizeUserCredentials(
       provider: signInProvider,
     });
 
+    logAuthStageStart(traceContext, AUTH_STAGE_EMAIL_CONFIRMATION);
+    const emailVerified = resolveDecodedTokenEmailVerified(
+      decodedToken as Record<string, unknown>,
+    );
+    if (!emailVerified) {
+      logAuthStageFailure(
+        traceContext,
+        AUTH_STAGE_EMAIL_CONFIRMATION,
+        new Error("AUTH_EMAIL_NOT_CONFIRMED"),
+      );
+      throwAuthCode(
+        "AUTH_EMAIL_NOT_CONFIRMED",
+        "Please confirm your email address before signing in.",
+      );
+    }
+    logAuthStageSuccess(traceContext, AUTH_STAGE_EMAIL_CONFIRMATION);
+
     const tokenClaims = decodedToken as Record<string, unknown>;
     logAuthStageStart(traceContext, AUTH_STAGE_USER_UPSERT);
     const user = await upsertUserFromAuth({
@@ -703,6 +771,7 @@ async function authorizeUserCredentials(
 
     return {
       ...toAuthorizedUser(user),
+      emailVerified,
       profileCompleted: normalizedProfileCompleted,
       traceId: traceContext.traceId,
     };
@@ -801,6 +870,23 @@ async function authorizeAdminCredentials(
     }
     logAuthStageSuccess(traceContext, AUTH_STAGE_ADMIN_ALLOWLIST);
 
+    logAuthStageStart(traceContext, AUTH_STAGE_EMAIL_CONFIRMATION);
+    const emailVerified = resolveDecodedTokenEmailVerified(
+      decodedToken as Record<string, unknown>,
+    );
+    if (!emailVerified) {
+      logAuthStageFailure(
+        traceContext,
+        AUTH_STAGE_EMAIL_CONFIRMATION,
+        new Error("AUTH_EMAIL_NOT_CONFIRMED"),
+      );
+      throwAuthCode(
+        "AUTH_EMAIL_NOT_CONFIRMED",
+        "This admin account must confirm its email before admin sign-in.",
+      );
+    }
+    logAuthStageSuccess(traceContext, AUTH_STAGE_EMAIL_CONFIRMATION);
+
     const tokenClaims = decodedToken as Record<string, unknown>;
     logAuthStageStart(traceContext, AUTH_STAGE_ADMIN_CLAIM);
     const claimVerification = await verifyAdminClaimActivation(auth, {
@@ -860,6 +946,7 @@ async function authorizeAdminCredentials(
 
     return {
       ...toAuthorizedUser(user),
+      emailVerified,
       profileCompleted: normalizedProfileCompleted,
       traceId: traceContext.traceId,
     };
@@ -933,6 +1020,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (user) {
         const claims = tokenClaims;
+        const resolvedEmailVerified =
+          normalizeBooleanClaim(authUser.emailVerified)
+          ?? resolveDecodedTokenEmailVerified(claims);
 
         /* SESSION OWNERSHIP BINDING (Auth.js JWT Callback):
            
@@ -957,6 +1047,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         */
 
         claims.uid = authUser.uid ?? authUser.id ?? null;
+          claims.email = normalizeString(authUser.email) ?? normalizeString(claims.email);
+          /* Keep email verification projected into JWT claims so session hydration
+            and post-confirmation redirects cannot drift from provider truth. */
+          claims.emailVerified = resolvedEmailVerified;
+          claims.email_verified = resolvedEmailVerified;
         claims.displayName = normalizeString(authUser.displayName ?? authUser.name);
         claims.photoURL = normalizeString(authUser.photoURL ?? authUser.image);
         claims.deviceLabel = normalizeString(authUser.deviceLabel);
@@ -985,6 +1080,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       const claims = token as Record<string, unknown>;
       const uid = normalizeString(claims.uid);
+      const resolvedEmailVerified =
+        normalizeBooleanClaim(claims.emailVerified)
+        ?? normalizeBooleanClaim(claims.email_verified)
+        ?? (normalizeString(claims.email_confirmed_at) ? true : null);
       const traceContext = createAuthTraceContext({
         flow: normalizeRole(claims.role) === "admin" ? "admin" : "user",
         provider: "session",
@@ -1025,7 +1124,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         profileCompletedAt: normalizeString(claims.profileCompletedAt),
         role: normalizeRole(claims.role),
         status: normalizeStatus(claims.status),
-        emailVerified: null,
+        emailVerified: resolvedEmailVerified,
       } as typeof session.user;
 
       logAuthStageSuccess(traceContext, AUTH_STAGE_SESSION_CALLBACK, {

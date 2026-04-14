@@ -285,6 +285,7 @@ function buildSupabaseDecodedToken(input: {
 }) {
   const payload = decodeJwtPayload(input.token) ?? {};
   const userRecord = toLooseUserRecord(input.user);
+  const emailConfirmedAt = normalizeSupabaseTimestamp(userRecord.email_confirmed_at);
   const fallbackAuthTimeSeconds =
     normalizeSupabaseTimestampToUnixSeconds(userRecord.last_sign_in_at) ??
     normalizeSupabaseTimestampToUnixSeconds(userRecord.updated_at) ??
@@ -319,6 +320,11 @@ function buildSupabaseDecodedToken(input: {
     ...payload,
     uid: input.user.id,
     email: input.user.email ?? undefined,
+    /* Auth bootstrap must trust live Supabase user confirmation state so downstream
+       session creation can fail closed when email verification has not completed. */
+    email_verified: Boolean(emailConfirmedAt),
+    email_confirmed_at: emailConfirmedAt ?? null,
+    emailVerified: Boolean(emailConfirmedAt),
     name:
       typeof input.user.user_metadata?.name === "string"
         ? input.user.user_metadata.name

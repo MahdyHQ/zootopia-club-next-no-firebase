@@ -27,6 +27,27 @@ type ValidationFailure = {
   error: string;
 };
 
+export type UserPasswordPolicyFailureCode =
+  | "PASSWORD_TOO_SHORT"
+  | "PASSWORD_EDGE_WHITESPACE"
+  | "PASSWORD_MISSING_LETTER"
+  | "PASSWORD_COMPLEXITY_TOO_LOW"
+  | "PASSWORD_COMMON_PATTERN"
+  | "PASSWORD_REPEATED_CHARACTERS"
+  | "PASSWORD_SEQUENTIAL_PATTERN"
+  | "PASSWORD_MATCHES_EMAIL"
+  | "PASSWORD_MATCHES_FULL_NAME";
+
+export type UserPasswordPolicyValidationFailure = {
+  ok: false;
+  code: UserPasswordPolicyFailureCode;
+  error: string;
+};
+
+export type UserPasswordPolicyValidationResult =
+  | ValidationSuccess<string>
+  | UserPasswordPolicyValidationFailure;
+
 type ProfileValidationSuccess = ValidationSuccess<{
   fullName: string;
   universityCode: string;
@@ -60,6 +81,27 @@ const NAME_LETTERS_ONLY_PATTERN = /^[\p{Script=Arabic}\p{Script=Latin}]+$/u;
 const LOCATION_TEXT_PATTERN =
   /^[\p{Script=Arabic}\p{Script=Latin}\s.'-]+$/u;
 const E164_PHONE_PATTERN = /^\+[1-9]\d{6,17}$/;
+const USER_PASSWORD_MIN_LENGTH = 12;
+const USER_PASSWORD_STRICT_COMPLEXITY_LENGTH = 16;
+const USER_PASSWORD_MIN_PASSPHRASE_WORDS = 3;
+const USER_PASSWORD_COMMON_PATTERNS = [
+  "password",
+  "passw0rd",
+  "qwerty",
+  "qwertyui",
+  "letmein",
+  "welcome",
+  "iloveyou",
+  "abc123",
+  "admin",
+  "12345",
+  "123456",
+  "654321",
+  "qazwsx",
+] as const;
+const ASCII_ALPHA_SEQUENCE = "abcdefghijklmnopqrstuvwxyz";
+const ASCII_DIGIT_SEQUENCE = "0123456789";
+const PASSWORD_SEQUENTIAL_WINDOW = 5;
 const SUPPORTED_USER_GENDERS: UserGender[] = [
   "male",
   "female",
@@ -349,6 +391,154 @@ export function getPhoneNumberMetadata(value: string) {
     e164: parsedPhoneNumber.number,
     countryIso2: parsedPhoneNumber.country ?? null,
     countryCallingCode: parsedPhoneNumber.countryCallingCode ?? null,
+  };
+}
+
+function normalizePasswordComparableToken(value: string | null | undefined) {
+  const lowered = String(value || "").toLocaleLowerCase();
+  const segments = lowered.match(/[\p{Letter}\p{Number}]+/gu);
+  return segments ? segments.join("") : "";
+}
+
+function readEmailLocalPart(value: string | null | undefined) {
+  const normalized = normalizeWhitespace(String(value || "")).toLocaleLowerCase();
+  if (!normalized || !normalized.includes("@")) {
+    return "";
+  }
+
+  return normalized.split("@")[0] ?? "";
+}
+
+function hasSequentialPattern(value: string) {
+  const normalized = normalizePasswordComparableToken(value);
+  if (normalized.length < PASSWORD_SEQUENTIAL_WINDOW) {
+    return false;
+  }
+
+  const hasSequenceInBase = (base: string) => {
+    for (let index = 0; index <= normalized.length - PASSWORD_SEQUENTIAL_WINDOW; index += 1) {
+      const windowSlice = normalized.slice(index, index + PASSWORD_SEQUENTIAL_WINDOW);
+      const reversedWindowSlice = windowSlice.split("").reverse().join("");
+
+      if (base.includes(windowSlice) || base.includes(reversedWindowSlice)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  return hasSequenceInBase(ASCII_ALPHA_SEQUENCE) || hasSequenceInBase(ASCII_DIGIT_SEQUENCE);
+}
+
+/**
+ * User-password policy for app-owned signup/reset/change surfaces.
+ * This intentionally favors long passphrases (12+ chars) while still rejecting
+ * obvious weak patterns and identity-derived values.
+ */
+export function validateUserPasswordPolicy(input: {
+  password: string;
+  email?: string | null;
+  fullName?: string | null;
+}): UserPasswordPolicyValidationResult {
+  const password = String(input.password || "");
+
+  if (password.length < USER_PASSWORD_MIN_LENGTH) {
+    return {
+      ok: false,
+      code: "PASSWORD_TOO_SHORT",
+      error: `Password must be at least ${USER_PASSWORD_MIN_LENGTH} characters long.`,
+    };
+  }
+
+  if (password !== password.trim()) {
+    return {
+      ok: false,
+      code: "PASSWORD_EDGE_WHITESPACE",
+      error: "Password cannot start or end with whitespace.",
+    };
+  }
+
+  if (!/[\p{Letter}]/u.test(password)) {
+    return {
+      ok: false,
+      code: "PASSWORD_MISSING_LETTER",
+      error: "Password must include at least one letter.",
+    };
+  }
+
+  const hasLowercase = /[a-z]/.test(password);
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasDigit = /[\p{Number}]/u.test(password);
+  const hasSymbol = /[^\p{Letter}\p{Number}\s]/u.test(password);
+  const wordCount = normalizeWhitespace(password)
+    .split(" ")
+    .filter(Boolean)
+    .length;
+  const passphraseLike = /\s/.test(password) && wordCount >= USER_PASSWORD_MIN_PASSPHRASE_WORDS;
+  const hasMixedCase = hasLowercase && hasUppercase;
+  const hasComplexitySignal = hasDigit || hasSymbol || hasMixedCase || passphraseLike;
+
+  if (password.length < USER_PASSWORD_STRICT_COMPLEXITY_LENGTH && !hasComplexitySignal) {
+    return {
+      ok: false,
+      code: "PASSWORD_COMPLEXITY_TOO_LOW",
+      error: "Use a longer passphrase or add numbers, symbols, mixed case, or spaces between words.",
+    };
+  }
+
+  if (/(.)\1{3,}/u.test(password)) {
+    return {
+      ok: false,
+      code: "PASSWORD_REPEATED_CHARACTERS",
+      error: "Password cannot contain long repeated character runs.",
+    };
+  }
+
+  if (hasSequentialPattern(password)) {
+    return {
+      ok: false,
+      code: "PASSWORD_SEQUENTIAL_PATTERN",
+      error: "Password cannot contain obvious alphabetical or numeric sequences.",
+    };
+  }
+
+  const comparablePassword = normalizePasswordComparableToken(password);
+  if (
+    comparablePassword
+    && USER_PASSWORD_COMMON_PATTERNS.some((pattern) => comparablePassword.includes(pattern))
+  ) {
+    return {
+      ok: false,
+      code: "PASSWORD_COMMON_PATTERN",
+      error: "Password contains a common pattern. Choose a less predictable phrase.",
+    };
+  }
+
+  const comparableEmailLocalPart = normalizePasswordComparableToken(readEmailLocalPart(input.email));
+  if (
+    comparableEmailLocalPart.length >= 4
+    && comparablePassword === comparableEmailLocalPart
+  ) {
+    return {
+      ok: false,
+      code: "PASSWORD_MATCHES_EMAIL",
+      error: "Password must not match your email name.",
+    };
+  }
+
+  const comparableFullName = normalizePasswordComparableToken(input.fullName);
+  if (comparableFullName.length >= 6 && comparablePassword === comparableFullName) {
+    return {
+      ok: false,
+      code: "PASSWORD_MATCHES_FULL_NAME",
+      error: "Password must not match your full name.",
+    };
+  }
+
+  return {
+    ok: true,
+    value: password,
   };
 }
 

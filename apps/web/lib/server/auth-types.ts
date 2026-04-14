@@ -36,6 +36,9 @@ export type AuthUserRecord = {
 export type DecodedAuthToken = {
   uid: string;
   email?: string | null;
+  email_verified?: boolean;
+  email_confirmed_at?: string | null;
+  emailVerified?: boolean;
   name?: string;
   picture?: string;
   admin?: unknown;
