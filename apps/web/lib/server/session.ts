@@ -4,9 +4,6 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 import type {
   SessionSnapshot,
   SessionUser,
-  UserGender,
-  UserRole,
-  UserStatus,
 } from "@zootopia/shared-types";
 import { redirect } from "next/navigation";
 import { cache } from "react";
@@ -48,26 +45,6 @@ function getErrorCode(error: unknown) {
   return "UNKNOWN";
 }
 
-function normalizeRole(value: unknown): UserRole {
-  return value === "admin" ? "admin" : "user";
-}
-
-function normalizeStatus(value: unknown): UserStatus {
-  return value === "suspended" ? "suspended" : "active";
-}
-
-function normalizeString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function normalizeGender(value: unknown): UserGender | null {
-  if (value === "male" || value === "female" || value === "prefer_not_to_say") {
-    return value;
-  }
-
-  return null;
-}
-
 function readSessionUid(value: unknown) {
   if (!value || typeof value !== "object") {
     return null;
@@ -87,13 +64,13 @@ function readSessionUid(value: unknown) {
 
 const getVerifiedSessionContext = cache(
   async (): Promise<VerifiedSessionContext | null> => {
-    /* CRITICAL: Session boundary is the permanent trust boundary for user identity resolution.
+    /* CRITICAL: Session boundary is the server-authoritative trust boundary for protected routes.
        
        Session -> User Ownership Binding:
        1. auth() validates the session cookie (HTTP-only, signed by AUTH_SECRET)
-       2. readSessionUid() extracts session.user.uid from the session payload
-      3. getUserByUid() loads persisted user profile from the server-owned repository (Supabase-backed in active runtime)
-       4. Merged context = authoritative SessionUser (uid + role + status + profile fields)
+      2. readSessionUid() extracts session.user.uid from the session payload
+      3. getUserByUid() loads the live user record from server-owned auth/repository state
+      4. Live record = authoritative SessionUser (uid + role + status + profile fields)
        5. Every subsequent storage access MUST use session.user.uid as the owner
        
        Storage Ownership Model:
@@ -106,9 +83,17 @@ const getVerifiedSessionContext = cache(
        - Client request params like documentId are used only to LOOK UP metadata
        - Metadata ownership (record.ownerUid) must match session.uid
        - Even if metadata is corrupted, path assertion blocks access
+       - Stale Auth.js JWT claims must NEVER outlive live backend truth for role/status/admin scope
        
-       Future agents: Do NOT derive ownership from request body, URL params, or FormData.
-       The session context (from auth()) is the ONLY authoritative identity source.
+       Scope:
+       - All protected pages, Route Handlers, admin layouts, exports/downloads, and password flows
+       - This helper is security-sensitive, not a convenience hydration path
+
+       Future agents:
+       - Do NOT derive ownership from request body, URL params, or FormData
+       - Do NOT restore signed-cookie fallback for role/status/profile/admin truth here
+       - If you ever need a best-effort UI snapshot, build a separate non-authoritative helper
+         and keep it OUT of authorization, owner-scope, and admin route decisions.
     */
     await sweepExpiredUploadedSources().catch(() => undefined);
 
@@ -122,78 +107,40 @@ const getVerifiedSessionContext = cache(
     try {
       persistedUser = await getUserByUid(uid);
     } catch (error) {
-      // Keep protected-route rendering resilient when repository lookup is temporarily
-      // unavailable by falling back to signed session claims for this request.
-      console.warn("[session] persisted user lookup failed; using session fallback", {
+      /* Fail closed for security-sensitive server routes when live user truth is unavailable.
+         This covers user APIs, admin pages, exports, and account-security flows so stale JWT
+         claims cannot preserve access after suspension, admin demotion, or account deletion. */
+      console.warn("[session] rejecting session after persisted user lookup failure", {
         uid,
         errorCode: getErrorCode(error),
       });
-      persistedUser = null;
+      return null;
     }
 
-    const sessionUser = activeSession?.user as Record<string, unknown> | undefined;
+    if (!persistedUser) {
+      return null;
+    }
 
-    const normalizedUser: SessionUser = persistedUser
-      ? {
-          uid: persistedUser.uid,
-          email: persistedUser.email,
-          displayName: persistedUser.displayName,
-          photoURL: persistedUser.photoURL,
-          deviceLabel: persistedUser.deviceLabel,
-          deviceLabelSource: persistedUser.deviceLabelSource,
-          deviceLabelConfidence: persistedUser.deviceLabelConfidence,
-          fullName: persistedUser.fullName,
-          universityCode: persistedUser.universityCode,
-          phoneNumber: persistedUser.phoneNumber,
-          phoneCountryIso2: persistedUser.phoneCountryIso2 ?? null,
-          phoneCountryCallingCode: persistedUser.phoneCountryCallingCode ?? null,
-          gender: persistedUser.gender,
-          nationality: persistedUser.nationality,
-          profileCompleted: persistedUser.profileCompleted,
-          profileCompletedAt: persistedUser.profileCompletedAt,
-          role: persistedUser.role,
-          status: persistedUser.status,
-        }
-      : {
-          uid,
-          email: normalizeString(sessionUser?.email),
-          displayName:
-            normalizeString(sessionUser?.displayName) ??
-            normalizeString(sessionUser?.name),
-          photoURL:
-            normalizeString(sessionUser?.photoURL) ??
-            normalizeString(sessionUser?.image),
-          deviceLabel: normalizeString(sessionUser?.deviceLabel),
-          deviceLabelSource: normalizeString(sessionUser?.deviceLabelSource),
-          deviceLabelConfidence: (() => {
-            const rawValue = sessionUser?.deviceLabelConfidence;
-            if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
-              return rawValue >= 0 && rawValue <= 1 ? rawValue : null;
-            }
-
-            if (typeof rawValue === "string") {
-              const parsed = Number.parseFloat(rawValue);
-              return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
-                ? parsed
-                : null;
-            }
-
-            return null;
-          })(),
-          fullName: normalizeString(sessionUser?.fullName),
-          universityCode: normalizeString(sessionUser?.universityCode),
-          phoneNumber: normalizeString(sessionUser?.phoneNumber),
-          phoneCountryIso2: normalizeString(sessionUser?.phoneCountryIso2),
-          phoneCountryCallingCode: normalizeString(
-            sessionUser?.phoneCountryCallingCode,
-          ),
-          gender: normalizeGender(sessionUser?.gender),
-          nationality: normalizeString(sessionUser?.nationality),
-          profileCompleted: Boolean(sessionUser?.profileCompleted),
-          profileCompletedAt: normalizeString(sessionUser?.profileCompletedAt),
-          role: normalizeRole(sessionUser?.role),
-          status: normalizeStatus(sessionUser?.status),
-        };
+    const normalizedUser: SessionUser = {
+      uid: persistedUser.uid,
+      email: persistedUser.email,
+      displayName: persistedUser.displayName,
+      photoURL: persistedUser.photoURL,
+      deviceLabel: persistedUser.deviceLabel,
+      deviceLabelSource: persistedUser.deviceLabelSource,
+      deviceLabelConfidence: persistedUser.deviceLabelConfidence,
+      fullName: persistedUser.fullName,
+      universityCode: persistedUser.universityCode,
+      phoneNumber: persistedUser.phoneNumber,
+      phoneCountryIso2: persistedUser.phoneCountryIso2 ?? null,
+      phoneCountryCallingCode: persistedUser.phoneCountryCallingCode ?? null,
+      gender: persistedUser.gender,
+      nationality: persistedUser.nationality,
+      profileCompleted: persistedUser.profileCompleted,
+      profileCompletedAt: persistedUser.profileCompletedAt,
+      role: persistedUser.role,
+      status: persistedUser.status,
+    };
 
     if (normalizedUser.status !== "active") {
       return null;

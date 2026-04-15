@@ -4901,6 +4901,109 @@ Risks / Notes:
 
 ---
 
+2026-04-15 — Multi-User Isolation / Session Truth / Admin Separation Audit
+==========================================================================
+Type: strict production-readiness audit / isolation verification / minimal auth hardening
+Scope: Auth.js session truth, Supabase auth bootstrap, admin separation, owner-scope enforcement, storage ownership, credits, email confirmation, password reset/change, fallback behavior, concurrency-readiness
+
+Summary:
+- Performed a source-traced audit after reading the ledger and re-checking the live Next.js and Supabase auth/session paths before editing.
+- Verified the real protected-route, admin-route, owner-scope, export, storage, and account-security code paths instead of relying on assumptions.
+- Applied one minimal hardening change in `apps/web/lib/server/session.ts` so security-sensitive server routes now fail closed when live user lookup is unavailable instead of falling back to stale signed-cookie claims.
+
+Fully Correct:
+- User-to-user isolation is strongly enforced on the live document, assessment, infographic, and export paths:
+  - uploads are created with `ownerUid` from server session only
+  - read/delete paths use owner-bound helpers such as `getDocumentByIdForOwner`
+  - assessment result/export/readback paths use `getAssessmentGenerationForOwner`
+  - infographic readback uses `getInfographicGenerationForOwner`
+  - storage reads/writes/deletes re-assert canonical owner-scoped paths through `assertOwnerScopedStoragePath`
+- Admin separation is intentionally distinct from user auth:
+  - separate admin bootstrap/provider
+  - allowlist-gated identifier resolution
+  - explicit admin-claim activation checks
+  - user lane blocks allowlisted admin identities
+  - admin role mutation is limited to allowlisted admin emails only
+- Credits remain owner-bound and transaction-backed:
+  - reservation/commit path is server-authoritative
+  - idempotency is owner-scoped
+  - admin credit mutation blocks self-mutation
+  - save/commit path rejects owner mismatch
+- Email confirmation flow is professional and fail-closed in the important places:
+  - resend callbacks are pinned to server-derived origin
+  - governance state is durable and transaction-backed in Postgres
+  - provider rejection rolls back consumed attempts except cooldown
+  - final confirmation success is checked against live Supabase user state before session bootstrap is treated as complete
+- Password reset / password change flows are user-scoped and professional:
+  - forgot-password returns privacy-preserving accepted responses
+  - reset callback target is server-derived
+  - recovery token is verified server-side before completion metadata is accepted
+  - in-account password change requires current password re-auth and attempts session hardening with `signOut({ scope: "others" })`
+
+Partially Correct:
+- `apps/web/proxy.ts` uses signed-cookie session claims for redirect classification only.
+  - This is acceptable as a UX routing layer because server routes/layouts still re-check live session truth.
+  - It must not become the authority for admin, suspension, or owner-scope decisions.
+- Raw repository lookup helpers such as `getDocumentById`, `getAssessmentGenerationById`, and `getInfographicGenerationById` are safe today because current callers wrap them with owner/admin checks.
+  - They remain sharp edges for future misuse if a later route bypasses the owner-bound wrappers.
+- Production durable persistence posture is strong:
+  - repository memory fallback is already blocked when production durable persistence is required
+  - missing auth/database runtime throws instead of silently fragmenting truth across instances
+  - development/test can still use memory fallback intentionally
+
+Isolation / Session / Stale-Truth Findings:
+- Main real weak point before this pass:
+  - `apps/web/lib/server/session.ts` previously fell back to signed session claims when `getUserByUid()` failed
+  - that could preserve stale truth for `role`, `status`, `profileCompleted`, and admin/user routing decisions during backend lookup failure
+  - affected `getAuthenticatedSessionUser()`, `getAdminSessionUser()`, `requireAdminUser()`, password change, exports/downloads, protected pages, and other session-gated routes
+- Hardening applied:
+  - `getVerifiedSessionContext()` now requires a live persisted/auth-backed user lookup
+  - lookup failure now rejects the session for that request instead of trusting stale cookie claims
+  - this keeps admin demotion, suspension, account deletion, and stale role/status truth from surviving lookup failure on sensitive server paths
+
+Fallback / In-Memory Findings:
+- `apps/web/lib/server/request-rate-limit.ts` is intentionally process-local `globalThis` state.
+  - good for local friction
+  - not a globally enforced production control across multiple replicas
+  - should not be treated as a 3000-user security guarantee
+- `sweepExpiredUploadedSources()` uses per-instance throttling via `globalThis`.
+  - acceptable as best-effort cleanup
+  - not a cross-instance coordination mechanism
+- Verification resend governance is materially stronger than the lightweight auth rate-limit path because it is Postgres-backed and transactional.
+
+Admin-Boundary Findings:
+- Admin-only APIs and admin pages are consistently gated through `getAdminSessionUser()` / `requireAdminUser()`.
+- Admin role/status mutations revoke refresh tokens and update server-side auth truth.
+- Admin export stays server-authoritative, but workbook generation is operationally expensive because it fans out across user auth metadata plus per-user credit lookups.
+
+Scalability Findings For 3000+ Concurrent Users:
+- Architecture is broadly suitable in principle for isolated multi-user operation because ownership is server-derived and durable persistence is required in production.
+- Real bottlenecks/operational risks still present:
+  - every protected request depends on live `getUserByUid()` auth lookup, which improves security but adds Supabase Auth pressure under heavy load
+  - admin users export is N+1 for credit-state enrichment and can degrade with large user counts
+  - password-forgot/admin-resolver rate limiting is per-instance only
+  - Postgres pool in `apps/web/lib/server/zootopia-postgres-adapter.ts` is intentionally capped at `max: 3` per instance; safe for Supabase pool limits, but it constrains per-instance burst throughput and assumes horizontal scaling plus PgBouncer transaction pooling
+- No code evidence was found that would allow one normal user to read, mutate, or export another user's records through the live user routes reviewed in this pass.
+
+Files Changed:
+- `apps/web/lib/server/session.ts`
+- `zootopia-club-next-ledger.txt`
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+
+Risks / Notes:
+- This pass intentionally did not redesign proxy behavior, repository shape, or admin export architecture because the request was for surgical hardening without breaking working behavior.
+- Future agents must not reintroduce signed-cookie fallback for security-sensitive server session truth.
+- If stronger scale protections are needed later, prioritize:
+  - globally coordinated rate limits
+  - reduced live-auth read amplification on hot protected routes
+  - batched/admin-export enrichment rather than per-user serial fan-out
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve
