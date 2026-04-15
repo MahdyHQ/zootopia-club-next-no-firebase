@@ -1,4 +1,6 @@
 import { APP_NAME, APP_TAGLINE } from "@zootopia/shared-config";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata } from "next";
 import {
   Plus_Jakarta_Sans,
@@ -89,6 +91,11 @@ export default async function RootLayout({
         <div className="relative z-10 flex min-h-screen flex-col">
           {children}
         </div>
+        {/* Global Vercel telemetry is mounted once in the root layout so all site, auth,
+            protected, and admin traffic is measured. These integrations report to Vercel
+            dashboard services and do not render visible in-product analytics UI. */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

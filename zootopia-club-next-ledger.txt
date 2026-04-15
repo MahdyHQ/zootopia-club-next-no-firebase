@@ -5004,6 +5004,260 @@ Risks / Notes:
 
 ---
 
+2026-04-15 — Upload Flow Production Fix / Direct Storage Transport / Non-JSON Hardening
+========================================================================================
+Type: production bug fix / upload transport hardening / end-to-end flow verification
+Scope: `/upload` page, `/api/uploads`, Storage signed uploads, document persistence, linked-document handoff, assessment client error handling
+
+Summary:
+- Investigated the real `/upload` failure after reading the ledger first and tracing the live upload/storage/session/result pipeline before editing.
+- Confirmed the visible crash was real: `UploadWorkspace` was unconditionally calling `response.json()` and could crash on plain-text or malformed bodies.
+- Confirmed the server route could emit non-JSON before its structured error handler because `request.formData()` was outside the route `try/catch`.
+- Confirmed the deeper production mismatch: the app advertises 50MB uploads, but the old path still proxied the full file through `/api/uploads`, which is not production-safe for large uploads on Vercel-class function body limits.
+- Reworked upload transport surgically so the browser now uploads directly to an owner-scoped signed Supabase Storage path, then the server finalizes the document record from that stored object.
+
+Real Root Cause:
+- Root cause 1:
+  - `/upload` sent the whole file through the route handler as multipart form data.
+  - Large uploads could fail before application JSON error handling, surfacing non-JSON responses like `Request Entity Too Large`.
+  - The client then crashed trying to parse that body as JSON.
+- Root cause 2:
+  - The repo did not previously implement a supported browser-to-Supabase signed upload path for `/upload`.
+  - The observed `No API key found in request` class is what Supabase returns when a Storage request is made without a publishable key header.
+  - The new client path now uses the official browser Supabase client plus a server-issued signed upload token, so the upload request carries the proper Supabase client auth envelope instead of relying on ad hoc transport.
+
+What Changed:
+- `apps/web/app/api/uploads/route.ts`
+  - Added JSON `prepare` and `complete` modes on `POST /api/uploads`.
+  - `prepare`:
+    - authenticates the current session
+    - validates the file descriptor
+    - generates a server-owned `documentId`
+    - builds the canonical owner-scoped path `users/{ownerUid}/documents/{documentId}/{fileName}`
+    - signs that exact Storage object path with the service-role client
+  - `complete`:
+    - re-authenticates the current session
+    - recomputes the canonical owner-scoped path from session owner + prepared document id + file name
+    - downloads the uploaded object from secure Storage
+    - verifies byte size
+    - creates the document metadata record from the authoritative stored object
+    - persists the document through the existing repository path
+  - Hardened multipart fallback so `request.formData()` parse failures now return structured JSON errors instead of raw framework responses.
+  - Made upload/delete audit logging best-effort so logging degradation does not falsely turn a successful user action into a failed upload/delete.
+- `apps/web/lib/server/supabase-blob-storage.ts`
+  - Added a server helper to create signed upload URLs for the private bucket.
+  - Exposed the bucket name through a helper so the browser path uses the real bucket without duplicating hidden constants.
+- `apps/web/lib/server/document-runtime.ts`
+  - Extended `createDocumentRecord()` so finalize mode can reuse a pre-uploaded owner-scoped Storage object instead of re-uploading the binary.
+  - Re-asserts owner scope on the provided storage path before trusting it.
+- `apps/web/components/upload/upload-workspace.tsx`
+  - Browse and drag/drop still share the same file-entry helper.
+  - The upload client now:
+    - asks the server to prepare a signed direct upload
+    - uploads with the official browser Supabase client via `uploadToSignedUrl`
+    - asks the server to complete and persist the document
+  - Added safe API response parsing so upload/delete never crash on non-JSON responses.
+  - Keeps a fallback multipart path for runtimes where signed direct upload is unavailable.
+- `apps/web/components/assessment/assessment-studio.tsx`
+  - Hardened generation/readback fetch parsing so the post-upload assessment flow does not crash on malformed or non-JSON responses either.
+
+Isolation / Ownership Verification:
+- Upload ownership remains server-derived:
+  - the browser never chooses `ownerUid`
+  - the server still derives `ownerUid` from the authenticated session only
+  - the signed upload path is generated server-side under the current owner namespace only
+- Document persistence remains owner-bound:
+  - final document save still uses the existing owner-scoped repository path
+  - document read/delete/download paths still use owner-bound helpers such as `getDocumentByIdForOwner`
+- Linked-document and result flow remain owner-bound:
+  - assessment create still loads documents through `getDocumentByIdForOwner`
+  - linked document resolution still uses the persisted owner-scoped document record
+  - result save/export/readback still stay under owner-scoped generation helpers and owner-scoped Storage assertions
+- No code path reviewed in this fix allows one user to read, mutate, or preview another user's uploaded document, linked document context, generated result, or export.
+
+End-to-End Verification:
+- Verified by code trace:
+  - upload page -> `/api/uploads prepare` -> signed Storage path -> `/api/uploads complete`
+  - saved document -> assessment linked-document resolution -> assessment generation persistence -> preview/result owner-scoped readback
+- Verified live transport primitive:
+  - created a real signed upload URL against the `zootopia-private` bucket
+  - uploaded through the publishable-key browser client path
+  - downloaded the object with the service-role client
+  - content round-trip matched and cleanup succeeded
+- Verified commands:
+  - `npm run lint`: pass
+  - `npm run typecheck`: pass
+  - `npm run build`: pass
+
+Files Changed:
+- `apps/web/app/api/uploads/route.ts`
+- `apps/web/components/upload/upload-workspace.tsx`
+- `apps/web/components/assessment/assessment-studio.tsx`
+- `apps/web/lib/server/document-runtime.ts`
+- `apps/web/lib/server/supabase-blob-storage.ts`
+- `zootopia-club-next-ledger.txt`
+
+Risks / Notes:
+- The multipart proxy path still exists as a compatibility fallback, but the production-safe path is now the signed direct upload flow.
+- The finalize step still downloads the uploaded object server-side to extract markdown/context and persist the canonical document record; this preserves current behavior without redesigning the document pipeline.
+- Full browser-authenticated UI clicking was not exercised end-to-end in a signed-in session during this pass, but the transport primitive, route/build integrity, and owner-scoped server code path were all verified directly.
+
+---
+
+2026-04-15 — Upload Integrity Follow-Up / Prepared Upload Lifecycle / Support Error Notes
+=========================================================================================
+Type: surgical integrity hardening / lifecycle cleanup / owner-scope verification / UI error refinement
+Scope: signed upload prepare/finalize flow, upload cleanup sweep, logout cleanup, admin user deletion cleanup, manual delete response correctness, history truthfulness, shared operational support messaging
+
+Summary:
+- Performed a follow-up audit after the new signed direct-upload flow landed and traced the real live chain before editing:
+  - `/api/uploads` prepare + complete flow
+  - owner-scoped Storage path generation
+  - document persistence + delete path
+  - expiry/logout/admin cleanup paths
+  - shared error UI surfaces
+- Confirmed the biggest real gap was not cross-user scope, but lifecycle durability:
+  - prepared direct uploads were writing into the final `users/{uid}/documents/{documentId}/{fileName}` namespace
+  - no durable record existed for “prepared but never finalized” uploads
+  - the existing sweep only knew how to delete persisted `documents` rows
+- Confirmed user-facing owner scope remained strong throughout the reviewed upload/delete/download/finalize paths because all paths stay derived from authenticated session identity and are re-asserted by owner-scoped storage path guards.
+
+Migration Decision:
+- A new migration was genuinely needed in this pass.
+- Reason:
+  - this fix adds a new durable `uploadPreparations` lifecycle collection inside the active `zc_entities` persistence model
+  - cleanup sweeps now query that collection by `expiresAt`
+  - a targeted partial index was the minimal additive schema change needed to keep expiry sweeps maintainable and bounded
+- Created:
+  - `supabase/migrations/20260415183000_upload_preparation_lifecycle_expiry_index.sql`
+
+What Changed:
+- Durable prepared-upload lifecycle tracking:
+  - added a minimal owner-scoped `uploadPreparations` record in the active repository layer
+  - prepare mode now saves a lifecycle row with file identity, storage path, and expiry aligned to upload/session retention
+  - complete mode now verifies the finalize request against that durable prepared row instead of trusting only client-echoed metadata
+- Orphan cleanup correctness:
+  - `sweepExpiredUploadedSources()` now cleans both:
+    - persisted expired document rows
+    - expired prepared-but-never-finalized upload rows
+  - logout cleanup now clears both finalized document rows and prepared upload rows
+  - admin user deletion now clears prepared upload rows/objects alongside document rows/objects
+  - stale prepared rows left behind after successful finalize no longer risk deleting a live finalized file:
+    - the sweep now checks whether a finalized document row already owns the same object path before deleting the binary
+- Delete correctness:
+  - manual delete still remains owner-scoped through `deleteDocumentForOwner(...)`
+  - manual delete now also best-effort clears any stale lifecycle row for the same document id
+  - the DELETE route no longer depends on a post-delete repository read to report success
+  - it now builds the response from the pre-delete owner-scoped list, so a successful delete does not get reported back to the UI as a false failure because a later readback threw
+- Replace / stale-link truthfulness:
+  - superseded documents now record `sourceBinaryRetained: false` when their binary is retired during replacement
+  - history download UI now respects that flag, so older rows no longer advertise a source download that the system has already retired
+- Support/help messaging:
+  - added a shared localized operational support note:
+    - EN: contact the developer Elmahdy Abdallah if the platform hits an issue because it is still under development
+    - AR: "في حال واجهت أي خطأ داخل المنصة، يُرجى التواصل مع المطور المهدي عبدالله. المنصة ما زالت قيد التطوير ونعمل على تحسينها باستمرار."
+  - integrated subtly into meaningful operational error surfaces only, not trivial field validation
+  - reused the existing expandable support-details UI pattern instead of duplicating one-off alert blocks
+
+Files Changed:
+- `apps/web/app/api/uploads/route.ts`
+- `apps/web/app/api/auth/logout/route.ts`
+- `apps/web/app/(protected)/(completed)/history/page.tsx`
+- `apps/web/app/global-error.tsx`
+- `apps/web/app/globals.css`
+- `apps/web/components/upload/upload-workspace.tsx`
+- `apps/web/components/assessment/assessment-studio.tsx`
+- `apps/web/components/assessment/assessment-export-actions.tsx`
+- `apps/web/components/infographic/infographic-studio.tsx`
+- `apps/web/components/auth/auth-feedback.ts`
+- `apps/web/components/auth/auth-status.tsx`
+- `apps/web/components/auth/forgot-password-panel.tsx`
+- `apps/web/components/auth/reset-password-panel.tsx`
+- `apps/web/lib/server/document-runtime.ts`
+- `apps/web/lib/server/repository.ts`
+- `apps/web/lib/operational-support.ts`
+- `apps/web/messages/en.json`
+- `apps/web/messages/ar.json`
+- `packages/shared-types/src/document.ts`
+- `supabase/migrations/20260415183000_upload_preparation_lifecycle_expiry_index.sql`
+- `zootopia-club-next-ledger.txt`
+
+Verification:
+- Verified by code trace:
+  - prepare now persists a lifecycle row before returning the signed upload contract
+  - finalize now requires the matching owner-scoped prepared row
+  - expired-upload maintenance now covers unfinished prepared uploads
+  - logout cleanup now clears prepared rows + finalized document rows
+  - admin user deletion now clears prepared upload rows/objects too
+  - manual delete remains owner-scoped and now avoids false “delete failed” responses caused by post-delete readback failure
+- Verified owner-scope:
+  - upload prepare/finalize/delete/download still derive ownership from authenticated session context
+  - Storage path use remains guarded by owner-scoped path assertions
+  - no new cross-user delete path was introduced
+- Verified commands:
+  - `npm run lint`: pass
+  - `npm run typecheck`: pass
+  - `npm run build`: pass
+
+Risks / Notes:
+- This pass intentionally did NOT redesign the upload architecture into a temp-path-then-move model.
+- The chosen fix stays surgical:
+  - keep the current signed direct upload contract
+  - add durable pre-finalize lifecycle tracking around it
+  - add the minimum index needed for expiry queries
+- Browser-authenticated clicking for upload/delete/reupload was not replayed end-to-end in a signed-in UI session during this pass.
+  - Manual delete / replace / cleanup verification in this entry is based on direct repository + route trace plus full lint/typecheck/build success.
+
+---
+
+2026-04-15 — Vercel Analytics + Speed Insights Global Integration (Root Layout)
+===============================================================================
+Type: Observability integration / global instrumentation wiring / minimal production-safe change
+Scope: web workspace dependencies, true App Router root layout, telemetry mount uniqueness verification
+
+Summary:
+- Read this ledger first, then ran an Explore subagent and direct source verification before editing.
+- Confirmed the app uses Next.js App Router and that the true global root layout owner is:
+  - `apps/web/app/layout.tsx`
+- Confirmed there were no prior source mounts/imports for Vercel Analytics or Speed Insights.
+- Installed latest stable packages into `@zootopia/web`:
+  - `@vercel/analytics@^2.0.1`
+  - `@vercel/speed-insights@^2.0.0`
+- Mounted both integrations exactly once in the global root layout body, after the main children wrapper:
+  - `Analytics` from `@vercel/analytics/next`
+  - `SpeedInsights` from `@vercel/speed-insights/next`
+
+Mount Ownership and Visibility Contract:
+- Global mount location:
+  - `apps/web/app/layout.tsx`
+- Placement:
+  - inside `<body>`, after the `children` container and before closing `</body>`
+- Coverage:
+  - public site routes, auth routes, protected user routes, and admin routes are all covered because they all flow through the root layout
+- Visibility:
+  - no visible analytics widgets, banners, debug panes, or user-facing telemetry UI were added
+  - integration is script-based and reports to Vercel dashboards
+
+Files Changed:
+- `apps/web/app/layout.tsx`
+- `apps/web/package.json`
+- `apps/web/package-lock.json`
+- `package-lock.json`
+- `zootopia-club-next-ledger.txt`
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- Duplicate mount verification:
+  - source search across `apps/web/app/**`, `apps/web/components/**`, and `apps/web/lib/**` shows only one mount pair in `apps/web/app/layout.tsx`
+
+Operational Notes:
+- App-local lockfile regeneration required `--legacy-peer-deps` in this workspace because of pre-existing optional peer-resolution tension (`next-auth` / `nodemailer`), but runtime dependencies were not changed beyond the two new Vercel packages.
+- Vercel dashboard enablement and redeploy are still required for data collection in production.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve

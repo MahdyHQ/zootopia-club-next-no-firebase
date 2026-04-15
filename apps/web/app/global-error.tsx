@@ -3,6 +3,7 @@
 import { APP_NAME, APP_TAGLINE } from "@zootopia/shared-config";
 import { useEffect } from "react";
 
+import { AuthSupportDetails } from "@/components/auth/auth-status";
 import {
   DEFAULT_LOCALE,
   DEFAULT_THEME,
@@ -40,6 +41,18 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
             <div className="status-note mt-6">
               <strong>{APP_TAGLINE}</strong>
               {error.digest ? ` Reference: ${error.digest}` : ""}
+            </div>
+            <div className="mt-4">
+              <AuthSupportDetails
+                label="Support / الدعم"
+                notes={[
+                  {
+                    text:
+                      "في حال واجهت أي خطأ داخل المنصة، يُرجى التواصل مع المطور المهدي عبدالله. المنصة ما زالت قيد التطوير ونعمل على تحسينها باستمرار.",
+                    tone: "danger",
+                  },
+                ]}
+              />
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
               <button type="button" onClick={reset} className="action-button">

@@ -3490,6 +3490,10 @@ html[dir="rtl"] .auth-hero-title {
   gap: 0.2rem;
 }
 
+.auth-status-copy .auth-support-details {
+  margin-top: 0.55rem;
+}
+
 .auth-status-title,
 .auth-status-body {
   margin: 0;

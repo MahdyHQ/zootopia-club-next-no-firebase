@@ -159,6 +159,8 @@
   "confirmEmailNetworkBody": "Check your connection and try the resend action again.",
   "confirmEmailGenericErrorTitle": "Verification email could not be sent",
   "confirmEmailGenericErrorBody": "Please retry in a moment. If this keeps failing, contact support.",
+  "operationalSupportDetailsLabel": "Need help?",
+  "operationalSupportDeveloperNote": "If you encounter any issue inside the platform, please contact the developer, Elmahdy Abdallah. The platform is still under development and we are improving it continuously.",
   "confirmEmailBackToLogin": "Return to student login",
   "confirmEmailBackToAdmin": "Return to admin login",
   "homeTitle": "Build better science study flows",

@@ -29,6 +29,7 @@ export interface DocumentRecord {
   sizeBytes: number;
   contentSha256?: string;
   storagePath: string | null;
+  sourceBinaryRetained?: boolean;
   storageDataClass?: "upload-source";
   storageOwnerUid?: string;
   storageLayoutVersion?: StorageLayoutVersion;

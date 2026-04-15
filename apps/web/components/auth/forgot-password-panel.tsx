@@ -48,6 +48,9 @@ function buildLocalText(locale: Locale) {
       unavailableBody: "خدمة إعادة التعيين غير جاهزة الآن. حاول بعد قليل.",
       genericErrorTitle: "تعذر إرسال رابط إعادة التعيين",
       genericErrorBody: "حاول مرة أخرى بعد قليل.",
+      supportLabel: "مساعدة إضافية",
+      supportNote:
+        "في حال واجهت أي خطأ داخل المنصة، يُرجى التواصل مع المطور المهدي عبدالله. المنصة ما زالت قيد التطوير ونعمل على تحسينها باستمرار.",
       privacyNotice:
         "لأسباب أمنية، لا نكشف ما إذا كان البريد مسجلاً أم لا. يتم إرجاع نفس نتيجة النجاح عند القبول.",
     };
@@ -79,6 +82,9 @@ function buildLocalText(locale: Locale) {
     unavailableBody: "Password reset runtime is not ready right now. Please retry shortly.",
     genericErrorTitle: "Reset link could not be sent",
     genericErrorBody: "Please try again in a moment.",
+    supportLabel: "Need help?",
+    supportNote:
+      "If you encounter any issue inside the platform, please contact the developer, Elmahdy Abdallah. The platform is still under development and we are improving it continuously.",
     privacyNotice:
       "For security privacy, we do not reveal whether an email exists. Successful acceptance returns the same response shape.",
   };
@@ -147,6 +153,8 @@ function mapForgotFailure(code: string, text: ReturnType<typeof buildLocalText>)
         title: text.unavailableTitle,
         body: text.unavailableBody,
         live: "assertive",
+        supportLabel: text.supportLabel,
+        supportNotes: [{ text: text.supportNote, tone: "danger" }],
       };
     default:
       return {
@@ -155,6 +163,8 @@ function mapForgotFailure(code: string, text: ReturnType<typeof buildLocalText>)
         title: text.genericErrorTitle,
         body: text.genericErrorBody,
         live: "assertive",
+        supportLabel: text.supportLabel,
+        supportNotes: [{ text: text.supportNote, tone: "danger" }],
       };
   }
 }
@@ -240,6 +250,8 @@ export function ForgotPasswordPanel({
         title: text.genericErrorTitle,
         body: text.genericErrorBody,
         live: "assertive",
+        supportLabel: text.supportLabel,
+        supportNotes: [{ text: text.supportNote, tone: "danger" }],
       });
     } finally {
       setBusy(false);

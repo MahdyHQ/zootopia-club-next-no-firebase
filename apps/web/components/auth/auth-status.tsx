@@ -53,6 +53,12 @@ export function AuthStatus({
       <div className="auth-status-copy">
         <p className="auth-status-title">{status.title}</p>
         {status.body ? <p className="auth-status-body">{status.body}</p> : null}
+        {status.supportNotes && status.supportNotes.length > 0 ? (
+          <AuthSupportDetails
+            label={status.supportLabel ?? "Support"}
+            notes={status.supportNotes}
+          />
+        ) : null}
       </div>
     </div>
   );

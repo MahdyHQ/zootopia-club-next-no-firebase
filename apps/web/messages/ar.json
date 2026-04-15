@@ -159,6 +159,8 @@
   "confirmEmailNetworkBody": "تحقق من الاتصال ثم حاول إعادة الإرسال مرة أخرى.",
   "confirmEmailGenericErrorTitle": "تعذر إرسال رسالة التحقق",
   "confirmEmailGenericErrorBody": "يرجى إعادة المحاولة بعد قليل. وإذا استمرت المشكلة، تواصل مع الدعم.",
+  "operationalSupportDetailsLabel": "مساعدة إضافية",
+  "operationalSupportDeveloperNote": "في حال واجهت أي خطأ داخل المنصة، يُرجى التواصل مع المطور المهدي عبدالله. المنصة ما زالت قيد التطوير ونعمل على تحسينها باستمرار.",
   "confirmEmailBackToLogin": "العودة إلى دخول الطلاب",
   "confirmEmailBackToAdmin": "العودة إلى دخول الإدارة",
   "homeTitle": "ابنِ مسارات دراسة علمية أفضل",

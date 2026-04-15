@@ -156,7 +156,7 @@ export default async function HistoryPage() {
                     </div>
                     <HistoryDocumentActions
                       documentId={document.id}
-                      canDownload={Boolean(document.storagePath)}
+                      canDownload={document.sourceBinaryRetained === true && Boolean(document.storagePath)}
                       messages={uiContext.messages}
                     />
                   </div>

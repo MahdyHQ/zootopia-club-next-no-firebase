@@ -8,6 +8,7 @@ import {
   appendAssessmentThemeToHref,
   type AssessmentFileThemeMode,
 } from "@/lib/assessment-file-branding";
+import { withOperationalSupport } from "@/lib/operational-support";
 import type { NormalizedAssessmentPreview } from "@/lib/assessment-preview-model";
 import type { AppMessages } from "@/lib/messages";
 
@@ -52,13 +53,16 @@ function createPdfExportStatus(
     };
   }
 
-  return {
-    tone: "danger",
-    icon: "danger",
-    title: messages.assessmentExportFailedTitle,
-    body: messages.assessmentExportFailedBody,
-    live: "assertive",
-  };
+  return withOperationalSupport(
+    {
+      tone: "danger",
+      icon: "danger",
+      title: messages.assessmentExportFailedTitle,
+      body: messages.assessmentExportFailedBody,
+      live: "assertive",
+    },
+    messages,
+  );
 }
 
 function extractDownloadFileName(contentDisposition: string | null, fallback: string) {

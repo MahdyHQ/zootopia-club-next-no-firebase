@@ -61,6 +61,31 @@ export function hasRemoteBlobStorage() {
   return hasSupabaseAdminRuntime();
 }
 
+export function getZootopiaPrivateBucketName() {
+  return ZOOTOPIA_PRIVATE_BUCKET;
+}
+
+export async function createSignedUploadUrlForZootopiaPrivateObject(input: {
+  path: string;
+  upsert?: boolean;
+}) {
+  /* Direct browser uploads for /upload still keep path authority on the server:
+     the route handler generates the owner-scoped path, signs it with the service role,
+     and the browser only receives a time-limited token for that exact object path. */
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.storage
+    .from(ZOOTOPIA_PRIVATE_BUCKET)
+    .createSignedUploadUrl(input.path, {
+      upsert: input.upsert === true,
+    });
+
+  if (error || !data?.token || !data.path) {
+    throw error ?? new Error("SIGNED_UPLOAD_URL_CREATION_FAILED");
+  }
+
+  return data;
+}
+
 export async function uploadZootopiaPrivateObject(input: {
   path: string;
   body: Buffer;

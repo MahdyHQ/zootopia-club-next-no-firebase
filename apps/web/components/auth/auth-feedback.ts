@@ -1,4 +1,5 @@
 import type { AppMessages } from "@/lib/messages";
+import { withOperationalSupport } from "@/lib/operational-support";
 import {
   normalizeAuthFailure,
   type AuthFailureCode,
@@ -20,6 +21,8 @@ export type AuthStatusDescriptor = {
   title: string;
   body?: string;
   live?: "polite" | "assertive" | "off";
+  supportLabel?: string;
+  supportNotes?: AuthSupportNote[];
 };
 
 export type AuthSupportNote = {
@@ -125,20 +128,26 @@ export function mapRegularLoginError(
         "assertive",
       );
     case "AUTH_ENV_MISCONFIGURED":
-      return status(
-        "danger",
-        "config",
-        messages.loginStatusServerTitle,
-        messages.loginStatusServerBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.loginStatusServerTitle,
+          messages.loginStatusServerBody,
+          "assertive",
+        ),
+        messages,
       );
     case "AUTH_PROVIDER_MISCONFIGURED":
-      return status(
-        "danger",
-        "config",
-        messages.loginStatusProviderMisconfiguredTitle,
-        messages.loginStatusProviderMisconfiguredBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.loginStatusProviderMisconfiguredTitle,
+          messages.loginStatusProviderMisconfiguredBody,
+          "assertive",
+        ),
+        messages,
       );
     case "AUTH_INVALID_CREDENTIALS":
       return status(
@@ -171,12 +180,15 @@ export function mapRegularLoginError(
         "assertive",
       );
     case "AUTH_SESSION_CREATION_FAILED":
-      return status(
-        "danger",
-        "danger",
-        messages.loginStatusBootstrapErrorTitle,
-        messages.loginStatusBootstrapErrorBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "danger",
+          messages.loginStatusBootstrapErrorTitle,
+          messages.loginStatusBootstrapErrorBody,
+          "assertive",
+        ),
+        messages,
       );
     case "AUTH_SESSION_REFRESH_REQUIRED":
       return status(
@@ -209,41 +221,53 @@ export function mapRegularLoginError(
 
   switch (rawCode) {
     case "DB_REPOSITORY_UNAVAILABLE":
-      return status(
-        "danger",
-        "danger",
-        messages.loginStatusRepositoryTitle,
-        messages.loginStatusRepositoryBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "danger",
+          messages.loginStatusRepositoryTitle,
+          messages.loginStatusRepositoryBody,
+          "assertive",
+        ),
+        messages,
       );
     case "Configuration":
     case "CallbackRouteError":
-      return status(
-        "danger",
-        "config",
-        messages.loginStatusRuntimeConfigTitle,
-        messages.loginStatusRuntimeConfigBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.loginStatusRuntimeConfigTitle,
+          messages.loginStatusRuntimeConfigBody,
+          "assertive",
+        ),
+        messages,
       );
     case "SUPABASE_ADMIN_UNAVAILABLE":
     case "ADMIN_ALLOWLIST_UNCONFIGURED":
-      return status(
-        "danger",
-        "config",
-        messages.loginStatusServerTitle,
-        messages.loginStatusServerBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.loginStatusServerTitle,
+          messages.loginStatusServerBody,
+          "assertive",
+        ),
+        messages,
       );
     case "auth/app-not-authorized":
     case "auth/invalid-api-key":
     case "auth/invalid-app-credential":
     case "auth/unauthorized-domain":
-      return status(
-        "danger",
-        "config",
-        messages.loginStatusConfigTitle,
-        messages.loginStatusConfigBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.loginStatusConfigTitle,
+          messages.loginStatusConfigBody,
+          "assertive",
+        ),
+        messages,
       );
     case "auth/popup-closed-by-user":
       return status(
@@ -296,12 +320,15 @@ export function mapRegularLoginError(
         "assertive",
       );
     default:
-      return status(
-        "danger",
-        "danger",
-        messages.loginStatusGenericErrorTitle,
-        messages.loginStatusGenericErrorBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "danger",
+          messages.loginStatusGenericErrorTitle,
+          messages.loginStatusGenericErrorBody,
+          "assertive",
+        ),
+        messages,
       );
   }
 }
@@ -329,20 +356,26 @@ export function mapAdminLoginError(
         "assertive",
       );
     case "AUTH_ENV_MISCONFIGURED":
-      return status(
-        "danger",
-        "config",
-        messages.adminLoginStatusServerTitle,
-        messages.adminLoginStatusServerBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.adminLoginStatusServerTitle,
+          messages.adminLoginStatusServerBody,
+          "assertive",
+        ),
+        messages,
       );
     case "AUTH_PROVIDER_MISCONFIGURED":
-      return status(
-        "danger",
-        "config",
-        messages.adminLoginStatusConfigTitle,
-        messages.adminLoginStatusConfigBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.adminLoginStatusConfigTitle,
+          messages.adminLoginStatusConfigBody,
+          "assertive",
+        ),
+        messages,
       );
     case "AUTH_INVALID_CREDENTIALS":
       return status(
@@ -375,12 +408,15 @@ export function mapAdminLoginError(
         "assertive",
       );
     case "AUTH_SESSION_CREATION_FAILED":
-      return status(
-        "danger",
-        "danger",
-        messages.adminLoginStatusBootstrapErrorTitle,
-        messages.adminLoginStatusBootstrapErrorBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "danger",
+          messages.adminLoginStatusBootstrapErrorTitle,
+          messages.adminLoginStatusBootstrapErrorBody,
+          "assertive",
+        ),
+        messages,
       );
     case "AUTH_SESSION_REFRESH_REQUIRED":
       return status(
@@ -395,41 +431,53 @@ export function mapAdminLoginError(
 
   switch (rawCode) {
     case "DB_REPOSITORY_UNAVAILABLE":
-      return status(
-        "danger",
-        "danger",
-        messages.adminLoginStatusRepositoryTitle,
-        messages.adminLoginStatusRepositoryBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "danger",
+          messages.adminLoginStatusRepositoryTitle,
+          messages.adminLoginStatusRepositoryBody,
+          "assertive",
+        ),
+        messages,
       );
     case "Configuration":
     case "CallbackRouteError":
-      return status(
-        "danger",
-        "config",
-        messages.adminLoginStatusRuntimeConfigTitle,
-        messages.adminLoginStatusRuntimeConfigBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.adminLoginStatusRuntimeConfigTitle,
+          messages.adminLoginStatusRuntimeConfigBody,
+          "assertive",
+        ),
+        messages,
       );
     case "SUPABASE_ADMIN_UNAVAILABLE":
     case "ADMIN_ALLOWLIST_UNCONFIGURED":
-      return status(
-        "danger",
-        "config",
-        messages.adminLoginStatusServerTitle,
-        messages.adminLoginStatusServerBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.adminLoginStatusServerTitle,
+          messages.adminLoginStatusServerBody,
+          "assertive",
+        ),
+        messages,
       );
     case "auth/app-not-authorized":
     case "auth/invalid-api-key":
     case "auth/invalid-app-credential":
     case "auth/unauthorized-domain":
-      return status(
-        "danger",
-        "config",
-        messages.adminLoginStatusConfigTitle,
-        messages.adminLoginStatusConfigBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "config",
+          messages.adminLoginStatusConfigTitle,
+          messages.adminLoginStatusConfigBody,
+          "assertive",
+        ),
+        messages,
       );
     case "IDENTIFIER_REQUIRED":
       return status(
@@ -478,12 +526,15 @@ export function mapAdminLoginError(
         "assertive",
       );
     default:
-      return status(
-        "danger",
-        "danger",
-        messages.adminLoginStatusGenericErrorTitle,
-        messages.adminLoginStatusGenericErrorBody,
-        "assertive",
+      return withOperationalSupport(
+        status(
+          "danger",
+          "danger",
+          messages.adminLoginStatusGenericErrorTitle,
+          messages.adminLoginStatusGenericErrorBody,
+          "assertive",
+        ),
+        messages,
       );
   }
 }

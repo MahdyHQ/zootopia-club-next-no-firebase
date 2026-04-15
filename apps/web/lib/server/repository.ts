@@ -17,6 +17,7 @@ import type {
   DocumentRecord,
   InfographicGeneration,
   SessionUser,
+  StorageLayoutVersion,
   UpdateUserProfileInput,
   UserClientBestEffortNetworkMetadata,
   UserClientBestEffortScreenMetadata,
@@ -72,7 +73,10 @@ import {
   logAuthStageSuccess,
   type AuthTraceContext,
 } from "@/lib/server/auth-tracing";
-import { deleteDocumentBinaryFromStorage } from "@/lib/server/document-runtime";
+import {
+  deleteDocumentBinaryFromStorage,
+  resolveUploadWorkspaceExpiryTimestamp,
+} from "@/lib/server/document-runtime";
 import { inferOwnerScopedStoragePathMetadata } from "@/lib/server/owner-scope";
 import { getServerAuthAdmin } from "@/lib/server/server-auth";
 import { hasSupabaseAdminRuntime } from "@/lib/server/supabase-admin";
@@ -126,6 +130,23 @@ type AssessmentArtifactMetadataRecord = AssessmentArtifactRecord & {
   updatedAt: string;
 };
 
+type UploadPreparationRecord = {
+  id: string;
+  ownerUid: string;
+  ownerRole?: UserRole;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  storageDataClass?: "upload-source";
+  storageOwnerUid?: string;
+  storageLayoutVersion?: StorageLayoutVersion;
+  status: "prepared";
+  createdAt: string;
+  updatedAt: string;
+  expiresAt?: string;
+};
+
 export type ExpiredUploadSweepResult = {
   forced: boolean;
   skipped: boolean;
@@ -137,6 +158,7 @@ export type ExpiredUploadSweepResult = {
 type MemoryStore = {
   users: Map<string, UserDocument>;
   documents: Map<string, DocumentRecord>;
+  uploadPreparations: Map<string, UploadPreparationRecord>;
   assessments: Map<string, AssessmentGeneration>;
   assessmentArtifactMetadata: Map<string, AssessmentArtifactMetadataRecord>;
   assessmentGenerationIdempotency: Map<string, AssessmentGenerationIdempotencyRecord>;
@@ -167,6 +189,7 @@ type AssessmentDailyCreditReservationSuccess = {
 
 const EXPIRED_UPLOAD_SWEEP_INTERVAL_MS = 60 * 1000;
 const EXPIRED_UPLOAD_SWEEP_BATCH_LIMIT = 200;
+const UPLOAD_PREPARATION_COLLECTION = "uploadPreparations";
 const ASSESSMENT_GENERATION_IDEMPOTENCY_COLLECTION = "assessmentGenerationIdempotency";
 const ASSESSMENT_ARTIFACT_METADATA_COLLECTION = "assessmentArtifactMetadata";
 const ASSESSMENT_GENERATION_IDEMPOTENCY_IN_PROGRESS_STALE_MS = 10 * 60 * 1000;
@@ -201,6 +224,7 @@ function getMemoryStore(): MemoryStore {
     globalThis.__ZOOTOPIA_MEMORY_STORE__ = {
       users: new Map(),
       documents: new Map(),
+      uploadPreparations: new Map(),
       assessments: new Map(),
       assessmentArtifactMetadata: new Map(),
       assessmentGenerationIdempotency: new Map(),
@@ -877,6 +901,7 @@ function normalizeDocumentRecord(
     ownerRole: normalizeStoredOwnerRole(record.ownerRole) ?? resolvedOwnerRole,
     fileExtension: safeFileExtension,
     contentSha256: normalizedContentSha256,
+    sourceBinaryRetained: record.sourceBinaryRetained ?? Boolean(record.storagePath),
     storageDataClass:
       storageMetadata?.storageDataClass === "upload-source"
         ? "upload-source"
@@ -950,6 +975,96 @@ function normalizeDocumentCleanupCandidate(
   );
 }
 
+function normalizeUploadPreparationRecord(
+  record: UploadPreparationRecord,
+  resolvedOwnerRole?: UserRole,
+): UploadPreparationRecord {
+  const expiresAt =
+    record.expiresAt
+    ?? resolveUploadWorkspaceExpiryTimestamp({
+      createdAt: record.createdAt,
+    });
+  const storageMetadata = inferOwnerScopedStoragePathMetadata({
+    storagePath: record.storagePath,
+    ownerUid: record.ownerUid,
+    allowedNamespaces: ["documents"],
+  });
+
+  return {
+    ...record,
+    ownerRole: normalizeStoredOwnerRole(record.ownerRole) ?? resolvedOwnerRole,
+    storageDataClass:
+      storageMetadata?.storageDataClass === "upload-source"
+        ? "upload-source"
+        : record.storageDataClass,
+    storageOwnerUid: storageMetadata?.ownerUid ?? record.storageOwnerUid,
+    storageLayoutVersion: storageMetadata?.storageLayoutVersion ?? record.storageLayoutVersion,
+    status: "prepared",
+    expiresAt,
+  };
+}
+
+function isUploadPreparationExpired(
+  record: Pick<UploadPreparationRecord, "createdAt" | "expiresAt">,
+) {
+  const computedExpiry = getRetentionExpiryTimestamp(record.createdAt, "uploads");
+  if (!computedExpiry) {
+    return false;
+  }
+
+  const expiryMs = Date.parse(record.expiresAt ?? computedExpiry);
+  if (!Number.isFinite(expiryMs)) {
+    return false;
+  }
+
+  return Date.now() >= expiryMs;
+}
+
+async function persistUploadPreparationRecord(record: UploadPreparationRecord) {
+  if (shouldUseDatabase()) {
+    await getZootopiaDatabase()
+      .collection(UPLOAD_PREPARATION_COLLECTION)
+      .doc(record.id)
+      .set(omitUndefinedOwnerRole(record), { merge: true });
+    return;
+  }
+
+  getMemoryStore().uploadPreparations.set(record.id, record);
+}
+
+async function purgeExpiredUploadPreparationRecord(record: UploadPreparationRecord) {
+  const finalizedDocument = await getDocumentByIdForOwner(record.id, record.ownerUid);
+
+  /* Direct signed uploads can persist a binary before any document row exists. This cleanup path
+     owns those pre-finalize objects so abandoned prepare/upload attempts do not leak owner-scoped
+     files in Storage after the workspace/session retention window closes. */
+  if (!finalizedDocument || finalizedDocument.storagePath !== record.storagePath) {
+    await deleteDocumentBinaryFromStorage(record);
+  }
+
+  if (shouldUseDatabase()) {
+    await getZootopiaDatabase()
+      .collection(UPLOAD_PREPARATION_COLLECTION)
+      .doc(record.id)
+      .delete();
+  } else {
+    getMemoryStore().uploadPreparations.delete(record.id);
+  }
+
+  await appendAdminLog({
+    actorUid: "system",
+    ownerUid: record.ownerUid,
+    ownerRole: record.ownerRole,
+    action: "upload-preparation-expired-cleanup",
+    resourceType: "uploadPreparation",
+    resourceId: record.id,
+    metadata: {
+      fileName: record.fileName,
+      finalizedDocumentFound: Boolean(finalizedDocument),
+    },
+  });
+}
+
 /* Session-bound upload cleanup uses this throttled sweep so expired source files are removed
    even when users never revisit protected upload routes after session expiry. Keep the sweep
    batch-limited and owner-validated so high traffic does not create cross-owner side effects. */
@@ -973,21 +1088,22 @@ export async function sweepExpiredUploadedSources(input: {
 
   globalThis.__ZOOTOPIA_EXPIRED_UPLOAD_SWEEP_LAST_RUN_AT__ = nowMs;
 
-  let candidates: DocumentRecord[] = [];
+  let documentCandidates: DocumentRecord[] = [];
+  let uploadPreparationCandidates: UploadPreparationRecord[] = [];
 
   if (shouldUseDatabase()) {
-    const snapshot = await getZootopiaDatabase()
+    const documentSnapshot = await getZootopiaDatabase()
       .collection("documents")
       .where("expiresAt", "<=", runAt)
       .orderBy("expiresAt", "asc")
       .limit(EXPIRED_UPLOAD_SWEEP_BATCH_LIMIT)
       .get();
 
-    candidates = snapshot.docs.map((documentSnapshot) => {
-      const record = documentSnapshot.data() as unknown as DocumentRecord;
+    documentCandidates = documentSnapshot.docs.map((documentRecordSnapshot) => {
+      const record = documentRecordSnapshot.data() as unknown as DocumentRecord;
       const normalizedRecord: DocumentRecord = {
         ...record,
-        id: record.id || documentSnapshot.id,
+        id: record.id || documentRecordSnapshot.id,
       };
 
       return normalizeDocumentCleanupCandidate(
@@ -995,8 +1111,28 @@ export async function sweepExpiredUploadedSources(input: {
         normalizeStoredOwnerRole(record.ownerRole),
       );
     });
+
+    const uploadPreparationSnapshot = await getZootopiaDatabase()
+      .collection(UPLOAD_PREPARATION_COLLECTION)
+      .where("expiresAt", "<=", runAt)
+      .orderBy("expiresAt", "asc")
+      .limit(EXPIRED_UPLOAD_SWEEP_BATCH_LIMIT)
+      .get();
+
+    uploadPreparationCandidates = uploadPreparationSnapshot.docs.map((preparationSnapshot) => {
+      const record = preparationSnapshot.data() as unknown as UploadPreparationRecord;
+      const normalizedRecord: UploadPreparationRecord = {
+        ...record,
+        id: record.id || preparationSnapshot.id,
+      };
+
+      return normalizeUploadPreparationRecord(
+        normalizedRecord,
+        normalizeStoredOwnerRole(record.ownerRole),
+      );
+    });
   } else {
-    candidates = [...getMemoryStore().documents.values()]
+    documentCandidates = [...getMemoryStore().documents.values()]
       .map((record) =>
         normalizeDocumentCleanupCandidate(
           record,
@@ -1005,10 +1141,20 @@ export async function sweepExpiredUploadedSources(input: {
       )
       .filter((record) => isDocumentExpired(record))
       .slice(0, EXPIRED_UPLOAD_SWEEP_BATCH_LIMIT);
+
+    uploadPreparationCandidates = [...getMemoryStore().uploadPreparations.values()]
+      .map((record) =>
+        normalizeUploadPreparationRecord(
+          record,
+          normalizeStoredOwnerRole(record.ownerRole),
+        ),
+      )
+      .filter((record) => isUploadPreparationExpired(record))
+      .slice(0, EXPIRED_UPLOAD_SWEEP_BATCH_LIMIT);
   }
 
   let deletedCount = 0;
-  for (const candidate of candidates) {
+  for (const candidate of documentCandidates) {
     if (!isDocumentExpired(candidate)) {
       continue;
     }
@@ -1017,11 +1163,20 @@ export async function sweepExpiredUploadedSources(input: {
     deletedCount += 1;
   }
 
+  for (const candidate of uploadPreparationCandidates) {
+    if (!isUploadPreparationExpired(candidate)) {
+      continue;
+    }
+
+    await purgeExpiredUploadPreparationRecord(candidate);
+    deletedCount += 1;
+  }
+
   return {
     forced,
     skipped: false,
     runAt,
-    scannedCount: candidates.length,
+    scannedCount: documentCandidates.length + uploadPreparationCandidates.length,
     deletedCount,
   };
 }
@@ -1030,27 +1185,49 @@ export async function sweepExpiredUploadedSources(input: {
    binaries do not outlive the authenticated session boundary. Assessment result records/artifacts
    are intentionally preserved under their existing retention policy and are not touched here. */
 export async function clearUploadWorkspaceForOwner(ownerUid: string) {
-  const records = await listRawDocumentsForOwner(ownerUid);
+  const [records, uploadPreparations] = await Promise.all([
+    listRawDocumentsForOwner(ownerUid),
+    listRawUploadPreparationsForOwner(ownerUid),
+  ]);
   const normalizedRecords = normalizeDocumentRecordList(records);
+  const normalizedUploadPreparations = uploadPreparations.map((record) =>
+    normalizeUploadPreparationRecord(record),
+  );
 
-  await Promise.all(normalizedRecords.map((record) => deleteDocumentBinaryFromStorage(record)));
+  await Promise.all([
+    ...normalizedRecords.map((record) => deleteDocumentBinaryFromStorage(record)),
+    ...normalizedUploadPreparations.map((record) => deleteDocumentBinaryFromStorage(record)),
+  ]);
 
   if (shouldUseDatabase()) {
     await Promise.all(
-      normalizedRecords.map((record) =>
-        getZootopiaDatabase().collection("documents").doc(record.id).delete(),
-      ),
+      [
+        ...normalizedRecords.map((record) =>
+          getZootopiaDatabase().collection("documents").doc(record.id).delete(),
+        ),
+        ...normalizedUploadPreparations.map((record) =>
+          getZootopiaDatabase()
+            .collection(UPLOAD_PREPARATION_COLLECTION)
+            .doc(record.id)
+            .delete(),
+        ),
+      ],
     );
   } else {
     const store = getMemoryStore();
     for (const record of normalizedRecords) {
       store.documents.delete(record.id);
     }
+
+    for (const record of normalizedUploadPreparations) {
+      store.uploadPreparations.delete(record.id);
+    }
   }
 
   return {
     ownerUid,
     clearedDocumentCount: normalizedRecords.length,
+    clearedPreparedUploadCount: normalizedUploadPreparations.length,
   };
 }
 
@@ -1242,6 +1419,24 @@ async function persistDocumentRecord(record: DocumentRecord) {
   }
 }
 
+export async function saveUploadPreparation(record: UploadPreparationRecord) {
+  const resolvedOwnerRole = await resolvePersistedOwnerRole({
+    ownerUid: record.ownerUid,
+    ownerRole: record.ownerRole,
+  });
+  const nextRecord = normalizeUploadPreparationRecord(
+    {
+      ...record,
+      ownerRole: resolvedOwnerRole,
+      updatedAt: record.updatedAt || record.createdAt,
+    },
+    resolvedOwnerRole,
+  );
+
+  await persistUploadPreparationRecord(nextRecord);
+  return nextRecord;
+}
+
 async function markPreviousDocumentsInactive(input: {
   ownerUid: string;
   activeDocumentId: string;
@@ -1274,6 +1469,7 @@ async function markPreviousDocumentsInactive(input: {
               ...existing,
               id: existing.id || documentSnapshot.id,
               isActive: false,
+              sourceBinaryRetained: false,
               supersededAt: existing.supersededAt ?? input.supersededAt,
               updatedAt: input.supersededAt,
             },
@@ -1285,6 +1481,7 @@ async function markPreviousDocumentsInactive(input: {
         await documentSnapshot.ref.set(
           {
             isActive: false,
+            sourceBinaryRetained: false,
             supersededAt: existing.supersededAt ?? input.supersededAt,
             updatedAt: input.supersededAt,
           } satisfies Partial<DocumentRecord>,
@@ -1303,11 +1500,12 @@ async function markPreviousDocumentsInactive(input: {
     }
 
     store.documents.set(documentId, {
-      ...existing,
-      isActive: false,
-      supersededAt: existing.supersededAt ?? input.supersededAt,
-      updatedAt: input.supersededAt,
-    });
+          ...existing,
+          isActive: false,
+          sourceBinaryRetained: false,
+          supersededAt: existing.supersededAt ?? input.supersededAt,
+          updatedAt: input.supersededAt,
+        });
 
     supersededDocuments.push(
       normalizeDocumentRecord(
@@ -1933,16 +2131,20 @@ export async function deleteUserAccountAsAdmin(input: {
     await getServerAuthAdmin().revokeRefreshTokens(targetUid);
 
     currentStage = "collect-owner-records";
-    const [documents, assessments] = await Promise.all([
+    const [documents, uploadPreparations, assessments] = await Promise.all([
       listRawDocumentsForOwner(targetUid),
+      listRawUploadPreparationsForOwner(targetUid),
       listRawAssessmentGenerationsForOwner(targetUid),
     ]);
 
     currentStage = "delete-owner-storage";
-    summary.storage.deletedDocumentObjects = documents.length;
-    await Promise.allSettled(
-      documents.map((documentRecord) => deleteDocumentBinaryFromStorage(documentRecord)),
-    );
+    summary.storage.deletedDocumentObjects = documents.length + uploadPreparations.length;
+    await Promise.allSettled([
+      ...documents.map((documentRecord) => deleteDocumentBinaryFromStorage(documentRecord)),
+      ...uploadPreparations.map((uploadPreparation) =>
+        deleteDocumentBinaryFromStorage(uploadPreparation),
+      ),
+    ]);
 
     let assessmentArtifactsDeleted = 0;
     for (const generation of assessments) {
@@ -1967,6 +2169,7 @@ export async function deleteUserAccountAsAdmin(input: {
       };
 
       summary.database.deletedDocuments = await deleteOwnerScopedCollection("documents");
+      await deleteOwnerScopedCollection(UPLOAD_PREPARATION_COLLECTION);
       summary.database.deletedAssessmentGenerations = await deleteOwnerScopedCollection(
         "assessmentGenerations",
       );
@@ -2016,6 +2219,14 @@ export async function deleteUserAccountAsAdmin(input: {
 
         store.documents.delete(documentId);
         summary.database.deletedDocuments += 1;
+      }
+
+      for (const [preparationId, uploadPreparationRecord] of store.uploadPreparations.entries()) {
+        if (uploadPreparationRecord.ownerUid !== targetUid) {
+          continue;
+        }
+
+        store.uploadPreparations.delete(preparationId);
       }
 
       for (const [assessmentId, assessmentRecord] of store.assessments.entries()) {
@@ -2296,6 +2507,27 @@ async function listRawDocumentsForOwner(ownerUid: string) {
   );
 }
 
+async function listRawUploadPreparationsForOwner(ownerUid: string) {
+  if (shouldUseDatabase()) {
+    const snapshot = await getZootopiaDatabase()
+      .collection(UPLOAD_PREPARATION_COLLECTION)
+      .where("ownerUid", "==", ownerUid)
+      .get();
+
+    return snapshot.docs.map((doc) => {
+      const record = doc.data() as unknown as UploadPreparationRecord;
+      return {
+        ...record,
+        id: record.id || doc.id,
+      } as UploadPreparationRecord;
+    });
+  }
+
+  return [...getMemoryStore().uploadPreparations.values()].filter(
+    (record) => record.ownerUid === ownerUid,
+  );
+}
+
 async function listRawAssessmentGenerationsForOwner(ownerUid: string) {
   if (shouldUseDatabase()) {
     const snapshot = await getZootopiaDatabase()
@@ -2536,6 +2768,64 @@ export async function getDocumentByIdForOwner(id: string, ownerUid: string) {
   }
 
   return document;
+}
+
+export async function getUploadPreparationByIdForOwner(id: string, ownerUid: string) {
+  let record: UploadPreparationRecord | null = null;
+
+  if (shouldUseDatabase()) {
+    const snapshot = await getZootopiaDatabase()
+      .collection(UPLOAD_PREPARATION_COLLECTION)
+      .doc(id)
+      .get();
+
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    const storedRecord = snapshot.data() as unknown as UploadPreparationRecord;
+    record = {
+      ...storedRecord,
+      id: storedRecord.id || snapshot.id,
+    };
+  } else {
+    record = getMemoryStore().uploadPreparations.get(id) ?? null;
+  }
+
+  if (!record || record.ownerUid !== ownerUid) {
+    return null;
+  }
+
+  const resolvedOwnerRole = await resolvePersistedOwnerRole({
+    ownerUid: record.ownerUid,
+    ownerRole: record.ownerRole,
+  });
+  const normalizedRecord = normalizeUploadPreparationRecord(record, resolvedOwnerRole);
+
+  if (isUploadPreparationExpired(normalizedRecord)) {
+    await purgeExpiredUploadPreparationRecord(normalizedRecord);
+    return null;
+  }
+
+  return normalizedRecord;
+}
+
+export async function deleteUploadPreparationForOwner(id: string, ownerUid: string) {
+  const record = await getUploadPreparationByIdForOwner(id, ownerUid);
+  if (!record) {
+    return null;
+  }
+
+  if (shouldUseDatabase()) {
+    await getZootopiaDatabase()
+      .collection(UPLOAD_PREPARATION_COLLECTION)
+      .doc(id)
+      .delete();
+  } else {
+    getMemoryStore().uploadPreparations.delete(id);
+  }
+
+  return record;
 }
 
 export async function getActiveDocumentForOwner(ownerUid: string) {
@@ -5429,4 +5719,3 @@ export async function getAdminOverviewData(
     totalInfographicGenerations: await countCollection("infographicGenerations"),
   };
 }
-

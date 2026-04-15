@@ -95,6 +95,9 @@ function buildLocalText(locale: Locale) {
       unavailableBody: "تعذر تهيئة تدفق الاستعادة الآن. حاول لاحقاً.",
       genericErrorTitle: "تعذر إكمال إعادة التعيين",
       genericErrorBody: "حاول مرة أخرى بعد قليل.",
+      supportLabel: "مساعدة إضافية",
+      supportNote:
+        "في حال واجهت أي خطأ داخل المنصة، يُرجى التواصل مع المطور المهدي عبدالله. المنصة ما زالت قيد التطوير ونعمل على تحسينها باستمرار.",
       passwordLabel: "كلمة المرور الجديدة",
       confirmPasswordLabel: "تأكيد كلمة المرور الجديدة",
       passwordPlaceholder: "أدخل كلمة مرور قوية",
@@ -133,6 +136,9 @@ function buildLocalText(locale: Locale) {
     unavailableBody: "Password recovery runtime could not be prepared right now. Please retry later.",
     genericErrorTitle: "Password reset could not be completed",
     genericErrorBody: "Please try again in a moment.",
+    supportLabel: "Need help?",
+    supportNote:
+      "If you encounter any issue inside the platform, please contact the developer, Elmahdy Abdallah. The platform is still under development and we are improving it continuously.",
     passwordLabel: "New password",
     confirmPasswordLabel: "Confirm new password",
     passwordPlaceholder: "Enter a strong password",
@@ -275,6 +281,8 @@ function mapRecoveryValidationFailure(
       title: text.genericErrorTitle,
       body: text.genericErrorBody,
       live: "assertive",
+      supportLabel: text.supportLabel,
+      supportNotes: [{ text: text.supportNote, tone: "danger" }],
     };
   }
 
@@ -321,6 +329,8 @@ function mapSupabaseFinalizeError(
     title: text.genericErrorTitle,
     body: text.genericErrorBody,
     live: "assertive",
+    supportLabel: text.supportLabel,
+    supportNotes: [{ text: text.supportNote, tone: "danger" }],
   };
 }
 
@@ -349,6 +359,8 @@ function mapResetUpdateFailure(
         icon: "danger",
         title: text.genericErrorTitle,
         body: text.genericErrorBody,
+        supportLabel: text.supportLabel,
+        supportNotes: [{ text: text.supportNote, tone: "danger" }],
       };
     case "PASSWORD_RECOVERY_INVALID_TOKEN":
       return {
@@ -364,6 +376,8 @@ function mapResetUpdateFailure(
         title: text.genericErrorTitle,
         body: text.genericErrorBody,
         live: "assertive",
+        supportLabel: text.supportLabel,
+        supportNotes: [{ text: text.supportNote, tone: "danger" }],
       };
   }
 }
@@ -462,6 +476,8 @@ export function ResetPasswordPanel({
             title: text.unavailableTitle,
             body: text.unavailableBody,
             live: "assertive",
+            supportLabel: text.supportLabel,
+            supportNotes: [{ text: text.supportNote, tone: "danger" }],
           });
           setInitializing(false);
           setReady(false);
@@ -694,6 +710,8 @@ export function ResetPasswordPanel({
         title: text.genericErrorTitle,
         body: text.genericErrorBody,
         live: "assertive",
+        supportLabel: text.supportLabel,
+        supportNotes: [{ text: text.supportNote, tone: "danger" }],
       });
     } finally {
       setBusy(false);

@@ -10,7 +10,13 @@ import type {
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 
+import { AuthSupportDetails } from "@/components/auth/auth-status";
 import type { AppMessages } from "@/lib/messages";
+import {
+  createOperationalUiError,
+  getOperationalSupportNotes,
+  type OperationalUiError,
+} from "@/lib/operational-support";
 
 import { DocumentContextCard } from "@/components/document/document-context-card";
 
@@ -36,7 +42,7 @@ export function InfographicStudio({
     modelId: defaultModelId,
   });
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<OperationalUiError | null>(null);
 
   const latestGeneration = generations[0] ?? null;
   const documentOptions = useMemo(() => initialDocuments.slice(0, 20), [initialDocuments]);
@@ -66,7 +72,10 @@ export function InfographicStudio({
       setGenerations((current) => [payload.data, ...current]);
     } catch (nextError) {
       setError(
-        nextError instanceof Error ? nextError.message : "Infographic generation failed.",
+        createOperationalUiError(
+          nextError instanceof Error ? nextError.message : "Infographic generation failed.",
+          true,
+        ),
       );
     } finally {
       setPending(false);
@@ -222,13 +231,21 @@ export function InfographicStudio({
             </div>
             
             {error ? (
-              <div className="mt-4 flex items-center gap-2 rounded-xl border border-danger/20 bg-danger/5 p-3 text-sm text-danger">
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-danger/20 bg-danger/5 p-3 text-sm text-danger">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5 shrink-0" strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                <span>{error}</span>
+                <div className="min-w-0 space-y-3">
+                  <span>{error.message}</span>
+                  {error.showSupport ? (
+                    <AuthSupportDetails
+                      label={messages.operationalSupportDetailsLabel}
+                      notes={getOperationalSupportNotes(messages)}
+                    />
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </form>

@@ -38,8 +38,14 @@ import { useEffect, useRef, useState } from "react";
 
 import type { AppMessages } from "@/lib/messages";
 import { dispatchAssessmentCreditRefresh } from "@/lib/assessment-credit-events";
+import {
+  createOperationalUiError,
+  getOperationalSupportNotes,
+  type OperationalUiError,
+} from "@/lib/operational-support";
 
 import { AssessmentFieldSelect } from "@/components/assessment/assessment-field-select";
+import { AuthSupportDetails } from "@/components/auth/auth-status";
 import { DocumentContextCard } from "@/components/document/document-context-card";
 
 type AssessmentStudioProps = {
@@ -58,6 +64,10 @@ const ASSESSMENT_MODE_OPTIONS = [...ASSESSMENT_MODES];
 const QUESTION_TYPE_OPTIONS = [...ASSESSMENT_ACTIVE_QUESTION_TYPES];
 const ACTIVE_QUESTION_TYPE_SET = new Set<AssessmentQuestionType>(QUESTION_TYPE_OPTIONS);
 const RETENTION_NOTICE_AUTO_DISMISS_MS = 60_000;
+
+type AssessmentRequestError = Error & {
+  code?: string;
+};
 
 type AssessmentModelTone = "accent" | "gold" | "muted";
 
@@ -360,6 +370,80 @@ function getDocumentStatusLabel(value: DocumentRecord["status"], messages: AppMe
   }
 }
 
+function resolveAssessmentResponseFallbackMessage(
+  response: Response,
+  rawBody: string,
+  fallbackMessage: string,
+) {
+  const trimmedBody = rawBody.trim();
+
+  if (trimmedBody && !/^<!doctype html|^<html/i.test(trimmedBody)) {
+    return trimmedBody;
+  }
+
+  if (response.statusText.trim()) {
+    return response.statusText;
+  }
+
+  return fallbackMessage;
+}
+
+async function readAssessmentApiResult<T>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<ApiResult<T>> {
+  const rawBody = await response.text();
+
+  if (!rawBody.trim()) {
+    return {
+      ok: false,
+      error: {
+        code: "EMPTY_RESPONSE",
+        message: response.ok ? fallbackMessage : response.statusText || fallbackMessage,
+      },
+    };
+  }
+
+  try {
+    return JSON.parse(rawBody) as ApiResult<T>;
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_RESPONSE",
+        message: resolveAssessmentResponseFallbackMessage(
+          response,
+          rawBody,
+          fallbackMessage,
+        ),
+      },
+    };
+  }
+}
+
+function createAssessmentRequestError(message: string, code?: string) {
+  return Object.assign(new Error(message), { code }) as AssessmentRequestError;
+}
+
+function shouldShowAssessmentOperationalSupport(code?: string) {
+  if (!code) {
+    return true;
+  }
+
+  return ![
+    "INVALID_ASSESSMENT_REQUEST",
+    "ASSESSMENT_MODEL_UNSUPPORTED",
+    "DOCUMENT_NOT_FOUND",
+    "DOCUMENT_NOT_READY",
+    "DOCUMENT_CONTEXT_UNAVAILABLE",
+    "ASSESSMENT_DAILY_CREDITS_EXHAUSTED",
+    "ASSESSMENT_ACCESS_DISABLED",
+    "ASSESSMENT_USER_LANE_REQUIRED",
+    "PROFILE_INCOMPLETE",
+    "UNAUTHENTICATED",
+  ].includes(code);
+}
+
 function resolveAssessmentErrorMessage(
   error: ApiFailure["error"] | null,
   messages: AppMessages,
@@ -434,7 +518,7 @@ export function AssessmentStudio({
   );
   const [pending, setPending] = useState(false);
   const [readbackId, setReadbackId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<OperationalUiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [lastCreatedGeneration, setLastCreatedGeneration] =
     useState<AssessmentGeneration | null>(null);
@@ -633,20 +717,31 @@ export function AssessmentStudio({
 
     try {
       const response = await fetch(`/api/assessment/${encodeURIComponent(id)}`);
-      const payload = (await response.json()) as ApiResult<AssessmentGeneration>;
+      const payload = await readAssessmentApiResult<AssessmentGeneration>(
+        response,
+        messages.assessmentReadbackFailed,
+      );
 
       if (!response.ok || !payload.ok) {
-        throw new Error(
+        throw createAssessmentRequestError(
           resolveAssessmentErrorMessage(payload.ok ? null : payload.error, messages),
+          payload.ok ? "REQUEST_FAILED" : payload.error.code,
         );
       }
 
       setGenerations((current) => replaceGeneration(current, payload.data));
     } catch (nextError) {
       setError(
-        nextError instanceof Error
-          ? nextError.message
-          : messages.assessmentReadbackFailed,
+        createOperationalUiError(
+          nextError instanceof Error
+            ? nextError.message
+            : messages.assessmentReadbackFailed,
+          shouldShowAssessmentOperationalSupport(
+            nextError instanceof Error && "code" in nextError
+              ? String((nextError as AssessmentRequestError).code || "")
+              : undefined,
+          ),
+        ),
       );
     } finally {
       setReadbackId(null);
@@ -670,7 +765,7 @@ export function AssessmentStudio({
     // This is only a user-friendly local stop. The real exhausted-limit enforcement lives on the
     // server route so duplicate tabs, retried requests, and direct API calls stay constrained.
     if (creditsExhausted) {
-      setError(messages.assessmentDailyCreditsExhaustedBody);
+      setError(createOperationalUiError(messages.assessmentDailyCreditsExhaustedBody, false));
       setPending(false);
       return;
     }
@@ -717,7 +812,10 @@ export function AssessmentStudio({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(requestForSubmit),
       });
-      const payload = (await response.json()) as ApiResult<AssessmentCreateResponse>;
+      const payload = await readAssessmentApiResult<AssessmentCreateResponse>(
+        response,
+        messages.assessmentFieldGenericError,
+      );
 
       if (!response.ok || !payload.ok) {
         if (!payload.ok && payload.error.fieldErrors) {
@@ -750,8 +848,9 @@ export function AssessmentStudio({
           dispatchAssessmentCreditRefresh();
         }
 
-        throw new Error(
+        throw createAssessmentRequestError(
           resolveAssessmentErrorMessage(payload.ok ? null : payload.error, messages),
+          payload.ok ? "REQUEST_FAILED" : payload.error.code,
         );
       }
 
@@ -762,9 +861,16 @@ export function AssessmentStudio({
       setNotice(messages.assessmentRequestSaved);
     } catch (nextError) {
       setError(
-        nextError instanceof Error
-          ? nextError.message
-          : messages.assessmentFieldGenericError,
+        createOperationalUiError(
+          nextError instanceof Error
+            ? nextError.message
+            : messages.assessmentFieldGenericError,
+          shouldShowAssessmentOperationalSupport(
+            nextError instanceof Error && "code" in nextError
+              ? String((nextError as AssessmentRequestError).code || "")
+              : undefined,
+          ),
+        ),
       );
     } finally {
       setPending(false);
@@ -1195,7 +1301,15 @@ export function AssessmentStudio({
               ) : null}
               {error ? (
                 <div className="rounded-[1.25rem] border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
-                  {error}
+                  <div className="space-y-3">
+                    <p>{error.message}</p>
+                    {error.showSupport ? (
+                      <AuthSupportDetails
+                        label={messages.operationalSupportDetailsLabel}
+                        notes={getOperationalSupportNotes(messages)}
+                      />
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
 

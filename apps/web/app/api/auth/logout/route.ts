@@ -13,6 +13,7 @@ export async function POST() {
        now so only generated assessment artifacts remain retained under their own lifecycle. */
     const workspaceCleanup = await clearUploadWorkspaceForOwner(user.uid).catch(() => ({
       clearedDocumentCount: 0,
+      clearedPreparedUploadCount: 0,
     }));
 
     await appendAdminLog({
@@ -26,6 +27,7 @@ export async function POST() {
       route: "/api/auth/logout",
       metadata: {
         clearedUploadDocuments: workspaceCleanup.clearedDocumentCount,
+        clearedPreparedUploads: workspaceCleanup.clearedPreparedUploadCount,
       },
     });
   }

@@ -22,12 +22,12 @@ import {
 import { getRetentionExpiryTimestamp } from "@/lib/server/assessment-retention";
 
 /**
- * Resolve the workspace expiry timestamp for a document.
- * Returns string | undefined to match DocumentRecord.expiresAt type.
- * When retention mode is "none" (null from getRetentionExpiryTimestamp),
- * returns undefined so the document has no explicit expiry.
+ * Resolve the owner workspace expiry timestamp for upload-source records.
+ * This helper is shared by finalized document rows and pre-finalize upload lifecycle rows so
+ * `/upload` cleanup, logout cleanup, and maintenance sweeps all use the exact same retention
+ * contract. Future agents should keep this as the single source of truth for upload expiry math.
  */
-function resolveWorkspaceExpiryTimestamp(input: {
+export function resolveUploadWorkspaceExpiryTimestamp(input: {
   createdAt: string;
   workspaceExpiresAt?: string | null;
 }): string | undefined {
@@ -151,6 +151,8 @@ export async function deleteDocumentBinaryFromStorage(record: Pick<
 export async function createDocumentRecord(input: {
   ownerUid: string;
   ownerRole: DocumentRecord["ownerRole"];
+  documentId?: string;
+  storagePath?: string | null;
   workspaceExpiresAt?: string | null;
   fileName: string;
   mimeType: string;
@@ -164,9 +166,9 @@ export async function createDocumentRecord(input: {
   });
 
   const createdAt = new Date().toISOString();
-  const documentId = randomUUID();
-    const fileExtension = normalizeUploadExtension(input.fileName) || undefined;
-    const contentSha256 = createHash("sha256").update(input.buffer).digest("hex");
+  const documentId = input.documentId ?? randomUUID();
+  const fileExtension = normalizeUploadExtension(input.fileName) || undefined;
+  const contentSha256 = createHash("sha256").update(input.buffer).digest("hex");
   /* This is the active upload normalization path for the protected workspace.
      It replaced the retired Datalab-specific helper, and future agents should preserve the same direct-file-first contract and truthful warnings. */
   const snapshot = buildDocumentMarkdownSnapshot({
@@ -177,13 +179,19 @@ export async function createDocumentRecord(input: {
   });
   const warnings = [...snapshot.warnings];
 
-  const storagePath = await tryPersistBinaryToStorage({
-    ownerUid: input.ownerUid,
-    documentId,
-    fileName: input.fileName,
-    mimeType: input.mimeType,
-    buffer: input.buffer,
-  });
+  /* Direct signed uploads persist the binary before final metadata save. Re-assert the owner-
+     scoped path here so finalize requests can reuse the stored object without weakening the
+     canonical users/{ownerUid}/documents/{documentId}/... isolation contract. */
+  const storagePath =
+    typeof input.storagePath === "string" && input.storagePath.trim().length > 0
+      ? assertOwnerScopedStoragePath(input.storagePath, input.ownerUid, ["documents"])
+      : await tryPersistBinaryToStorage({
+          ownerUid: input.ownerUid,
+          documentId,
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          buffer: input.buffer,
+        });
 
   if (!storagePath) {
     warnings.push(
@@ -210,6 +218,7 @@ export async function createDocumentRecord(input: {
       sizeBytes: input.sizeBytes,
       contentSha256,
       storagePath,
+      sourceBinaryRetained: Boolean(storagePath),
       storageDataClass: storageMetadata?.storageDataClass === "upload-source"
         ? "upload-source"
         : undefined,
@@ -222,7 +231,7 @@ export async function createDocumentRecord(input: {
       supersededAt: null,
       /* Upload binaries are session-scoped workspace assets. This expiry timestamp is now driven
          by the authenticated session boundary, with retention-window fallback when unavailable. */
-      expiresAt: resolveWorkspaceExpiryTimestamp({
+      expiresAt: resolveUploadWorkspaceExpiryTimestamp({
         createdAt,
         workspaceExpiresAt: input.workspaceExpiresAt,
       }),

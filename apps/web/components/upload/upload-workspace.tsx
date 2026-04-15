@@ -13,7 +13,14 @@ import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { BrainCircuit, PieChart, Trash2, UploadCloud } from "lucide-react";
 
+import { AuthSupportDetails } from "@/components/auth/auth-status";
 import type { AppMessages } from "@/lib/messages";
+import {
+  createOperationalUiError,
+  getOperationalSupportNotes,
+  type OperationalUiError,
+} from "@/lib/operational-support";
+import { getSupabaseClient, isSupabaseWebConfigured } from "@/lib/supabase/client";
 import { SUPPORTED_UPLOAD_FORMAT_BADGES } from "@/lib/upload";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +31,18 @@ type UploadWorkspaceProps = {
   title?: string;
   description?: string;
   canAccessInfographic?: boolean;
+};
+
+type UploadPrepareResponse = {
+  documentId: string;
+  bucket: string;
+  objectPath: string;
+  uploadToken: string;
+};
+
+type ApiRequestError = Error & {
+  code?: string;
+  status?: number;
 };
 
 function formatDocumentSize(sizeBytes: number) {
@@ -46,6 +65,128 @@ function prependWorkspaceDocument(
     nextDocument,
     ...currentDocuments.filter((document) => document.id !== nextDocument.id),
   ];
+}
+
+function createApiRequestError(
+  message: string,
+  options: {
+    code?: string;
+    status?: number;
+  } = {},
+) {
+  return Object.assign(new Error(message), options) as ApiRequestError;
+}
+
+function resolveResponseFallbackMessage(
+  response: Response,
+  rawBody: string,
+  fallbackMessage: string,
+) {
+  const trimmedBody = rawBody.trim();
+
+  if (
+    response.status === 413
+    || /request entity too large|payload too large|body exceeded|function_payload_too_large/i.test(
+      trimmedBody,
+    )
+  ) {
+    return "The upload request was too large for the server proxy path.";
+  }
+
+  if (trimmedBody && !/^<!doctype html|^<html/i.test(trimmedBody)) {
+    return trimmedBody;
+  }
+
+  if (response.statusText.trim()) {
+    return response.statusText;
+  }
+
+  return fallbackMessage;
+}
+
+async function readApiResultSafely<T>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<ApiResult<T>> {
+  const rawBody = await response.text();
+
+  if (!rawBody.trim()) {
+    return {
+      ok: false,
+      error: {
+        code: "EMPTY_RESPONSE",
+        message: response.ok ? fallbackMessage : response.statusText || fallbackMessage,
+      },
+    };
+  }
+
+  try {
+    return JSON.parse(rawBody) as ApiResult<T>;
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_RESPONSE",
+        message: resolveResponseFallbackMessage(response, rawBody, fallbackMessage),
+      },
+    };
+  }
+}
+
+async function readApiData<T>(
+  response: Response,
+  fallbackMessage: string,
+) {
+  const payload = await readApiResultSafely<T>(response, fallbackMessage);
+  if (!response.ok || !payload.ok) {
+    throw createApiRequestError(
+      payload.ok ? fallbackMessage : payload.error.message,
+      {
+        code: payload.ok ? "REQUEST_FAILED" : payload.error.code,
+        status: response.status,
+      },
+    );
+  }
+
+  return payload.data;
+}
+
+function shouldUseLegacyUploadFallback(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+
+  return (
+    code === "UPLOAD_DIRECT_UNAVAILABLE"
+    || code === "SUPABASE_WEB_CONFIG_MISSING"
+    || /no api key found in request/i.test(message)
+  );
+}
+
+function shouldShowUploadOperationalSupport(error: unknown) {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code || "")
+      : "";
+  if (
+    code === "INVALID_UPLOAD_DESCRIPTOR"
+    || code === "DOCUMENT_NOT_FOUND"
+    || code === "DOCUMENT_ID_REQUIRED"
+    || code === "PROFILE_INCOMPLETE"
+    || code === "UNAUTHENTICATED"
+  ) {
+    return false;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return ![
+    "No file selected.",
+    "File is empty.",
+    "File too large. Max size is 50MB.",
+    "Unsupported file format.",
+  ].includes(message);
 }
 
 /*
@@ -107,7 +248,7 @@ export function UploadWorkspace({
   const [pending, setPending] = useState(false);
   const [removingDocumentId, setRemovingDocumentId] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<OperationalUiError | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const customTitle = title?.trim() || null;
   const resolvedTitle = customTitle || messages.uploadDropzoneTitle;
@@ -140,6 +281,80 @@ export function UploadWorkspace({
     return Array.from(event.dataTransfer?.types ?? []).includes("Files");
   }
 
+  async function uploadViaMultipartProxy(file: File) {
+    const requestBody = new FormData();
+    requestBody.append("file", file);
+
+    const response = await fetch("/api/uploads", {
+      method: "POST",
+      body: requestBody,
+    });
+
+    return readApiData<UploadResponse>(response, messages.uploadFailed);
+  }
+
+  async function uploadViaDirectStorage(file: File) {
+    if (!isSupabaseWebConfigured()) {
+      throw createApiRequestError("Secure direct uploads are unavailable.", {
+        code: "SUPABASE_WEB_CONFIG_MISSING",
+      });
+    }
+
+    const prepareResponse = await fetch("/api/uploads", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        mode: "prepare",
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      }),
+    });
+    const preparePayload = await readApiData<UploadPrepareResponse>(
+      prepareResponse,
+      messages.uploadFailed,
+    );
+
+    /* Direct upload still belongs to the authenticated /upload owner. The server prepares the
+       document id + owner-scoped path first, and the browser only receives a signed token for
+       that exact object so drag/drop and browse stay on the same isolated contract. */
+    const { error } = await getSupabaseClient().storage
+      .from(preparePayload.bucket)
+      .uploadToSignedUrl(
+        preparePayload.objectPath,
+        preparePayload.uploadToken,
+        file,
+        {
+          contentType: file.type || "application/octet-stream",
+          upsert: true,
+        },
+      );
+
+    if (error) {
+      throw createApiRequestError(error.message || messages.uploadFailed, {
+        code: "UPLOAD_TO_SIGNED_URL_FAILED",
+      });
+    }
+
+    const completeResponse = await fetch("/api/uploads", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        mode: "complete",
+        documentId: preparePayload.documentId,
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      }),
+    });
+
+    return readApiData<UploadResponse>(completeResponse, messages.uploadFailed);
+  }
+
   /* UploadWorkspace promises both browse-click and drag/drop intake on the protected /upload
      route. Keep all file-entry paths funneled through this one request helper so validation,
      warning handling, retries, and future upload instrumentation never drift between input modes. */
@@ -157,9 +372,12 @@ export function UploadWorkspace({
     } catch (validationError) {
       resetFilePicker();
       setError(
-        validationError instanceof Error
-          ? validationError.message
-          : messages.uploadFileNotSupported,
+        createOperationalUiError(
+          validationError instanceof Error
+            ? validationError.message
+            : messages.uploadFileNotSupported,
+          false,
+        ),
       );
       return;
     }
@@ -169,27 +387,29 @@ export function UploadWorkspace({
     setWarnings([]);
 
     try {
-      const requestBody = new FormData();
-      requestBody.append("file", file);
+      let payload: UploadResponse;
 
-      const response = await fetch("/api/uploads", {
-        method: "POST",
-        body: requestBody,
-      });
+      try {
+        payload = await uploadViaDirectStorage(file);
+      } catch (directUploadError) {
+        if (!shouldUseLegacyUploadFallback(directUploadError)) {
+          throw directUploadError;
+        }
 
-      const payload = (await response.json()) as ApiResult<UploadResponse>;
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.ok ? "UPLOAD_FAILED" : payload.error.message);
+        payload = await uploadViaMultipartProxy(file);
       }
 
-      setWarnings(payload.data.warnings);
+      setWarnings(payload.warnings);
       setDocuments((current) =>
-        prependWorkspaceDocument(current, payload.data.document),
+        prependWorkspaceDocument(current, payload.document),
       );
-      onDocumentCreated?.(payload.data.document);
+      onDocumentCreated?.(payload.document);
     } catch (uploadError) {
       setError(
-        uploadError instanceof Error ? uploadError.message : messages.uploadFailed,
+        createOperationalUiError(
+          uploadError instanceof Error ? uploadError.message : messages.uploadFailed,
+          shouldShowUploadOperationalSupport(uploadError),
+        ),
       );
     } finally {
       resetFilePicker();
@@ -254,7 +474,7 @@ export function UploadWorkspace({
 
     const file = event.dataTransfer.files?.[0];
     if (!file) {
-      setError(messages.uploadSelectFile);
+      setError(createOperationalUiError(messages.uploadSelectFile, false));
       return;
     }
 
@@ -288,20 +508,20 @@ export function UploadWorkspace({
         `/api/uploads?documentId=${encodeURIComponent(activeDocument.id)}`,
         { method: "DELETE", credentials: "same-origin" },
       );
-      const payload = (await response.json()) as ApiResult<RemoveDocumentResponse>;
+      const payload = await readApiData<RemoveDocumentResponse>(
+        response,
+        messages.uploadRemoveActiveFailed,
+      );
 
-      if (!response.ok || !payload.ok) {
-        throw new Error(
-          payload.ok ? "DOCUMENT_DELETE_FAILED" : payload.error.message,
-        );
-      }
-
-      setDocuments(payload.data.documents);
+      setDocuments(payload.documents);
     } catch (removalError) {
       setError(
-        removalError instanceof Error
-          ? removalError.message
-          : messages.uploadRemoveActiveFailed,
+        createOperationalUiError(
+          removalError instanceof Error
+            ? removalError.message
+            : messages.uploadRemoveActiveFailed,
+          shouldShowUploadOperationalSupport(removalError),
+        ),
       );
     } finally {
       setRemovingDocumentId(null);
@@ -429,7 +649,15 @@ export function UploadWorkspace({
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
-              <p className="text-sm text-danger">{error}</p>
+              <div className="min-w-0 space-y-3">
+                <p className="text-sm text-danger">{error.message}</p>
+                {error.showSupport ? (
+                  <AuthSupportDetails
+                    label={messages.operationalSupportDetailsLabel}
+                    notes={getOperationalSupportNotes(messages)}
+                  />
+                ) : null}
+              </div>
             </div>
           )}
 
