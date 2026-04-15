@@ -25,12 +25,14 @@ import {
   ExternalLink,
   FileText,
   Gauge,
+  HandHeart,
   History,
   Languages,
   Layers3,
   LockKeyhole,
   Percent,
   RefreshCcw,
+  ShieldCheck,
   Sparkles,
   Timer,
 } from "lucide-react";
@@ -82,7 +84,7 @@ const ASSESSMENT_PROMPT_UNLOCK_ROUTE = "/api/assessment/prompt-unlock";
 const ASSESSMENT_PROMPT_LOCK_COPY = {
   title: "ميزة طلب التقييم مخصصة حالياً للطلاب المختارين",
   body:
-    "هذه الميزة متاحة لطلاب محددين فقط. إذا رغبت في الوصول إليها أو الحصول على كلمة المرور، يرجى التواصل باحترام مع المشرف/المطور ابن عبدالله.",
+    "هذه الميزة متاحة لطلاب محددين فقط. إذا رغبت في الوصول إليها أو الحصول على كلمة المرور، يرجى التواصل مع المشرف/المطور ابن عبدالله.",
   passwordLabel: "كلمة المرور",
   passwordPlaceholder: "أدخل كلمة المرور لفتح الميزة",
   unlockAction: "فتح الميزة",
@@ -101,10 +103,8 @@ const ASSESSMENT_PROMPT_LOCK_COPY = {
 };
 
 const ASSESSMENT_MODEL_VISIBILITY_COPY = {
-  badge: "ميزة بريميوم",
-  title: "اختيار النموذج متاح حالياً لحسابات الإدارة فقط",
-  body:
-    "لضمان ثبات الجودة في المسار الحالي، يتم تحديد نموذج التقييم تلقائياً لهذا الحساب. إذا كنت تحتاج نموذجاً مخصصاً، يرجى التواصل مع الإدارة.",
+  rightsLine: "جميع حقوق المنصة والتصاميم والافكار محفوظة للمطور ابن عبدالله © 2026",
+  supportHint: "تبرع لتطوير أنظمة الذكاء الاصطناعي",
 };
 
 type AssessmentRequestError = Error & {
@@ -1084,22 +1084,19 @@ export function AssessmentStudio({
                   dir="rtl"
                   className="assessment-model-control border-amber-500/28 bg-[linear-gradient(145deg,rgba(251,191,36,0.14),rgba(245,158,11,0.06))] text-right"
                 >
-                  <span className="inline-flex w-fit items-center rounded-full border border-amber-500/35 bg-amber-500/18 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
-                    {ASSESSMENT_MODEL_VISIBILITY_COPY.badge}
-                  </span>
-                  <div className="mt-1.5 flex items-start gap-2.5">
-                    <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-500/35 bg-amber-500/15 text-amber-800 dark:text-amber-200">
-                      <LockKeyhole className="h-4 w-4" />
+                  {/* Non-admin model lane intentionally remains compact to align with the title rail.
+                      Keep this rights/support block short and horizontally efficient across breakpoints. */}
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-500/35 bg-amber-500/16 text-amber-800 dark:text-amber-200">
+                      <ShieldCheck className="h-3.5 w-3.5" />
                     </span>
                     <div className="min-w-0 space-y-1">
-                      <p className="text-sm font-semibold leading-7 text-foreground">
-                        {ASSESSMENT_MODEL_VISIBILITY_COPY.title}
+                      <p className="text-[0.79rem] font-semibold leading-5 text-foreground sm:text-[0.81rem] sm:leading-5 md:whitespace-nowrap">
+                        {ASSESSMENT_MODEL_VISIBILITY_COPY.rightsLine}
                       </p>
-                      <p className="text-sm leading-7 text-foreground-muted">
-                        {ASSESSMENT_MODEL_VISIBILITY_COPY.body}
-                      </p>
-                      <p className="pt-1 text-xs font-semibold text-foreground-muted/90">
-                        {messages.assessmentModelLabel}: {selectedModel?.label ?? defaultModelId}
+                      <p className="inline-flex items-center gap-1.5 text-[0.66rem] leading-4 text-foreground-muted/85 sm:text-[0.68rem] md:whitespace-nowrap">
+                        <HandHeart className="h-3.5 w-3.5 shrink-0 text-rose-500 dark:text-rose-300" />
+                        <span className="truncate">{ASSESSMENT_MODEL_VISIBILITY_COPY.supportHint}</span>
                       </p>
                     </div>
                   </div>

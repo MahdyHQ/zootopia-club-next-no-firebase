@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Assessment prompt admin-managed entitlement: durable per-user grant/revoke)
+Last Updated: 2026-04-15 (Assessment non-admin model panel copy/compact layout refinement)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -117,6 +117,9 @@ Key verified facts:
   entitlement gate (`enabled|disabled`) with server-authoritative enforcement,
   while preserving the existing env-password unlock mechanism for entitled
   users and keeping admin permanently exempt
+- Assessment setup non-admin model-replacement panel now uses compact Arabic
+  rights ownership copy and a subtle donation/support hint with small icons,
+  preserving premium visual balance in the top setup row across breakpoints
 - Global maintenance mode now supports an env-controlled proxy guard that
   redirects non-admin auth/public/site/protected traffic to `/maintenance`,
   while preserving admin bypass and `/admin/login` availability
@@ -5636,6 +5639,38 @@ Verification:
 Risks / Notes:
 - Proxy-level maintenance gating applies only to explicitly matched paths; future public pages should be added to maintenance matcher lists when they must be gated.
 - Internal secret-gated upload cleanup maintenance route remains operationally separate from user-facing maintenance mode.
+
+---
+
+2026-04-15 — Assessment Non-Admin Model Panel Copy / Compact Arabic Refinement
+===============================================================================
+Type: UI-only refinement / compact typography tuning / non-admin lane polishing
+Scope: assessment setup header non-admin model-replacement panel
+
+Summary:
+- Replaced the previous non-admin informational Arabic block in the Assessment
+  model-replacement panel with the required rights ownership line:
+  "جميع حقوق المنصة والتصاميم والافكار محفوظة للمطور ابن عبدالله © 2026".
+- Added a compact secondary donation/support hint line:
+  "تبرع لتطوير أنظمة الذكاء الاصطناعي".
+- Updated panel icon treatment to use small expressive icons and tighter
+  typography/spacing so the block stays elegant and horizontally efficient.
+
+What Changed:
+- `apps/web/components/assessment/assessment-studio.tsx`
+  - Updated `ASSESSMENT_MODEL_VISIBILITY_COPY` to the new Arabic rights/support copy.
+  - Refined only the non-admin (`promptAccess.isAdmin === false`) panel JSX to
+    compact the text block and icon sizing.
+  - Preserved admin branch (`AssessmentFieldSelect`) and all backend contracts.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Change is intentionally local to non-admin presentation only; no server logic,
+  role authority, model validation, or API behavior was altered.
 
 ---
 
