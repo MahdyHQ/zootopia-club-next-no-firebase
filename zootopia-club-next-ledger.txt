@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Admin credit submit crash hardening: server-action origin allowlist + pre-mutation lookup fail-safe)
+Last Updated: 2026-04-15 (Near-real-time assessment credit sync: owner-scoped SSE + fallback refresh)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -106,6 +106,10 @@ Key verified facts:
   (default 24h, daily behavior preserved)
 - Admin credit mutations now persist durable per-user before/after history
   snapshots and are rendered on `/admin/users/[uid]`
+- Admin credit mutations now publish the repository-returned post-commit credit
+  summary for the exact target UID from both the admin detail-page server action
+  flow and the admin PATCH route, without moving mutation authority out of the
+  backend repository layer
 - Assessment create requests now require a route-level `Idempotency-Key`, and
   Assessment Studio persists a short-lived per-tab logical-attempt key across
   duplicate submits / refresh retries so one successful generation attempt
@@ -114,6 +118,10 @@ Key verified facts:
 - Protected shell credit header refresh now coalesces concurrent trigger paths
   (focus/visibility/event/interval) and skips hidden-tab interval polling to
   reduce duplicate `/api/assessment/credits` requests
+- Protected shell now opens an authenticated same-origin SSE lane at
+  `/api/assessment/credits/stream`, applies all pushed summaries through the
+  existing shared credit-event bridge, and falls back to fetch-based
+  focus/visibility/interval refresh when the live stream is unavailable
 - Protected header credit badge now keeps a compact always-visible balance value
   beside the wallet icon and includes an adjacent non-mutating plus action that
   opens an Arabic urgent-credit help popover (Elmahdy Abdallah contact guidance)
@@ -833,10 +841,13 @@ Credit System:
 - Daily credit limit: ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS (default 3)
 - Renewal window: ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS (default 24h UTC)
 - GET /api/assessment/credits returns current status with explicit no-store headers
+- GET /api/assessment/credits/stream is the authenticated same-origin SSE lane
+  for near-real-time owner-scoped credit-summary delivery
 - Credit reservation before AI generation
 - Credit consumed on success, released on failure
-- Protected shell credit badge now refreshes on explicit assessment events plus focus,
-  visibility, and periodic sync to reduce admin/user cross-session drift
+- Protected shell credit badge now prefers SSE push delivery and falls back to
+  explicit assessment events plus focus/visibility/periodic sync when the live
+  stream is unavailable or reconnecting
 
 Assessment Retrieval:
 - GET /api/assessment/[id] — Single assessment
@@ -1291,6 +1302,7 @@ Implemented & Active:
 - [x] Profile completion gating
 - [x] Document upload with retention policies
 - [x] AI assessment generation with credit limits
+- [x] Near-real-time server-authoritative assessment credit synchronization
 - [x] Assessment history viewer
 - [x] Assessment export (PDF, JSON)
 - [x] User settings page
@@ -1393,6 +1405,110 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-15 — Near-Real-Time Assessment Credit Synchronization (Owner-Scoped SSE + Fallback Refresh)
+
+Type: Runtime sync hardening + auth-scoped server push
+Scope: Minimal, backward-compatible
+Migration: None
+
+Reason:
+- Admin credit mutations were already persisting correctly through repository-owned backend paths, but target-user credit surfaces could still wait on coarse refresh windows before reflecting the new server truth.
+- The objective was to keep `/api/assessment/credits` as the single authoritative summary model while making admin-to-user updates appear almost immediately across protected UI surfaces.
+
+Root Cause (verified):
+1) Delivery-gap rather than persistence-gap:
+- `applyAdminAssessmentCreditMutation(...)` already committed the correct target-user mutation and returned the authoritative effective summary.
+- `/api/assessment/credits` already returned server-owned truth for the signed-in owner session.
+- The missing piece was a near-real-time delivery lane from successful admin mutation to existing target-user browser sessions.
+
+2) Client refresh architecture was truthful but windowed:
+- `apps/web/components/layout/protected-shell.tsx` owned the shared credit fetch/broadcast path for protected pages.
+- `apps/web/components/assessment/assessment-studio.tsx` already listened to the shell's summary-updated event.
+- Cross-session freshness still depended on focus/visibility/route-change/interval refresh timing, so active target-user tabs could lag after an external admin mutation.
+
+Why SSE was chosen (verified + architecture inference):
+- The repo needs one-way server-to-client delivery of credit-summary truth, not a bidirectional collaboration channel.
+- Same-origin cookie-authenticated EventSource integrates cleanly with the existing Auth.js session boundary and keeps subscription ownership on the server.
+- Vercel's streaming guidance supports long-lived streaming responses for functions, while Vercel's WebSocket knowledge-base guidance points developers toward external realtime providers rather than a native in-route WebSocket server path.
+- This repo has no existing socket foundation, so WebSocket would add more moving parts and deployment risk than the current requirement justifies.
+
+What changed:
+
+1) `apps/web/lib/server/assessment-credit-live-updates.ts`
+- Added a server-only in-memory listener registry keyed by owner UID.
+- Added `subscribeAssessmentCreditLiveUpdates(...)` for live listeners on the current Node.js instance.
+- Added `createAssessmentCreditSummarySignature(...)` so SSE delivery dedupes against the same summary shape used by `/api/assessment/credits`.
+- Added `publishAssessmentCreditLiveUpdate(...)` so successful admin mutations can fan out the exact post-commit summary for the intended owner UID only.
+
+2) `apps/web/app/api/assessment/credits/stream/route.ts`
+- Added a new Node.js/dynamic SSE route at `/api/assessment/credits/stream`.
+- Route authenticates with `getAuthenticatedSessionUser()` and never trusts a client-supplied UID.
+- Route resolves the initial authoritative summary via `getAssessmentDailyCreditsSummaryForUser(...)`, emits it immediately, then subscribes to same-instance live updates.
+- Added keepalive comments and a 3s fallback server-truth recheck so Vercel multi-instance traffic still converges quickly even when the admin mutation and target-user stream are not on the same process.
+- Response headers explicitly disable caching/buffering and declare `text/event-stream`.
+
+3) `apps/web/components/layout/protected-shell.tsx`
+- Added a single deduped `applyCreditSummary(...)` owner for all incoming shell credit state.
+- Wired an `EventSource("/api/assessment/credits/stream")` connection that feeds pushed summaries through the existing `dispatchAssessmentCreditSummaryUpdated(...)` bridge.
+- Kept focus/visibility/event refresh behavior as fallback and skip the periodic polling path while the live stream is healthy.
+- Header balance badge remains read-only and still reflects server-owned summary truth only.
+
+4) `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- After successful repository mutation + admin audit log append, the detail-page server action now publishes the returned `state.credits` summary to the live-update registry.
+- Added logging that records target UID, acting admin UID, action, delivered listener count, and resolved remaining count.
+
+5) `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+- The PATCH route now publishes the returned `state.credits` summary after successful mutation + audit log append.
+- Added matching operational logging for target UID, delivered listener count, and resolved remaining count.
+
+What was preserved:
+- Backend authority remains in repository/server paths; no secure mutation logic moved to the client.
+- `applyAdminAssessmentCreditMutation(...)` remains the only mutation authority for admin credit updates.
+- `/api/assessment/credits` remains the canonical read model for owner credit truth.
+- Assessment Studio continues to reuse the existing browser summary-updated event instead of creating a competing credit state owner.
+- No schema changes, no migrations, and no new dependencies were introduced.
+
+Auth / leakage prevention:
+- Stream ownership is derived from `getAuthenticatedSessionUser()` on the server, not from any client UID parameter.
+- Live listener registry keys by owner UID, and admin publishers emit only to the exact mutated owner UID.
+- Normal users never receive admin-only mutation metadata; pushed payloads contain only the same credit-summary truth shape already exposed by `/api/assessment/credits`.
+
+Environment notes:
+- Local integrated development:
+  - Same-process admin mutations can fan out immediately through the in-memory listener registry.
+  - Existing fetch refresh remains available when the SSE stream is not healthy.
+- Vercel production:
+  - Same-instance fan-out is immediate when mutation and stream share a function instance.
+  - Cross-instance cases converge through the route's periodic authoritative recheck without trusting process memory as global truth.
+- Legacy/reference-only paths:
+  - No Firebase-era runtime assumptions were reintroduced.
+
+Verification:
+- Lint: `npm run lint:web` ✅
+- Typecheck: `npm run typecheck:web` ✅
+- Build: `npm run build:web` ✅
+- Local built app smoke check: `npm run start:web` served `/login` successfully (HTTP 200 with login content present) ✅
+- Local auth-boundary check: unauthenticated `GET /api/assessment/credits/stream` returned `401` with `Cache-Control: no-store...` and sign-in-required text ✅
+- Local auth-boundary check: unauthenticated `GET /api/assessment/credits` returned `401` JSON with the same sign-in-required boundary ✅
+- Authenticated admin→target browser replay: not executed from this machine because the repo does not expose disposable local credentials/bootstrap accounts, and no unknown remote data was mutated for verification ⚠️
+
+Files changed:
+- `apps/web/lib/server/assessment-credit-live-updates.ts`
+- `apps/web/app/api/assessment/credits/stream/route.ts`
+- `apps/web/components/layout/protected-shell.tsx`
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+
+Risks / follow-up:
+- Cross-instance Vercel delivery is near-real-time rather than hard realtime because the global authority stays in the database/read model, not in process memory; if sub-second multi-instance guarantees become mandatory, use a provider-backed pub/sub lane instead of expanding the in-memory registry.
+- A full authenticated E2E replay should still be run with one admin account, one normal user account, and ideally two normal-user tabs to verify:
+  - exact target UID mutation confirmation
+  - post-mutation `/api/assessment/credits` truth
+  - protected header update
+  - Assessment Studio update
+  - exhausted-credit banner clearance when credits become available
+  - wrong-user non-delivery in a real session environment
 
 2026-04-15 — Admin Credit Submit Crash Hardening (Server Action Origin + Lookup Guard)
 
@@ -1506,4 +1622,3 @@ Verification:
 Risks / follow-up:
 - Poll interval is now tighter (20s). Expected load increase is small for current scope, but monitor if protected-session volume grows significantly.
 - For near-instant cross-session propagation beyond polling/focus/route-change, a future server-push channel (SSE/WebSocket) would be needed; current patch intentionally avoids architectural redesign.
-

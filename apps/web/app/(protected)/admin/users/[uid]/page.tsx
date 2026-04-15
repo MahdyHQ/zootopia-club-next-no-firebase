@@ -452,6 +452,9 @@ async function runAdminCreditMutationFromDetailPage(input: {
   const { appendAdminLog, applyAdminAssessmentCreditMutation, getUserByUid } = await import(
     "@/lib/server/repository"
   );
+  const { publishAssessmentCreditLiveUpdate } = await import(
+    "@/lib/server/assessment-credit-live-updates"
+  );
   const { requireAdminUser } = await import("@/lib/server/session");
 
   const admin = await requireAdminUser();
@@ -514,6 +517,32 @@ async function runAdminCreditMutationFromDetailPage(input: {
             : null,
       },
     });
+
+    /* Live credit delivery must publish the repository-returned post-commit summary for this
+       exact owner UID. Keep the detail page on the same server truth object so header/studio
+       listeners never receive guessed balances or cross-user payloads. */
+    try {
+      const liveUpdate = publishAssessmentCreditLiveUpdate({
+        ownerUid: input.targetUid,
+        credits: state.credits,
+        reason: `admin-user-detail:${input.mutation.action}`,
+      });
+
+      console.info("[admin-user-detail] published assessment credit live update", {
+        targetUid: input.targetUid,
+        actingAdminUid: admin.uid,
+        action: input.mutation.action,
+        deliveredCount: liveUpdate.deliveredCount,
+        remainingCount: state.credits.remainingCount,
+      });
+    } catch (error) {
+      console.warn("[admin-user-detail] failed to publish assessment credit live update", {
+        targetUid: input.targetUid,
+        actingAdminUid: admin.uid,
+        action: input.mutation.action,
+        error: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    }
   } catch (error) {
     redirect(
       buildAdminUserDetailPath(input.targetUid, {

@@ -4,6 +4,7 @@ import type {
 } from "@zootopia/shared-types";
 
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
+import { publishAssessmentCreditLiveUpdate } from "@/lib/server/assessment-credit-live-updates";
 import {
   appendAdminLog,
   applyAdminAssessmentCreditMutation,
@@ -220,12 +221,36 @@ export async function PATCH(
       },
     });
 
+    let deliveredCount = 0;
+
+    /* Broadcast only the repository-returned post-commit summary for the mutated owner UID.
+       This route stays server-authoritative by reusing the exact effective summary model already
+       returned to admins and `/api/assessment/credits`, rather than computing a client-side delta. */
+    try {
+      const liveUpdate = publishAssessmentCreditLiveUpdate({
+        ownerUid: uid,
+        credits: state.credits,
+        reason: `admin-api:${body.action}`,
+      });
+      deliveredCount = liveUpdate.deliveredCount;
+    } catch (error) {
+      console.warn("[admin-users-mutation] live update publish failed", {
+        action: `assessment-credits:${body.action}`,
+        targetUid: uid,
+        actingAdminUid: admin.uid,
+        routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
+        error: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    }
+
     console.info("[admin-users-mutation]", {
       action: `assessment-credits:${body.action}`,
       targetUid: uid,
       actingAdminUid: admin.uid,
       routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
       backendMutationResult: "success",
+      deliveredCount,
+      remainingCount: state.credits.remainingCount,
     });
 
     return applyNoStore(

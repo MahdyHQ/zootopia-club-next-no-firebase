@@ -83,8 +83,10 @@ export function ProtectedShell({
   const [isCreditHelpOpen, setIsCreditHelpOpen] = useState(false);
   const [creditSummary, setCreditSummary] =
     useState<AssessmentDailyCreditsSummary | null>(null);
+  const [isCreditStreamHealthy, setIsCreditStreamHealthy] = useState(false);
   const mainScrollRef = useRef<HTMLElement | null>(null);
   const creditSummaryRequestRef = useRef<Promise<void> | null>(null);
+  const creditSummaryRef = useRef<AssessmentDailyCreditsSummary | null>(null);
   const creditHelpTriggerRef = useRef<HTMLButtonElement | null>(null);
   const creditHelpPanelRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
@@ -110,6 +112,21 @@ export function ProtectedShell({
     );
   });
 
+  /* The protected shell is the single shared owner of visible credit summary state for protected
+     pages. Keep all incoming fetch and SSE updates funneled through this one deduped handler so
+     header chrome and downstream Assessment Studio listeners stay aligned to the same server truth. */
+  const applyCreditSummary = useEffectEvent(
+    (nextSummary: AssessmentDailyCreditsSummary) => {
+      if (areCreditSummariesEqual(creditSummaryRef.current, nextSummary)) {
+        return;
+      }
+
+      creditSummaryRef.current = nextSummary;
+      setCreditSummary(nextSummary);
+      dispatchAssessmentCreditSummaryUpdated(nextSummary);
+    },
+  );
+
   const refreshCreditSummary = useEffectEvent(async () => {
     /* The protected shell receives refresh triggers from focus, visibility, interval, and
        assessment-route events. Coalescing keeps those signals from fan-outing into duplicate
@@ -132,12 +149,7 @@ export function ProtectedShell({
           return;
         }
 
-        dispatchAssessmentCreditSummaryUpdated(payload.data.credits);
-        setCreditSummary((current) =>
-          areCreditSummariesEqual(current, payload.data.credits)
-            ? current
-            : payload.data.credits,
-        );
+        applyCreditSummary(payload.data.credits);
       } catch {
         // Keep the header chip resilient: transient network failures should not break shell UI.
       }
@@ -152,6 +164,10 @@ export function ProtectedShell({
       }
     }
   });
+
+  useEffect(() => {
+    creditSummaryRef.current = creditSummary;
+  }, [creditSummary]);
 
   useEffect(() => {
     const scrollContainer = mainScrollRef.current;
@@ -178,8 +194,9 @@ export function ProtectedShell({
       void refreshCreditSummary();
     };
 
-    /* Credit state can change outside this tab (admin mutation or another session). Keep
-       header balance fresh on route focus/visibility and a light interval without polling hard. */
+    /* SSE is the primary near-real-time lane for protected credit chrome. Focus/visibility and
+       the existing interval remain as fallback when the stream is unsupported or reconnecting, so
+       server-truth balance still heals without trusting stale client state. */
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void refreshCreditSummary();
@@ -189,6 +206,10 @@ export function ProtectedShell({
     const intervalId = window.setInterval(() => {
       // Skip background polling for hidden tabs; focus/visibility handlers resync on return.
       if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      if (isCreditStreamHealthy) {
         return;
       }
 
@@ -208,6 +229,53 @@ export function ProtectedShell({
       window.removeEventListener("focus", handleRefreshCredits);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(intervalId);
+    };
+  }, [isCreditStreamHealthy]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.EventSource === "undefined") {
+      setIsCreditStreamHealthy(false);
+      return;
+    }
+
+    const creditStream = new window.EventSource("/api/assessment/credits/stream");
+
+    /* This same-origin SSE connection is scoped by the authenticated session on the server.
+       Keep the browser client read-only here and continue routing every payload through the
+       shell's shared summary handler so other protected surfaces only ever see server-resolved truth. */
+    const handleStreamSummary = (event: Event) => {
+      try {
+        const payload = JSON.parse(
+          (event as MessageEvent<string>).data,
+        ) as { credits?: AssessmentDailyCreditsSummary };
+        if (!payload.credits) {
+          return;
+        }
+
+        applyCreditSummary(payload.credits);
+      } catch {
+        // Leave fallback refresh active if the stream emits an unreadable payload.
+      }
+    };
+
+    const handleStreamOpen = () => {
+      setIsCreditStreamHealthy(true);
+    };
+
+    const handleStreamError = () => {
+      setIsCreditStreamHealthy(false);
+    };
+
+    creditStream.addEventListener("summary", handleStreamSummary);
+    creditStream.addEventListener("open", handleStreamOpen);
+    creditStream.addEventListener("error", handleStreamError);
+
+    return () => {
+      setIsCreditStreamHealthy(false);
+      creditStream.removeEventListener("summary", handleStreamSummary);
+      creditStream.removeEventListener("open", handleStreamOpen);
+      creditStream.removeEventListener("error", handleStreamError);
+      creditStream.close();
     };
   }, []);
 
