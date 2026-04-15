@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     const response = applyNoStore(
       apiError(
         "ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED",
-        "هذه الميزة غير مفعّلة لهذا الحساب حالياً. يرجى التواصل مع الإدارة لطلب التفعيل.",
+        "تعذر فتح الميزة لأن هذه الصلاحية غير مفعّلة لهذا الحساب حالياً. يرجى التواصل مع الإدارة أو المطوّر ابن عبدالله لتفعيلها.",
         403,
       ),
     );
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     return applyNoStore(
       apiError(
         "ASSESSMENT_PROMPT_LOCK_MISCONFIGURED",
-        "قفل الميزة غير متاح حالياً بسبب إعدادات الخادم.",
+        "تعذر فتح الميزة حالياً بسبب إعداد داخلي في الخادم. يرجى المحاولة لاحقاً أو التواصل مع الدعم إذا استمرت المشكلة.",
         503,
       ),
     );
@@ -141,7 +141,7 @@ export async function POST(request: Request) {
     return applyNoStore(
       apiError(
         "ASSESSMENT_PROMPT_UNLOCK_INVALID_PASSWORD",
-        "كلمة المرور غير صحيحة.",
+        "تعذر فتح الميزة لأن كلمة المرور غير صحيحة.",
         403,
       ),
     );
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
     return applyNoStore(
       apiError(
         "ASSESSMENT_PROMPT_LOCK_MISCONFIGURED",
-        "قفل الميزة غير متاح حالياً بسبب إعدادات الخادم.",
+        "تعذر فتح الميزة حالياً بسبب إعداد داخلي في الخادم. يرجى المحاولة لاحقاً أو التواصل مع الدعم إذا استمرت المشكلة.",
         503,
       ),
     );

@@ -29,7 +29,7 @@ import {
 /* Pro PDF artifacts must invalidate when the Pro capture surface changes materially. Keep this
    version lane-specific so renderer-content migration and later premium design work can rev
    without forcing Fast browser-print artifact churn. */
-export const ASSESSMENT_PRO_PRINT_RENDERER_VERSION = "pro-2026-04-14-renderer-content-migration-v2";
+export const ASSESSMENT_PRO_PRINT_RENDERER_VERSION = "pro-2026-04-15-footer-containment-v3";
 
 export type AssessmentProPrintRenderDiagnostics = {
   bodyLoaded: boolean;
@@ -600,15 +600,19 @@ export function buildAssessmentProPrintHtml(input: {
   /* Keep card growth intentionally subtle: the opening page stays slightly safer so the shared
      footer keeps its own slot, while later question pages gain a modest size bump to fill unused
      whitespace without collapsing the current 3-card rhythm. */
-  const firstPageQuestionCardMinHeight = "38.4mm";
-  const followingPageQuestionCardMinHeight = "27.2mm";
-  const followingPageQuestionCardPrintMinHeight = "29mm";
+  const firstPageQuestionCardMinHeight = "36.2mm";
+  const followingPageQuestionCardMinHeight = "26.2mm";
+  const followingPageQuestionCardPrintMinHeight = "27.6mm";
   /* The final support-page composition must stay on one page with its own footer attached.
      Keep these print guards centralized so future tweaks do not reintroduce footer-only overflow. */
-  const staticSectionMinHeight = "calc(100vh - 0.6mm)";
+  const staticSectionMinHeight = "calc(100vh - 2.4mm)";
+  /* Footer containment is non-negotiable for Pro export. Keep this reserved row explicit so
+     dense page bodies cannot consume the footer slot and push it into the next printed page. */
+  const staticSectionFooterReservedHeight = "90px";
+  const staticSectionBodyMaxHeight = `calc(${staticSectionMinHeight} - ${staticSectionFooterReservedHeight})`;
   /* This gutter reserves breathing room between the page body and the shared footer row in
      static-section mode. Preserve it when tuning page chrome so footer containment survives. */
-  const staticSectionFooterGap = "4px";
+  const staticSectionFooterGap = "6px";
   const supportPagePrintPadding = "11px 11px 9px";
   const supportPagePrintCardPadding = "8px 9px";
   const supportPagePrintGridGap = "7px";
@@ -2197,6 +2201,7 @@ export function buildAssessmentProPrintHtml(input: {
       }
 
       @page {
+        size: A4;
         /* The page box owns the true full-page bleed in Chrome print output.
            Keep this foundation matched to the themed file background edge tone so exported PDFs
            never fall back to black or blank border bands around the designed sheet. */
@@ -2333,10 +2338,13 @@ export function buildAssessmentProPrintHtml(input: {
         .page-number-mode-static-sections .page-section,
         .page-number-mode-static-sections .support-page {
           min-height: ${staticSectionMinHeight};
+          max-height: ${staticSectionMinHeight};
           display: grid;
-          grid-template-rows: minmax(0, 1fr) auto;
+          grid-template-rows: minmax(0, 1fr) minmax(${staticSectionFooterReservedHeight}, auto);
           align-content: stretch;
           gap: 0;
+          break-inside: avoid;
+          page-break-inside: avoid;
         }
 
         /* The dedicated page body wrapper preserves a real footer slot in static-section mode.
@@ -2345,7 +2353,22 @@ export function buildAssessmentProPrintHtml(input: {
         .page-number-mode-static-sections .page-section-body,
         .page-number-mode-static-sections .support-page-composition {
           min-height: 0;
+          max-height: ${staticSectionBodyMaxHeight};
           padding-bottom: ${staticSectionFooterGap};
+        }
+
+        .page-number-mode-static-sections .page-section-body--cover {
+          gap: 5px;
+        }
+
+        .page-number-mode-static-sections .page-section-body--question,
+        .page-number-mode-static-sections .support-page-composition {
+          gap: 6px;
+        }
+
+        .page-number-mode-static-sections .assessment-file-footer,
+        .page-number-mode-static-sections .screen-footer {
+          min-height: ${staticSectionFooterReservedHeight};
         }
 
         /* Keep page footers bound to their owning page section by treating the footer row as a
@@ -2354,6 +2377,7 @@ export function buildAssessmentProPrintHtml(input: {
         .page-number-mode-static-sections .screen-footer {
           display: grid;
           margin-top: 0;
+          align-self: end;
           flex-shrink: 0;
           break-inside: avoid;
           page-break-inside: avoid;
@@ -2389,7 +2413,7 @@ export function buildAssessmentProPrintHtml(input: {
         }
 
         .first-page-shell {
-          gap: 3px;
+          gap: 2px;
         }
 
         .first-page-questions {
@@ -2399,15 +2423,28 @@ export function buildAssessmentProPrintHtml(input: {
 
         .question-card--first-page {
           min-height: ${firstPageQuestionCardMinHeight};
+          padding: 7px 9px 7px;
         }
 
         .question-page-stack {
-          gap: 4px;
+          gap: 3px;
         }
 
         .question-card--compact {
-          padding: 7px 10px 7px;
+          padding: 6px 9px 6px;
           min-height: ${followingPageQuestionCardPrintMinHeight};
+        }
+
+        .question-card--first-page .answer-card,
+        .question-card--first-page .rationale-card,
+        .question-card--compact .answer-card,
+        .question-card--compact .rationale-card,
+        .question-card--first-page .type-detail-card,
+        .question-card--compact .type-detail-card,
+        .question-card--first-page .science-block,
+        .question-card--compact .science-block {
+          padding: 4px 6px;
+          margin-top: 3px;
         }
 
         .support-page {

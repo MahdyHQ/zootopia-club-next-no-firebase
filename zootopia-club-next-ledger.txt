@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Assessment non-admin rights panel overflow-safe responsive typography refinement)
+Last Updated: 2026-04-15 (Assessment prompt-lock entitlement-aware unlock fix + Arabic failure-message hardening)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -106,6 +106,11 @@ Key verified facts:
   (default 24h, daily behavior preserved)
 - Admin credit mutations now persist durable per-user before/after history
   snapshots and are rendered on `/admin/users/[uid]`
+- Assessment create requests now require a route-level `Idempotency-Key`, and
+  Assessment Studio persists a short-lived per-tab logical-attempt key across
+  duplicate submits / refresh retries so one successful generation attempt
+  cannot fan out into multiple credit deductions while reserve/commit/release
+  authority stays fully server-owned
 - Protected shell credit header refresh now coalesces concurrent trigger paths
   (focus/visibility/event/interval) and skips hidden-tab interval polling to
   reduce duplicate `/api/assessment/credits` requests
@@ -164,6 +169,15 @@ Key verified facts:
   the workspace root for Vercel, uses explicit `maxDuration = 120`, and emits
   stage-classified internal diagnostics without exposing raw failure details to
   the user-facing response
+- Assessment Pro PDF static-section layout now reserves explicit per-page
+  footer height budget with deterministic print sizing and tighter card spacing
+  so page footers remain fully contained on their own page (no bleed/overlap)
+- Assessment prompt-lock password input now includes a local eye/eye-off
+  visibility toggle in the locked prompt UI without changing server lock logic
+- Assessment prompt-lock UI now consumes the server-owned entitlement state so
+  non-entitled users do not see a misleading password form; unlock failures now
+  distinguish wrong password, missing entitlement, and server misconfiguration
+  with clearer Arabic feedback while unlock authority remains backend-owned
 - Protected Home/Assessment/Infographic/Settings/Upload/History wrappers now
   share a lighter translucency baseline so background ambience reads through
   consistently without reducing form/control legibility
@@ -5708,6 +5722,223 @@ Verification:
 Risks / Notes:
 - Change is scoped strictly to non-admin panel presentation.
 - No backend logic, auth/role authority, model validation, or API routes changed.
+
+---
+
+2026-04-15 — Pro PDF Footer Containment Hardening + Prompt Lock Password Toggle
+===============================================================================
+Type: Export pagination hardening / print layout budgeting / scoped lock-UI enhancement
+Scope: Pro PDF renderer static-section print layout + assessment prompt-lock password input
+
+Summary:
+- Hardened Pro PDF pagination so each page reserves explicit footer space and
+  keeps footer rendering confined to its owning page.
+- Tightened card spacing/min-heights in the Pro print lane to improve adaptive
+  fit while preserving professional readability.
+- Added show/hide password icon controls for the assessment prompt-lock field
+  as a UI-only enhancement.
+
+What Changed:
+- `apps/web/lib/server/assessment-pro-print-renderer.ts`
+  - Added deterministic `@page` size (`A4`) for stable print geometry.
+  - Added explicit static-section footer reservation constants and body-height
+    budget (`staticSectionFooterReservedHeight`, `staticSectionBodyMaxHeight`).
+  - Updated static-section grid rows to reserve footer lane explicitly.
+  - Applied print-only compaction tweaks for first-page and following-page
+    question cards (spacing/padding/min-height tuning).
+  - Preserved shared 2-card first page and 3-card following-page targeting via
+    `buildAssessmentFileQuestionPages(...)`.
+- `apps/web/components/assessment/assessment-studio.tsx`
+  - Added `Eye`/`EyeOff` password visibility toggle with local state for the
+    prompt-lock password input.
+  - Kept unlock verification and entitlement checks server-authoritative.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Changes are scoped to Pro export print CSS/layout and prompt-lock input UI.
+- Fast PDF lane, backend auth/ownership enforcement, and lock-route authority
+  were not widened or weakened.
+
+---
+
+2026-04-15 — Assessment Credit Deduction Verification + Idempotency Hardening
+==============================================================================
+Type: Credit-safety verification / duplicate-submit hardening / backend route guard
+Scope: Assessment Studio submit flow + `/api/assessment` idempotency enforcement
+
+Summary:
+- Performed a ledger-first, code-trace-first verification pass of the full
+  assessment credit path before editing:
+  - assessment page owner preload
+  - studio submit button / pending state / request dispatch
+  - `/api/assessment` auth + idempotency + reservation + release + commit path
+  - repository credit summary / reservation / release / commit helpers
+  - per-user credit account + grant + daily ledger persistence model
+  - protected-shell credit refresh event flow
+- Verified that the repository credit engine was already owner-scoped and
+  transaction-backed:
+  - credit accounts are keyed by `ownerUid`
+  - daily ledgers are keyed by `ownerUid + dayKey`
+  - idempotency records are keyed by `ownerUid + idempotencyKeyHash`
+  - failed execution/finalization paths release reservations before any charge
+  - successful commit path charges at most once per deterministic generation id
+- Confirmed the real duplicate-charge gap was higher in the stack:
+  - the route supported owner-scoped idempotency
+  - but the studio submit path did not send `Idempotency-Key`
+  - and local protection depended only on async `pending` UI disable, which
+    could be beaten by fast double-click / resend timing
+- Applied the smallest production-safe hardening fix:
+  - Assessment Studio now creates one logical-attempt idempotency key per
+    submit, reuses it for short-lived same-tab refresh/retry flows, and adds a
+    synchronous in-flight guard before POST dispatch
+  - `/api/assessment` now rejects missing `Idempotency-Key` headers so future
+    client regressions cannot silently re-open duplicate-charge risk
+
+What Changed:
+- `apps/web/components/assessment/assessment-studio.tsx`
+  - Added a short-lived per-tab submit-attempt snapshot
+    (`idempotencyKey`, request fingerprint, createdAt) in `sessionStorage`.
+  - Added stable request fingerprinting for logical-attempt reuse across
+    refresh/retry of the same submit.
+  - Added a synchronous `submitInFlightRef` guard so double-clicks cannot race
+    ahead of React's async rerender/button-disabled state.
+  - Added `Idempotency-Key` header to `POST /api/assessment`.
+  - Cleared the stored attempt only after authoritative success response, so a
+    refresh/resend before success stays on the same server replay lane.
+- `apps/web/app/api/assessment/route.ts`
+  - Added explicit route-level rejection for missing `Idempotency-Key` header
+    before any reservation or credit-bearing execution can begin.
+- `zootopia-club-next-ledger.txt`
+  - Refreshed current truth and recorded this verification/hardening pass.
+
+Verification:
+- Static flow trace verified:
+  - submit path: `assessment/page.tsx` -> `AssessmentStudio.handleSubmit(...)`
+  - route path: auth -> validation -> idempotency begin -> credit reservation ->
+    model execution -> save+credit commit -> idempotency completion
+  - repository path: per-user summary -> reservation -> release -> transaction
+    commit with single-charge guard via `successfulGenerationIds`
+- `shell: npm run lint:web`: pass
+- `shell: npm run typecheck:web`: pass
+- `shell: npm run build:web`: pass
+
+Risks / Notes:
+- Current protection now relies on both layers working together:
+  - client defines one logical attempt and forwards its idempotency key
+  - server enforces that an idempotency key exists before any credit-bearing
+    path can start
+- The short-lived client retry window is intentionally per-tab and limited
+  (`30 min`) so accidental refresh retries are deduped without permanently
+  collapsing intentionally new future submissions.
+- No repository credit arithmetic, admin mutation flow, prompt lock,
+  preview/result/export, upload ownership, or admin/user separation contracts
+  were widened in this pass.
+
+---
+
+2026-04-15 — Assessment Prompt-Lock Verification + Entitlement-Aware Unlock Fix
+===============================================================================
+Type: Access-gating verification / unlock-flow hardening / professional Arabic feedback refinement
+Scope: assessment prompt lock runtime trace + unlock UI messaging + prompt-submit denial classification
+
+Summary:
+- Performed a ledger-first, code-trace-first verification pass of the prompt
+  lock system end to end:
+  - env flag/password runtime parsing
+  - timing-safe password comparison
+  - unlock-cookie signing/validation
+  - admin bypass and per-user entitlement lookup
+  - prompt-unlock API lane
+  - assessment page initial server state
+  - Assessment Studio locked/unlocked rendering and unlock feedback
+  - `/api/assessment` prompt enforcement lane
+- Verified the backend lock system itself was structurally sound:
+  - password env/runtime values are trimmed before compare
+  - cookie grants are signed with `AUTH_SECRET`
+  - cookie validation checks signature, owner uid, expiry, and password
+    fingerprint
+  - admin users remain permanently unlocked
+  - unlock state is isolated per user and stale/foreign cookies cannot unlock a
+    different account
+- Verified the current local environment was not missing the required runtime
+  inputs:
+  - `ZOOTOPIA_ASSESSMENT_PROMPT_UNLOCK_PASSWORD` present
+  - `ZOOTOPIA_ASSESSMENT_PROMPT_LOCK_ENABLED` present
+  - `AUTH_SECRET` present
+  - no leading/trailing whitespace or wrapping quotes detected in those current
+    local values
+- Identified the most credible real-world failure cause:
+  - the unlock route already denied non-entitled users before password success
+  - but the client ignored the server-provided entitlement state and still
+    showed the password form
+  - this made a correct password appear "broken" when the real blocker was
+    admin entitlement, and the UI then collapsed most failure reasons into one
+    vague generic message
+- Applied the smallest production-safe fix:
+  - the studio now respects server entitlement when deciding whether to render
+    the password unlock lane
+  - non-entitled users now see a direct entitlement message instead of a
+    misleading password prompt
+  - unlock failures now map to specific Arabic feedback for wrong password,
+    missing entitlement, and server misconfiguration
+  - `/api/assessment` now distinguishes entitlement denial from ordinary
+    prompt-lock denial for direct/tampered submit paths as well
+
+What Changed:
+- `apps/web/components/assessment/assessment-studio.tsx`
+  - Extended client prompt-access state to include the server-owned
+    `entitlement` value.
+  - Added entitlement-aware lock-panel rendering so the password input only
+    appears for entitled users who still need to unlock.
+  - Added explicit Arabic unlock error mapping for:
+    - invalid password
+    - entitlement missing
+    - lock misconfiguration
+    - temporary failure
+  - Updated placeholder/local field-error copy so non-entitled accounts see the
+    correct blocker instead of password-oriented language.
+  - Preserved backend authority: the client still never validates or stores the
+    password outcome itself.
+- `apps/web/app/api/assessment/prompt-unlock/route.ts`
+  - Refined entitlement / invalid-password / misconfiguration Arabic responses
+    for more precise professional feedback.
+- `apps/web/app/api/assessment/route.ts`
+  - Split prompt-submit denial into two server-authoritative cases:
+    - `ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED`
+    - `ASSESSMENT_PROMPT_LOCKED`
+  - Preserved the same authorization boundary; only the error classification
+    and message precision changed.
+- `zootopia-club-next-ledger.txt`
+  - Refreshed the current truth snapshot and recorded this prompt-lock pass.
+
+Verification:
+- Static flow trace verified:
+  - env -> `assessment-prompt-lock.ts` compare/signature runtime
+  - `/api/assessment/prompt-unlock` entitlement gate -> password check ->
+    signed cookie issuance
+  - assessment page server preload -> `AssessmentStudio`
+  - `AssessmentStudio` unlock UI -> `/api/assessment`
+  - `/api/assessment` prompt enforcement using server-owned access state
+- Current local env sanity check verified presence/shape of:
+  - `ZOOTOPIA_ASSESSMENT_PROMPT_UNLOCK_PASSWORD`
+  - `ZOOTOPIA_ASSESSMENT_PROMPT_LOCK_ENABLED`
+  - `AUTH_SECRET`
+- `shell: npm run lint:web`: pass
+- `shell: npm run typecheck:web`: pass
+- `shell: npm run build:web`: pass
+
+Risks / Notes:
+- The main fix is intentionally narrow: it corrects misleading unlock UX and
+  response classification without widening account security, admin separation,
+  password lifecycle logic, upload/preview/export, or assessment credit logic.
+- The current evidence points to entitlement/UI mismatch as the real failure
+  cause in this codebase revision; the existing trimmed password comparison was
+  retained because the active environment does not indicate a whitespace-based
+  misconfiguration.
 
 ---
 

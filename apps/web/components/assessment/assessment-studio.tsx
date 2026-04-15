@@ -12,6 +12,7 @@ import {
   type AssessmentDifficulty,
   type AssessmentGeneration,
   type AssessmentMode,
+  type AssessmentPromptEntitlement,
   type AssessmentQuestionType,
   type AssessmentQuestionTypeDistribution,
   type AssessmentRequest,
@@ -22,6 +23,8 @@ import {
   BrainCircuit,
   Check,
   CheckCircle2,
+  Eye,
+  EyeOff,
   ExternalLink,
   FileText,
   Gauge,
@@ -68,6 +71,7 @@ type AssessmentPromptAccess = {
   lockEnabled: boolean;
   unlocked: boolean;
   isAdmin: boolean;
+  entitlement: AssessmentPromptEntitlement;
 };
 
 type AssessmentPromptUnlockResponse = Pick<
@@ -85,21 +89,34 @@ const ASSESSMENT_PROMPT_LOCK_COPY = {
   title: "ميزة طلب التقييم مخصصة حالياً للطلاب المختارين",
   body:
     "هذه الميزة متاحة لطلاب محددين فقط. إذا رغبت في الوصول إليها أو الحصول على كلمة المرور، يرجى التواصل مع المشرف/المطور ابن عبدالله.",
+  entitlementTitle: "ميزة طلب التقييم غير مفعّلة لهذا الحساب حالياً",
+  entitlementBody:
+    "هذا الحساب لا يملك صلاحية استخدام طلب التقييم حالياً. إذا كان من المفترض أن تكون الميزة متاحة لك، يرجى التواصل مع الإدارة أو المطوّر ابن عبدالله لتفعيلها.",
   passwordLabel: "كلمة المرور",
+  showPasswordAction: "إظهار كلمة المرور",
+  hidePasswordAction: "إخفاء كلمة المرور",
   passwordPlaceholder: "أدخل كلمة المرور لفتح الميزة",
   unlockAction: "فتح الميزة",
   unlockActionPending: "جارٍ التحقق...",
   passwordRequired: "يرجى إدخال كلمة المرور أولاً.",
   unlockInvalidPassword:
-    "كلمة المرور غير صحيحة. يمكنك المحاولة مجدداً أو التواصل مع ابن عبدالله.",
+    "تعذر فتح الميزة لأن كلمة المرور غير صحيحة. تأكد من إدخالها كما زُوّدت بها ثم أعد المحاولة.",
+  unlockEntitlementRequired:
+    "تعذر فتح الميزة لأن هذه الصلاحية غير مفعّلة لهذا الحساب حالياً. يرجى التواصل مع الإدارة أو المطوّر ابن عبدالله لتفعيلها.",
+  unlockMisconfigured:
+    "تعذر فتح الميزة حالياً بسبب إعداد داخلي في الخادم. يرجى المحاولة لاحقاً، وإن استمرت المشكلة فتواصل مع الدعم.",
   unlockFailed:
-    "تعذر التحقق حالياً. يرجى إعادة المحاولة بعد قليل أو التواصل مع ابن عبدالله.",
+    "تعذر فتح الميزة حالياً بسبب مشكلة مؤقتة. يرجى إعادة المحاولة بعد قليل.",
   lockedFieldError:
     "ميزة طلب التقييم ما زالت مقفلة لهذا الحساب. يرجى إتمام فتح الميزة أولاً.",
+  entitlementFieldError:
+    "ميزة طلب التقييم غير مفعّلة لهذا الحساب حالياً، لذلك لا يمكن استخدام هذا الحقل.",
   lockedPlaceholder: "هذا الحقل مقفل حالياً حتى يتم التحقق من كلمة المرور",
+  entitlementPlaceholder:
+    "هذا الحقل غير متاح لهذا الحساب حالياً حتى يتم تفعيل الصلاحية من الإدارة",
   successTitle: "تم فتح الميزة بنجاح",
   successBody:
-    "ألف مبروك! تم فتح هذه الميزة لك من قِبل المطوّر ابن عبدالله ✨🎉",
+    "تم التحقق من كلمة المرور وتفعيل طلب التقييم لهذا الحساب. يمكنك الآن متابعة إنشاء التقييم.",
 };
 
 const ASSESSMENT_MODEL_VISIBILITY_COPY = {
@@ -111,7 +128,17 @@ type AssessmentRequestError = Error & {
   code?: string;
 };
 
+type AssessmentSubmitAttemptSnapshot = {
+  idempotencyKey: string;
+  requestFingerprint: string;
+  createdAt: number;
+};
+
 type AssessmentModelTone = "accent" | "gold" | "muted";
+
+const ASSESSMENT_SUBMIT_ATTEMPT_STORAGE_KEY =
+  "zootopia:assessment-submit-attempt";
+const ASSESSMENT_SUBMIT_ATTEMPT_TTL_MS = 30 * 60 * 1000;
 
 function buildBalancedQuestionTypeDistribution(
   questionTypes: AssessmentQuestionType[],
@@ -467,6 +494,141 @@ function createAssessmentRequestError(message: string, code?: string) {
   return Object.assign(new Error(message), { code }) as AssessmentRequestError;
 }
 
+function resolveAssessmentPromptUnlockErrorMessage(error: ApiFailure["error"] | null) {
+  switch (error?.code) {
+    case "ASSESSMENT_PROMPT_UNLOCK_INVALID_PASSWORD":
+      return ASSESSMENT_PROMPT_LOCK_COPY.unlockInvalidPassword;
+    case "ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED":
+      return ASSESSMENT_PROMPT_LOCK_COPY.unlockEntitlementRequired;
+    case "ASSESSMENT_PROMPT_LOCK_MISCONFIGURED":
+      return ASSESSMENT_PROMPT_LOCK_COPY.unlockMisconfigured;
+    case "ASSESSMENT_PROMPT_UNLOCK_PASSWORD_REQUIRED":
+      return ASSESSMENT_PROMPT_LOCK_COPY.passwordRequired;
+    case "PROFILE_INCOMPLETE":
+      return "يرجى إكمال بيانات الحساب من صفحة الإعدادات قبل استخدام هذه الميزة.";
+    case "UNAUTHENTICATED":
+      return "يلزم تسجيل الدخول قبل استخدام هذه الميزة.";
+    default:
+      return error?.message?.trim() || ASSESSMENT_PROMPT_LOCK_COPY.unlockFailed;
+  }
+}
+
+/* Assessment Studio owns the client-side logical-attempt key for `/api/assessment`.
+   Persisting it per tab for a short TTL keeps double-clicks, refresh retries, and resend flows
+   on the same server idempotency lane so one human attempt cannot fan out into multiple charges.
+   Future agents: keep this fingerprint/key flow aligned with the route contract before changing
+   submit behavior, or the credit system can drift back into duplicate-deduction risk. */
+function stableSerializeAssessmentSubmitValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerializeAssessmentSubmitValue(item)).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(
+        ([entryKey, entryValue]) =>
+          `${JSON.stringify(entryKey)}:${stableSerializeAssessmentSubmitValue(entryValue)}`,
+      )
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value) ?? "null";
+}
+
+function buildAssessmentSubmitFingerprint(request: AssessmentRequest) {
+  return stableSerializeAssessmentSubmitValue(request);
+}
+
+function createAssessmentSubmitIdempotencyKey() {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+
+  return `assessment-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
+function isAssessmentSubmitAttemptSnapshot(
+  value: unknown,
+): value is AssessmentSubmitAttemptSnapshot {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const snapshot = value as Partial<AssessmentSubmitAttemptSnapshot>;
+  return (
+    typeof snapshot.idempotencyKey === "string" &&
+    snapshot.idempotencyKey.trim().length > 0 &&
+    typeof snapshot.requestFingerprint === "string" &&
+    snapshot.requestFingerprint.trim().length > 0 &&
+    typeof snapshot.createdAt === "number" &&
+    Number.isFinite(snapshot.createdAt)
+  );
+}
+
+function clearStoredAssessmentSubmitAttempt() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(ASSESSMENT_SUBMIT_ATTEMPT_STORAGE_KEY);
+  } catch {
+    // Storage access is best-effort only; missing storage must not block submit safety.
+  }
+}
+
+function readStoredAssessmentSubmitAttempt(nowMs = Date.now()) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(ASSESSMENT_SUBMIT_ATTEMPT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isAssessmentSubmitAttemptSnapshot(parsed)) {
+      clearStoredAssessmentSubmitAttempt();
+      return null;
+    }
+
+    if (
+      parsed.createdAt > nowMs ||
+      nowMs - parsed.createdAt > ASSESSMENT_SUBMIT_ATTEMPT_TTL_MS
+    ) {
+      clearStoredAssessmentSubmitAttempt();
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    clearStoredAssessmentSubmitAttempt();
+    return null;
+  }
+}
+
+function writeStoredAssessmentSubmitAttempt(snapshot: AssessmentSubmitAttemptSnapshot) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      ASSESSMENT_SUBMIT_ATTEMPT_STORAGE_KEY,
+      JSON.stringify(snapshot),
+    );
+  } catch {
+    // Storage access is best-effort only; missing storage must not block submit safety.
+  }
+}
+
 function shouldShowAssessmentOperationalSupport(code?: string) {
   if (!code) {
     return true;
@@ -481,6 +643,10 @@ function shouldShowAssessmentOperationalSupport(code?: string) {
     "ASSESSMENT_DAILY_CREDITS_EXHAUSTED",
     "ASSESSMENT_ACCESS_DISABLED",
     "ASSESSMENT_PROMPT_LOCKED",
+    "ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED",
+    "ASSESSMENT_IDEMPOTENCY_KEY_REQUIRED",
+    "ASSESSMENT_REQUEST_IN_PROGRESS",
+    "ASSESSMENT_IDEMPOTENCY_KEY_REUSED",
     "ASSESSMENT_USER_LANE_REQUIRED",
     "PROFILE_INCOMPLETE",
     "UNAUTHENTICATED",
@@ -529,8 +695,12 @@ function resolveAssessmentErrorMessage(
     case "ASSESSMENT_ACCESS_DISABLED":
     case "ASSESSMENT_USER_LANE_REQUIRED":
       return messages.assessmentAccessDisabledBody;
+    case "ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED":
+      return ASSESSMENT_PROMPT_LOCK_COPY.entitlementFieldError;
     case "ASSESSMENT_PROMPT_LOCKED":
       return ASSESSMENT_PROMPT_LOCK_COPY.lockedFieldError;
+    case "ASSESSMENT_REQUEST_IN_PROGRESS":
+      return messages.assessmentGenerateWorking;
     case "ASSESSMENT_FINALIZATION_FAILED":
       return messages.assessmentFinalizationFailed;
     case "PROFILE_INCOMPLETE":
@@ -569,6 +739,7 @@ export function AssessmentStudio({
   const [promptAccess, setPromptAccess] =
     useState<AssessmentPromptAccess>(initialPromptAccess);
   const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockPasswordVisible, setUnlockPasswordVisible] = useState(false);
   const [unlockPending, setUnlockPending] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [unlockSuccessVisible, setUnlockSuccessVisible] = useState(false);
@@ -577,6 +748,8 @@ export function AssessmentStudio({
     useState<AssessmentGeneration | null>(null);
   const [showRetentionNotice, setShowRetentionNotice] = useState(false);
   const retentionNoticeGenerationIdRef = useRef<string | null>(null);
+  const submitAttemptRef = useRef<AssessmentSubmitAttemptSnapshot | null>(null);
+  const submitInFlightRef = useRef(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -671,6 +844,29 @@ export function AssessmentStudio({
   const creditsExhausted = isAssessmentDailyCreditsExhausted(creditSummary);
   const promptFeatureLocked =
     promptAccess.lockEnabled && !promptAccess.unlocked && !promptAccess.isAdmin;
+  /* The server owns entitlement state and decides whether this account should ever see the
+     password-unlock lane. Future agents: do not fall back to showing the password form when
+     entitlement is disabled, or users can misread admin denial as a password bug. */
+  const promptUnlockAllowed =
+    promptFeatureLocked && promptAccess.entitlement === "enabled";
+  const promptLockPanelCopy =
+    promptAccess.entitlement === "enabled"
+      ? {
+          title: ASSESSMENT_PROMPT_LOCK_COPY.title,
+          body: ASSESSMENT_PROMPT_LOCK_COPY.body,
+        }
+      : {
+          title: ASSESSMENT_PROMPT_LOCK_COPY.entitlementTitle,
+          body: ASSESSMENT_PROMPT_LOCK_COPY.entitlementBody,
+        };
+  const promptLockedFieldError =
+    promptAccess.entitlement === "enabled"
+      ? ASSESSMENT_PROMPT_LOCK_COPY.lockedFieldError
+      : ASSESSMENT_PROMPT_LOCK_COPY.entitlementFieldError;
+  const promptLockedPlaceholder =
+    promptAccess.entitlement === "enabled"
+      ? ASSESSMENT_PROMPT_LOCK_COPY.lockedPlaceholder
+      : ASSESSMENT_PROMPT_LOCK_COPY.entitlementPlaceholder;
   const linkedDocumentReady = !selectedDocument || selectedDocument.status === "ready";
   const questionTypeCountMap = buildQuestionTypeCountMap(
     request.options.questionCount,
@@ -793,7 +989,7 @@ export function AssessmentStudio({
   }
 
   async function handleUnlockPromptFeature() {
-    if (unlockPending || promptAccess.unlocked) {
+    if (unlockPending || promptAccess.unlocked || promptAccess.entitlement !== "enabled") {
       return;
     }
 
@@ -818,13 +1014,24 @@ export function AssessmentStudio({
       );
 
       if (!response.ok || !payload.ok || !payload.data.unlocked) {
-        const unlockCode = payload.ok ? "REQUEST_FAILED" : payload.error.code;
-        if (unlockCode === "ASSESSMENT_PROMPT_UNLOCK_INVALID_PASSWORD") {
-          setUnlockError(ASSESSMENT_PROMPT_LOCK_COPY.unlockInvalidPassword);
-          return;
+        if (!payload.ok && payload.error.code === "ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED") {
+          /* Reflect server-side entitlement revocations immediately in the open tab so stale page
+             state never keeps offering a password form after admin access has been removed. */
+          setPromptAccess((current) => ({
+            ...current,
+            lockEnabled: true,
+            unlocked: false,
+            entitlement: "disabled",
+          }));
+          setUnlockPassword("");
+          setUnlockPasswordVisible(false);
         }
 
-        setUnlockError(ASSESSMENT_PROMPT_LOCK_COPY.unlockFailed);
+        setUnlockSuccessVisible(false);
+        setUnlockSuccessEntered(false);
+        setUnlockError(
+          resolveAssessmentPromptUnlockErrorMessage(payload.ok ? null : payload.error),
+        );
         return;
       }
 
@@ -838,6 +1045,7 @@ export function AssessmentStudio({
         prompt: "",
       }));
       setUnlockPassword("");
+      setUnlockPasswordVisible(false);
       setUnlockError(null);
       setUnlockSuccessVisible(true);
       setUnlockSuccessEntered(false);
@@ -846,6 +1054,8 @@ export function AssessmentStudio({
         setUnlockSuccessEntered(true);
       });
     } catch {
+      setUnlockSuccessVisible(false);
+      setUnlockSuccessEntered(false);
       setUnlockError(ASSESSMENT_PROMPT_LOCK_COPY.unlockFailed);
     } finally {
       setUnlockPending(false);
@@ -893,74 +1103,102 @@ export function AssessmentStudio({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    /* This synchronous guard belongs to the Assessment Studio submit lane.
+       React state updates are async, so the button-disabled UI alone is not enough to stop a
+       fast double-click from dispatching two POSTs before the rerender lands. */
+    if (submitInFlightRef.current) {
+      return;
+    }
+
+    submitInFlightRef.current = true;
     setPending(true);
     setError(null);
     setNotice(null);
     setShowRetentionNotice(false);
     setLastCreatedGeneration(null);
     setFieldErrors({});
-    const requestForSubmit = sanitizeAssessmentRequestQuestionTypes(request);
-
-    if (!hasSameQuestionTypeSelection(request, requestForSubmit)) {
-      setRequest(requestForSubmit);
-    }
-
-    // This is only a user-friendly local stop. The real exhausted-limit enforcement lives on the
-    // server route so duplicate tabs, retried requests, and direct API calls stay constrained.
-    if (creditsExhausted) {
-      setError(createOperationalUiError(messages.assessmentDailyCreditsExhaustedBody, false));
-      setPending(false);
-      return;
-    }
-
-    if (selectedDocument && !linkedDocumentReady) {
-      setFieldErrors({ documentId: messages.assessmentFieldDocumentNotReady });
-      setPending(false);
-      return;
-    }
-
-    if (requestForSubmit.options.questionTypes.length === 0) {
-      setFieldErrors({ questionTypes: messages.assessmentQuestionTypesRequired });
-      setPending(false);
-      return;
-    }
-
-    if (
-      requestForSubmit.options.questionTypeDistribution.reduce(
-        (total, entry) => total + entry.percentage,
-        0,
-      ) !== 100
-    ) {
-      setFieldErrors({
-        questionTypeDistribution: messages.assessmentDistributionInvalid,
-      });
-      setPending(false);
-      return;
-    }
-
-    if (promptFeatureLocked && requestForSubmit.prompt.trim()) {
-      setFieldErrors({
-        prompt: ASSESSMENT_PROMPT_LOCK_COPY.lockedFieldError,
-      });
-      setPending(false);
-      return;
-    }
-
-    // The prompt now acts as an optional steering note. We still block empty-content submissions
-    // so Assessment always has either user intent text or a linked server-owned document to work from.
-    if (!requestForSubmit.prompt.trim() && !requestForSubmit.documentId) {
-      setFieldErrors({
-        prompt: messages.assessmentPromptOrDocumentRequired,
-        documentId: messages.assessmentPromptOrDocumentRequired,
-      });
-      setPending(false);
-      return;
-    }
-
     try {
+      const requestForSubmit = sanitizeAssessmentRequestQuestionTypes(request);
+
+      if (!hasSameQuestionTypeSelection(request, requestForSubmit)) {
+        setRequest(requestForSubmit);
+      }
+
+      // This is only a user-friendly local stop. The real exhausted-limit enforcement lives on the
+      // server route so duplicate tabs, retried requests, and direct API calls stay constrained.
+      if (creditsExhausted) {
+        setError(createOperationalUiError(messages.assessmentDailyCreditsExhaustedBody, false));
+        return;
+      }
+
+      if (selectedDocument && !linkedDocumentReady) {
+        setFieldErrors({ documentId: messages.assessmentFieldDocumentNotReady });
+        return;
+      }
+
+      if (requestForSubmit.options.questionTypes.length === 0) {
+        setFieldErrors({ questionTypes: messages.assessmentQuestionTypesRequired });
+        return;
+      }
+
+      if (
+        requestForSubmit.options.questionTypeDistribution.reduce(
+          (total, entry) => total + entry.percentage,
+          0,
+        ) !== 100
+      ) {
+        setFieldErrors({
+          questionTypeDistribution: messages.assessmentDistributionInvalid,
+        });
+        return;
+      }
+
+      if (promptFeatureLocked && requestForSubmit.prompt.trim()) {
+        setFieldErrors({
+          prompt: promptLockedFieldError,
+        });
+        return;
+      }
+
+      // The prompt now acts as an optional steering note. We still block empty-content submissions
+      // so Assessment always has either user intent text or a linked server-owned document to work from.
+      if (!requestForSubmit.prompt.trim() && !requestForSubmit.documentId) {
+        setFieldErrors({
+          prompt: messages.assessmentPromptOrDocumentRequired,
+          documentId: messages.assessmentPromptOrDocumentRequired,
+        });
+        return;
+      }
+
+      const requestFingerprint = buildAssessmentSubmitFingerprint(requestForSubmit);
+      const nowMs = Date.now();
+      const storedAttempt = readStoredAssessmentSubmitAttempt(nowMs);
+      const currentAttempt = submitAttemptRef.current;
+      const reusableAttempt =
+        currentAttempt &&
+        currentAttempt.requestFingerprint === requestFingerprint &&
+        nowMs - currentAttempt.createdAt <= ASSESSMENT_SUBMIT_ATTEMPT_TTL_MS
+          ? currentAttempt
+          : storedAttempt?.requestFingerprint === requestFingerprint
+            ? storedAttempt
+            : null;
+      const attemptSnapshot =
+        reusableAttempt ??
+        ({
+          idempotencyKey: createAssessmentSubmitIdempotencyKey(),
+          requestFingerprint,
+          createdAt: nowMs,
+        } satisfies AssessmentSubmitAttemptSnapshot);
+
+      submitAttemptRef.current = attemptSnapshot;
+      writeStoredAssessmentSubmitAttempt(attemptSnapshot);
+
       const response = await fetch("/api/assessment", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": attemptSnapshot.idempotencyKey,
+        },
         body: JSON.stringify(requestForSubmit),
       });
       const payload = await readAssessmentApiResult<AssessmentCreateResponse>(
@@ -1010,6 +1248,8 @@ export function AssessmentStudio({
       setCreditSummary(payload.data.credits);
       dispatchAssessmentCreditRefresh();
       setNotice(messages.assessmentRequestSaved);
+      submitAttemptRef.current = null;
+      clearStoredAssessmentSubmitAttempt();
     } catch (nextError) {
       setError(
         createOperationalUiError(
@@ -1025,6 +1265,7 @@ export function AssessmentStudio({
       );
     } finally {
       setPending(false);
+      submitInFlightRef.current = false;
     }
   }
 
@@ -1387,46 +1628,76 @@ export function AssessmentStudio({
                       </span>
                       <div className="min-w-0 space-y-1">
                         <p className="text-sm font-semibold leading-7 text-foreground">
-                          {ASSESSMENT_PROMPT_LOCK_COPY.title}
+                          {promptLockPanelCopy.title}
                         </p>
                         <p className="text-sm leading-7 text-foreground-muted">
-                          {ASSESSMENT_PROMPT_LOCK_COPY.body}
+                          {promptLockPanelCopy.body}
                         </p>
                       </div>
                     </div>
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                      <label className="space-y-2">
-                        <span className="block text-xs font-semibold text-foreground-muted">
-                          {ASSESSMENT_PROMPT_LOCK_COPY.passwordLabel}
-                        </span>
-                        <input
-                          type="password"
-                          value={unlockPassword}
-                          onChange={(event) => {
-                            setUnlockError(null);
-                            setUnlockPassword(event.target.value);
-                          }}
-                          placeholder={ASSESSMENT_PROMPT_LOCK_COPY.passwordPlaceholder}
-                          className="field-control assessment-premium-field w-full"
-                          autoComplete="current-password"
-                          disabled={unlockPending}
-                        />
-                      </label>
+                    {promptUnlockAllowed ? (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                        <label className="space-y-2">
+                          <span className="block text-xs font-semibold text-foreground-muted">
+                            {ASSESSMENT_PROMPT_LOCK_COPY.passwordLabel}
+                          </span>
+                          <div className="relative">
+                            <input
+                              type={unlockPasswordVisible ? "text" : "password"}
+                              value={unlockPassword}
+                              onChange={(event) => {
+                                setUnlockError(null);
+                                setUnlockPassword(event.target.value);
+                              }}
+                              placeholder={ASSESSMENT_PROMPT_LOCK_COPY.passwordPlaceholder}
+                              className="field-control assessment-premium-field w-full pl-10"
+                              autoComplete="current-password"
+                              disabled={unlockPending}
+                            />
+                            {/* Visibility toggle is UI-only; password verification remains fully
+                                server-authoritative through the unlock endpoint. */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUnlockPasswordVisible((current) => !current);
+                              }}
+                              aria-label={
+                                unlockPasswordVisible
+                                  ? ASSESSMENT_PROMPT_LOCK_COPY.hidePasswordAction
+                                  : ASSESSMENT_PROMPT_LOCK_COPY.showPasswordAction
+                              }
+                              title={
+                                unlockPasswordVisible
+                                  ? ASSESSMENT_PROMPT_LOCK_COPY.hidePasswordAction
+                                  : ASSESSMENT_PROMPT_LOCK_COPY.showPasswordAction
+                              }
+                              disabled={unlockPending}
+                              className="absolute inset-y-0 left-2 inline-flex items-center justify-center text-foreground-muted/90 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {unlockPasswordVisible ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                        </label>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleUnlockPromptFeature();
-                        }}
-                        disabled={unlockPending}
-                        className="assessment-premium-button inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white"
-                      >
-                        {unlockPending
-                          ? ASSESSMENT_PROMPT_LOCK_COPY.unlockActionPending
-                          : ASSESSMENT_PROMPT_LOCK_COPY.unlockAction}
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleUnlockPromptFeature();
+                          }}
+                          disabled={unlockPending}
+                          className="assessment-premium-button inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white"
+                        >
+                          {unlockPending
+                            ? ASSESSMENT_PROMPT_LOCK_COPY.unlockActionPending
+                            : ASSESSMENT_PROMPT_LOCK_COPY.unlockAction}
+                        </button>
+                      </div>
+                    ) : null}
 
                     {unlockError ? (
                       <p className="mt-3 text-sm leading-6 text-danger">{unlockError}</p>
@@ -1461,7 +1732,7 @@ export function AssessmentStudio({
                   rows={4}
                   placeholder={
                     promptFeatureLocked
-                      ? ASSESSMENT_PROMPT_LOCK_COPY.lockedPlaceholder
+                      ? promptLockedPlaceholder
                       : messages.assessmentPromptPlaceholder
                   }
                   onChange={(event) => {

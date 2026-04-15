@@ -455,10 +455,22 @@ export async function POST(request: Request) {
     role: user.role,
   });
   if (!promptAccess.unlocked && normalized.prompt) {
+    /* Prompt access has two distinct server-owned denial reasons:
+       1) admin entitlement is disabled for this account
+       2) entitlement exists but the prompt lock has not been opened yet
+       Keep those cases separate so the UI can explain the real blocker accurately. */
+    const promptLockCode =
+      promptAccess.entitlement !== "enabled"
+        ? "ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED"
+        : "ASSESSMENT_PROMPT_LOCKED";
+    const promptLockMessage =
+      promptAccess.entitlement !== "enabled"
+        ? "هذه الميزة غير مفعّلة لهذا الحساب حالياً. يرجى التواصل مع الإدارة أو المطوّر ابن عبدالله لتفعيلها."
+        : "ميزة طلب التقييم ما زالت مقفلة لهذا الحساب. أدخل كلمة المرور الصحيحة أولاً، أو تواصل مع المطوّر ابن عبدالله إذا كنت بحاجة إلى المساعدة.";
+
     return respondAssessmentError({
-      code: "ASSESSMENT_PROMPT_LOCKED",
-      message:
-        "ميزة طلب التقييم مخصصة حالياً للطلاب المختارين. يرجى التواصل مع المطور ابن عبدالله لطلب الوصول.",
+      code: promptLockCode,
+      message: promptLockMessage,
       status: 403,
       context: {
         ...baseDiagnosticContext,
@@ -472,6 +484,25 @@ export async function POST(request: Request) {
 
   const canonicalModelId = toCanonicalToolModelId("assessment", normalized.modelId);
   const requestIdempotencyKey = readAssessmentIdempotencyKey(request);
+  /* Assessment create requests must carry a logical-attempt key before they can reserve or spend
+     credits. Keeping this guard at the route boundary prevents future client regressions from
+     silently re-opening duplicate-charge paths when the UI submit flow changes. */
+  if (!requestIdempotencyKey) {
+    return respondAssessmentError({
+      code: "ASSESSMENT_IDEMPOTENCY_KEY_REQUIRED",
+      message: "Assessment requests must include an Idempotency-Key header.",
+      status: 400,
+      context: {
+        ...baseDiagnosticContext,
+        layer: "request",
+        subsystem: "assessment-route",
+        operation: "require-idempotency-key",
+        modelId: normalized.modelId,
+        canonicalModelId,
+      },
+    });
+  }
+
   if (requestIdempotencyKey === "INVALID_LENGTH") {
     return respondAssessmentError({
       code: "ASSESSMENT_IDEMPOTENCY_KEY_INVALID",
