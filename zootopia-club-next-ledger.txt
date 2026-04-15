@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Unified admin credit-management workspace + server-truth preview and confirmation hardening)
+Last Updated: 2026-04-15 (Admin credit submit crash hardening: server-action origin allowlist + pre-mutation lookup fail-safe)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -1393,3 +1393,62 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-15 — Admin Credit Submit Crash Hardening (Server Action Origin + Lookup Guard)
+
+Type: Runtime bug fix + submit-path hardening
+Scope: Minimal, backward-compatible
+Migration: None
+
+Reason:
+- Admin credit submits on `/admin/users/[uid]` could fall into the global Application Error surface with client-side `"An unexpected response was received from the server."`.
+- Attached screenshot evidence also showed `"Origin not allowed"` from `inpage.js` context; source tracing confirmed this string is not emitted by app-owned admin credit flow code.
+- Next.js 16 docs in `node_modules/next/dist/docs/` confirm Server Actions abort when Origin and Host do not match unless `experimental.serverActions.allowedOrigins` is configured for trusted proxy/origin paths.
+
+Root Cause (verified):
+1) Server Action transport sensitivity:
+- The unified credit workspace submits via page-level Server Action.
+- In origin/host-mismatch environments (proxy/custom host drift), Next Server Actions can abort and return a non-action payload, which surfaces in browser as unexpected response errors.
+
+2) Server action pre-mutation lookup crash vector:
+- In `apps/web/app/(protected)/admin/users/[uid]/page.tsx`, `runAdminCreditMutationFromDetailPage` performed `getUserByUid` before its mutation try/catch.
+- If that lookup throws (transient repository/runtime failure), the action can bubble into global error handling instead of returning a professional credit error state.
+
+What changed:
+
+1) `apps/web/next.config.ts`
+- Added explicit `experimental.serverActions.allowedOrigins` configuration.
+- Implemented `collectServerActionAllowedOrigins()` and `parseServerActionOriginHost()` to build a narrow allowlist from:
+  - canonical runtime envs (`NEXT_PUBLIC_BASE_URL`, `NEXTAUTH_URL`, `VERCEL_URL`)
+  - explicit local QA hosts (`localhost` / `127.0.0.1` and known ports used in this repo).
+- Kept existing `allowedDevOrigins` behavior intact.
+
+2) `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- Hardened `runAdminCreditMutationFromDetailPage` by wrapping target-user lookup (`getUserByUid`) in a fail-safe redirect path.
+- On transient lookup failure, action now redirects with `credits_update_failed` instead of allowing an unhandled exception to hit global error boundary.
+- Existing mutation semantics, self-mutation guard, success/error query feedback, and backend repository authority are preserved.
+
+What was preserved:
+- Unified admin credit workspace UX and action semantics (`add/subtract/set/grant/override`).
+- Server-authoritative mutation path (`applyAdminAssessmentCreditMutation` in repository).
+- Durable before/after mutation history and admin audit logging path.
+- User credit truth ownership through `/api/assessment/credits`.
+- Protected shell + assessment studio refresh/event propagation architecture.
+
+Verification:
+- Lint: `npm run lint --workspace @zootopia/web` ✅
+- Typecheck: `npm run typecheck --workspace @zootopia/web` ✅
+- Build: `npm run build --workspace @zootopia/web` ✅
+  - Build output confirms app and relevant routes compile, including:
+    - `/admin/users/[uid]`
+    - `/api/admin/users/[uid]/credits`
+    - `/api/assessment/credits`
+
+Evidence classification:
+- `Origin not allowed` in attached screenshot traced to extension script (`inpage.js`) context, not an app-owned thrown string in the admin credit path.
+- App-owned reliability hardening was still applied to remove crash-prone action abort vectors and preserve truthful admin feedback.
+
+Risks / follow-up:
+- If production uses additional trusted proxy/front-door origins beyond env-derived values, add them to `serverActions.allowedOrigins` allowlist.
+- A full authenticated browser E2E replay of admin-submit + target-user UI refresh should be rerun in the exact production domain path where the screenshot was captured to confirm no host/proxy drift remains.
+

@@ -455,7 +455,20 @@ async function runAdminCreditMutationFromDetailPage(input: {
   const { requireAdminUser } = await import("@/lib/server/session");
 
   const admin = await requireAdminUser();
-  const targetUser = await getUserByUid(input.targetUid);
+  let targetUser: Awaited<ReturnType<typeof getUserByUid>> = null;
+  /* Credit mutations must never crash the admin route on transient lookup failures.
+     Keep this pre-mutation owner read fail-closed and redirect-based so operators get
+     an explicit error state instead of the global application error boundary. */
+  try {
+    targetUser = await getUserByUid(input.targetUid);
+  } catch {
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: "credits_update_failed",
+      }),
+    );
+  }
+
   if (!targetUser) {
     redirect(
       buildAdminUserDetailPath(input.targetUid, {
