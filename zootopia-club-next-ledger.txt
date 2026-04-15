@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Assessment non-admin model panel copy/compact layout refinement)
+Last Updated: 2026-04-15 (Assessment non-admin rights panel overflow-safe responsive typography refinement)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -120,6 +120,9 @@ Key verified facts:
 - Assessment setup non-admin model-replacement panel now uses compact Arabic
   rights ownership copy and a subtle donation/support hint with small icons,
   preserving premium visual balance in the top setup row across breakpoints
+- Assessment setup non-admin rights panel now enforces overflow-safe responsive
+  wrapping/sizing so Arabic rights text stays fully contained on mobile, tablet,
+  desktop, and large-width surfaces without escaping the panel container
 - Global maintenance mode now supports an env-controlled proxy guard that
   redirects non-admin auth/public/site/protected traffic to `/maintenance`,
   while preserving admin bypass and `/admin/login` availability
@@ -5671,6 +5674,40 @@ Verification:
 Risks / Notes:
 - Change is intentionally local to non-admin presentation only; no server logic,
   role authority, model validation, or API behavior was altered.
+
+---
+
+2026-04-15 — Assessment Non-Admin Rights Panel Overflow Containment Refinement
+===============================================================================
+Type: UI-only containment hardening / responsive typography tuning / panel layout polish
+Scope: assessment setup header non-admin model-replacement panel
+
+Summary:
+- Refined the non-admin rights panel to guarantee the Arabic rights line remains
+  inside the panel container across small and large screens.
+- Reduced visual scale and tightened line-height/gap/icon sizing to keep the
+  block compact and balanced.
+- Removed no-wrap/truncate pressure in the rights/support text path and switched
+  to wrap-safe text behavior.
+
+What Changed:
+- `apps/web/components/assessment/assessment-studio.tsx`
+  - Added panel-level overflow containment (`overflow-hidden`) for safety.
+  - Tightened non-admin icon and spacing (`gap`, icon container size, icon size).
+  - Updated rights-line typography to smaller responsive sizing with
+    wrap-safe classes (`whitespace-normal`, `break-words`, `overflow-wrap:anywhere`).
+  - Updated support-hint row to remain secondary and wrap safely instead of
+    truncating text.
+  - Kept admin model selector branch untouched.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Change is scoped strictly to non-admin panel presentation.
+- No backend logic, auth/role authority, model validation, or API routes changed.
 
 ---
 

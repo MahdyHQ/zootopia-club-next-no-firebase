@@ -1082,21 +1082,23 @@ export function AssessmentStudio({
               ) : (
                 <div
                   dir="rtl"
-                  className="assessment-model-control border-amber-500/28 bg-[linear-gradient(145deg,rgba(251,191,36,0.14),rgba(245,158,11,0.06))] text-right"
+                  className="assessment-model-control overflow-hidden border-amber-500/28 bg-[linear-gradient(145deg,rgba(251,191,36,0.14),rgba(245,158,11,0.06))] text-right"
                 >
                   {/* Non-admin model lane intentionally remains compact to align with the title rail.
                       Keep this rights/support block short and horizontally efficient across breakpoints. */}
-                  <div className="flex items-start gap-2.5">
-                    <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-500/35 bg-amber-500/16 text-amber-800 dark:text-amber-200">
-                      <ShieldCheck className="h-3.5 w-3.5" />
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-amber-500/35 bg-amber-500/16 text-amber-800 dark:text-amber-200">
+                      <ShieldCheck className="h-3 w-3" />
                     </span>
-                    <div className="min-w-0 space-y-1">
-                      <p className="text-[0.79rem] font-semibold leading-5 text-foreground sm:text-[0.81rem] sm:leading-5 md:whitespace-nowrap">
+                    <div className="min-w-0 w-full space-y-1">
+                      <p className="max-w-full whitespace-normal break-words text-[0.71rem] font-semibold leading-[1.05rem] tracking-tight text-foreground [overflow-wrap:anywhere] sm:text-[0.72rem] md:text-[0.74rem]">
                         {ASSESSMENT_MODEL_VISIBILITY_COPY.rightsLine}
                       </p>
-                      <p className="inline-flex items-center gap-1.5 text-[0.66rem] leading-4 text-foreground-muted/85 sm:text-[0.68rem] md:whitespace-nowrap">
-                        <HandHeart className="h-3.5 w-3.5 shrink-0 text-rose-500 dark:text-rose-300" />
-                        <span className="truncate">{ASSESSMENT_MODEL_VISIBILITY_COPY.supportHint}</span>
+                      <p className="flex max-w-full items-center gap-1 text-[0.62rem] leading-[0.95rem] text-foreground-muted/82 sm:text-[0.63rem] md:text-[0.64rem]">
+                        <HandHeart className="h-3 w-3 shrink-0 text-rose-500 dark:text-rose-300" />
+                        <span className="min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
+                          {ASSESSMENT_MODEL_VISIBILITY_COPY.supportHint}
+                        </span>
                       </p>
                     </div>
                   </div>
