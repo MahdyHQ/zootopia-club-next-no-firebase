@@ -53,6 +53,10 @@ const DELETE_USER_CONFIRMATION_PHRASE = "DELETE USER";
 /* Admin user-management is a high-signal operational surface.
    These classes intentionally strengthen light-mode contrast and remove lift-style motion on
    buttons/cards here only, so credit mutations stay easy to read without altering dark mode. */
+const ADMIN_USER_DETAIL_DISABLED_BUTTON_CLASS =
+  "disabled:pointer-events-none disabled:opacity-100 disabled:cursor-not-allowed disabled:shadow-none disabled:border-zinc-300 disabled:bg-zinc-100 disabled:text-zinc-500 dark:disabled:border-zinc-700 dark:disabled:bg-zinc-900/60 dark:disabled:text-zinc-500";
+const ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS =
+  "field-control border-zinc-300/90 bg-white text-zinc-900 placeholder:text-zinc-500 focus:border-emerald-400 focus:bg-white disabled:pointer-events-none disabled:opacity-100 disabled:cursor-not-allowed disabled:border-zinc-300 disabled:bg-zinc-100 disabled:text-zinc-500 disabled:placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-emerald-400 dark:focus:bg-zinc-900 dark:disabled:border-zinc-700 dark:disabled:bg-zinc-900/60 dark:disabled:text-zinc-500 dark:disabled:placeholder:text-zinc-600";
 const ADMIN_USER_DETAIL_PANEL_CLASS =
   "rounded-[2rem] border border-zinc-200/80 bg-white/82 backdrop-blur-2xl p-6 shadow-[0_16px_38px_rgba(148,163,184,0.14)] dark:border-white/5 dark:bg-zinc-950/40 dark:shadow-sm";
 const ADMIN_USER_DETAIL_SUBSECTION_CLASS =
@@ -62,15 +66,15 @@ const ADMIN_USER_DETAIL_CARD_CLASS =
 const ADMIN_USER_DETAIL_MUTATION_CARD_CLASS =
   "rounded-xl border border-zinc-200/80 bg-white/92 p-3 shadow-[0_8px_20px_rgba(148,163,184,0.10)] dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-none";
 const ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS =
-  "hover:translate-y-0 shadow-[0_10px_24px_rgba(16,185,129,0.16)] transition-colors dark:shadow-sm";
+  `hover:translate-y-0 border border-emerald-500/70 bg-emerald-600 text-white shadow-[0_10px_24px_rgba(16,185,129,0.20)] transition-colors hover:border-emerald-700 hover:bg-emerald-700 dark:border-accent/40 dark:bg-accent dark:text-white dark:shadow-sm dark:hover:bg-accent/90 ${ADMIN_USER_DETAIL_DISABLED_BUTTON_CLASS}`;
 const ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS =
-  "border-zinc-300 bg-white text-zinc-900 shadow-sm shadow-zinc-200/70 transition-colors hover:translate-y-0 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 dark:border-border-strong dark:bg-transparent dark:text-foreground dark:shadow-none dark:hover:bg-accent/5 dark:hover:text-accent";
+  `border-zinc-400 bg-white text-zinc-900 shadow-sm shadow-zinc-200/70 transition-colors hover:translate-y-0 hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-900 dark:border-border-strong dark:bg-transparent dark:text-foreground dark:shadow-none dark:hover:bg-accent/5 dark:hover:text-accent ${ADMIN_USER_DETAIL_DISABLED_BUTTON_CLASS}`;
 const ADMIN_USER_DETAIL_SECONDARY_BUTTON_CLASS =
-  "bg-zinc-100 text-zinc-900 shadow-sm shadow-zinc-200/70 transition-colors hover:translate-y-0 hover:bg-zinc-200 dark:bg-accent/10 dark:text-accent dark:shadow-none dark:hover:bg-accent/20";
+  `border border-zinc-300 bg-zinc-100 text-zinc-900 shadow-sm shadow-zinc-200/70 transition-colors hover:translate-y-0 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-accent/10 dark:text-accent dark:shadow-none dark:hover:bg-accent/20 ${ADMIN_USER_DETAIL_DISABLED_BUTTON_CLASS}`;
 const ADMIN_USER_DETAIL_DANGER_BUTTON_CLASS =
-  "hover:translate-y-0 shadow-[0_10px_22px_rgba(239,68,68,0.14)] transition-colors dark:shadow-sm";
+  `hover:translate-y-0 border border-red-500/80 bg-red-600 text-white shadow-[0_10px_22px_rgba(239,68,68,0.18)] transition-colors hover:border-red-700 hover:bg-red-700 dark:border-red-500/40 dark:bg-danger dark:text-white dark:shadow-sm dark:hover:bg-danger/90 ${ADMIN_USER_DETAIL_DISABLED_BUTTON_CLASS}`;
 const ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS =
-  "border-red-300 bg-white text-red-700 shadow-sm shadow-red-100/70 transition-colors hover:translate-y-0 hover:border-red-400 hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:shadow-none dark:hover:bg-red-950/30";
+  `border-red-400 bg-red-50 text-red-800 shadow-sm shadow-red-100/70 transition-colors hover:translate-y-0 hover:border-red-500 hover:bg-red-100 hover:text-red-900 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:shadow-none dark:hover:bg-red-950/30 ${ADMIN_USER_DETAIL_DISABLED_BUTTON_CLASS}`;
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -1162,6 +1166,16 @@ export default async function AdminUserDetailPage({
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               Every mutation is written to durable storage and reflected in the per-user audit history.
             </p>
+            {/*
+              This page intentionally blocks self-credit mutations (target uid === acting admin uid).
+              Keep this explanation visible in the credit section so disabled controls read as policy,
+              not as a broken form state for operators auditing their own account.
+            */}
+            {isCurrentUser ? (
+              <div className="mt-3 rounded-xl border border-sky-300/80 bg-sky-50 px-3.5 py-3 text-sm text-sky-800 shadow-sm shadow-sky-100/80 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-200 dark:shadow-none">
+                Credit controls are intentionally disabled for your current admin account. Open another user record to add, subtract, set, or grant credits.
+              </div>
+            ) : null}
             {creditsAccount?.assessmentAccess === "disabled" ? (
               <div className="mt-3 rounded-xl border border-amber-300/70 bg-amber-50 px-3.5 py-3 text-sm text-amber-800 shadow-sm shadow-amber-100/80 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200 dark:shadow-none">
                 Credit grants can persist while this user still shows no usable balance if Assessment Access is disabled. Re-enable access first if the user should consume the granted credits immediately.
@@ -1228,6 +1242,11 @@ export default async function AdminUserDetailPage({
                       {grant.reason ? (
                         <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">
                           reason: {grant.reason}
+                        </p>
+                      ) : null}
+                      {!canRevoke ? (
+                        <p className="mt-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                          Only active grants can be revoked from this panel.
                         </p>
                       ) : null}
 
@@ -1804,14 +1823,14 @@ function CreditDailyOverrideForm({
           min={1}
           step={1}
           placeholder="Override daily limit"
-          className="field-control h-10 w-full text-sm"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-sm`}
           disabled={disabled}
         />
         <input
           type="text"
           name="reason"
           placeholder="Reason (optional)"
-          className="field-control h-10 w-full text-sm"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-sm`}
           disabled={disabled}
           maxLength={320}
         />
@@ -1922,7 +1941,7 @@ function CreditManualBalanceForm({
           min={0}
           step={1}
           placeholder="Amount"
-          className="field-control h-10 w-full text-sm"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-sm`}
           disabled={disabled}
           required
         />
@@ -1930,7 +1949,7 @@ function CreditManualBalanceForm({
           type="text"
           name="reason"
           placeholder="Reason (optional)"
-          className="field-control h-10 w-full text-sm"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-sm`}
           disabled={disabled}
           maxLength={320}
         />
@@ -1943,7 +1962,7 @@ function CreditManualBalanceForm({
             disabled={disabled}
             className={`h-9 ${ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS}`}
           >
-            Add
+            Add Credits
           </Button>
           <Button
             type="submit"
@@ -1954,7 +1973,7 @@ function CreditManualBalanceForm({
             disabled={disabled}
             className={`h-9 ${ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS}`}
           >
-            Subtract
+            Subtract Credits
           </Button>
           <Button
             type="submit"
@@ -1965,7 +1984,7 @@ function CreditManualBalanceForm({
             disabled={disabled}
             className={`h-9 ${ADMIN_USER_DETAIL_SECONDARY_BUTTON_CLASS}`}
           >
-            Set
+            Set Balance
           </Button>
         </div>
       </div>
@@ -2027,28 +2046,28 @@ function CreditGrantCreateForm({
           min={1}
           step={1}
           placeholder="Grant amount"
-          className="field-control h-10 w-full text-sm"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-sm`}
           disabled={disabled}
           required
         />
         <input
           type="datetime-local"
           name="expiresAt"
-          className="field-control h-10 w-full text-sm"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-sm`}
           disabled={disabled}
         />
         <input
           type="text"
           name="reason"
           placeholder="Reason (optional)"
-          className="field-control h-10 w-full text-sm"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-sm`}
           disabled={disabled}
           maxLength={320}
         />
         <textarea
           name="note"
           placeholder="Internal note (optional)"
-          className="field-control min-h-20 w-full resize-y text-sm"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} min-h-20 w-full resize-y text-sm`}
           disabled={disabled}
           maxLength={1000}
         />
@@ -2093,7 +2112,7 @@ function RevokeCreditGrantForm({
           type="text"
           name="reason"
           placeholder="Revocation reason (optional)"
-          className="field-control h-9 w-full text-xs"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-9 w-full text-xs`}
           disabled={disabled}
           maxLength={320}
         />
@@ -2159,7 +2178,7 @@ function DeleteUserForm({
           type="text"
           name="confirmation"
           placeholder={`Type "${DELETE_USER_CONFIRMATION_PHRASE}" to confirm`}
-          className="field-control h-10 w-full text-xs"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-xs`}
           disabled={disabled}
           required
         />
@@ -2233,7 +2252,7 @@ function DeleteUserStorageForm({
           type="text"
           name="confirmation"
           placeholder={`Type "${confirmationTarget}" to confirm`}
-          className="field-control h-10 w-full text-xs"
+          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-xs`}
           disabled={disabled}
           required
         />

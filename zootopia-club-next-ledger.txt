@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Admin credit recipient refresh sync + access-state clarity + admin users light-mode contrast polish)
+Last Updated: 2026-04-15 (Admin credit detail control-state clarity + light-mode usability hardening)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -6045,6 +6045,57 @@ Risks / Notes:
   second polling owner on the same page.
 - The separate admin credits route still exists for programmatic/admin API use,
   but the current detail-page UI path remains server-action driven.
+
+---
+
+2026-04-15 — Admin User Detail Credit Control State + Light-Mode Usability Hardening
+=========================================================================================
+Type: UI/state correctness hardening (no schema change)
+Scope: admin user detail credit-management controls on `/admin/users/[uid]`
+
+Summary:
+- Performed a strict read-first verification of the admin detail credit path before editing:
+  - detail page control state wiring
+  - server-action mutation handlers
+  - repository credit mutation persistence
+  - grant revoke eligibility logic
+- Confirmed credit persistence/mutation backend is healthy and server-authoritative; no data-model defect was found.
+- Confirmed the perceived “locked/inactive” behavior had two real causes in this revision:
+  - intentional self-mutation lock (`isCurrentUser`) lacked localized in-section explanation in the credit panel
+  - light-mode action/disabled styling did not clearly distinguish active controls from intentionally disabled controls
+  - revoke buttons for non-active grants were disabled without explicit inline reason text
+
+Migration Decision:
+- No migration required.
+- Rationale:
+  - repository mutation contracts already support add/subtract/set/grant/revoke/access/daily-override flows
+  - per-user durable mutation history and grant/account records are already in place
+  - issue resolved at UI-state clarity + light-mode contrast layer, not schema layer
+
+What Changed:
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+  - Added admin-detail scoped control tokens for explicit disabled-state rendering with readable text/border/background in light mode.
+  - Hardened light-mode button emphasis for primary, outline, secondary, and danger actions so actionable controls no longer look washed out.
+  - Added a clear in-panel policy callout when viewing the current admin account, explaining why credit controls are intentionally disabled.
+  - Added an inline grant-state hint: non-active grants now explicitly explain why revoke is unavailable.
+  - Upgraded all credit/destructive form inputs in this page to a scoped high-contrast field class with explicit disabled-state styling.
+  - Refined manual credit action labels to clearer operator language: “Add Credits”, “Subtract Credits”, “Set Balance”.
+- `zootopia-club-next-ledger.txt`
+  - Updated top metadata and recorded this pass.
+
+Verification:
+- Backend path trace (read-only) confirmed:
+  - detail page form submit -> server action -> `applyAdminAssessmentCreditMutation(...)` -> repository state reread
+  - self-mutation block remains enforced server-side (`ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN`)
+  - owner scope remains target-user specific
+- Build-quality checks:
+  - `shell: web-lint-post-polish`: pass
+  - `shell: web-typecheck-post-polish`: pass
+  - `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- This pass intentionally did not alter auth boundaries, admin separation, owner-scope storage, upload/preview/export logic, or account/password flows.
+- Self-mutation restrictions remain intact by policy; the fix improves clarity and usability around that policy instead of weakening it.
 
 ---
 
