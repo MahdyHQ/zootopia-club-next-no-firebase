@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { NormalizedAssessmentPreview } from "@/lib/assessment-preview-model";
+import { getTypeAwareAnswerLabel } from "@/lib/assessment-render-copy";
 import {
   countFillBlanks,
   extractMatchingPairs,
@@ -453,165 +454,189 @@ export async function buildAssessmentDocxExport(preview: NormalizedAssessmentPre
               }),
             ],
           }),
-          ...preview.questions.flatMap((question) => {
-            const paragraphs: Array<Paragraph | Table> = [
-              new Paragraph({
-                heading: HeadingLevel.HEADING_2,
-                alignment: headingAlignment,
-                bidirectional: isRtl,
-                spacing: {
-                  before: 180,
-                  after: 90,
-                },
-                children: [
-                  new TextRun({
-                    text: `${question.index + 1}. ${question.stem}`,
-                    bold: true,
-                  }),
-                ],
-              }),
-            ];
+          ...preview.questionSections.flatMap((section) => [
+            new Paragraph({
+              heading: HeadingLevel.HEADING_2,
+              alignment: headingAlignment,
+              bidirectional: isRtl,
+              keepNext: true,
+              spacing: {
+                before: 300,
+                after: 120,
+              },
+              children: [
+                new TextRun({
+                  text: section.heading,
+                  bold: true,
+                }),
+              ],
+            }),
+            ...section.questions.flatMap((question) => {
+              const paragraphs: Array<Paragraph | Table> = [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_3,
+                  alignment: headingAlignment,
+                  bidirectional: isRtl,
+                  spacing: {
+                    before: 180,
+                    after: 90,
+                  },
+                  children: [
+                    new TextRun({
+                      text: `${question.index + 1}. ${question.stem}`,
+                      bold: true,
+                    }),
+                  ],
+                }),
+              ];
 
-            if (question.choices.length > 0) {
-              if (question.choiceLayout === "grid-2x2" && question.choices.length === 4) {
-                paragraphs.push(
-                  buildChoiceTable({
-                    choices: question.choices,
-                    alignment: bodyAlignment,
-                    isRtl,
-                  }),
-                );
-              } else {
-                paragraphs.push(
-                  ...question.choices.map((choice) =>
-                    buildChoiceParagraph({
-                      marker: choice.marker,
-                      text: choice.text,
+              if (question.choices.length > 0) {
+                if (question.choiceLayout === "grid-2x2" && question.choices.length === 4) {
+                  paragraphs.push(
+                    buildChoiceTable({
+                      choices: question.choices,
                       alignment: bodyAlignment,
                       isRtl,
                     }),
+                  );
+                } else {
+                  paragraphs.push(
+                    ...question.choices.map((choice) =>
+                      buildChoiceParagraph({
+                        marker: choice.marker,
+                        text: choice.text,
+                        alignment: bodyAlignment,
+                        isRtl,
+                      }),
+                    ),
+                  );
+                }
+              }
+
+              if (question.supplementalLines.length > 0) {
+                paragraphs.push(
+                  ...question.supplementalLines.map(
+                    (line) =>
+                      new Paragraph({
+                        alignment: bodyAlignment,
+                        bidirectional: isRtl,
+                        spacing: {
+                          after: 90,
+                        },
+                        children: [
+                          new TextRun({
+                            text: line,
+                          }),
+                        ],
+                      }),
                   ),
                 );
               }
-            }
 
-            if (question.supplementalLines.length > 0) {
-              paragraphs.push(
-                ...question.supplementalLines.map(
-                  (line) =>
-                    new Paragraph({
-                      alignment: bodyAlignment,
-                      bidirectional: isRtl,
-                      spacing: {
-                        after: 90,
-                      },
-                      children: [
-                        new TextRun({
-                          text: line,
-                        }),
-                      ],
-                    }),
-                ),
-              );
-            }
-
-            if (question.typeLabel) {
-              paragraphs.push(
-                new Paragraph({
-                  alignment: bodyAlignment,
-                  bidirectional: isRtl,
-                  children: [
-                    new TextRun({
-                      text: `${preview.locale === "ar" ? "نوع السؤال" : "Question type"}: `,
-                      bold: true,
-                    }),
-                    new TextRun(question.typeLabel),
-                  ],
-                }),
-              );
-            }
-
-            if (question.difficultyLabel) {
-              paragraphs.push(
-                new Paragraph({
-                  alignment: bodyAlignment,
-                  bidirectional: isRtl,
-                  children: [
-                    new TextRun({
-                      text: `${preview.locale === "ar" ? "صعوبة السؤال" : "Question difficulty"}: `,
-                      bold: true,
-                    }),
-                    new TextRun(question.difficultyLabel),
-                  ],
-                }),
-              );
-            }
-
-            paragraphs.push(
-              new Paragraph({
-                alignment: bodyAlignment,
-                bidirectional: isRtl,
-                children: [
-                  new TextRun({
-                    text: `${preview.locale === "ar" ? "الإجابة" : "Answer"}: `,
-                    bold: true,
+              if (question.typeLabel) {
+                paragraphs.push(
+                  new Paragraph({
+                    alignment: bodyAlignment,
+                    bidirectional: isRtl,
+                    children: [
+                      new TextRun({
+                        text: `${preview.locale === "ar" ? "نوع السؤال" : "Question type"}: `,
+                        bold: true,
+                      }),
+                      new TextRun(question.typeLabel),
+                    ],
                   }),
-                  new TextRun(question.answerDisplay),
-                ],
-              }),
-            );
+                );
+              }
 
-            paragraphs.push(
-              ...buildTypeAwareDocxDetails({
-                preview,
-                question,
-                alignment: bodyAlignment,
-                isRtl,
-              }),
-            );
+              if (question.difficultyLabel) {
+                paragraphs.push(
+                  new Paragraph({
+                    alignment: bodyAlignment,
+                    bidirectional: isRtl,
+                    children: [
+                      new TextRun({
+                        text: `${preview.locale === "ar" ? "صعوبة السؤال" : "Question difficulty"}: `,
+                        bold: true,
+                      }),
+                      new TextRun(question.difficultyLabel),
+                    ],
+                  }),
+                );
+              }
 
-            paragraphs.push(
-              ...buildScienceDocxDetails({
-                question,
-                alignment: bodyAlignment,
-                isRtl,
-              }),
-            );
+              const answerLabel = getTypeAwareAnswerLabel({
+                locale: preview.contentLanguage,
+                questionType: question.questionType,
+                fallback: preview.locale === "ar" ? "الإجابة" : "Answer",
+              });
 
-            if (question.rationale) {
               paragraphs.push(
                 new Paragraph({
                   alignment: bodyAlignment,
                   bidirectional: isRtl,
                   children: [
                     new TextRun({
-                      text: `${preview.locale === "ar" ? "التبرير" : "Rationale"}: `,
+                      text: `${answerLabel}: `,
                       bold: true,
                     }),
-                    new TextRun(question.rationale),
+                    new TextRun(question.answerDisplay),
                   ],
                 }),
               );
-            }
 
-            if (question.tags.length > 0) {
               paragraphs.push(
-                new Paragraph({
+                ...buildTypeAwareDocxDetails({
+                  preview,
+                  question,
                   alignment: bodyAlignment,
-                  bidirectional: isRtl,
-                  children: [
-                    new TextRun({
-                      text: `${preview.locale === "ar" ? "الوسوم" : "Tags"}: `,
-                      bold: true,
-                    }),
-                    new TextRun(question.tags.join(", ")),
-                  ],
+                  isRtl,
                 }),
               );
-            }
 
-            return paragraphs;
-          }),
+              paragraphs.push(
+                ...buildScienceDocxDetails({
+                  question,
+                  alignment: bodyAlignment,
+                  isRtl,
+                }),
+              );
+
+              if (question.rationale) {
+                paragraphs.push(
+                  new Paragraph({
+                    alignment: bodyAlignment,
+                    bidirectional: isRtl,
+                    children: [
+                      new TextRun({
+                        text: `${preview.locale === "ar" ? "التبرير" : "Rationale"}: `,
+                        bold: true,
+                      }),
+                      new TextRun(question.rationale),
+                    ],
+                  }),
+                );
+              }
+
+              if (question.tags.length > 0) {
+                paragraphs.push(
+                  new Paragraph({
+                    alignment: bodyAlignment,
+                    bidirectional: isRtl,
+                    children: [
+                      new TextRun({
+                        text: `${preview.locale === "ar" ? "الوسوم" : "Tags"}: `,
+                        bold: true,
+                      }),
+                      new TextRun(question.tags.join(", ")),
+                    ],
+                  }),
+                );
+              }
+
+              return paragraphs;
+            }),
+          ]),
            /* DOCX exports should carry the same file-facing attribution line as preview/PDF
              surfaces so footer wording stays consistent across every assessment file surface. */
           new Paragraph({

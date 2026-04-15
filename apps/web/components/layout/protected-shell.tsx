@@ -31,6 +31,34 @@ type ProtectedShellProps = {
   themeMode: ThemeMode;
 };
 
+function areCreditSummariesEqual(
+  current: AssessmentDailyCreditsSummary | null,
+  next: AssessmentDailyCreditsSummary,
+) {
+  if (!current) {
+    return false;
+  }
+
+  return (
+    current.applies === next.applies &&
+    current.isAdminExempt === next.isAdminExempt &&
+    current.assessmentAccess === next.assessmentAccess &&
+    current.dayKey === next.dayKey &&
+    current.dailyDefaultLimit === next.dailyDefaultLimit &&
+    current.dailyLimit === next.dailyLimit &&
+    current.dailyLimitSource === next.dailyLimitSource &&
+    current.usedCount === next.usedCount &&
+    current.dailyRemainingCount === next.dailyRemainingCount &&
+    current.manualCreditsAvailable === next.manualCreditsAvailable &&
+    current.grantCreditsAvailable === next.grantCreditsAvailable &&
+    current.extraCreditsAvailable === next.extraCreditsAvailable &&
+    current.activeGrantCount === next.activeGrantCount &&
+    current.totalRemainingCount === next.totalRemainingCount &&
+    current.remainingCount === next.remainingCount &&
+    current.resetsAt === next.resetsAt
+  );
+}
+
 export function ProtectedShell({
   children,
   messages,
@@ -45,6 +73,7 @@ export function ProtectedShell({
   const [creditSummary, setCreditSummary] =
     useState<AssessmentDailyCreditsSummary | null>(null);
   const mainScrollRef = useRef<HTMLElement | null>(null);
+  const creditSummaryRequestRef = useRef<Promise<void> | null>(null);
   const siteContent = getSiteContent(locale);
   const headerAvatarSrc = resolveRoleGenderAvatarSrc(user);
   const headerAvatarInitial = resolveAvatarFallbackInitial(user);
@@ -68,21 +97,44 @@ export function ProtectedShell({
   });
 
   const refreshCreditSummary = useEffectEvent(async () => {
-    try {
-      const response = await fetch("/api/assessment/credits", {
-        method: "GET",
-        cache: "no-store",
-      });
-      const payload = (await response.json()) as ApiResult<{
-        credits: AssessmentDailyCreditsSummary;
-      }>;
-      if (!response.ok || !payload.ok) {
-        return;
-      }
+    /* The protected shell receives refresh triggers from focus, visibility, interval, and
+       assessment-route events. Coalescing keeps those signals from fan-outing into duplicate
+       credit requests against the same owner session. */
+    if (creditSummaryRequestRef.current) {
+      await creditSummaryRequestRef.current;
+      return;
+    }
 
-      setCreditSummary(payload.data.credits);
-    } catch {
-      // Keep the header chip resilient: transient network failures should not break shell UI.
+    const requestPromise = (async () => {
+      try {
+        const response = await fetch("/api/assessment/credits", {
+          method: "GET",
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as ApiResult<{
+          credits: AssessmentDailyCreditsSummary;
+        }>;
+        if (!response.ok || !payload.ok) {
+          return;
+        }
+
+        setCreditSummary((current) =>
+          areCreditSummariesEqual(current, payload.data.credits)
+            ? current
+            : payload.data.credits,
+        );
+      } catch {
+        // Keep the header chip resilient: transient network failures should not break shell UI.
+      }
+    })();
+
+    creditSummaryRequestRef.current = requestPromise;
+    try {
+      await requestPromise;
+    } finally {
+      if (creditSummaryRequestRef.current === requestPromise) {
+        creditSummaryRequestRef.current = null;
+      }
     }
   });
 
@@ -120,6 +172,11 @@ export function ProtectedShell({
     };
 
     const intervalId = window.setInterval(() => {
+      // Skip background polling for hidden tabs; focus/visibility handlers resync on return.
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
       void refreshCreditSummary();
     }, CREDIT_SUMMARY_REFRESH_INTERVAL_MS);
 

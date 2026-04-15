@@ -1,23 +1,30 @@
 import "server-only";
 
-import type {
-  AssessmentArtifactKind,
-  AssessmentArtifactRecord,
-  AssessmentDifficulty,
-  AssessmentGeneration,
-  AssessmentGenerationMeta,
-  AssessmentGenerationStatus,
-  AssessmentInputMode,
-  AssessmentMode,
-  AssessmentGenerationSourceDocument,
-  AssessmentQuestion,
-  AssessmentQuestionType,
-  AssessmentQuestionTypeDistribution,
-  AssessmentRequest,
-  AssessmentRequestOptions,
-  Locale,
-  ThemeMode,
-  UserRole,
+import {
+  ASSESSMENT_NORMALIZATION_VERSION,
+  ASSESSMENT_PROMPT_CONTRACT_VERSION,
+  ASSESSMENT_RENDER_MODEL_VERSION,
+  type AssessmentNormalizedQuestion,
+  type AssessmentNormalizedResult,
+  type AssessmentNormalizedSection,
+  type AssessmentArtifactKind,
+  type AssessmentArtifactRecord,
+  type AssessmentDifficulty,
+  type AssessmentGeneration,
+  type AssessmentGenerationMeta,
+  type AssessmentGenerationStatus,
+  type AssessmentInputMode,
+  type AssessmentMode,
+  type AssessmentGenerationSourceDocument,
+  type AssessmentQuestion,
+  type AssessmentQuestionType,
+  type AssessmentQuestionTypeDistribution,
+  type AssessmentRawModelResult,
+  type AssessmentRequest,
+  type AssessmentRequestOptions,
+  type Locale,
+  type ThemeMode,
+  type UserRole,
 } from "@zootopia/shared-types";
 import {
   normalizeMultilineWhitespace,
@@ -53,6 +60,26 @@ type AssessmentQuestionLike = Partial<AssessmentQuestion> & {
   difficulty?: unknown;
 };
 
+type AssessmentNormalizedQuestionLike = AssessmentQuestionLike &
+  Partial<AssessmentNormalizedQuestion> & {
+    source?: Partial<AssessmentNormalizedQuestion["source"]> | null;
+    grouping?: Partial<AssessmentNormalizedQuestion["grouping"]> | null;
+    ordering?: Partial<AssessmentNormalizedQuestion["ordering"]> | null;
+    classification?: Partial<AssessmentNormalizedQuestion["classification"]> | null;
+  };
+
+type AssessmentRawModelResultLike = Partial<AssessmentRawModelResult> & {
+  responseJson?: unknown;
+};
+
+type AssessmentNormalizedResultLike = Partial<AssessmentNormalizedResult> & {
+  selectedQuestionTypes?: unknown;
+  requestedDistribution?: unknown;
+  ignoredQuestionTypeKeys?: unknown;
+  normalizedQuestions?: AssessmentNormalizedQuestionLike[] | null;
+  sections?: Array<Partial<AssessmentNormalizedSection>> | null;
+};
+
 type AssessmentGenerationLike = Partial<AssessmentGeneration> & {
   ownerRole?: UserRole;
   status?: AssessmentGenerationStatus;
@@ -66,6 +93,8 @@ type AssessmentGenerationLike = Partial<AssessmentGeneration> & {
     sourceDocument?: Partial<AssessmentGenerationSourceDocument> | null;
   };
   questions?: AssessmentQuestionLike[] | string[] | null;
+  rawModelResult?: AssessmentRawModelResultLike | null;
+  normalizedResult?: AssessmentNormalizedResultLike | null;
   prompt?: string;
   documentId?: string;
   questionCount?: number;
@@ -198,6 +227,26 @@ function normalizeQuestionTypes(value: unknown): AssessmentQuestionType[] {
     });
 }
 
+function inferQuestionTypesFromQuestions(
+  value: Array<AssessmentQuestionLike | AssessmentNormalizedQuestionLike | string>,
+) {
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        return undefined;
+      }
+
+      return normalizeQuestionType(item.type);
+    })
+    .filter((item, index, items): item is AssessmentQuestionType => {
+      if (!item) {
+        return false;
+      }
+
+      return items.indexOf(item) === index;
+    });
+}
+
 function buildBalancedQuestionTypeDistribution(
   questionTypes: AssessmentQuestionType[],
 ): AssessmentQuestionTypeDistribution[] {
@@ -242,6 +291,31 @@ function normalizeQuestionTypeDistribution(
   return total === 100
     ? normalized
     : buildBalancedQuestionTypeDistribution(questionTypes);
+}
+
+function normalizeInteger(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.trunc(parsed);
+    }
+  }
+
+  return null;
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => normalizeOptionalString(item))
+    .filter((item, index, items): item is string => Boolean(item) && items.indexOf(item) === index);
 }
 
 function buildQuestionTypeSequence(
@@ -465,6 +539,314 @@ function normalizeAssessmentQuestion(
   return normalizedQuestion;
 }
 
+function getStoredQuestionTypeLabel(
+  value: AssessmentQuestionType,
+  language: Locale,
+) {
+  if (language === "ar") {
+    switch (value) {
+      case "true_false":
+        return "صح / خطأ";
+      case "scientific_term":
+        return "مصطلح علمي";
+      case "essay":
+        return "مقالي";
+      case "fill_blanks":
+        return "أكمل الفراغ";
+      case "short_answer":
+        return "إجابة قصيرة";
+      case "matching":
+        return "توصيل";
+      case "multiple_response":
+        return "متعدد الإجابات";
+      case "terminology":
+        return "مصطلحات";
+      case "definition":
+        return "تعريف";
+      case "comparison":
+        return "مقارنة";
+      case "labeling":
+        return "تسمية";
+      case "classification":
+        return "تصنيف";
+      case "sequencing":
+        return "تسلسل";
+      case "process_mechanism":
+        return "عملية / آلية";
+      case "cause_effect":
+        return "سبب ونتيجة";
+      case "distinguish_between":
+        return "ميّز بين";
+      case "identify_structure":
+        return "تحديد بنية";
+      case "identify_compound":
+        return "تحديد مركب";
+      default:
+        return "اختيار متعدد";
+    }
+  }
+
+  switch (value) {
+    case "true_false":
+      return "True / False";
+    case "scientific_term":
+      return "Scientific Term";
+    case "essay":
+      return "Essay";
+    case "fill_blanks":
+      return "Fill in the Blanks";
+    case "short_answer":
+      return "Short Answer";
+    case "matching":
+      return "Matching";
+    case "multiple_response":
+      return "Multiple Response";
+    case "terminology":
+      return "Terminology";
+    case "definition":
+      return "Definition";
+    case "comparison":
+      return "Comparison";
+    case "labeling":
+      return "Labeling";
+    case "classification":
+      return "Classification";
+    case "sequencing":
+      return "Sequencing";
+    case "process_mechanism":
+      return "Process / Mechanism";
+    case "cause_effect":
+      return "Cause and Effect";
+    case "distinguish_between":
+      return "Distinguish Between";
+    case "identify_structure":
+      return "Identify Structure";
+    case "identify_compound":
+      return "Identify Compound";
+    default:
+      return "MCQ";
+  }
+}
+
+function safeJsonStringify(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
+function normalizeAnswerMetadataRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+/* Assessment generations now persist the model-returned JSON separately from the derived
+   normalized renderer/export contract. This read-path normalizer keeps old rows compatible
+   while preventing undefined nested fields from leaking back into repository merge writes. */
+function normalizeAssessmentRawModelResult(
+  value: AssessmentRawModelResultLike | null | undefined,
+  fallback: {
+    provider: AssessmentGenerationMeta["provider"];
+    requestedModelId: string;
+    canonicalModelId: string;
+    providerModelId: string;
+    capturedAt: string;
+  },
+) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const responseJson = "responseJson" in value ? value.responseJson : null;
+  const responseText =
+    normalizeOptionalMultilineString(value.responseText) ??
+    (responseJson === null ? null : safeJsonStringify(responseJson));
+
+  if (!responseText && responseJson === null) {
+    return undefined;
+  }
+
+  return {
+    provider: value.provider === "qwen" ? "qwen" : fallback.provider,
+    requestedModelId:
+      normalizeOptionalString(value.requestedModelId) ?? fallback.requestedModelId,
+    canonicalModelId:
+      normalizeOptionalString(value.canonicalModelId) ?? fallback.canonicalModelId,
+    providerModelId:
+      normalizeOptionalString(value.providerModelId) ?? fallback.providerModelId,
+    promptContractVersion:
+      normalizeOptionalString(value.promptContractVersion)
+      ?? ASSESSMENT_PROMPT_CONTRACT_VERSION,
+    responseMimeType: "application/json",
+    capturedAt:
+      normalizeOptionalString(value.capturedAt) ?? fallback.capturedAt,
+    responseText: responseText ?? "",
+    responseJson,
+  } satisfies AssessmentRawModelResult;
+}
+
+function extractRawModelQuestionCount(rawModelResult: AssessmentRawModelResult | undefined) {
+  const payload =
+    rawModelResult?.responseJson && typeof rawModelResult.responseJson === "object"
+      ? (rawModelResult.responseJson as { questions?: unknown }).questions
+      : null;
+
+  return Array.isArray(payload) ? payload.length : null;
+}
+
+/* This is the shared Phase 2 normalization seam for stored assessment results. It rebuilds
+   stable section/order/classification metadata from backend-owned selected types so preview,
+   export, analytics, and future filtering all read the same contract without trusting UI-only
+   derivation or brittle provider-authored renderer hints. */
+export function buildAssessmentNormalizedResult(input: {
+  language: Locale;
+  questionTypes: AssessmentQuestionType[];
+  questionTypeDistribution: AssessmentQuestionTypeDistribution[];
+  questions: AssessmentQuestion[];
+  promptContractVersion?: string | null;
+  normalizationVersion?: string | null;
+  renderModelVersion?: string | null;
+  sourceQuestionCount?: number | null;
+  ignoredQuestionCount?: number | null;
+  ignoredQuestionTypeKeys?: string[] | null;
+  seedNormalizedQuestions?: AssessmentNormalizedQuestionLike[] | null;
+}): AssessmentNormalizedResult {
+  const selectedQuestionTypes =
+    input.questionTypes.length > 0
+      ? input.questionTypes
+      : [DEFAULT_ASSESSMENT_QUESTION_TYPE];
+  const requestedDistribution = normalizeQuestionTypeDistribution(
+    input.questionTypeDistribution,
+    selectedQuestionTypes,
+  );
+  const requestedPercentageByType = new Map(
+    requestedDistribution.map((entry) => [entry.type, entry.percentage]),
+  );
+  const selectedTypeSet = new Set(selectedQuestionTypes);
+  const plannedQuestionTypeSequence = buildQuestionTypeSequence(
+    Math.max(input.questions.length, selectedQuestionTypes.length),
+    requestedDistribution,
+  );
+  const seedQuestions = Array.isArray(input.seedNormalizedQuestions)
+    ? input.seedNormalizedQuestions
+    : [];
+  const seedQuestionsById = new Map<string, AssessmentNormalizedQuestionLike>();
+
+  for (const seedQuestion of seedQuestions) {
+    const normalizedSeedId = normalizeOptionalString(seedQuestion.id);
+    if (normalizedSeedId && !seedQuestionsById.has(normalizedSeedId)) {
+      seedQuestionsById.set(normalizedSeedId, seedQuestion);
+    }
+  }
+
+  const effectiveQuestions = input.questions.map((question, index) => {
+    const selectedType =
+      question.type && selectedTypeSet.has(question.type)
+        ? question.type
+        : plannedQuestionTypeSequence[index]
+          ?? selectedQuestionTypes[0]
+          ?? DEFAULT_ASSESSMENT_QUESTION_TYPE;
+
+    return {
+      question,
+      selectedType,
+      seed:
+        seedQuestionsById.get(question.id)
+        ?? seedQuestions[index]
+        ?? null,
+    };
+  });
+
+  const sections = selectedQuestionTypes.map((type, order) => ({
+    key: `section-${type}`,
+    type,
+    title: getStoredQuestionTypeLabel(type, input.language),
+    order,
+    requestedPercentage: requestedPercentageByType.get(type) ?? 0,
+    questionCount: effectiveQuestions.filter((entry) => entry.selectedType === type).length,
+  })) satisfies AssessmentNormalizedSection[];
+
+  let nextDisplayOrder = 0;
+  const normalizedQuestions = sections.flatMap((section) =>
+    effectiveQuestions
+      .filter((entry) => entry.selectedType === section.type)
+      .map(({ question, seed }, orderInSection) => ({
+        ...question,
+        source: {
+          sourceType: normalizeOptionalString(seed?.source?.sourceType) ?? null,
+          sourceDifficulty:
+            typeof seed?.source?.sourceDifficulty === "number"
+              || typeof seed?.source?.sourceDifficulty === "string"
+              ? seed.source.sourceDifficulty
+              : null,
+          sourceDisplayOrder:
+            normalizeInteger(seed?.source?.sourceDisplayOrder)
+            ?? normalizeInteger(seed?.ordering?.displayOrder),
+          sourceSectionKey:
+            normalizeOptionalString(seed?.source?.sourceSectionKey) ?? null,
+          sourceSectionTitle:
+            normalizeOptionalString(seed?.source?.sourceSectionTitle) ?? null,
+          answerMetadata: normalizeAnswerMetadataRecord(seed?.source?.answerMetadata),
+        },
+        grouping: {
+          sectionKey: section.key,
+          sectionTitle: section.title,
+          sectionType: section.type,
+          sectionOrder: section.order,
+          requestedPercentage: section.requestedPercentage,
+        },
+        ordering: {
+          displayOrder: nextDisplayOrder,
+          sectionOrder: section.order,
+          orderInSection,
+        },
+        classification: {
+          canonicalType: section.type,
+          selectedType: section.type,
+          isSelectedType: true,
+          normalizedDifficulty: question.difficulty ?? "medium",
+        },
+      }) satisfies AssessmentNormalizedQuestion)
+      .map((question) => {
+        nextDisplayOrder += 1;
+        return question;
+      }),
+  );
+  const ignoredQuestionTypeKeys = normalizeStringArray(input.ignoredQuestionTypeKeys);
+  const ignoredQuestionCount =
+    normalizeInteger(input.ignoredQuestionCount)
+    ?? ignoredQuestionTypeKeys.length;
+  const sourceQuestionCount =
+    normalizeInteger(input.sourceQuestionCount)
+    ?? normalizedQuestions.length + ignoredQuestionCount;
+
+  return {
+    promptContractVersion:
+      normalizeOptionalString(input.promptContractVersion)
+      ?? ASSESSMENT_PROMPT_CONTRACT_VERSION,
+    normalizationVersion:
+      normalizeOptionalString(input.normalizationVersion)
+      ?? ASSESSMENT_NORMALIZATION_VERSION,
+    renderModelVersion:
+      normalizeOptionalString(input.renderModelVersion)
+      ?? ASSESSMENT_RENDER_MODEL_VERSION,
+    selectionFilterMode: "selected_types_only",
+    selectedQuestionTypes,
+    requestedDistribution,
+    sourceQuestionCount,
+    normalizedQuestionCount: normalizedQuestions.length,
+    groupedDisplayQuestionCount: normalizedQuestions.length,
+    ignoredQuestionCount,
+    ignoredQuestionTypeKeys,
+    sections,
+    normalizedQuestions,
+  } satisfies AssessmentNormalizedResult;
+}
+
 function normalizeSourceDocument(
   sourceDocument: Partial<AssessmentGenerationSourceDocument> | null | undefined,
 ) {
@@ -660,11 +1042,20 @@ export function normalizeAssessmentGenerationRecord(
     resolvedOwnerRole?: UserRole;
   } = {},
 ): AssessmentGeneration {
+  const normalizedResultSeed = record.normalizedResult;
+  const rawNormalizedQuestions = Array.isArray(
+    normalizedResultSeed?.normalizedQuestions,
+  )
+    ? normalizedResultSeed.normalizedQuestions
+    : [];
+  const rawQuestions = rawNormalizedQuestions.length > 0
+    ? rawNormalizedQuestions
+    : (Array.isArray(record.questions) ? record.questions : []);
   const inferredLanguage = inferAssessmentLanguage({
     prompt: record.request?.prompt ?? record.prompt,
     title: record.title,
     summary: record.meta?.summary,
-    questions: record.questions ?? [],
+    questions: rawQuestions,
   });
 
   const requestPrompt = normalizeWhitespace(
@@ -687,13 +1078,19 @@ export function normalizeAssessmentGenerationRecord(
   const mode = normalizeAssessmentMode(
     record.request?.options?.mode ?? record.request?.mode,
   );
-  const rawQuestionTypes = normalizeQuestionTypes(record.request?.options?.questionTypes);
+  const rawQuestionTypes = normalizeQuestionTypes(
+    normalizedResultSeed?.selectedQuestionTypes
+    ?? record.request?.options?.questionTypes,
+  );
+  const inferredQuestionTypes = inferQuestionTypesFromQuestions(rawQuestions);
   const questionTypes =
     rawQuestionTypes.length > 0
       ? rawQuestionTypes
-      : [DEFAULT_ASSESSMENT_QUESTION_TYPE];
-  const rawQuestions = Array.isArray(record.questions) ? record.questions : [];
+      : (inferredQuestionTypes.length > 0
+          ? inferredQuestionTypes
+          : [DEFAULT_ASSESSMENT_QUESTION_TYPE]);
   const questionCount = normalizeQuestionCount(
+    normalizedResultSeed?.normalizedQuestionCount ??
     record.request?.options?.questionCount ??
       record.request?.questionCount ??
       record.meta?.questionCount ??
@@ -701,11 +1098,13 @@ export function normalizeAssessmentGenerationRecord(
     rawQuestions.length || 6,
   );
   const questionTypeDistribution = normalizeQuestionTypeDistribution(
-    record.request?.options?.questionTypeDistribution,
+    normalizedResultSeed?.requestedDistribution
+    ?? record.request?.options?.questionTypeDistribution,
     questionTypes,
   );
   const hasQuestionTypeMetadata =
     rawQuestionTypes.length > 0 ||
+    Array.isArray(normalizedResultSeed?.requestedDistribution) ||
     Array.isArray(record.request?.options?.questionTypeDistribution) ||
     rawQuestions.some(
       (question) =>
@@ -761,6 +1160,44 @@ export function normalizeAssessmentGenerationRecord(
   const normalizedOwnerUid = normalizeWhitespace(String(record.ownerUid || ""));
   const resolvedOwnerRole = normalizeOwnerRole(record.ownerRole) ?? options.resolvedOwnerRole;
   const normalizedArtifacts = normalizeAssessmentArtifacts(record.artifacts, normalizedOwnerUid);
+  const normalizedRawModelResult = normalizeAssessmentRawModelResult(
+    record.rawModelResult,
+    {
+      provider: record.meta?.provider === "qwen" ? "qwen" : model.provider,
+      requestedModelId:
+        normalizeOptionalString(record.request?.modelId)
+        ?? normalizeOptionalString(record.modelId)
+        ?? model.id,
+      canonicalModelId: model.id,
+      providerModelId:
+        normalizeOptionalString(record.rawModelResult?.providerModelId)
+        ?? model.id,
+      capturedAt: updatedAt,
+    },
+  );
+  const normalizedResult = buildAssessmentNormalizedResult({
+    language,
+    questionTypes,
+    questionTypeDistribution,
+    questions,
+    promptContractVersion:
+      normalizeOptionalString(normalizedResultSeed?.promptContractVersion)
+      ?? normalizedRawModelResult?.promptContractVersion,
+    normalizationVersion: normalizeOptionalString(
+      normalizedResultSeed?.normalizationVersion,
+    ),
+    renderModelVersion: normalizeOptionalString(
+      normalizedResultSeed?.renderModelVersion,
+    ),
+    sourceQuestionCount:
+      normalizeInteger(normalizedResultSeed?.sourceQuestionCount)
+      ?? extractRawModelQuestionCount(normalizedRawModelResult),
+    ignoredQuestionCount: normalizeInteger(normalizedResultSeed?.ignoredQuestionCount),
+    ignoredQuestionTypeKeys: normalizeStringArray(
+      normalizedResultSeed?.ignoredQuestionTypeKeys,
+    ),
+    seedNormalizedQuestions: rawNormalizedQuestions,
+  });
 
   const normalizedGeneration: AssessmentGeneration = {
     id: normalizedId,
@@ -778,19 +1215,20 @@ export function normalizeAssessmentGenerationRecord(
     previewRoute,
     resultRoute,
     request,
-    questions,
+    questions: normalizedResult.normalizedQuestions,
     meta: {
       summary:
         normalizeOptionalString(record.meta?.summary) ??
         buildAssessmentSummary({
           prompt: request.prompt,
           mode: request.options.mode,
-          questionCount: questions.length || questionCount,
+          questionCount:
+            normalizedResult.normalizedQuestions.length || questionCount,
           difficulty: request.options.difficulty,
           language: request.options.language,
           sourceDocument,
         }),
-      questionCount: questions.length || questionCount,
+      questionCount: normalizedResult.normalizedQuestions.length || questionCount,
       difficulty: request.options.difficulty,
       language: request.options.language,
       mode: request.options.mode,
@@ -804,6 +1242,8 @@ export function normalizeAssessmentGenerationRecord(
         buildAssessmentPromptPreview(request.prompt),
       sourceDocument,
     },
+    rawModelResult: normalizedRawModelResult,
+    normalizedResult,
     createdAt,
     updatedAt,
   };
@@ -816,6 +1256,10 @@ export function normalizeAssessmentGenerationRecord(
 
   if (normalizedArtifacts) {
     normalizedGeneration.artifacts = normalizedArtifacts;
+  }
+
+  if (!normalizedRawModelResult) {
+    delete normalizedGeneration.rawModelResult;
   }
 
   return normalizedGeneration;

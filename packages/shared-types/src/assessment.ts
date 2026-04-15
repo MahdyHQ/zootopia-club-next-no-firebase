@@ -5,6 +5,12 @@ import type { DocumentStatus, StorageDataClass, StorageLayoutVersion } from "./d
 export type AssessmentDifficulty = "easy" | "medium" | "hard";
 export type AssessmentGenerationStatus = "ready" | "expired";
 export type AssessmentInputMode = "prompt-only" | "text-context" | "pdf-file";
+export const ASSESSMENT_PROMPT_CONTRACT_VERSION =
+  "2026-04-15-assessment-json-v2";
+export const ASSESSMENT_NORMALIZATION_VERSION =
+  "2026-04-15-assessment-normalized-v2";
+export const ASSESSMENT_RENDER_MODEL_VERSION =
+  "2026-04-15-assessment-render-model-v2";
 export const ASSESSMENT_MODES = [
   "question_generation",
   "exam_generation",
@@ -101,6 +107,34 @@ export type AssessmentQuestionRenderBlockKind =
   | "list"
   | "pair-list";
 
+export type AssessmentQuestionAnswerMode =
+  | "choice"
+  | "boolean"
+  | "text"
+  | "term_definition"
+  | "comparison"
+  | "fill_blanks";
+
+export type AssessmentQuestionRenderVariant =
+  | "mcq_card"
+  | "true_false_card"
+  | "definition_card"
+  | "terminology_card"
+  | "short_answer_card"
+  | "fill_blanks_card"
+  | "comparison_card"
+  | "scientific_term_card";
+
+export type AssessmentQuestionExportVariant =
+  | "mcq_export"
+  | "true_false_export"
+  | "definition_export"
+  | "terminology_export"
+  | "short_answer_export"
+  | "fill_blanks_export"
+  | "comparison_export"
+  | "scientific_term_export";
+
 export interface AssessmentQuestionBlankSlot {
   index: number;
 }
@@ -110,6 +144,9 @@ export interface AssessmentQuestionBlankSlot {
    answer text, or science structuredData payloads that remain the primary source of truth. */
 export interface AssessmentQuestionRenderMetadata {
   renderer: AssessmentQuestionType;
+  answerMode: AssessmentQuestionAnswerMode;
+  renderVariant: AssessmentQuestionRenderVariant;
+  exportVariant: AssessmentQuestionExportVariant;
   responseMode:
     | "single_select"
     | "boolean"
@@ -168,6 +205,83 @@ export interface AssessmentQuestion {
   tags?: string[];
   structuredData?: AssessmentQuestionStructuredData;
   rendering?: AssessmentQuestionRenderMetadata;
+}
+
+/* Phase 2 stores the parsed provider JSON separately from the normalized question model.
+   Keep this payload focused on the model-returned JSON/body text and provider identifiers
+   so future re-normalization and debugging stay possible without persisting bulky HTTP envelopes. */
+export interface AssessmentRawModelResult {
+  provider: AiProviderId;
+  requestedModelId: string;
+  canonicalModelId: string;
+  providerModelId: string;
+  promptContractVersion: string;
+  responseMimeType: "application/json";
+  capturedAt: string;
+  responseText: string;
+  responseJson: unknown;
+}
+
+export interface AssessmentNormalizedQuestionSourceMetadata {
+  sourceType: string | null;
+  sourceDifficulty: string | number | null;
+  sourceDisplayOrder: number | null;
+  sourceSectionKey: string | null;
+  sourceSectionTitle: string | null;
+  answerMetadata?: Record<string, unknown> | null;
+}
+
+export interface AssessmentNormalizedQuestionGroupingMetadata {
+  sectionKey: string;
+  sectionTitle: string;
+  sectionType: AssessmentQuestionType;
+  sectionOrder: number;
+  requestedPercentage: number;
+}
+
+export interface AssessmentNormalizedQuestionOrderingMetadata {
+  displayOrder: number;
+  sectionOrder: number;
+  orderInSection: number;
+}
+
+export interface AssessmentNormalizedQuestionClassificationMetadata {
+  canonicalType: AssessmentQuestionType;
+  selectedType: AssessmentQuestionType;
+  isSelectedType: boolean;
+  normalizedDifficulty: AssessmentDifficulty;
+}
+
+export interface AssessmentNormalizedQuestion extends AssessmentQuestion {
+  source: AssessmentNormalizedQuestionSourceMetadata;
+  grouping: AssessmentNormalizedQuestionGroupingMetadata;
+  ordering: AssessmentNormalizedQuestionOrderingMetadata;
+  classification: AssessmentNormalizedQuestionClassificationMetadata;
+}
+
+export interface AssessmentNormalizedSection {
+  key: string;
+  type: AssessmentQuestionType;
+  title: string;
+  order: number;
+  requestedPercentage: number;
+  questionCount: number;
+}
+
+export interface AssessmentNormalizedResult {
+  promptContractVersion: string;
+  normalizationVersion: string;
+  renderModelVersion: string;
+  selectionFilterMode: "selected_types_only";
+  selectedQuestionTypes: AssessmentQuestionType[];
+  requestedDistribution: AssessmentQuestionTypeDistribution[];
+  sourceQuestionCount: number;
+  normalizedQuestionCount: number;
+  groupedDisplayQuestionCount: number;
+  ignoredQuestionCount: number;
+  ignoredQuestionTypeKeys: string[];
+  sections: AssessmentNormalizedSection[];
+  normalizedQuestions: AssessmentNormalizedQuestion[];
 }
 
 export interface AssessmentGenerationSourceDocument {
@@ -298,6 +412,8 @@ export interface AssessmentGeneration {
   request: AssessmentRequest;
   questions: AssessmentQuestion[];
   meta: AssessmentGenerationMeta;
+  rawModelResult?: AssessmentRawModelResult;
+  normalizedResult?: AssessmentNormalizedResult;
   artifacts?: Record<string, AssessmentArtifactRecord>;
   createdAt: string;
   updatedAt: string;

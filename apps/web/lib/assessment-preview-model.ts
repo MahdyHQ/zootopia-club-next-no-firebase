@@ -54,6 +54,12 @@ export interface AssessmentPreviewChoiceItem {
 export interface AssessmentPreviewQuestionItem {
   id: string;
   index: number;
+  displayOrder: number;
+  sectionKey: string | null;
+  sectionTitle: string;
+  sectionHeading: string;
+  sectionOrder: number;
+  startsSection: boolean;
   questionType: AssessmentQuestionType | null;
   typeLabel: string | null;
   difficulty: AssessmentDifficulty | null;
@@ -70,6 +76,15 @@ export interface AssessmentPreviewQuestionItem {
   answerDisplay: string;
   rationale: string | null;
   tags: string[];
+}
+
+export interface AssessmentPreviewQuestionSection {
+  key: string;
+  type: AssessmentQuestionType;
+  label: string;
+  heading: string;
+  order: number;
+  questions: AssessmentPreviewQuestionItem[];
 }
 
 export interface AssessmentPreviewFileSurface {
@@ -146,6 +161,7 @@ export interface NormalizedAssessmentPreview {
   expiresAtLabel: string;
   metadata: AssessmentPreviewMetadataItem[];
   compositionBadges: AssessmentPreviewCompositionBadge[];
+  questionSections: AssessmentPreviewQuestionSection[];
   questions: AssessmentPreviewQuestionItem[];
   fileSurface: AssessmentPreviewFileSurface;
   plainTextExport: string;

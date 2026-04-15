@@ -67,6 +67,8 @@ type AssessmentFileScienceBlockLike = {
 
 type AssessmentFileQuestionLike = {
   stem: string;
+  sectionHeading?: string | null;
+  startsSection?: boolean;
   questionType?: string | null;
   typeLabel?: string | null;
   difficultyLabel?: string | null;
@@ -93,6 +95,7 @@ const ASSESSMENT_FILE_MULTIPLE_RESPONSE_COMPLEXITY = 168;
 const ASSESSMENT_FILE_SCIENCE_BLOCK_COMPLEXITY = 160;
 const ASSESSMENT_FILE_SCIENCE_LIST_ITEM_COMPLEXITY = 64;
 const ASSESSMENT_FILE_SCIENCE_PAIR_ITEM_COMPLEXITY = 90;
+const ASSESSMENT_FILE_SECTION_HEADING_COMPLEXITY = 172;
 
 function estimateTextComplexity(text: string | null | undefined) {
   if (!text) {
@@ -171,6 +174,10 @@ function estimateQuestionComplexity(question: AssessmentFileQuestionLike) {
      and multiline copy here so future card enrichments still trigger earlier fallback instead of
      silently letting the footer escape onto the following page. */
   return (
+    (question.startsSection && question.sectionHeading
+      ? ASSESSMENT_FILE_SECTION_HEADING_COMPLEXITY +
+        estimateTextComplexity(question.sectionHeading)
+      : 0) +
     estimateTextComplexity(question.stem) +
     (question.typeLabel ? ASSESSMENT_FILE_LABEL_COMPLEXITY + estimateTextComplexity(question.typeLabel) : 0) +
     (question.difficultyLabel

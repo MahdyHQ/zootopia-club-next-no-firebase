@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  ASSESSMENT_PROMPT_CONTRACT_VERSION,
   ASSESSMENT_ACTIVE_QUESTION_TYPES,
   type AssessmentDifficulty,
   type AssessmentInputMode,
@@ -170,11 +171,18 @@ export function buildAssessmentPrompt(input: {
     "Tool: assessment",
     `Model lane: ${input.modelLabel}`,
     `Output contract: Return exactly ${input.questionCount} assessment items.`,
-    'JSON contract: Return valid JSON only with the shape {"summary": string, "questions": [{"type": string, "difficulty": string, "question": string, "answer": string, "rationale": string, "tags": string[], "structuredData": object}]}',
+    `JSON contract version: ${ASSESSMENT_PROMPT_CONTRACT_VERSION}.`,
+    'JSON contract: Return valid JSON only with the exact top-level shape {"contractVersion": string, "summary": string, "selectedQuestionTypes": string[], "requestedDistribution": [{"type": string, "percentage": number}], "questions": [{"type": string, "difficulty": string, "displayOrder": number, "sectionKey": string, "sectionTitle": string, "question": string, "answer": string, "rationale": string, "tags": string[], "structuredData": object, "answerMetadata": object}]}',
+    `ContractVersion rule: set contractVersion to ${ASSESSMENT_PROMPT_CONTRACT_VERSION}.`,
     `Type enum contract: type must be one of ${supportedTypeList}.`,
     `Difficulty enum contract: difficulty must be one of ${supportedDifficultyList}.`,
     "Strict metadata contract: every question object must include both type and difficulty; never omit either field.",
+    "Ordering contract: displayOrder must start at 1 and increase by 1 for each question.",
+    "Grouping contract: sectionKey must equal the canonical type id and sectionTitle must be the human-readable label for that same type.",
+    "Echo contract: selectedQuestionTypes and requestedDistribution must mirror the requested canonical ids/distribution exactly.",
     "Structured metadata contract: include structuredData only when fields are genuinely supported by the question content; never invent values.",
+    "Answer metadata contract: answerMetadata is optional but should be an object when provided. Use it for stable fields such as expectedResponses or blankSlots; otherwise return an empty object.",
+    "Renderer authority: do not invent renderVariant, exportVariant, or UI-only surface ids. The server derives renderer/export metadata from canonical type and structured data.",
     `Generation mode: ${describeAssessmentMode(input.mode)}`,
     `Language target: ${describeAssessmentLanguage(input.language)}`,
     `Difficulty target: ${describeAssessmentDifficulty(input.difficulty)}`,
@@ -183,6 +191,9 @@ export function buildAssessmentPrompt(input: {
     `Question types: ${input.questionTypes
       .map((type) => describeAssessmentQuestionType(type))
       .join(", ")}`,
+    "Selection authority: selected canonical type ids are authoritative for final grouped rendering and export.",
+    "Rendering filter contract: any question returned with an unsupported or unselected type will be ignored by the system.",
+    "Type restriction: do not return additional question types outside the selected canonical ids.",
     `Canonical type distribution: ${input.questionTypeDistribution
       .map((entry) => `${entry.type}=${entry.percentage}%`)
       .join(", ")}`,

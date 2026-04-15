@@ -5,6 +5,10 @@ import { listUsers } from "@/lib/server/repository";
 import { getAdminSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
+/* Admin user lists are mutable privileged records; keep this route fully dynamic so
+  access/session checks and user state are never served from route cache snapshots. */
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
   const user = await getAdminSessionUser();

@@ -4,6 +4,10 @@ import { getRuntimeFlags } from "@/lib/server/runtime";
 import { getAdminSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
+/* Admin overview payload includes mutable privileged data and must always resolve fresh
+  per request/session in server runtime; never allow ISR/route-cache reuse here. */
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
   const user = await getAdminSessionUser();

@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-14 (User password policy hardening + forgot/reset + in-account password change flow)
+Last Updated: 2026-04-15 (Protected-shell credit refresh coalescing + admin API dynamic cache guards)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -69,7 +69,7 @@ Domain Purpose: AI-powered document analysis, assessment generation, and
 2. CURRENT TRUTH SNAPSHOT
 ================================================================================
 
-As of 2026-04-14, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
+As of 2026-04-15, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
 using Supabase as the unified backend provider (Postgres database, Auth, Storage).
 
 Key verified facts:
@@ -106,6 +106,12 @@ Key verified facts:
   (default 24h, daily behavior preserved)
 - Admin credit mutations now persist durable per-user before/after history
   snapshots and are rendered on `/admin/users/[uid]`
+- Protected shell credit header refresh now coalesces concurrent trigger paths
+  (focus/visibility/event/interval) and skips hidden-tab interval polling to
+  reduce duplicate `/api/assessment/credits` requests
+- Admin overview/users API routes now explicitly declare dynamic runtime cache
+  behavior (`dynamic = "force-dynamic"`, `revalidate = 0`) in addition to
+  response-level no-store headers
 - Protected header and settings surfaces now share a compact local avatar policy
   (`admin` role override → managed `gender` asset → initial fallback)
 - Request-locale bootstrap now supports env-seeded first-load language via
@@ -818,6 +824,14 @@ Detached Preview/Footer Ownership:
   `apps/web/components/assessment/assessment-preview-page-footer.tsx`.
 - Result route keeps `apps/web/components/assessment/assessment-file-footer.tsx`
   as its shared footer owner.
+- Assessment preview/result/export grouping is now owned by normalized
+  `questionSections` from `apps/web/lib/server/assessment-preview.ts`; extra
+  provider-returned question types are tolerated in raw generation output but
+  filtered out of final grouped display/export surfaces.
+- Type-specific preview/result card ownership now lives in
+  `apps/web/components/assessment/renderers/*` with the grouped page shell in
+  `apps/web/components/assessment/assessment-grouped-view.tsx` and the switch
+  boundary in `apps/web/components/assessment/question-renderer-switch.tsx`.
 - Fast export HTML/footer ownership now lives in
   `apps/web/lib/server/assessment-fast-print-renderer.ts`.
 - Pro export HTML/footer ownership now lives in
@@ -4530,6 +4544,45 @@ Risks / Notes:
 
 ---
 
+2026-04-15 — Health/Performance Audit Pass + Credit Refresh Coalescing
+========================================================================
+Type: Performance hardening / cache intent clarity / server-boundary-safe optimization
+Scope: protected-shell credit polling path, admin mutable API cache declarations, ledger truth refresh
+
+Summary:
+- Completed full ledger-first and source-first audit workflow, then ran an Explore subagent for repository-wide health/performance findings before editing.
+- Validated findings directly in current source and applied only evidence-backed, low-risk fixes.
+- Reduced duplicate owner credit refresh requests in the protected shell by coalescing concurrent triggers into a single in-flight fetch and by skipping interval refreshes while tabs are hidden.
+- Hardened mutable admin API cache intent by explicitly marking admin overview/user-list routes as dynamic with no revalidation.
+- Preserved auth/session/admin/owner boundaries; no backend authority moved to the client.
+
+Files Changed:
+- apps/web/components/layout/protected-shell.tsx
+- apps/web/app/api/admin/overview/route.ts
+- apps/web/app/api/admin/users/route.ts
+- zootopia-club-next-ledger.txt
+
+Behavioral Changes:
+- Protected shell credit refresh:
+  - added in-flight request coalescing so simultaneous focus/visibility/event/interval triggers share one `/api/assessment/credits` request
+  - added summary equality guard to avoid unnecessary state updates/rerenders when credit payload values are unchanged
+  - interval refresh now skips background polling when `document.visibilityState !== "visible"`
+- Admin route cache guard clarity:
+  - `/api/admin/overview` now exports `dynamic = "force-dynamic"` and `revalidate = 0`
+  - `/api/admin/users` now exports `dynamic = "force-dynamic"` and `revalidate = 0`
+  - existing `applyNoStore(...)` response headers remain in place
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- This pass intentionally avoided broad repository or storage cleanup refactors to keep changes surgical and boundary-safe.
+- Existing stale editor diagnostics referencing historical renderer paths were not treated as build blockers in this pass because web typecheck/build succeeded against current source.
+
+---
+
 2026-04-14 — User Password Policy + Forgot/Reset + Settings Password Change Hardening
 ========================================================================================
 Type: Auth hardening / password lifecycle expansion / user-lane security boundary enforcement
@@ -4579,6 +4632,275 @@ Risks / Notes:
 
 ---
 
+2026-04-15 — Assessment Type-Oriented Rendering + Grouped Export Safety Completion
+===================================================================================
+Type: Assessment normalization hardening / grouped preview-export rendering / modular type-ownership completion
+Scope: normalized question metadata, grouped preview/result rendering, DOCX/Fast/Pro export grouping, page-budget safety, ledger truth refresh
+
+Summary:
+- Read the ledger first, reviewed the attached implementation guide as the source of truth, verified the live assessment request/prompt/normalization path in source, and used an explorer subagent before editing.
+- Confirmed the existing request pipeline already sends user-selected question types plus distribution to the backend and prompt orchestrator, so this pass stayed surgical and did not rewire auth, admin boundaries, owner-scope, or assessment generation ownership.
+- Completed the missing type-oriented rendering/export layer by making normalized preview data section-aware, adding modular renderer ownership per active type, and grouping preview/DOCX/Fast/Pro outputs by selected type only.
+- Preserved tolerance for imperfect model output: extra/unselected types remain ignored in final grouped display/export, and missing fields now degrade to safe blanks/placeholders instead of breaking viewer/export surfaces.
+
+What Was Already Verified As Current Before Editing:
+- UI request payload already sends canonical selected question types plus `questionTypeDistribution`.
+- Prompt orchestration already injects selected types and distribution into the model prompt.
+- Provider normalization already canonicalizes supported active types and skips explicit unsupported/unselected returned types instead of failing the whole generation.
+- `buildAssessmentPreview()` was already the correct server-authoritative seam for final selected-type filtering and grouped section generation.
+
+Files Changed:
+- `packages/shared-types/src/assessment.ts`
+- `apps/web/lib/assessment-question-display.ts`
+- `apps/web/lib/assessment-preview-model.ts`
+- `apps/web/lib/assessment-render-copy.ts`
+- `apps/web/lib/assessment-file-layout.ts`
+- `apps/web/lib/server/assessment-preview.ts`
+- `apps/web/components/assessment/assessment-result-viewer.tsx`
+- `apps/web/components/assessment/assessment-grouped-view.tsx`
+- `apps/web/components/assessment/question-renderer-switch.tsx`
+- `apps/web/components/assessment/question-section.tsx`
+- `apps/web/components/assessment/renderers/type-renderers.tsx`
+- `apps/web/components/assessment/renderers/rendering-primitives.tsx`
+- `apps/web/components/assessment/renderers/render-mcq.tsx`
+- `apps/web/components/assessment/renderers/render-true-false.tsx`
+- `apps/web/components/assessment/renderers/render-definition.tsx`
+- `apps/web/components/assessment/renderers/render-terminology.tsx`
+- `apps/web/components/assessment/renderers/render-short-answer.tsx`
+- `apps/web/components/assessment/renderers/render-fill-blanks.tsx`
+- `apps/web/components/assessment/renderers/render-comparison.tsx`
+- `apps/web/components/assessment/renderers/render-scientific-term.tsx`
+- `apps/web/lib/server/assessment-exporter.ts`
+- `apps/web/lib/server/assessment-fast-print-renderer.ts`
+- `apps/web/lib/server/assessment-pro-print-renderer.ts`
+- `zootopia-club-next-ledger.txt`
+
+Behavioral Changes:
+- Normalized metadata:
+  - `AssessmentQuestionRenderMetadata` now carries explicit `answerMode`, `renderVariant`, and `exportVariant` fields so rendering/export surfaces can branch by normalized backend-authored intent instead of reparsing raw text ad hoc.
+  - Preview question items now carry section metadata (`sectionKey`, `sectionTitle`, `sectionHeading`, `sectionOrder`, `displayOrder`, `startsSection`) so grouped rendering/export stays deterministic and selection-order-safe.
+  - Legacy or older persisted rendering payloads are re-hardened during preview shaping by merging fresh derived rendering metadata without changing the stored canonical question text/answer text.
+- Grouped preview/result rendering:
+  - Added dedicated grouped-view ownership:
+    - `assessment-grouped-view.tsx`
+    - `question-section.tsx`
+    - `question-renderer-switch.tsx`
+  - Added dedicated active-type renderer ownership:
+    - `render-mcq.tsx`
+    - `render-true-false.tsx`
+    - `render-definition.tsx`
+    - `render-terminology.tsx`
+    - `render-short-answer.tsx`
+    - `render-fill-blanks.tsx`
+    - `render-comparison.tsx`
+    - `render-scientific-term.tsx`
+  - Preview/result pages now render section headings only where the normalized section actually starts, which allows a section to continue onto a later page without duplicating headings on every continuation page.
+  - Missing prompt/answer/tag/supplemental data now falls back to stable blank-safe UI instead of crashing the page shell.
+- Grouped export behavior:
+  - DOCX export now iterates `preview.questionSections`, emits section headings, and uses type-aware answer labels from normalized question metadata.
+  - Fast and Pro HTML/PDF lanes now inject normalized section headings before the first question of each grouped type and keep heading-plus-first-card ownership inside a page-safe wrapper.
+  - Shared page-slot complexity budgeting now counts section-heading cost so the grouped export surface still protects against footer collisions and overflow regressions.
+
+Shared vs Isolated Ownership After This Pass:
+- Still shared / server-authoritative:
+  - request validation
+  - prompt orchestration
+  - provider normalization and selected-type filtering
+  - preview shaping in `apps/web/lib/server/assessment-preview.ts`
+  - page-budget math in `apps/web/lib/assessment-file-layout.ts`
+- Newly isolated by question type:
+  - active question-type preview/result card behavior under
+    `apps/web/components/assessment/renderers/*`
+- Still lane-isolated:
+  - Fast PDF/browser-print HTML in
+    `apps/web/lib/server/assessment-fast-print-renderer.ts`
+  - Pro PDF capture HTML in
+    `apps/web/lib/server/assessment-pro-print-renderer.ts`
+- Intentionally unchanged:
+  - auth and owner-scope guards
+  - admin separation
+  - assessment generation route ownership
+  - preview/result route ownership
+  - export route context/auth gating
+
+Verification:
+- `npm run lint:web`: pass
+- `npm run typecheck:web`: pass
+- `npm run build:web`: pass
+
+Verification Notes:
+- Initial sandboxed `typecheck`/`build` attempts hit Windows `EPERM` writes under `apps/web/.next` (`routes.d.ts`, `trace`) rather than application-type errors.
+- Re-running the verification commands with elevated filesystem permissions resolved the environment-level file-lock issue without additional code changes.
+- Elevated `typecheck` completed cleanly with `✓ Types generated successfully`.
+- Elevated `build` completed successfully on Next.js `16.2.2`; optimized production build, TypeScript pass, page-data collection, and route generation all finished successfully.
+
+Risks / Notes:
+- This pass intentionally did not widen the active generation catalog beyond the current canonical 8 active types; legacy types still remain supported at the normalization/render-metadata level for backward compatibility but are not reintroduced to the selection UI here.
+- Existing unrelated worktree changes outside this implementation area were left intact and not reverted.
+- The grouped export layout now depends on normalized section metadata staying authoritative; future agents should extend that server-owned metadata path first before changing viewer/export grouping behavior.
+
+---
+
+2026-04-15 — Assessment Type-Oriented System Strict Verification Audit
+========================================================================
+Type: Source-traced verification / AI-contract audit / Supabase persistence audit
+Scope: assessment request payload, prompt orchestration, provider JSON contract, normalized question model, grouped preview/export path, active persistence model
+
+Summary:
+- Performed a strict verification-only pass after reading the ledger and re-reading `Guide-Files/ASSESSMENT_TYPE_ORIENTED_RENDERING_AND_EXPORT_SYSTEM_GUIDE.md` as the source of truth.
+- Re-traced the live path from Assessment Studio submission through backend validation, prompt orchestration, provider execution, normalization, persistence, preview shaping, and DOCX/Fast/Pro export consumption.
+- No code changes were made in this pass; this entry records verified truth plus the remaining contract/persistence gaps.
+
+Verified Correct:
+- Selected canonical question types and `questionTypeDistribution` are sent from the client payload, validated on the backend, injected into the assessment prompt, and used to shape fallback generation sequence.
+- Prompt orchestration explicitly asks for valid JSON only, predictable question keys, canonical `type`, canonical `difficulty`, and type-aware `structuredData`; provider requests also force JSON-mode responses (`responseMimeType: "application/json"` for Google and `response_format: { type: "json_object" }` for Qwen).
+- Provider output is normalized into structured typed question records with `type`, `difficulty`, `tags`, `structuredData`, and lightweight render/export metadata (`answerMode`, `renderVariant`, `exportVariant`).
+- Final preview rendering is grouped by selected type only through `buildAssessmentPreview()` -> `buildQuestionSections()` -> `preview.questionSections` / `preview.questions`.
+- Extra or unselected provider-returned question types are skipped during normalization and therefore do not reach final grouped preview/export output.
+- Missing prompt/answer/rationale/tag/structured science fields degrade safely through normalization plus renderer-safe fallback helpers instead of crashing preview/export.
+- DOCX, Fast PDF, and Pro PDF all consume the normalized grouped preview path rather than raw provider text.
+- Shared page-budget logic counts grouped headings and card complexity, and both Fast/Pro HTML lanes keep the section heading attached to the first grouped question block to reduce footer-collision risk.
+
+Partially Correct / Still Weaker Than The Guide:
+- The AI result contract is structured and usable, but it is not yet as rich as the guide’s ideal professional record model:
+  - no persisted `rawModelResult`
+  - no separate persisted `normalizedQuestions` envelope distinct from the generation snapshot
+  - no persisted `renderModelVersion` / `normalizationVersion`
+  - no persisted section/group ordering fields on stored questions
+- The prompt contract is explicit JSON, but it does not ask the model for richer grouping/order/export metadata. Grouping remains derived server-side from selected-type order rather than being carried as first-class stored result metadata.
+- The persisted question contract is solid for current rendering/export, but future analytics/filtering/auditing will still depend on querying nested JSON blobs plus preview-time derivation instead of a richer dedicated result schema.
+- `short_answer` has a dedicated renderer file, but `question-renderer-switch.tsx` still reaches it through the default branch instead of an explicit `short_answer_card` case.
+
+False Assumptions Ruled Out:
+- It is false to assume raw provider/model output is stored in Supabase today. The raw provider payload is transient inside `apps/web/lib/server/ai/execution.ts` and is not persisted in the saved generation record or canonical-result artifact.
+- It is false to assume section metadata is stored in the durable assessment record. `sectionKey`, `sectionHeading`, `sectionOrder`, `displayOrder`, and `startsSection` are generated in the preview model, not saved in the core persisted question list.
+- It is false to assume the active Supabase persistence shape is a dedicated typed `assessment_generations` relational contract. The live repository uses the generic `zc_entities` JSONB document-store path (`collection("assessmentGenerations")`) for assessment generation persistence.
+
+Supabase Storage Reality:
+- Active persistence is backend-authoritative and owner-scoped, but it is still a JSON snapshot model:
+  - durable generation record saved via repository normalization into `zc_entities`
+  - optional canonical-result JSON artifact saved to private object storage
+  - export artifacts mirrored into artifact metadata records for lookup/caching
+- This is maintainable for the current product flow, but it is weaker than a richer, classification-first assessment result schema if future grouped analytics or structured querying become a core product requirement.
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+
+Risks / Notes:
+- Current architecture is strong on runtime normalization, grouped rendering, and export safety.
+- Current architecture is weaker on long-term raw-vs-normalized auditability and professional persistence richness because the saved assessment record remains one normalized generation snapshot instead of a richer versioned result envelope.
+- Future agents should treat the preview model as the current grouping authority, but should extend the persisted assessment contract first if analytics, auditing, or advanced filtering become first-class requirements.
+
+---
+
+2026-04-15 — Assessment Phase 2 Contract Hardening (Raw Model Persistence + Versioned Normalized Result)
+=========================================================================================================
+Type: Backend contract hardening / persistence-model enrichment / prompt-contract strengthening / Supabase index enhancement
+Scope: shared assessment types, assessment prompt orchestration, assessment execution persistence, assessment record normalization, Supabase `zc_entities` assessment-generation indexes
+
+Summary:
+- Completed the requested Phase 2 hardening pass without rewriting the working preview/export/auth/owner/admin flow.
+- Persisted a new `rawModelResult` alongside each generated assessment so the saved record now retains the parsed model-returned JSON and raw JSON text for debugging, auditability, and future re-normalization.
+- Added a richer versioned `normalizedResult` envelope that stores backend-authored grouped/orderable/classification-ready assessment metadata while preserving the existing top-level `questions` and `meta` compatibility contract.
+- Strengthened the AI prompt JSON contract to request a professional structured payload with explicit stable keys (`contractVersion`, `selectedQuestionTypes`, `requestedDistribution`, `displayOrder`, `sectionKey`, `sectionTitle`, `answerMetadata`) while keeping renderer/export ownership server-side.
+- Kept Supabase persistence on the active `zc_entities` model and added a narrow migration for new assessment-generation result/version indexes instead of introducing a risky new table.
+
+Files Changed:
+- packages/shared-types/src/assessment.ts
+- apps/web/lib/server/ai/prompt-orchestrator.ts
+- apps/web/lib/server/ai/execution.ts
+- apps/web/lib/server/assessment-records.ts
+- supabase/migrations/20260415120000_assessment_generation_phase2_contract_indexes.sql
+- zootopia-club-next-ledger.txt
+
+What Was Added:
+- Shared contract hardening:
+  - added version constants:
+    - `ASSESSMENT_PROMPT_CONTRACT_VERSION`
+    - `ASSESSMENT_NORMALIZATION_VERSION`
+    - `ASSESSMENT_RENDER_MODEL_VERSION`
+  - added `AssessmentRawModelResult`
+  - added `AssessmentNormalizedResult`
+  - added `AssessmentNormalizedQuestion`
+  - added normalized section/group/order/classification/source metadata interfaces
+  - extended `AssessmentGeneration` with optional:
+    - `rawModelResult`
+    - `normalizedResult`
+- Prompt contract hardening:
+  - prompt now explicitly asks the model for versioned JSON with exact predictable top-level keys
+  - prompt now requests:
+    - echoed `selectedQuestionTypes`
+    - echoed `requestedDistribution`
+    - per-question `displayOrder`
+    - per-question `sectionKey`
+    - per-question `sectionTitle`
+    - optional `answerMetadata`
+  - prompt explicitly forbids hallucinated UI-only renderer/export ids and keeps render/export authority on the backend
+- Execution/persistence hardening:
+  - provider execution now captures both:
+    - parsed provider payload
+    - raw JSON text returned by the model
+  - `generateAssessment(...)` now persists:
+    - `rawModelResult`
+    - backend-authored `normalizedResult`
+  - normalization now records ignored/unselected returned type keys/counts instead of discarding that fact completely
+  - persisted top-level `questions` now come from `normalizedResult.normalizedQuestions`, so preview/export continue to read the stable legacy field while benefiting from the richer model
+- Record readback hardening:
+  - `normalizeAssessmentGenerationRecord(...)` now preserves and normalizes:
+    - `rawModelResult`
+    - `normalizedResult`
+  - readback prefers persisted normalized questions when present
+  - older rows are backfilled safely into the new normalized contract from legacy `questions`/`meta`/`request`
+  - missing request question-type metadata now degrades more safely by inferring available types from saved questions before falling back to the default type
+- Supabase schema/storage hardening:
+  - stayed on the live `zc_entities` persistence model
+  - added targeted partial indexes for `assessmentGenerations` on:
+    - `rawModelResult.provider`
+    - `normalizedResult.promptContractVersion`
+    - `normalizedResult.normalizationVersion`
+    - `normalizedResult.renderModelVersion`
+    - `normalizedResult.selectedQuestionTypes` (GIN)
+
+What Stayed Shared vs Isolated:
+- Shared / preserved:
+  - repository save/load ownership
+  - owner-scope enforcement
+  - admin/user separation
+  - preview/result route ownership
+  - DOCX export path
+  - Fast PDF export path
+  - Pro PDF export path
+  - canonical-result artifact behavior
+- Isolated to Phase 2:
+  - richer assessment result contract
+  - prompt JSON contract wording
+  - execution-time raw-model capture
+  - record normalization/backfill logic
+  - additive Supabase indexing
+
+Backward Compatibility Notes:
+- Existing top-level `questions` and `meta` were not removed.
+- Existing preview/export consumers continue to work because they still read `generation.questions`, which is now fed from the richer normalized model.
+- Existing saved generations without `rawModelResult` or `normalizedResult` are normalized safely on read.
+- No UI redesign was introduced.
+- No auth, owner-scope, admin separation, or export-route authority moved to the client.
+- No new dedicated relational assessment-results table was introduced in this pass.
+- `supabase` CLI was not available in this workspace on 2026-04-15, so the migration file was added manually using the repo’s existing timestamped migration pattern.
+
+Verification:
+- `npm run lint`: pass
+- `npm run typecheck`: pass
+- `npm run build`: pass
+
+Risks / Notes:
+- `rawModelResult` now persists the parsed model JSON and raw JSON text, but it intentionally does not store full HTTP envelopes or duplicated document-context strings to avoid bloating both `zc_entities` rows and canonical-result artifacts.
+- Grouped preview/export rendering code was intentionally left stable in Phase 2; the richer contract is threaded underneath the existing successful display/export path rather than forcing a UI rewrite.
+- Future analytics/reporting work should prefer extending the new `normalizedResult` contract and its indexes before introducing any parallel assessment-result shape.
+
+---
+
 NOTE: This ledger is a living document. Future agents should append new dated
 entries to the Historical Change Log section and update relevant sections as
 the project evolves. Do not delete genuine historical entries. Preserve
@@ -4587,4 +4909,3 @@ chronology. Mark outdated assumptions as superseded or legacy when appropriate.
 ================================================================================
 END OF LEDGER
 ================================================================================
-

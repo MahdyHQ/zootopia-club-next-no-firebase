@@ -1,21 +1,26 @@
 import "server-only";
 
 import { findModelForTool } from "@zootopia/shared-config";
-import type {
-  AssessmentDifficulty,
-  AssessmentGeneration,
-  AssessmentGenerationSourceDocument,
-  AssessmentInputMode,
-  AssessmentQuestion,
-  AssessmentQuestionType,
-  AssessmentQuestionTypeDistribution,
-  AssessmentRequest,
-  AiModelDescriptor,
-  InfographicGeneration,
-  InfographicGenerationSourceDocument,
-  InfographicRequest,
-  Locale,
-  UserRole,
+import {
+  ASSESSMENT_NORMALIZATION_VERSION,
+  ASSESSMENT_PROMPT_CONTRACT_VERSION,
+  ASSESSMENT_RENDER_MODEL_VERSION,
+  type AssessmentDifficulty,
+  type AssessmentGeneration,
+  type AssessmentNormalizedQuestion,
+  type AssessmentGenerationSourceDocument,
+  type AssessmentInputMode,
+  type AssessmentQuestion,
+  type AssessmentQuestionType,
+  type AssessmentQuestionTypeDistribution,
+  type AssessmentRequest,
+  type AssessmentRawModelResult,
+  type AiModelDescriptor,
+  type InfographicGeneration,
+  type InfographicGenerationSourceDocument,
+  type InfographicRequest,
+  type Locale,
+  type UserRole,
 } from "@zootopia/shared-types";
 import { normalizeMultilineWhitespace, normalizeWhitespace } from "@zootopia/shared-utils";
 import { randomUUID } from "node:crypto";
@@ -31,6 +36,7 @@ import {
   resolveAssessmentQuestionStructuredData,
 } from "@/lib/assessment-question-display";
 import {
+  buildAssessmentNormalizedResult,
   buildAssessmentPromptPreview,
   buildAssessmentSummary,
   buildAssessmentTitle,
@@ -112,11 +118,18 @@ type ProviderAssessmentQuestion = {
   difficulty?: string | number;
   level?: string | number;
   difficulty_level?: string | number;
+  displayOrder?: string | number;
+  order?: string | number;
+  sectionKey?: string;
+  sectionTitle?: string;
+  groupKey?: string;
+  groupTitle?: string;
   question?: string;
   answer?: string;
   rationale?: string;
   tags?: string[] | string;
   structuredData?: unknown;
+  answerMetadata?: unknown;
   expectedTerm?: unknown;
   acceptableVariants?: unknown;
   concept?: unknown;
@@ -143,8 +156,29 @@ type ProviderAssessmentQuestion = {
 };
 
 type ProviderAssessmentPayload = {
+  contractVersion?: string;
   summary?: string;
+  selectedQuestionTypes?: string[];
+  requestedDistribution?: Array<{
+    type?: string;
+    percentage?: number;
+  }>;
   questions?: ProviderAssessmentQuestion[] | string[];
+};
+
+type AssessmentProviderExecutionResult = {
+  payload: ProviderAssessmentPayload;
+  rawModelResult: AssessmentRawModelResult;
+};
+
+type AssessmentNormalizedQuestionBuildResult = {
+  questions: AssessmentQuestion[];
+  seedNormalizedQuestions: Array<
+    Pick<AssessmentNormalizedQuestion, "id" | "source">
+  >;
+  sourceQuestionCount: number;
+  ignoredQuestionCount: number;
+  ignoredQuestionTypeKeys: string[];
 };
 
 type GoogleProviderResponse = {
@@ -241,9 +275,13 @@ function normalizeAssessmentQuestionType(value: unknown): AssessmentQuestionType
     case "mcq":
       return "mcq";
     case "true_false":
+    case "true_false_question":
     case "truefalse":
+    case "tf":
       return "true_false";
     case "fill_blanks":
+    case "fill_blank":
+    case "fill_in_the_blank":
     case "fill_in_the_blanks":
     case "fill_in_blanks":
       return "fill_blanks";
@@ -251,8 +289,10 @@ function normalizeAssessmentQuestionType(value: unknown): AssessmentQuestionType
     case "shortanswer":
       return "short_answer";
     case "terminology":
+    case "term":
       return "terminology";
     case "scientific_term":
+    case "scientificterm":
     case "scientific_terms":
     case "term_identification":
     case "identify_term":
@@ -870,6 +910,76 @@ function normalizeProviderTags(
   return language === "ar" ? ["مراجعة"] : ["review"];
 }
 
+function normalizeProviderInteger(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.trunc(parsed);
+    }
+  }
+
+  return null;
+}
+
+function normalizeProviderAnswerMetadata(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+/* This seed captures provider-authored classification/group/order hints without letting the
+   model own final renderer/export behavior. The persisted normalizedResult can keep these
+   source hints for audit/re-normalization while backend normalization stays authoritative. */
+function buildProviderQuestionSourceSeed(input: {
+  question: ProviderAssessmentQuestion | string;
+  normalizedQuestionId: string;
+}) {
+  if (typeof input.question === "string") {
+    return {
+      id: input.normalizedQuestionId,
+      source: {
+        sourceType: null,
+        sourceDifficulty: null,
+        sourceDisplayOrder: null,
+        sourceSectionKey: null,
+        sourceSectionTitle: null,
+        answerMetadata: null,
+      },
+    } satisfies Pick<AssessmentNormalizedQuestion, "id" | "source">;
+  }
+
+  return {
+    id: input.normalizedQuestionId,
+    source: {
+      sourceType: normalizeWhitespace(String(input.question.type || "")) || null,
+      sourceDifficulty:
+        input.question.difficulty ??
+        input.question.difficulty_level ??
+        input.question.level ??
+        null,
+      sourceDisplayOrder:
+        normalizeProviderInteger(
+          input.question.displayOrder ?? input.question.order,
+        ),
+      sourceSectionKey:
+        normalizeWhitespace(
+          String(input.question.sectionKey ?? input.question.groupKey ?? ""),
+        ) || null,
+      sourceSectionTitle:
+        normalizeWhitespace(
+          String(input.question.sectionTitle ?? input.question.groupTitle ?? ""),
+        ) || null,
+      answerMetadata: normalizeProviderAnswerMetadata(input.question.answerMetadata),
+    },
+  } satisfies Pick<AssessmentNormalizedQuestion, "id" | "source">;
+}
+
 function buildProviderStructuredDataPayload(
   question: ProviderAssessmentQuestion,
 ): Record<string, unknown> | undefined {
@@ -918,6 +1028,7 @@ function normalizeProviderQuestion(input: {
   fallback: AssessmentQuestion;
   index: number;
   language: Locale;
+  resolvedTypeOverride?: AssessmentQuestionType;
 }): AssessmentQuestion {
   if (typeof input.question === "string") {
     const normalizedQuestion =
@@ -946,7 +1057,9 @@ function normalizeProviderQuestion(input: {
   }
 
   const resolvedType =
-    normalizeAssessmentQuestionType(input.question.type) ?? input.fallback.type;
+    input.resolvedTypeOverride
+    ?? normalizeAssessmentQuestionType(input.question.type)
+    ?? input.fallback.type;
   const normalizedQuestion =
     normalizeMultilineWhitespace(String(input.question.question || "")) ||
     input.fallback.question;
@@ -1005,7 +1118,7 @@ function buildNormalizedAssessmentQuestions(input: {
   ownerUid?: string;
   sessionLane?: "admin" | "user";
   requestLane?: "admin" | "user";
-}) {
+}): AssessmentNormalizedQuestionBuildResult {
   const fallbackQuestions = buildFallbackAssessmentQuestions({
     prompt: input.prompt,
     orchestrationPrompt: input.orchestrationPrompt,
@@ -1019,6 +1132,9 @@ function buildNormalizedAssessmentQuestions(input: {
   const providerQuestions = Array.isArray(input.payload.questions)
     ? input.payload.questions
     : [];
+  const selectedTypeSet = new Set(
+    input.questionTypeDistribution.map((entry) => entry.type),
+  );
 
   if (providerQuestions.length === 0) {
     throw createAssessmentExecutionError({
@@ -1040,22 +1156,85 @@ function buildNormalizedAssessmentQuestions(input: {
     });
   }
 
-  const normalizedQuestions = providerQuestions
-    .slice(0, input.questionCount)
-    .map((question, index) =>
-      normalizeProviderQuestion({
-        question,
-        fallback: fallbackQuestions[index]!,
-        index,
-        language: input.language,
+  const normalizedQuestions: AssessmentQuestion[] = [];
+  const normalizedQuestionSeeds: Array<
+    Pick<AssessmentNormalizedQuestion, "id" | "source">
+  > = [];
+  const ignoredQuestionTypeKeys: string[] = [];
+  let ignoredQuestionCount = 0;
+
+  for (const providerQuestion of providerQuestions) {
+    if (normalizedQuestions.length >= input.questionCount) {
+      break;
+    }
+
+    const fallbackQuestion = fallbackQuestions[normalizedQuestions.length];
+    if (!fallbackQuestion) {
+      break;
+    }
+
+    let resolvedTypeOverride: AssessmentQuestionType | undefined;
+
+    if (typeof providerQuestion !== "string") {
+      const declaredType = normalizeWhitespace(
+        String(providerQuestion.type || ""),
+      );
+
+      if (declaredType) {
+        const normalizedDeclaredType = normalizeAssessmentQuestionType(
+          providerQuestion.type,
+        );
+
+        /* User-selected types are authoritative. If the model explicitly returns
+           an unsupported/unselected type, skip only that question and keep the flow
+           alive by backfilling from deterministic fallback content later. */
+        if (!normalizedDeclaredType || !selectedTypeSet.has(normalizedDeclaredType)) {
+          ignoredQuestionCount += 1;
+          ignoredQuestionTypeKeys.push(
+            normalizedDeclaredType ?? declaredType.toLowerCase(),
+          );
+          continue;
+        }
+
+        resolvedTypeOverride = normalizedDeclaredType;
+      }
+    }
+
+    const normalizedQuestion = normalizeProviderQuestion({
+      question: providerQuestion,
+      fallback: fallbackQuestion,
+      index: normalizedQuestions.length,
+      language: input.language,
+      resolvedTypeOverride,
+    });
+
+    normalizedQuestions.push(normalizedQuestion);
+    normalizedQuestionSeeds.push(
+      buildProviderQuestionSourceSeed({
+        question: providerQuestion,
+        normalizedQuestionId: normalizedQuestion.id,
       }),
     );
-
-  while (normalizedQuestions.length < input.questionCount) {
-    normalizedQuestions.push(fallbackQuestions[normalizedQuestions.length]!);
   }
 
-  return normalizedQuestions;
+  while (normalizedQuestions.length < input.questionCount) {
+    const fallbackQuestion = fallbackQuestions[normalizedQuestions.length]!;
+    normalizedQuestions.push(fallbackQuestion);
+    normalizedQuestionSeeds.push(
+      buildProviderQuestionSourceSeed({
+        question: fallbackQuestion.question,
+        normalizedQuestionId: fallbackQuestion.id,
+      }),
+    );
+  }
+
+  return {
+    questions: normalizedQuestions,
+    seedNormalizedQuestions: normalizedQuestionSeeds,
+    sourceQuestionCount: providerQuestions.length,
+    ignoredQuestionCount,
+    ignoredQuestionTypeKeys: [...new Set(ignoredQuestionTypeKeys)],
+  };
 }
 
 function extractQwenContentText(content: unknown) {
@@ -1412,7 +1591,7 @@ async function executeGoogleAssessmentModel(input: {
   ownerUid?: string;
   sessionLane?: "admin" | "user";
   requestLane?: "admin" | "user";
-}) {
+}): Promise<AssessmentProviderExecutionResult> {
   const contextBase: AssessmentExecutionContextBase = {
     modelId: input.requestedModelId,
     canonicalModelId: input.canonicalModelId,
@@ -1563,8 +1742,10 @@ async function executeGoogleAssessmentModel(input: {
     });
   }
 
+  let parsedPayload: ProviderAssessmentPayload;
+
   try {
-    return parseProviderAssessmentPayload(responseText);
+    parsedPayload = parseProviderAssessmentPayload(responseText);
   } catch {
     throw createAssessmentExecutionError({
       code: "ASSESSMENT_PROVIDER_RESPONSE_INVALID",
@@ -1578,6 +1759,21 @@ async function executeGoogleAssessmentModel(input: {
       },
     });
   }
+
+  return {
+    payload: parsedPayload,
+    rawModelResult: {
+      provider: "google",
+      requestedModelId: input.requestedModelId,
+      canonicalModelId: input.canonicalModelId,
+      providerModelId: input.runtime.providerModel,
+      promptContractVersion: ASSESSMENT_PROMPT_CONTRACT_VERSION,
+      responseMimeType: "application/json",
+      capturedAt: new Date().toISOString(),
+      responseText,
+      responseJson: parsedPayload,
+    },
+  };
 }
 
 async function executeQwenAssessmentModel(input: {
@@ -1589,7 +1785,7 @@ async function executeQwenAssessmentModel(input: {
   ownerUid?: string;
   sessionLane?: "admin" | "user";
   requestLane?: "admin" | "user";
-}) {
+}): Promise<AssessmentProviderExecutionResult> {
   const contextBase: AssessmentExecutionContextBase = {
     modelId: input.requestedModelId,
     canonicalModelId: input.canonicalModelId,
@@ -1739,8 +1935,10 @@ async function executeQwenAssessmentModel(input: {
     });
   }
 
+  let parsedPayload: ProviderAssessmentPayload;
+
   try {
-    return parseProviderAssessmentPayload(responseText);
+    parsedPayload = parseProviderAssessmentPayload(responseText);
   } catch {
     throw createAssessmentExecutionError({
       code: "ASSESSMENT_PROVIDER_RESPONSE_INVALID",
@@ -1754,6 +1952,21 @@ async function executeQwenAssessmentModel(input: {
       },
     });
   }
+
+  return {
+    payload: parsedPayload,
+    rawModelResult: {
+      provider: "qwen",
+      requestedModelId: input.requestedModelId,
+      canonicalModelId: input.canonicalModelId,
+      providerModelId: input.runtime.providerModel,
+      promptContractVersion: ASSESSMENT_PROMPT_CONTRACT_VERSION,
+      responseMimeType: "application/json",
+      capturedAt: new Date().toISOString(),
+      responseText,
+      responseJson: parsedPayload,
+    },
+  };
 }
 
 const LEGACY_ASSESSMENT_MODEL_ID_ALIASES: Record<string, string> = {
@@ -1780,7 +1993,7 @@ async function executeAssessmentModel(input: {
   ownerUid?: string;
   sessionLane?: "admin" | "user";
   requestLane?: "admin" | "user";
-}) {
+}): Promise<AssessmentProviderExecutionResult> {
   switch (input.model.id) {
     case "gemini-3.1-flash-lite-preview":
       return executeGoogleAssessmentModel({
@@ -1889,7 +2102,7 @@ export async function generateAssessment(input: {
     providerConfigured: providerRuntime.configured,
   });
 
-  const providerPayload = await executeAssessmentModel({
+  const providerExecution = await executeAssessmentModel({
     model,
     runtime: providerRuntime,
     prompt: orchestratedPrompt,
@@ -1904,8 +2117,8 @@ export async function generateAssessment(input: {
   /* Route-level idempotency can inject a deterministic generation id so replayed requests
      converge on one persisted record without double-consuming credits. */
   const generationId = input.generationId ?? randomUUID();
-  const questions = buildNormalizedAssessmentQuestions({
-    payload: providerPayload,
+  const normalizedQuestionBuild = buildNormalizedAssessmentQuestions({
+    payload: providerExecution.payload,
     prompt: canonicalRequest.prompt,
     orchestrationPrompt: orchestratedPrompt,
     questionCount: canonicalRequest.options.questionCount,
@@ -1921,7 +2134,26 @@ export async function generateAssessment(input: {
     sessionLane: input.sessionLane,
     requestLane: input.requestLane,
   });
-  const providerSummary = normalizeWhitespace(String(providerPayload.summary || ""));
+  const questions = normalizedQuestionBuild.questions;
+  /* Persist both the raw model JSON and a backend-authored normalizedResult so future preview,
+     export, debugging, and re-normalization work can read one rich stored contract without
+     rebuilding semantics from loose text blobs on every request. */
+  const normalizedResult = buildAssessmentNormalizedResult({
+    language: canonicalRequest.options.language,
+    questionTypes: canonicalRequest.options.questionTypes,
+    questionTypeDistribution: canonicalRequest.options.questionTypeDistribution,
+    questions,
+    promptContractVersion: providerExecution.rawModelResult.promptContractVersion,
+    normalizationVersion: ASSESSMENT_NORMALIZATION_VERSION,
+    renderModelVersion: ASSESSMENT_RENDER_MODEL_VERSION,
+    sourceQuestionCount: normalizedQuestionBuild.sourceQuestionCount,
+    ignoredQuestionCount: normalizedQuestionBuild.ignoredQuestionCount,
+    ignoredQuestionTypeKeys: normalizedQuestionBuild.ignoredQuestionTypeKeys,
+    seedNormalizedQuestions: normalizedQuestionBuild.seedNormalizedQuestions,
+  });
+  const providerSummary = normalizeWhitespace(
+    String(providerExecution.payload.summary || ""),
+  );
 
   return {
     id: generationId,
@@ -1938,7 +2170,7 @@ export async function generateAssessment(input: {
     previewRoute: buildAssessmentPreviewRoute(generationId),
     resultRoute: buildAssessmentResultRoute(generationId),
     request: canonicalRequest,
-    questions,
+    questions: normalizedResult.normalizedQuestions,
     meta: {
       summary:
         providerSummary ||
@@ -1962,6 +2194,8 @@ export async function generateAssessment(input: {
       promptPreview: buildAssessmentPromptPreview(canonicalRequest.prompt),
       sourceDocument: input.sourceDocument ?? null,
     },
+    rawModelResult: providerExecution.rawModelResult,
+    normalizedResult,
     createdAt: timestamp,
     updatedAt: timestamp,
   };

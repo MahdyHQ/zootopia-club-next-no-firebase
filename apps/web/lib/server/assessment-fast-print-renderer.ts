@@ -16,6 +16,10 @@ import {
   resolveTrueFalseAnswerValue,
   splitMultipleResponseAnswers,
 } from "@/lib/assessment-question-display";
+import {
+  getTypeAwareAnswerLabel,
+  localizeAssessmentCopy as localizeCopy,
+} from "@/lib/assessment-render-copy";
 
 /* This file owns the Fast browser-print HTML surface that users save to PDF from the browser.
    It preserves the former shared renderer design as the Fast lane's source of truth so future
@@ -99,7 +103,7 @@ export function buildAssessmentFastPrintRenderDiagnostics(input: {
     metadataCount: input.preview.metadata.length,
     questionCount: input.preview.questions.length,
     questionPageCount: renderedQuestionPageCount,
-    sectionCount: renderedQuestionPageCount + 1,
+    sectionCount: input.preview.questionSections.length + 1,
   };
 }
 
@@ -138,51 +142,6 @@ function renderChoiceItem(input: {
       ${correctBadge}
     </div>
   `.trim();
-}
-
-function localizeCopy(locale: NormalizedAssessmentPreview["contentLanguage"], en: string, ar: string) {
-  return locale === "ar" ? ar : en;
-}
-
-function getTypeAwareAnswerLabel(input: {
-  locale: NormalizedAssessmentPreview["contentLanguage"];
-  questionType: AssessmentPreviewQuestionItem["questionType"];
-  fallback: string;
-}) {
-  switch (input.questionType) {
-    case "essay":
-      return localizeCopy(input.locale, "Model answer / guidance", "إرشاد الإجابة المقالية");
-    case "short_answer":
-      return localizeCopy(input.locale, "Expected short answer", "الإجابة القصيرة المتوقعة");
-    case "matching":
-      return localizeCopy(input.locale, "Correct matching", "التوصيل الصحيح");
-    case "multiple_response":
-      return localizeCopy(input.locale, "Correct options", "الخيارات الصحيحة");
-    case "terminology":
-      return localizeCopy(input.locale, "Expected term", "المصطلح المتوقع");
-    case "definition":
-      return localizeCopy(input.locale, "Expected definition", "التعريف المتوقع");
-    case "comparison":
-      return localizeCopy(input.locale, "Comparison guidance", "إرشاد المقارنة");
-    case "labeling":
-      return localizeCopy(input.locale, "Labeling key", "مفتاح التسمية");
-    case "classification":
-      return localizeCopy(input.locale, "Classification key", "مفتاح التصنيف");
-    case "sequencing":
-      return localizeCopy(input.locale, "Expected sequence", "التسلسل المتوقع");
-    case "process_mechanism":
-      return localizeCopy(input.locale, "Mechanism guidance", "إرشاد الآلية");
-    case "cause_effect":
-      return localizeCopy(input.locale, "Cause-effect mapping", "خريطة السبب والنتيجة");
-    case "distinguish_between":
-      return localizeCopy(input.locale, "Distinguishing points", "نقاط التمييز");
-    case "identify_structure":
-      return localizeCopy(input.locale, "Structure identification", "تحديد البنية");
-    case "identify_compound":
-      return localizeCopy(input.locale, "Compound identification", "تحديد المركب");
-    default:
-      return input.fallback;
-  }
 }
 
 function renderScienceBlock(input: {
@@ -457,6 +416,45 @@ function renderQuestionCard(input: {
     .trim();
 }
 
+function renderQuestionSectionHeading(heading: string) {
+  return `
+    <div class="question-section-heading">${escapeHtml(heading)}</div>
+  `.trim();
+}
+
+function renderQuestionStackCards(input: {
+  questions: AssessmentPreviewQuestionItem[];
+  answerLabel: string;
+  rationaleLabel: string;
+  contentLanguage: NormalizedAssessmentPreview["contentLanguage"];
+  className: string;
+}) {
+  /* Section headings must travel with the same normalized page-question list used for preview.
+     Keep this wrapper in the Fast lane so grouped type headings stay attached to their first card
+     without creating a second pagination model outside the shared page-slot budget helper. */
+  return input.questions
+    .map((question) => {
+      const sectionHeading =
+        question.startsSection && question.sectionHeading
+          ? renderQuestionSectionHeading(question.sectionHeading)
+          : "";
+
+      return `
+        <div class="question-section-block">
+          ${sectionHeading}
+          ${renderQuestionCard({
+            question,
+            answerLabel: input.answerLabel,
+            rationaleLabel: input.rationaleLabel,
+            contentLanguage: input.contentLanguage,
+            className: input.className,
+          })}
+        </div>
+      `.trim();
+    })
+    .join("\n");
+}
+
 function renderSupportPill(text: string, className = "support-chip") {
   return `<span class="${className}">${escapeHtml(text)}</span>`;
 }
@@ -631,17 +629,13 @@ export function buildAssessmentFastPrintHtml(input: {
     usesOverflowFallback: false,
   };
   const followingQuestionPages = questionPages.slice(1);
-  const firstPageQuestionCards = firstQuestionPage.questions
-    .map((question) =>
-      renderQuestionCard({
-        question,
-        answerLabel,
-        rationaleLabel,
-        contentLanguage,
-        className: "question-card--first-page",
-      }),
-    )
-    .join("\n");
+  const firstPageQuestionCards = renderQuestionStackCards({
+    questions: firstQuestionPage.questions,
+    answerLabel,
+    rationaleLabel,
+    contentLanguage,
+    className: "question-card--first-page",
+  });
   /* Keep each paged body separate from its footer row so both PDF lanes can reserve a true
      footer slot instead of letting dense question content spill the footer into the next sheet. */
   const followingQuestionPageSections = followingQuestionPages
@@ -652,17 +646,13 @@ export function buildAssessmentFastPrintHtml(input: {
         <section class="page-section page-section--question">
           <div class="page-section-body page-section-body--question">
             <section class="question-page-stack">
-              ${page.questions
-                .map((question) =>
-                  renderQuestionCard({
-                    question,
-                    answerLabel,
-                    rationaleLabel,
-                    contentLanguage,
-                    className: "question-card--compact",
-                  }),
-                )
-                .join("\n")}
+              ${renderQuestionStackCards({
+                questions: page.questions,
+                answerLabel,
+                rationaleLabel,
+                contentLanguage,
+                className: "question-card--compact",
+              })}
             </section>
             ${
               page.usesOverflowFallback
@@ -1153,6 +1143,26 @@ export function buildAssessmentFastPrintHtml(input: {
       .question-page-stack {
         display: grid;
         gap: 5px;
+      }
+
+      .question-section-block {
+        display: grid;
+        gap: 5px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .question-section-heading {
+        border: 1px solid ${dark ? "rgba(125, 211, 252, 0.22)" : "rgba(165, 243, 252, 0.92)"};
+        border-radius: 11px;
+        padding: 7px 10px;
+        background: ${dark
+          ? "linear-gradient(180deg, rgba(8, 145, 178, 0.18), rgba(5, 15, 28, 0.34))"
+          : "linear-gradient(180deg, rgba(236, 254, 255, 0.96), rgba(219, 246, 255, 0.88))"};
+        color: ${dark ? "rgba(224, 242, 254, 0.96)" : "rgba(22, 78, 99, 0.96)"};
+        font-size: 11.2px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
       }
 
       /* The question cards stay intentionally translucent so the themed file background can read

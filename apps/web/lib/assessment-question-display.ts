@@ -1,7 +1,10 @@
 import type {
+  AssessmentQuestionAnswerMode,
   AssessmentQuestionBlankSlot,
+  AssessmentQuestionExportVariant,
   AssessmentQuestionRenderBlockKind,
   AssessmentQuestionRenderMetadata,
+  AssessmentQuestionRenderVariant,
   AssessmentQuestionStructuredData,
   AssessmentQuestionStructuredPair,
   AssessmentQuestionType,
@@ -1555,17 +1558,26 @@ export function buildAssessmentQuestionRenderMetadata(input: {
     structuredData,
     answerText: input.answerText,
   });
+  const baseMetadata = {
+    renderer: input.questionType,
+    answerMode: resolveAssessmentQuestionAnswerMode(input.questionType),
+    renderVariant: resolveAssessmentQuestionRenderVariant(input.questionType),
+    exportVariant: resolveAssessmentQuestionExportVariant(input.questionType),
+  } satisfies Pick<
+    AssessmentQuestionRenderMetadata,
+    "renderer" | "answerMode" | "renderVariant" | "exportVariant"
+  >;
 
   switch (input.questionType) {
     case "mcq":
       return {
-        renderer: input.questionType,
+        ...baseMetadata,
         responseMode: "single_select",
         answerPlacement: "choice_list",
       };
     case "true_false":
       return {
-        renderer: input.questionType,
+        ...baseMetadata,
         responseMode: "boolean",
         answerPlacement: "boolean_toggle",
         expectedResponses,
@@ -1574,22 +1586,23 @@ export function buildAssessmentQuestionRenderMetadata(input: {
       const blankCount = countFillBlanks(input.questionText);
 
       return {
-        renderer: input.questionType,
+        ...baseMetadata,
         responseMode: "inline_blanks",
         answerPlacement: "inline_blanks",
+        expectedResponses,
         blankCount: blankCount || undefined,
         blankSlots: buildBlankSlots(blankCount),
       };
     }
     case "short_answer":
       return {
-        renderer: input.questionType,
+        ...baseMetadata,
         responseMode: "free_response",
         answerPlacement: "answer_box",
       };
     default:
       return {
-        renderer: input.questionType,
+        ...baseMetadata,
         responseMode: "free_response",
         answerPlacement:
           scienceBlockKinds.length > 0 ? "science_blocks" : "answer_box",
@@ -1597,5 +1610,87 @@ export function buildAssessmentQuestionRenderMetadata(input: {
         scienceBlockKinds:
           scienceBlockKinds.length > 0 ? scienceBlockKinds : undefined,
       };
+  }
+}
+
+function resolveAssessmentQuestionAnswerMode(
+  questionType: AssessmentQuestionType,
+): AssessmentQuestionAnswerMode {
+  switch (questionType) {
+    case "mcq":
+    case "multiple_response":
+      return "choice";
+    case "true_false":
+      return "boolean";
+    case "definition":
+    case "terminology":
+    case "scientific_term":
+      return "term_definition";
+    case "comparison":
+    case "matching":
+    case "classification":
+    case "cause_effect":
+    case "distinguish_between":
+      return "comparison";
+    case "fill_blanks":
+      return "fill_blanks";
+    default:
+      return "text";
+  }
+}
+
+function resolveAssessmentQuestionRenderVariant(
+  questionType: AssessmentQuestionType,
+): AssessmentQuestionRenderVariant {
+  switch (questionType) {
+    case "mcq":
+    case "multiple_response":
+      return "mcq_card";
+    case "true_false":
+      return "true_false_card";
+    case "definition":
+      return "definition_card";
+    case "terminology":
+      return "terminology_card";
+    case "comparison":
+    case "matching":
+    case "classification":
+    case "cause_effect":
+    case "distinguish_between":
+      return "comparison_card";
+    case "fill_blanks":
+      return "fill_blanks_card";
+    case "scientific_term":
+      return "scientific_term_card";
+    default:
+      return "short_answer_card";
+  }
+}
+
+function resolveAssessmentQuestionExportVariant(
+  questionType: AssessmentQuestionType,
+): AssessmentQuestionExportVariant {
+  switch (questionType) {
+    case "mcq":
+    case "multiple_response":
+      return "mcq_export";
+    case "true_false":
+      return "true_false_export";
+    case "definition":
+      return "definition_export";
+    case "terminology":
+      return "terminology_export";
+    case "comparison":
+    case "matching":
+    case "classification":
+    case "cause_effect":
+    case "distinguish_between":
+      return "comparison_export";
+    case "fill_blanks":
+      return "fill_blanks_export";
+    case "scientific_term":
+      return "scientific_term_export";
+    default:
+      return "short_answer_export";
   }
 }

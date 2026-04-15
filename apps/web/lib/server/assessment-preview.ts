@@ -6,6 +6,7 @@ import type {
   AssessmentScienceRenderBlock,
   AssessmentPreviewCompositionBadge,
   AssessmentPreviewQuestionItem,
+  AssessmentPreviewQuestionSection,
   NormalizedAssessmentPreview,
 } from "@/lib/assessment-preview-model";
 import {
@@ -162,21 +163,94 @@ function getQuestionTypeLabel(
 
 const ASSESSMENT_COMPOSITION_VISIBLE_TYPE_BADGES = 4;
 
-function buildCompositionBadges(input: {
-  generation: AssessmentGeneration;
+function buildSelectedQuestionTypeOrder(generation: AssessmentGeneration) {
+  const orderedTypes: AssessmentQuestionType[] = [];
+
+  for (const type of generation.meta.questionTypes) {
+    if (!orderedTypes.includes(type)) {
+      orderedTypes.push(type);
+    }
+  }
+
+  if (orderedTypes.length > 0) {
+    return orderedTypes;
+  }
+
+  return generation.questions
+    .map((question) => question.type)
+    .filter((type, index, types): type is AssessmentQuestionType =>
+      Boolean(type) && types.indexOf(type) === index,
+    );
+}
+
+function buildQuestionSections(input: {
   messages: AppMessages;
+  selectedQuestionTypes: AssessmentQuestionType[];
+  questions: AssessmentPreviewQuestionItem[];
+}): AssessmentPreviewQuestionSection[] {
+  const selectedTypeSet = new Set(input.selectedQuestionTypes);
+  const filteredQuestions = input.questions.filter(
+    (question): question is AssessmentPreviewQuestionItem & { questionType: AssessmentQuestionType } => {
+      // Only allow non-null, valid AssessmentQuestionType
+      if (!question.questionType) return false;
+      return selectedTypeSet.has(question.questionType as AssessmentQuestionType);
+    },
+  );
+  let nextQuestionIndex = 0;
+
+  return input.selectedQuestionTypes
+    .map((type, order) => {
+      const sectionLabel = getQuestionTypeLabel(type, input.messages);
+      const sectionHeading = buildSectionHeading(order, sectionLabel);
+      const sectionQuestions = filteredQuestions
+        .filter((question) => question.questionType === type)
+        .map((question, sectionIndex) => {
+          const displayOrder = nextQuestionIndex++;
+
+          return {
+            ...question,
+            index: displayOrder,
+            displayOrder,
+            sectionKey: `section-${type}`,
+            sectionTitle: sectionLabel,
+            sectionHeading,
+            sectionOrder: order,
+            startsSection: sectionIndex === 0,
+          };
+        });
+
+      if (sectionQuestions.length === 0) {
+        return undefined;
+      }
+
+      return {
+        key: `section-${type}`,
+        type,
+        label: sectionLabel,
+        heading: sectionHeading,
+        order,
+        questions: sectionQuestions,
+      } as AssessmentPreviewQuestionSection;
+    })
+    .filter((section): section is AssessmentPreviewQuestionSection => section !== undefined);
+}
+
+function buildCompositionBadges(input: {
+  messages: AppMessages;
+  questions: AssessmentPreviewQuestionItem[];
+  selectedQuestionTypes: AssessmentQuestionType[];
 }): AssessmentPreviewCompositionBadge[] {
   const counts = new Map<string, number>();
 
-  for (const question of input.generation.questions) {
-    const key = question.type ?? "unknown";
+  for (const question of input.questions) {
+    const key = question.questionType ?? "unknown";
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
   const orderedTypeKeys = [
-    ...input.generation.meta.questionTypes,
+    ...input.selectedQuestionTypes,
     ...Array.from(counts.keys()).filter(
-      (key) => !input.generation.meta.questionTypes.includes(key as AssessmentQuestionType),
+      (key) => !input.selectedQuestionTypes.includes(key as AssessmentQuestionType),
     ),
   ];
 
@@ -224,7 +298,7 @@ function buildCompositionBadges(input: {
   summaryBadges.push({
     key: "total",
     label: input.messages.assessmentTotalBadge,
-    value: String(input.generation.questions.length),
+    value: String(input.questions.length),
     tone: "summary",
   });
 
@@ -248,6 +322,22 @@ function buildQuestionTypeSummaryLine(badges: AssessmentPreviewCompositionBadge[
   }
 
   return `${compactSummary} | ${overflowBadge.label}${overflowBadge.value ? ` ${overflowBadge.value}` : ""}`;
+}
+
+function buildSectionPrefix(index: number) {
+  let current = index;
+  let prefix = "";
+
+  do {
+    prefix = String.fromCharCode(65 + (current % 26)) + prefix;
+    current = Math.floor(current / 26) - 1;
+  } while (current >= 0);
+
+  return prefix;
+}
+
+function buildSectionHeading(index: number, label: string) {
+  return `${buildSectionPrefix(index)}) ${label}`;
 }
 
 function getInputModeLabel(value: AssessmentGeneration["meta"]["inputMode"], messages: AppMessages) {
@@ -294,20 +384,35 @@ function buildPreviewQuestionItem(input: {
     answerText: question.answer,
     rationaleText: question.rationale,
   });
-  const rendering =
-    question.rendering ??
-    buildAssessmentQuestionRenderMetadata({
-      questionType: resolvedQuestionType,
-      structuredData: question.structuredData,
-      questionText: question.question,
-      answerText: question.answer,
-      rationaleText: question.rationale,
-    }) ??
-    null;
+  const derivedRendering = buildAssessmentQuestionRenderMetadata({
+    questionType: resolvedQuestionType,
+    structuredData: question.structuredData,
+    questionText: question.question,
+    answerText: question.answer,
+    rationaleText: question.rationale,
+  });
+  let rendering = question.rendering ?? null;
+
+  if (derivedRendering && question.rendering) {
+    rendering = {
+      ...question.rendering,
+      ...derivedRendering,
+    };
+  } else if (derivedRendering) {
+    rendering = derivedRendering;
+  }
 
   return {
     id: question.id,
     index,
+    displayOrder: index,
+    sectionKey: null,
+    sectionTitle:
+      getQuestionTypeLabel(resolvedQuestionType, messages) || messages.assessmentTypeOther,
+    sectionHeading:
+      getQuestionTypeLabel(resolvedQuestionType, messages) || messages.assessmentTypeOther,
+    sectionOrder: index,
+    startsSection: false,
     questionType: resolvedQuestionType,
     typeLabel: getQuestionTypeLabel(resolvedQuestionType, messages),
     difficulty: questionDifficulty,
@@ -467,16 +572,17 @@ function buildTypeAwareExportDetails(input: {
 function buildPlainTextExport(input: {
   generation: AssessmentGeneration;
   messages: AppMessages;
-  questions: AssessmentPreviewQuestionItem[];
+  questionSections: AssessmentPreviewQuestionSection[];
+  questionCount: number;
   compositionBadges: AssessmentPreviewCompositionBadge[];
 }) {
-  const { generation, messages, questions, compositionBadges } = input;
+  const { generation, messages, questionSections, questionCount, compositionBadges } = input;
   const questionTypeSummaryLine = buildQuestionTypeSummaryLine(compositionBadges);
   const lines = [
     generation.title,
     generation.meta.summary,
     "",
-    `${messages.assessmentQuestionCount}: ${generation.meta.questionCount}`,
+    `${messages.assessmentQuestionCount}: ${questionCount}`,
     `${messages.assessmentModeLabel}: ${getModeLabel(generation.meta.mode, messages)}`,
     `${messages.assessmentDifficulty}: ${getDifficultyLabel(generation.meta.difficulty, messages)}`,
     `${messages.assessmentLanguage}: ${getLanguageLabel(generation.meta.language, messages)}`,
@@ -494,37 +600,42 @@ function buildPlainTextExport(input: {
 
   lines.push("");
 
-  for (const question of questions) {
-    lines.push(`${question.index + 1}. ${question.stem}`);
-    if (question.choices.length > 0) {
-      lines.push(...question.choices.map((choice) => `   ${choice.displayText}`));
-    }
-    if (question.supplementalLines.length > 0) {
-      lines.push(...question.supplementalLines.map((line) => `   ${line}`));
-    }
-    if (question.typeLabel) {
-      lines.push(`   ${messages.assessmentQuestionTypesLabel}: ${question.typeLabel}`);
-    }
-    if (question.difficultyLabel) {
-      lines.push(
-        `   ${localizeCopy(generation.meta.language, "Question difficulty", "صعوبة السؤال")}: ${question.difficultyLabel}`,
-      );
-    }
-    lines.push(`   ${messages.assessmentAnswerLabel}: ${question.answerDisplay}`);
-    lines.push(
-      ...buildTypeAwareExportDetails({
-        locale: generation.meta.language,
-        question,
-        linePrefix: "   ",
-      }),
-    );
-    if (question.rationale) {
-      lines.push(`   ${messages.assessmentRationaleLabel}: ${question.rationale}`);
-    }
-    if (question.tags?.length) {
-      lines.push(`   ${messages.assessmentTagsLabel}: ${question.tags.join(", ")}`);
-    }
+  for (const [sectionIndex, section] of questionSections.entries()) {
+    lines.push(section.heading || buildSectionHeading(sectionIndex, section.label));
     lines.push("");
+
+    for (const question of section.questions) {
+      lines.push(`${question.index + 1}. ${question.stem}`);
+      if (question.choices.length > 0) {
+        lines.push(...question.choices.map((choice) => `   ${choice.displayText}`));
+      }
+      if (question.supplementalLines.length > 0) {
+        lines.push(...question.supplementalLines.map((line) => `   ${line}`));
+      }
+      if (question.typeLabel) {
+        lines.push(`   ${messages.assessmentQuestionTypesLabel}: ${question.typeLabel}`);
+      }
+      if (question.difficultyLabel) {
+        lines.push(
+          `   ${localizeCopy(generation.meta.language, "Question difficulty", "صعوبة السؤال")}: ${question.difficultyLabel}`,
+        );
+      }
+      lines.push(`   ${messages.assessmentAnswerLabel}: ${question.answerDisplay}`);
+      lines.push(
+        ...buildTypeAwareExportDetails({
+          locale: generation.meta.language,
+          question,
+          linePrefix: "   ",
+        }),
+      );
+      if (question.rationale) {
+        lines.push(`   ${messages.assessmentRationaleLabel}: ${question.rationale}`);
+      }
+      if (question.tags?.length) {
+        lines.push(`   ${messages.assessmentTagsLabel}: ${question.tags.join(", ")}`);
+      }
+      lines.push("");
+    }
   }
 
   return lines.filter((line): line is string => line != null).join("\n").trim();
@@ -533,18 +644,19 @@ function buildPlainTextExport(input: {
 function buildMarkdownExport(input: {
   generation: AssessmentGeneration;
   messages: AppMessages;
-  questions: AssessmentPreviewQuestionItem[];
+  questionSections: AssessmentPreviewQuestionSection[];
+  questionCount: number;
   compositionBadges: AssessmentPreviewCompositionBadge[];
   footerText: string;
 }) {
-  const { generation, messages, questions, compositionBadges, footerText } = input;
+  const { generation, messages, questionSections, questionCount, compositionBadges, footerText } = input;
   const questionTypeSummaryLine = buildQuestionTypeSummaryLine(compositionBadges);
   const lines = [
     `# ${generation.title}`,
     "",
     generation.meta.summary,
     "",
-    `- ${messages.assessmentQuestionCount}: ${generation.meta.questionCount}`,
+    `- ${messages.assessmentQuestionCount}: ${questionCount}`,
     `- ${messages.assessmentModeLabel}: ${getModeLabel(generation.meta.mode, messages)}`,
     `- ${messages.assessmentDifficulty}: ${getDifficultyLabel(generation.meta.difficulty, messages)}`,
     `- ${messages.assessmentLanguage}: ${getLanguageLabel(generation.meta.language, messages)}`,
@@ -562,40 +674,45 @@ function buildMarkdownExport(input: {
 
   lines.push("", "## Questions", "");
 
-  for (const question of questions) {
-    lines.push(`### ${question.index + 1}. ${question.stem.replace(/\n+/g, " ")}`);
+  for (const [sectionIndex, section] of questionSections.entries()) {
+    lines.push(`## ${section.heading || buildSectionHeading(sectionIndex, section.label)}`);
     lines.push("");
-    if (question.choices.length > 0) {
-      lines.push(...question.choices.map((choice) => `- ${choice.displayText}`));
+
+    for (const question of section.questions) {
+      lines.push(`### ${question.index + 1}. ${question.stem.replace(/\n+/g, " ")}`);
       lines.push("");
-    }
-    if (question.supplementalLines.length > 0) {
-      lines.push(...question.supplementalLines);
-      lines.push("");
-    }
-    if (question.typeLabel) {
-      lines.push(`- ${messages.assessmentQuestionTypesLabel}: ${question.typeLabel}`);
-    }
-    if (question.difficultyLabel) {
+      if (question.choices.length > 0) {
+        lines.push(...question.choices.map((choice) => `- ${choice.displayText}`));
+        lines.push("");
+      }
+      if (question.supplementalLines.length > 0) {
+        lines.push(...question.supplementalLines);
+        lines.push("");
+      }
+      if (question.typeLabel) {
+        lines.push(`- ${messages.assessmentQuestionTypesLabel}: ${question.typeLabel}`);
+      }
+      if (question.difficultyLabel) {
+        lines.push(
+          `- ${localizeCopy(generation.meta.language, "Question difficulty", "صعوبة السؤال")}: ${question.difficultyLabel}`,
+        );
+      }
+      lines.push(`- ${messages.assessmentAnswerLabel}: ${question.answerDisplay}`);
       lines.push(
-        `- ${localizeCopy(generation.meta.language, "Question difficulty", "صعوبة السؤال")}: ${question.difficultyLabel}`,
+        ...buildTypeAwareExportDetails({
+          locale: generation.meta.language,
+          question,
+          linePrefix: "- ",
+        }),
       );
+      if (question.rationale) {
+        lines.push(`- ${messages.assessmentRationaleLabel}: ${question.rationale}`);
+      }
+      if (question.tags?.length) {
+        lines.push(`- ${messages.assessmentTagsLabel}: ${question.tags.join(", ")}`);
+      }
+      lines.push("");
     }
-    lines.push(`- ${messages.assessmentAnswerLabel}: ${question.answerDisplay}`);
-    lines.push(
-      ...buildTypeAwareExportDetails({
-        locale: generation.meta.language,
-        question,
-        linePrefix: "- ",
-      }),
-    );
-    if (question.rationale) {
-      lines.push(`- ${messages.assessmentRationaleLabel}: ${question.rationale}`);
-    }
-    if (question.tags?.length) {
-      lines.push(`- ${messages.assessmentTagsLabel}: ${question.tags.join(", ")}`);
-    }
-    lines.push("");
   }
 
   lines.push("---", "", `> ${footerText}`);
@@ -617,12 +734,8 @@ export function buildAssessmentPreview(input: {
     platformName: messages.appName,
     platformTagline: messages.tagline,
   });
-  const compositionBadges = buildCompositionBadges({
-    generation,
-    messages,
-  });
-  const questionTypeSummaryLine = buildQuestionTypeSummaryLine(compositionBadges);
-  const questions = generation.questions.map((question, index) =>
+  const selectedQuestionTypes = buildSelectedQuestionTypeOrder(generation);
+  const candidateQuestions = generation.questions.map((question, index) =>
     buildPreviewQuestionItem({
       question,
       index,
@@ -631,6 +744,22 @@ export function buildAssessmentPreview(input: {
       messages,
     }),
   );
+  /* User-selected types remain authoritative for final preview/export surfaces.
+     Keep only selected canonical types here so extra provider-returned types are tolerated
+     in raw storage but never leak into grouped display or downloadable artifacts. */
+  const questionSections = buildQuestionSections({
+    messages,
+    selectedQuestionTypes,
+    questions: candidateQuestions,
+  });
+  const questions = questionSections.flatMap((section) => section.questions);
+  const questionCount = questions.length;
+  const compositionBadges = buildCompositionBadges({
+    messages,
+    questions,
+    selectedQuestionTypes,
+  });
+  const questionTypeSummaryLine = buildQuestionTypeSummaryLine(compositionBadges);
 
   return {
     id: generation.id,
@@ -647,7 +776,7 @@ export function buildAssessmentPreview(input: {
     difficultyLabel: getDifficultyLabel(generation.meta.difficulty, messages),
     languageLabel: getLanguageLabel(generation.meta.language, messages),
     inputModeLabel: getInputModeLabel(generation.meta.inputMode, messages),
-    questionCountLabel: `${generation.meta.questionCount} ${messages.assessmentQuestionsLabel}`,
+    questionCountLabel: `${questionCount} ${messages.assessmentQuestionsLabel}`,
     sourceDocumentLabel: generation.meta.sourceDocument?.fileName ?? null,
     generatedAtLabel,
     expiresAtLabel,
@@ -686,18 +815,21 @@ export function buildAssessmentPreview(input: {
       },
     ],
     compositionBadges,
+    questionSections,
     questions,
     fileSurface,
     plainTextExport: buildPlainTextExport({
       generation,
       messages,
-      questions,
+      questionSections,
+      questionCount,
       compositionBadges,
     }),
     markdownExport: buildMarkdownExport({
       generation,
       messages,
-      questions,
+      questionSections,
+      questionCount,
       compositionBadges,
       /* Markdown exports should reuse the same branded footer line as DOCX/PDF/file previews
          so extracted artifacts stay consistent even though Markdown has no visual card layout. */
