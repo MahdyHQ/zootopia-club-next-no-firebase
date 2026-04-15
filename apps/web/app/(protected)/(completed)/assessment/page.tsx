@@ -4,6 +4,7 @@ import { BrainCircuit } from "lucide-react";
 
 import { AssessmentStudio } from "@/components/assessment/assessment-studio";   
 import { resolveDefaultModelIdForTool } from "@/lib/server/ai/default-models";
+import { getAssessmentPromptAccessStateForUser } from "@/lib/server/assessment-prompt-lock";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import {
   getActiveDocumentForOwner,
@@ -44,6 +45,10 @@ export default async function AssessmentPage() {
     requireCompletedUser(APP_ROUTES.assessment),
     getRequestUiContext(),
   ]);
+  const promptAccess = await getAssessmentPromptAccessStateForUser({
+    uid: user.uid,
+    role: user.role,
+  });
 
   let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
   let generations = [] as Awaited<ReturnType<typeof listAssessmentGenerationsForUser>>;
@@ -99,6 +104,7 @@ export default async function AssessmentPage() {
       <AssessmentStudio
         locale={uiContext.locale}
         messages={uiContext.messages}
+        initialPromptAccess={promptAccess}
         defaultModelId={resolveDefaultModelIdForTool("assessment")}
         models={getModelsForTool("assessment")}
         initialDocuments={documents}

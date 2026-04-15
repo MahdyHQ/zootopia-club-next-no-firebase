@@ -21,12 +21,14 @@ import {
 import {
   BrainCircuit,
   Check,
+  CheckCircle2,
   ExternalLink,
   FileText,
   Gauge,
   History,
   Languages,
   Layers3,
+  LockKeyhole,
   Percent,
   RefreshCcw,
   Sparkles,
@@ -51,6 +53,7 @@ import { DocumentContextCard } from "@/components/document/document-context-card
 type AssessmentStudioProps = {
   locale: Locale;
   messages: AppMessages;
+  initialPromptAccess: AssessmentPromptAccess;
   defaultModelId: string;
   models: AiModelDescriptor[];
   initialDocuments: DocumentRecord[];
@@ -59,11 +62,50 @@ type AssessmentStudioProps = {
   initialCreditSummary: AssessmentDailyCreditsSummary;
 };
 
+type AssessmentPromptAccess = {
+  lockEnabled: boolean;
+  unlocked: boolean;
+  isAdmin: boolean;
+};
+
+type AssessmentPromptUnlockResponse = Pick<
+  AssessmentPromptAccess,
+  "lockEnabled" | "unlocked"
+>;
+
 const QUESTION_COUNT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 const ASSESSMENT_MODE_OPTIONS = [...ASSESSMENT_MODES];
 const QUESTION_TYPE_OPTIONS = [...ASSESSMENT_ACTIVE_QUESTION_TYPES];
 const ACTIVE_QUESTION_TYPE_SET = new Set<AssessmentQuestionType>(QUESTION_TYPE_OPTIONS);
 const RETENTION_NOTICE_AUTO_DISMISS_MS = 60_000;
+const ASSESSMENT_PROMPT_UNLOCK_ROUTE = "/api/assessment/prompt-unlock";
+const ASSESSMENT_PROMPT_LOCK_COPY = {
+  title: "ميزة طلب التقييم مخصصة حالياً للطلاب المختارين",
+  body:
+    "هذه الميزة متاحة لطلاب محددين فقط. إذا رغبت في الوصول إليها أو الحصول على كلمة المرور، يرجى التواصل باحترام مع المشرف/المطور ابن عبدالله.",
+  passwordLabel: "كلمة المرور",
+  passwordPlaceholder: "أدخل كلمة المرور لفتح الميزة",
+  unlockAction: "فتح الميزة",
+  unlockActionPending: "جارٍ التحقق...",
+  passwordRequired: "يرجى إدخال كلمة المرور أولاً.",
+  unlockInvalidPassword:
+    "كلمة المرور غير صحيحة. يمكنك المحاولة مجدداً أو التواصل مع ابن عبدالله.",
+  unlockFailed:
+    "تعذر التحقق حالياً. يرجى إعادة المحاولة بعد قليل أو التواصل مع ابن عبدالله.",
+  lockedFieldError:
+    "ميزة طلب التقييم ما زالت مقفلة لهذا الحساب. يرجى إتمام فتح الميزة أولاً.",
+  lockedPlaceholder: "هذا الحقل مقفل حالياً حتى يتم التحقق من كلمة المرور",
+  successTitle: "تم فتح الميزة بنجاح",
+  successBody:
+    "ألف مبروك! تم فتح هذه الميزة لك من قِبل المطوّر ابن عبدالله ✨🎉",
+};
+
+const ASSESSMENT_MODEL_VISIBILITY_COPY = {
+  badge: "ميزة بريميوم",
+  title: "اختيار النموذج متاح حالياً لحسابات الإدارة فقط",
+  body:
+    "لضمان ثبات الجودة في المسار الحالي، يتم تحديد نموذج التقييم تلقائياً لهذا الحساب. إذا كنت تحتاج نموذجاً مخصصاً، يرجى التواصل مع الإدارة.",
+};
 
 type AssessmentRequestError = Error & {
   code?: string;
@@ -438,6 +480,7 @@ function shouldShowAssessmentOperationalSupport(code?: string) {
     "DOCUMENT_CONTEXT_UNAVAILABLE",
     "ASSESSMENT_DAILY_CREDITS_EXHAUSTED",
     "ASSESSMENT_ACCESS_DISABLED",
+    "ASSESSMENT_PROMPT_LOCKED",
     "ASSESSMENT_USER_LANE_REQUIRED",
     "PROFILE_INCOMPLETE",
     "UNAUTHENTICATED",
@@ -486,6 +529,8 @@ function resolveAssessmentErrorMessage(
     case "ASSESSMENT_ACCESS_DISABLED":
     case "ASSESSMENT_USER_LANE_REQUIRED":
       return messages.assessmentAccessDisabledBody;
+    case "ASSESSMENT_PROMPT_LOCKED":
+      return ASSESSMENT_PROMPT_LOCK_COPY.lockedFieldError;
     case "ASSESSMENT_FINALIZATION_FAILED":
       return messages.assessmentFinalizationFailed;
     case "PROFILE_INCOMPLETE":
@@ -504,6 +549,7 @@ function isAssessmentDailyCreditsExhausted(credits: AssessmentDailyCreditsSummar
 export function AssessmentStudio({
   locale,
   messages,
+  initialPromptAccess,
   defaultModelId,
   models,
   initialDocuments,
@@ -520,6 +566,13 @@ export function AssessmentStudio({
   const [readbackId, setReadbackId] = useState<string | null>(null);
   const [error, setError] = useState<OperationalUiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [promptAccess, setPromptAccess] =
+    useState<AssessmentPromptAccess>(initialPromptAccess);
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockPending, setUnlockPending] = useState(false);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+  const [unlockSuccessVisible, setUnlockSuccessVisible] = useState(false);
+  const [unlockSuccessEntered, setUnlockSuccessEntered] = useState(false);
   const [lastCreatedGeneration, setLastCreatedGeneration] =
     useState<AssessmentGeneration | null>(null);
   const [showRetentionNotice, setShowRetentionNotice] = useState(false);
@@ -533,6 +586,34 @@ export function AssessmentStudio({
   useEffect(() => {
     setCreditSummary(initialCreditSummary);
   }, [initialCreditSummary]);
+
+  useEffect(() => {
+    setPromptAccess(initialPromptAccess);
+  }, [initialPromptAccess]);
+
+  useEffect(() => {
+    if (promptAccess.isAdmin) {
+      return;
+    }
+
+    setRequest((current) =>
+      current.modelId === defaultModelId
+        ? current
+        : {
+            ...current,
+            modelId: defaultModelId,
+          },
+    );
+
+    setFieldErrors((current) =>
+      current.modelId
+        ? {
+            ...current,
+            modelId: "",
+          }
+        : current,
+    );
+  }, [defaultModelId, promptAccess.isAdmin]);
 
   useEffect(() => {
     setRequest((current) => {
@@ -588,6 +669,8 @@ export function AssessmentStudio({
     documentOptions.find((document) => document.isActive) ?? documentOptions[0] ?? null;
   const latestGeneration = generations[0] ?? null;
   const creditsExhausted = isAssessmentDailyCreditsExhausted(creditSummary);
+  const promptFeatureLocked =
+    promptAccess.lockEnabled && !promptAccess.unlocked && !promptAccess.isAdmin;
   const linkedDocumentReady = !selectedDocument || selectedDocument.status === "ready";
   const questionTypeCountMap = buildQuestionTypeCountMap(
     request.options.questionCount,
@@ -709,6 +792,66 @@ export function AssessmentStudio({
     });
   }
 
+  async function handleUnlockPromptFeature() {
+    if (unlockPending || promptAccess.unlocked) {
+      return;
+    }
+
+    const password = unlockPassword.trim();
+    if (!password) {
+      setUnlockError(ASSESSMENT_PROMPT_LOCK_COPY.passwordRequired);
+      return;
+    }
+
+    setUnlockPending(true);
+    setUnlockError(null);
+
+    try {
+      const response = await fetch(ASSESSMENT_PROMPT_UNLOCK_ROUTE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const payload = await readAssessmentApiResult<AssessmentPromptUnlockResponse>(
+        response,
+        ASSESSMENT_PROMPT_LOCK_COPY.unlockFailed,
+      );
+
+      if (!response.ok || !payload.ok || !payload.data.unlocked) {
+        const unlockCode = payload.ok ? "REQUEST_FAILED" : payload.error.code;
+        if (unlockCode === "ASSESSMENT_PROMPT_UNLOCK_INVALID_PASSWORD") {
+          setUnlockError(ASSESSMENT_PROMPT_LOCK_COPY.unlockInvalidPassword);
+          return;
+        }
+
+        setUnlockError(ASSESSMENT_PROMPT_LOCK_COPY.unlockFailed);
+        return;
+      }
+
+      setPromptAccess((current) => ({
+        ...current,
+        lockEnabled: payload.data.lockEnabled,
+        unlocked: payload.data.unlocked,
+      }));
+      setFieldErrors((current) => ({
+        ...current,
+        prompt: "",
+      }));
+      setUnlockPassword("");
+      setUnlockError(null);
+      setUnlockSuccessVisible(true);
+      setUnlockSuccessEntered(false);
+
+      window.requestAnimationFrame(() => {
+        setUnlockSuccessEntered(true);
+      });
+    } catch {
+      setUnlockError(ASSESSMENT_PROMPT_LOCK_COPY.unlockFailed);
+    } finally {
+      setUnlockPending(false);
+    }
+  }
+
   async function handleRefreshGeneration(id: string) {
     setReadbackId(id);
     setError(null);
@@ -790,6 +933,14 @@ export function AssessmentStudio({
     ) {
       setFieldErrors({
         questionTypeDistribution: messages.assessmentDistributionInvalid,
+      });
+      setPending(false);
+      return;
+    }
+
+    if (promptFeatureLocked && requestForSubmit.prompt.trim()) {
+      setFieldErrors({
+        prompt: ASSESSMENT_PROMPT_LOCK_COPY.lockedFieldError,
       });
       setPending(false);
       return;
@@ -899,32 +1050,61 @@ export function AssessmentStudio({
                 </div>
               </div>
 
-              <div className="assessment-model-control">
-                <AssessmentFieldSelect
-                  id="assessment-model"
-                  label={messages.modelLabel}
-                  value={request.modelId}
-                  options={modelOptions}
-                  icon={Sparkles}
-                  error={fieldErrors.modelId}
-                  onChange={(nextValue) => {
-                    setFieldErrors((current) => ({ ...current, modelId: "" }));
-                    setRequest((current) => ({ ...current, modelId: nextValue }));
-                  }}
-                />
-                {selectedModel ? (
-                  <div className="assessment-model-control__meta">
-                    {getAssessmentModelMeta(selectedModel.id, messages).map((chip) => (
-                      <span
-                        key={`${selectedModel.id}-${chip.label}`}
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getModelChipClasses(chip.tone)}`}
-                      >
-                        {chip.label}
-                      </span>
-                    ))}
+              {/* Model visibility stays role-scoped by server-derived access state.
+                  Backend request validation remains authoritative; this guard is UI-only. */}
+              {promptAccess.isAdmin ? (
+                <div className="assessment-model-control">
+                  <AssessmentFieldSelect
+                    id="assessment-model"
+                    label={messages.modelLabel}
+                    value={request.modelId}
+                    options={modelOptions}
+                    icon={Sparkles}
+                    error={fieldErrors.modelId}
+                    onChange={(nextValue) => {
+                      setFieldErrors((current) => ({ ...current, modelId: "" }));
+                      setRequest((current) => ({ ...current, modelId: nextValue }));
+                    }}
+                  />
+                  {selectedModel ? (
+                    <div className="assessment-model-control__meta">
+                      {getAssessmentModelMeta(selectedModel.id, messages).map((chip) => (
+                        <span
+                          key={`${selectedModel.id}-${chip.label}`}
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getModelChipClasses(chip.tone)}`}
+                        >
+                          {chip.label}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div
+                  dir="rtl"
+                  className="assessment-model-control border-amber-500/28 bg-[linear-gradient(145deg,rgba(251,191,36,0.14),rgba(245,158,11,0.06))] text-right"
+                >
+                  <span className="inline-flex w-fit items-center rounded-full border border-amber-500/35 bg-amber-500/18 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                    {ASSESSMENT_MODEL_VISIBILITY_COPY.badge}
+                  </span>
+                  <div className="mt-1.5 flex items-start gap-2.5">
+                    <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-500/35 bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                      <LockKeyhole className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-semibold leading-7 text-foreground">
+                        {ASSESSMENT_MODEL_VISIBILITY_COPY.title}
+                      </p>
+                      <p className="text-sm leading-7 text-foreground-muted">
+                        {ASSESSMENT_MODEL_VISIBILITY_COPY.body}
+                      </p>
+                      <p className="pt-1 text-xs font-semibold text-foreground-muted/90">
+                        {messages.assessmentModelLabel}: {selectedModel?.label ?? defaultModelId}
+                      </p>
+                    </div>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              )}
             </div>
 
             <form className="space-y-6" onSubmit={handleSubmit}>
@@ -1196,16 +1376,101 @@ export function AssessmentStudio({
                 <p className="mt-2 text-sm leading-6 text-foreground-muted">
                   {messages.assessmentPromptHelper}
                 </p>
+
+                {promptFeatureLocked ? (
+                  <div
+                    dir="rtl"
+                    className="mt-4 rounded-[1.25rem] border border-amber-500/25 bg-[linear-gradient(145deg,rgba(251,191,36,0.1),rgba(245,158,11,0.06))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                  >
+                    <div className="flex items-start gap-3 text-right">
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/35 bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                        <LockKeyhole className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-semibold leading-7 text-foreground">
+                          {ASSESSMENT_PROMPT_LOCK_COPY.title}
+                        </p>
+                        <p className="text-sm leading-7 text-foreground-muted">
+                          {ASSESSMENT_PROMPT_LOCK_COPY.body}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                      <label className="space-y-2">
+                        <span className="block text-xs font-semibold text-foreground-muted">
+                          {ASSESSMENT_PROMPT_LOCK_COPY.passwordLabel}
+                        </span>
+                        <input
+                          type="password"
+                          value={unlockPassword}
+                          onChange={(event) => {
+                            setUnlockError(null);
+                            setUnlockPassword(event.target.value);
+                          }}
+                          placeholder={ASSESSMENT_PROMPT_LOCK_COPY.passwordPlaceholder}
+                          className="field-control assessment-premium-field w-full"
+                          autoComplete="current-password"
+                          disabled={unlockPending}
+                        />
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleUnlockPromptFeature();
+                        }}
+                        disabled={unlockPending}
+                        className="assessment-premium-button inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white"
+                      >
+                        {unlockPending
+                          ? ASSESSMENT_PROMPT_LOCK_COPY.unlockActionPending
+                          : ASSESSMENT_PROMPT_LOCK_COPY.unlockAction}
+                      </button>
+                    </div>
+
+                    {unlockError ? (
+                      <p className="mt-3 text-sm leading-6 text-danger">{unlockError}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {unlockSuccessVisible ? (
+                  <div
+                    dir="rtl"
+                    className={`mt-4 rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.09)] transition-all duration-500 ease-out ${unlockSuccessEntered ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-[0.98] opacity-0"}`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200">
+                        <CheckCircle2 className="h-4.5 w-4.5" />
+                      </span>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-foreground">
+                          {ASSESSMENT_PROMPT_LOCK_COPY.successTitle}
+                        </p>
+                        <p className="text-sm leading-6 text-foreground-muted">
+                          {ASSESSMENT_PROMPT_LOCK_COPY.successBody}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
                 <textarea
                   id="assessment-prompt"
                   value={request.prompt}
                   rows={4}
-                  placeholder={messages.assessmentPromptPlaceholder}
+                  placeholder={
+                    promptFeatureLocked
+                      ? ASSESSMENT_PROMPT_LOCK_COPY.lockedPlaceholder
+                      : messages.assessmentPromptPlaceholder
+                  }
                   onChange={(event) => {
                     setFieldErrors((current) => ({ ...current, prompt: "" }));
                     setRequest((current) => ({ ...current, prompt: event.target.value }));
                   }}
-                  className="field-control assessment-premium-field mt-4 min-h-[132px] resize-y"
+                  disabled={promptFeatureLocked}
+                  className={`field-control assessment-premium-field mt-4 min-h-[132px] resize-y ${promptFeatureLocked ? "cursor-not-allowed opacity-70" : ""}`}
                 />
                 {fieldErrors.prompt ? (
                   <p className="mt-2 text-sm text-danger">{fieldErrors.prompt}</p>

@@ -1,7 +1,10 @@
 import { ShieldCheck } from "lucide-react";
 import { UsersTable } from "@/components/admin/users-table";
 import { getRequestUiContext } from "@/lib/server/request-context";
-import { listUsers } from "@/lib/server/repository";
+import {
+  listUserUidsWithAssessmentPromptEntitlementEnabled,
+  listUsers,
+} from "@/lib/server/repository";
 import { requireAdminUser } from "@/lib/server/session";
 
 export default async function AdminUsersPage() {
@@ -12,6 +15,8 @@ export default async function AdminUsersPage() {
 
   let users = [] as Awaited<ReturnType<typeof listUsers>>;
   let usersDataDegraded = false;
+  let promptAccessLookupDegraded = false;
+  let promptEnabledUids: string[] = [];
 
   try {
     users = await listUsers();
@@ -20,6 +25,18 @@ export default async function AdminUsersPage() {
     console.warn("[admin-users-page] failed to load users; rendering fallback list", {
       error: error instanceof Error ? error.name : "UNKNOWN",
     });
+  }
+
+  if (!usersDataDegraded) {
+    try {
+      const enabledUidSet = await listUserUidsWithAssessmentPromptEntitlementEnabled();
+      promptEnabledUids = [...enabledUidSet];
+    } catch (error) {
+      promptAccessLookupDegraded = true;
+      console.warn("[admin-users-page] failed to load prompt-entitlement visibility set", {
+        error: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    }
   }
 
   return (
@@ -51,11 +68,18 @@ export default async function AdminUsersPage() {
           </div>
         ) : null}
 
+        {promptAccessLookupDegraded ? (
+          <div className="mb-4 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-200">
+            Prompt entitlement visibility is temporarily unavailable. User cards are shown with default locked indicators.
+          </div>
+        ) : null}
+
         <UsersTable
           messages={uiContext.messages}
           locale={uiContext.locale}
           initialUsers={users}
           currentUserId={adminUser.uid}
+          initialPromptEnabledUids={promptEnabledUids}
         />
       </section>
     </div>

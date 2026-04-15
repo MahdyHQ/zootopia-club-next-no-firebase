@@ -174,6 +174,8 @@ export function buildAssessmentPrompt(input: {
     `JSON contract version: ${ASSESSMENT_PROMPT_CONTRACT_VERSION}.`,
     'JSON contract: Return valid JSON only with the exact top-level shape {"contractVersion": string, "summary": string, "selectedQuestionTypes": string[], "requestedDistribution": [{"type": string, "percentage": number}], "questions": [{"type": string, "difficulty": string, "displayOrder": number, "sectionKey": string, "sectionTitle": string, "question": string, "answer": string, "rationale": string, "tags": string[], "structuredData": object, "answerMetadata": object}]}',
     `ContractVersion rule: set contractVersion to ${ASSESSMENT_PROMPT_CONTRACT_VERSION}.`,
+    "Summary contract: summary must be a meaningful lecture/document brief grounded in the provided prompt/context, not a generic placeholder.",
+    "Summary length contract: write 3 to 5 full sentences with concrete learning focus (target roughly 220 to 420 characters) so compact cards render about 5 to 8 lines.",
     `Type enum contract: type must be one of ${supportedTypeList}.`,
     `Difficulty enum contract: difficulty must be one of ${supportedDifficultyList}.`,
     "Strict metadata contract: every question object must include both type and difficulty; never omit either field.",

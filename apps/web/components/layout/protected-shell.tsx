@@ -4,7 +4,8 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 import type { CSSProperties } from "react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
-import { Menu, Search, Bell, Sparkles, CheckCircle2, ChevronLeft, ChevronRight, ArrowUp, HandCoins, WalletCards } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Menu, Search, Bell, Sparkles, CheckCircle2, ChevronLeft, ChevronRight, ArrowUp, HandCoins, WalletCards, Plus, X } from "lucide-react";
 import type {
   ApiResult,
   AssessmentDailyCreditsSummary,
@@ -59,6 +60,12 @@ function areCreditSummariesEqual(
   );
 }
 
+const CREDIT_HELP_DIALOG_TITLE_AR = "طلب كريدت تقييم إضافي";
+const CREDIT_HELP_DIALOG_BODY_AR =
+  "إذا كنت بحاجة إلى كريدت خاص أو عاجل، يُرجى التواصل مباشرة مع المطور والأدمن Elmahdy Abdallah.";
+const CREDIT_HELP_DIALOG_NOTE_AR =
+  "يرجى إرسال البريد الإلكتروني للحساب وسبب الطلب لتسريع المعالجة.";
+
 export function ProtectedShell({
   children,
   messages,
@@ -70,10 +77,14 @@ export function ProtectedShell({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isCreditHelpOpen, setIsCreditHelpOpen] = useState(false);
   const [creditSummary, setCreditSummary] =
     useState<AssessmentDailyCreditsSummary | null>(null);
   const mainScrollRef = useRef<HTMLElement | null>(null);
   const creditSummaryRequestRef = useRef<Promise<void> | null>(null);
+  const creditHelpTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const creditHelpPanelRef = useRef<HTMLDivElement | null>(null);
+  const pathname = usePathname();
   const siteContent = getSiteContent(locale);
   const headerAvatarSrc = resolveRoleGenderAvatarSrc(user);
   const headerAvatarInitial = resolveAvatarFallbackInitial(user);
@@ -196,6 +207,51 @@ export function ProtectedShell({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isCreditHelpOpen) {
+      return;
+    }
+
+    /* Keep the credit-help surface unobtrusive: close on outside pointer and Escape
+       so it behaves like a compact header popover instead of a blocking modal. */
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+
+      if (creditHelpPanelRef.current?.contains(target)) {
+        return;
+      }
+
+      if (creditHelpTriggerRef.current?.contains(target)) {
+        return;
+      }
+
+      setIsCreditHelpOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCreditHelpOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCreditHelpOpen]);
+
+  useEffect(() => {
+    /* Route transitions inside protected pages should not keep transient header
+       popovers open; reset this local support surface on every pathname change. */
+    setIsCreditHelpOpen(false);
+  }, [pathname]);
+
   const resolvedBalanceLabel = creditSummary?.isAdminExempt
     ? messages.roleAdmin
     : String(creditSummary?.remainingCount ?? siteContent.navigation.balancePlaceholder);
@@ -204,6 +260,10 @@ export function ProtectedShell({
     : creditSummary
       ? `${creditSummary.remainingCount ?? 0} / ${creditSummary.totalRemainingCount ?? 0}`
       : siteContent.navigation.balanceHint;
+  const creditHelpTriggerLabel =
+    locale === "ar" ? "طلب كريدت عاجل" : "Urgent credit help";
+  const creditHelpCloseLabel =
+    locale === "ar" ? "إغلاق ملاحظة الدعم" : "Close support note";
 
   function handleScrollToTop() {
     mainScrollRef.current?.scrollTo({
@@ -266,8 +326,8 @@ export function ProtectedShell({
           </div>
           
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-             {/* These header controls intentionally stay compact so the protected shell keeps room for the existing theme and account actions.
-                 Do not expand them into fake wallet logic or oversized CTAs until a real balance backend and broader support navigation exist. */}
+             {/* These header controls intentionally stay compact so the protected shell
+                 preserves space for account and navigation actions across breakpoints. */}
              <Link
                href={APP_ROUTES.donation}
                aria-label={siteContent.navigation.donationCta}
@@ -282,20 +342,72 @@ export function ProtectedShell({
 
              {/* The shell badge mirrors server-authoritative assessment credits for the signed-in
                  owner. Keep this read-only so quota authority remains in backend reserve/commit routes. */}
-             <div
-               aria-label={`${siteContent.navigation.balanceLabel}: ${resolvedBalanceLabel}`}
-               title={resolvedBalanceHint}
-               className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/58 px-3 text-foreground-muted shadow-sm"
-             >
-               <WalletCards className="h-4.5 w-4.5 shrink-0 text-gold" />
-               <div className="hidden xl:flex xl:flex-col xl:items-start xl:leading-none">
-                 <span className="text-[10px] font-black uppercase tracking-[0.18em]">
+             <div className="relative flex items-center gap-1.5">
+               <div
+                 aria-label={`${siteContent.navigation.balanceLabel}: ${resolvedBalanceLabel}`}
+                 title={resolvedBalanceHint}
+                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/58 px-2.5 text-foreground-muted shadow-sm"
+               >
+                 <WalletCards className="h-4.5 w-4.5 shrink-0 text-gold" />
+                 <span className="hidden text-[10px] font-black uppercase tracking-[0.16em] md:inline">
                    {siteContent.navigation.balanceLabel}
                  </span>
-                 <span className="mt-1 text-[11px] font-semibold text-foreground">
+                 <span className="max-w-[4.75rem] truncate text-sm font-semibold leading-none text-foreground tabular-nums">
                    {resolvedBalanceLabel}
                  </span>
                </div>
+
+               {/* This adjacent plus action opens support guidance only; it never mutates
+                   credits client-side and keeps quota authority strictly server-owned. */}
+               <button
+                 ref={creditHelpTriggerRef}
+                 type="button"
+                 aria-haspopup="dialog"
+                 aria-expanded={isCreditHelpOpen}
+                 aria-controls="credit-help-dialog"
+                 aria-label={creditHelpTriggerLabel}
+                 title={creditHelpTriggerLabel}
+                 onClick={() => setIsCreditHelpOpen((current) => !current)}
+                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-background/58 text-foreground-muted shadow-sm transition-all hover:border-accent/70 hover:text-accent focus:outline-none"
+               >
+                 <Plus className="h-4 w-4" />
+               </button>
+
+               {isCreditHelpOpen ? (
+                 <div
+                   id="credit-help-dialog"
+                   ref={creditHelpPanelRef}
+                   role="dialog"
+                   aria-modal="false"
+                   aria-label={creditHelpTriggerLabel}
+                   dir="rtl"
+                   className={`absolute top-[calc(100%+0.7rem)] z-40 w-[21rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border/65 bg-background-elevated/95 p-4 text-right shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 ${isRtl ? "left-0" : "right-0"}`}
+                 >
+                   <div className="flex items-start justify-between gap-3">
+                     <div className="space-y-1">
+                       <p className="text-xs font-black text-accent">
+                         {CREDIT_HELP_DIALOG_TITLE_AR}
+                       </p>
+                     </div>
+                     <button
+                       type="button"
+                       aria-label={creditHelpCloseLabel}
+                       title={creditHelpCloseLabel}
+                       onClick={() => setIsCreditHelpOpen(false)}
+                       className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background/55 text-foreground-muted transition-colors hover:border-accent/70 hover:text-accent"
+                     >
+                       <X className="h-3.5 w-3.5" />
+                     </button>
+                   </div>
+
+                   <p className="mt-2 text-sm leading-6 text-foreground/90">
+                     {CREDIT_HELP_DIALOG_BODY_AR}
+                   </p>
+                   <p className="mt-2 text-xs leading-5 text-foreground-muted/95">
+                     {CREDIT_HELP_DIALOG_NOTE_AR}
+                   </p>
+                 </div>
+               ) : null}
              </div>
 
              <div className="hidden h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-border/60 bg-background/55 text-foreground-muted shadow-sm transition-all hover:border-accent/60 hover:text-foreground xl:flex">

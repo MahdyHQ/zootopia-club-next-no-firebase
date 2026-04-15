@@ -2,12 +2,14 @@
 
 import type { ApiResult, Locale, UserDocument } from "@zootopia/shared-types";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   ArrowUpRight,
   Download,
   LoaderCircle,
+  LockKeyhole,
+  Sparkles,
   ShieldAlert,
   ShieldCheck,
   UserCheck,
@@ -22,6 +24,7 @@ type UsersTableProps = {
   locale: Locale;
   initialUsers: UserDocument[];
   currentUserId: string;
+  initialPromptEnabledUids: string[];
 };
 
 const USERS_EXPORT_ENDPOINT = "/api/admin/users/export";
@@ -65,9 +68,14 @@ export function UsersTable({
   locale,
   initialUsers,
   currentUserId,
+  initialPromptEnabledUids,
 }: UsersTableProps) {
   const [error, setError] = useState<string | null>(null);
   const [exportingUsers, setExportingUsers] = useState(false);
+  const promptEnabledUidSet = useMemo(
+    () => new Set(initialPromptEnabledUids),
+    [initialPromptEnabledUids],
+  );
 
   const dateFormatter = new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-US", {
     dateStyle: "medium",
@@ -187,6 +195,7 @@ export function UsersTable({
             const isCurrentUser = user.uid === currentUserId;
             const isAdmin = user.role === "admin";
             const isActive = user.status === "active";
+            const hasPromptEntitlement = promptEnabledUidSet.has(user.uid);
             const genderLabel = formatUserGender(user.gender, messages);
             const userInitial =
               (user.fullName || user.displayName || user.email || user.uid || "U")
@@ -257,6 +266,23 @@ export function UsersTable({
                     {user.profileCompleted
                       ? messages.adminUserProfileComplete
                       : messages.adminUserProfileIncomplete}
+                  </span>
+
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                      hasPromptEntitlement
+                        ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                        : "border-amber-500/30 bg-amber-500/12 text-amber-700 dark:text-amber-300"
+                    }`}
+                  >
+                    {hasPromptEntitlement ? (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    ) : (
+                      <LockKeyhole className="h-3.5 w-3.5" />
+                    )}
+                    {hasPromptEntitlement
+                      ? "Prompt Access Enabled"
+                      : "Prompt Access Locked"}
                   </span>
 
                   {isCurrentUser ? (

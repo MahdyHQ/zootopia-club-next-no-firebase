@@ -1,6 +1,9 @@
 import "server-only";
 
-import type { AdminAssessmentCreditMutationInput } from "@zootopia/shared-types";
+import type {
+  AdminAssessmentCreditMutationInput,
+  AssessmentPromptEntitlement,
+} from "@zootopia/shared-types";
 import {
   Activity,
   AlertCircle,
@@ -325,6 +328,23 @@ function mapCreditMutationErrorToQueryCode(error: unknown) {
   }
 }
 
+function mapPromptEntitlementMutationErrorToQueryCode(error: unknown) {
+  const code = error instanceof Error
+    ? error.message
+    : "ASSESSMENT_PROMPT_ENTITLEMENT_UPDATE_FAILED";
+
+  switch (code) {
+    case "USER_NOT_FOUND":
+      return "prompt_user_not_found";
+    case "ASSESSMENT_PROMPT_ENTITLEMENT_SELF_MUTATION_FORBIDDEN":
+      return "prompt_self_mutation_forbidden";
+    case "ASSESSMENT_PROMPT_ENTITLEMENT_INVALID":
+      return "prompt_invalid_request";
+    default:
+      return "prompt_update_failed";
+  }
+}
+
 function parsePositiveIntegerFromForm(value: FormDataEntryValue | null) {
   const raw = String(value ?? "").trim();
   if (!raw) {
@@ -468,6 +488,79 @@ async function runAdminCreditMutationFromDetailPage(input: {
   redirect(
     buildAdminUserDetailPath(input.targetUid, {
       credits_updated: input.mutation.action,
+    }),
+  );
+}
+
+async function runAdminPromptEntitlementMutationFromDetailPage(input: {
+  targetUid: string;
+  entitlement: AssessmentPromptEntitlement;
+}) {
+  const {
+    appendAdminLog,
+    getUserByUid,
+    setAssessmentPromptEntitlementForUser,
+  } = await import("@/lib/server/repository");
+  const { requireAdminUser } = await import("@/lib/server/session");
+
+  const admin = await requireAdminUser();
+
+  if (input.targetUid === admin.uid) {
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: "prompt_self_mutation_forbidden",
+      }),
+    );
+  }
+
+  const targetUser = await getUserByUid(input.targetUid);
+  if (!targetUser) {
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: "prompt_user_not_found",
+      }),
+    );
+  }
+
+  if (input.entitlement !== "enabled" && input.entitlement !== "disabled") {
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: "prompt_invalid_request",
+      }),
+    );
+  }
+
+  try {
+    const account = await setAssessmentPromptEntitlementForUser({
+      ownerUid: input.targetUid,
+      entitlement: input.entitlement,
+    });
+
+    await appendAdminLog({
+      actorUid: admin.uid,
+      actorRole: admin.role,
+      targetUid: input.targetUid,
+      ownerUid: input.targetUid,
+      ownerRole: targetUser.role,
+      action: `assessment-prompt-entitlement:${account.assessmentPromptEntitlement}`,
+      resourceType: "assessment-prompt-entitlement",
+      resourceId: input.targetUid,
+      route: "/admin/users/[uid]",
+      metadata: {
+        entitlement: account.assessmentPromptEntitlement,
+      },
+    });
+  } catch (error) {
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: mapPromptEntitlementMutationErrorToQueryCode(error),
+      }),
+    );
+  }
+
+  redirect(
+    buildAdminUserDetailPath(input.targetUid, {
+      prompt_access_updated: input.entitlement,
     }),
   );
 }
@@ -669,6 +762,7 @@ export default async function AdminUserDetailPage({
 
   const errorCode = getFirstSearchParamValue(resolvedSearchParams.error).trim();
   const creditsUpdatedAction = getFirstSearchParamValue(resolvedSearchParams.credits_updated).trim();
+  const promptAccessUpdated = getFirstSearchParamValue(resolvedSearchParams.prompt_access_updated).trim();
   const storageCleaned = getFirstSearchParamValue(resolvedSearchParams.storage_cleaned) === "true";
   const creditMutationSuccessMessages: Record<string, string> = {
     set_access: "Assessment access was updated successfully.",
@@ -679,6 +773,10 @@ export default async function AdminUserDetailPage({
     set_manual_credits: "Manual credits were set successfully.",
     grant_credits: "Credit grant was created successfully.",
     revoke_grant: "Credit grant was revoked successfully.",
+  };
+  const promptMutationSuccessMessages: Record<string, string> = {
+    enabled: "Assessment prompt entitlement is now enabled for this user.",
+    disabled: "Assessment prompt entitlement is now disabled for this user.",
   };
   const errorMessages: Record<string, string> = {
     confirmation_required: "Confirmation is required before deleting a user account. Type DELETE USER exactly.",
@@ -697,9 +795,16 @@ export default async function AdminUserDetailPage({
     credits_grant_already_revoked: "This grant was already revoked.",
     credits_invalid_request: "The credit mutation request is invalid.",
     credits_update_failed: "Unable to update credits right now. Try again shortly.",
+    prompt_user_not_found: "The selected user no longer exists.",
+    prompt_self_mutation_forbidden: "Admins cannot mutate their own prompt entitlement from this page.",
+    prompt_invalid_request: "Prompt entitlement request is invalid.",
+    prompt_update_failed: "Unable to update prompt entitlement right now. Try again shortly.",
   };
   const creditMutationSuccess = creditsUpdatedAction
     ? creditMutationSuccessMessages[creditsUpdatedAction] ?? "Assessment credits updated successfully."
+    : null;
+  const promptMutationSuccess = promptAccessUpdated
+    ? promptMutationSuccessMessages[promptAccessUpdated] ?? "Assessment prompt entitlement updated successfully."
     : null;
   const feedbackError = errorCode ? (errorMessages[errorCode] ?? "The requested admin action failed.") : null;
 
@@ -801,6 +906,13 @@ export default async function AdminUserDetailPage({
         <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
           <ShieldCheck className="h-5 w-5 shrink-0" />
           <p className="text-sm font-medium">{creditMutationSuccess}</p>
+        </div>
+      )}
+
+      {promptMutationSuccess && (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
+          <ShieldCheck className="h-5 w-5 shrink-0" />
+          <p className="text-sm font-medium">{promptMutationSuccess}</p>
         </div>
       )}
 
@@ -953,6 +1065,11 @@ export default async function AdminUserDetailPage({
             badge={creditsAccount?.assessmentAccess === "enabled" ? "success" : "danger"}
           />
           <DetailCard
+            label="Prompt Entitlement"
+            value={creditsAccount?.assessmentPromptEntitlement ?? "disabled"}
+            badge={creditsAccount?.assessmentPromptEntitlement === "enabled" ? "success" : "warning"}
+          />
+          <DetailCard
             label="Daily Limit"
             value={
               creditsSummary
@@ -1028,6 +1145,11 @@ export default async function AdminUserDetailPage({
               <CreditAccessToggleForm
                 targetUid={targetUser.uid}
                 currentAccess={creditsAccount?.assessmentAccess ?? "enabled"}
+                disabled={isCurrentUser}
+              />
+              <PromptEntitlementToggleForm
+                targetUid={targetUser.uid}
+                currentEntitlement={creditsAccount?.assessmentPromptEntitlement ?? "disabled"}
                 disabled={isCurrentUser}
               />
               <CreditDailyOverrideForm
@@ -1495,6 +1617,52 @@ function StatusToggleForm({
         }`}
       >
         {isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+        {actionLabel}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * Prompt entitlement toggle controls persistent assessment-prompt eligibility per user.
+ * This admin-owned toggle is intentionally separate from password/account flows.
+ */
+function PromptEntitlementToggleForm({
+  targetUid,
+  currentEntitlement,
+  disabled,
+}: {
+  targetUid: string;
+  currentEntitlement: AssessmentPromptEntitlement;
+  disabled: boolean;
+}) {
+  const nextEntitlement = currentEntitlement === "enabled" ? "disabled" : "enabled";
+  const actionLabel = nextEntitlement === "enabled"
+    ? "Enable Prompt Entitlement"
+    : "Disable Prompt Entitlement";
+
+  return (
+    <form
+      action={async () => {
+        "use server";
+        await runAdminPromptEntitlementMutationFromDetailPage({
+          targetUid,
+          entitlement: nextEntitlement,
+        });
+      }}
+    >
+      <Button
+        type="submit"
+        variant={nextEntitlement === "enabled" ? "default" : "outline"}
+        size="sm"
+        disabled={disabled}
+        className="w-full h-10 justify-center gap-2"
+      >
+        {nextEntitlement === "enabled" ? (
+          <ShieldCheck className="h-4 w-4" />
+        ) : (
+          <ShieldX className="h-4 w-4" />
+        )}
         {actionLabel}
       </Button>
     </form>

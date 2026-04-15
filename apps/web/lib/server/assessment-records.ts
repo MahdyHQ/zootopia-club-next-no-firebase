@@ -106,6 +106,11 @@ const ARABIC_CHARACTER_PATTERN = /[\u0600-\u06FF]/;
 const PROMPT_PREVIEW_LIMIT = 180;
 const TITLE_TOPIC_LIMIT = 68;
 const SUMMARY_TOPIC_LIMIT = 92;
+const SUMMARY_MIN_CHAR_COUNT = 120;
+const SUMMARY_MIN_WORD_COUNT = 18;
+const SUMMARY_MAX_CHAR_COUNT = 420;
+const SUMMARY_TRUNCATION_SEARCH_WINDOW = 96;
+const SUMMARY_WORD_TOKEN_SANITIZER = /[^\u0600-\u06FFA-Za-z0-9]+/g;
 const DOCUMENT_CONTEXT_LIMIT = 3200;
 const DEFAULT_ASSESSMENT_MODE: AssessmentMode = "question_generation";
 const DEFAULT_ASSESSMENT_QUESTION_TYPE: AssessmentQuestionType = "mcq";
@@ -402,6 +407,108 @@ function buildAssessmentTopic(
 ) {
   const documentFallback = normalizeOptionalString(sourceDocument?.fileName);
   return clampText(prompt, limit) || clampText(documentFallback ?? fallback, limit) || fallback;
+}
+
+function normalizeAssessmentSummaryCandidate(value: unknown) {
+  const normalized = normalizeMultilineWhitespace(String(value ?? ""))
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  const withoutPrefix = normalized.replace(
+    /^(summary|assessment summary|summary brief|ملخ(?:ص|ّص))\s*[:\-–]\s*/iu,
+    "",
+  );
+
+  return withoutPrefix.replace(/^['"`]+|['"`]+$/g, "").trim();
+}
+
+function looksLikeAssessmentSummaryJsonLeak(value: string) {
+  const lowered = value.toLowerCase();
+
+  if (
+    value.startsWith("{") ||
+    value.startsWith("[") ||
+    value.startsWith("```")
+  ) {
+    return true;
+  }
+
+  return (
+    lowered.includes('"questions"') ||
+    lowered.includes('"selectedquestiontypes"') ||
+    lowered.includes('"requesteddistribution"') ||
+    lowered.includes('"contractversion"')
+  );
+}
+
+function isWeakAssessmentSummary(value: string) {
+  const lowered = value.toLowerCase();
+
+  if (
+    lowered === "summary" ||
+    lowered === "assessment summary" ||
+    lowered === "no summary" ||
+    lowered === "not provided" ||
+    lowered === "n/a" ||
+    lowered === "na" ||
+    lowered === "none" ||
+    lowered === "null" ||
+    lowered === "undefined" ||
+    lowered === "tbd" ||
+    lowered === "ملخص" ||
+    lowered === "ملخّص" ||
+    lowered === "لا يوجد ملخص"
+  ) {
+    return true;
+  }
+
+  if (looksLikeAssessmentSummaryJsonLeak(value)) {
+    return true;
+  }
+
+  const words = value
+    .split(/\s+/)
+    .map((word) => word.replace(SUMMARY_WORD_TOKEN_SANITIZER, ""))
+    .filter((word) => Boolean(word));
+
+  if (value.length < SUMMARY_MIN_CHAR_COUNT || words.length < SUMMARY_MIN_WORD_COUNT) {
+    return true;
+  }
+
+  const uniqueWordCount = new Set(words.map((word) => word.toLowerCase())).size;
+  return uniqueWordCount <= Math.max(5, Math.floor(words.length * 0.35));
+}
+
+function clampAssessmentSummaryForSmallSurfaces(value: string) {
+  if (value.length <= SUMMARY_MAX_CHAR_COUNT) {
+    return value;
+  }
+
+  const truncated = value.slice(0, SUMMARY_MAX_CHAR_COUNT + 1);
+  const boundaryStart = Math.max(
+    SUMMARY_MIN_CHAR_COUNT,
+    SUMMARY_MAX_CHAR_COUNT - SUMMARY_TRUNCATION_SEARCH_WINDOW,
+  );
+  const tail = truncated.slice(boundaryStart);
+  const punctuationOffset = Math.max(
+    tail.lastIndexOf("."),
+    tail.lastIndexOf("!"),
+    tail.lastIndexOf("?"),
+    tail.lastIndexOf("؟"),
+    tail.lastIndexOf("؛"),
+  );
+
+  if (punctuationOffset >= 0) {
+    return truncated.slice(0, boundaryStart + punctuationOffset + 1).trim();
+  }
+
+  const lastSpace = truncated.lastIndexOf(" ");
+  const cutoff = lastSpace > SUMMARY_MIN_CHAR_COUNT ? lastSpace : SUMMARY_MAX_CHAR_COUNT;
+  return `${truncated.slice(0, cutoff).trimEnd()}...`;
 }
 
 function buildQuestionFallback(input: {
@@ -1010,8 +1117,14 @@ export function buildAssessmentSummary(input: {
       : "";
     const modeLabel =
       input.mode === "exam_generation" ? "أسئلة امتحانية" : "أسئلة تدريبية";
+    const modeGuidance =
+      input.mode === "exam_generation"
+        ? "تلتزم الصياغة بنمط امتحاني واضح مع إجابات دقيقة ومنظمة."
+        : "تدعم الصياغة التدريب والمراجعة السريعة مع تعزيز الفهم قبل الاختبار.";
 
-    return `${input.questionCount} ${modeLabel} بمستوى ${difficulty} حول ${topic}${sourceNote}.`;
+    return clampAssessmentSummaryForSmallSurfaces(
+      `${input.questionCount} ${modeLabel} بمستوى ${difficulty} حول ${topic}${sourceNote}. يركز هذا الملخص على أفكار المحاضرة الأساسية والمفاهيم العلمية المحورية وخطوات الاستدلال المتوقعة من الطالب. ${modeGuidance}`,
+    );
   }
 
   const sourceNote = input.sourceDocument
@@ -1019,8 +1132,46 @@ export function buildAssessmentSummary(input: {
     : "";
   const modeLabel =
     input.mode === "exam_generation" ? "exam-style questions" : "practice questions";
+  const modeGuidance =
+    input.mode === "exam_generation"
+      ? "Wording is aligned with exam-style expectations and evidence-driven answers."
+      : "Wording is optimized for practice and revision while reinforcing core understanding.";
 
-  return `${input.questionCount} ${difficulty} ${modeLabel} focused on ${topic}${sourceNote}.`;
+  return clampAssessmentSummaryForSmallSurfaces(
+    `${input.questionCount} ${difficulty} ${modeLabel} focused on ${topic}${sourceNote}. This summary highlights the main lecture concepts, essential scientific terminology, and the reasoning steps learners are expected to demonstrate. ${modeGuidance}`,
+  );
+}
+
+export function buildCanonicalAssessmentSummary(input: {
+  summary: unknown;
+  prompt: string;
+  mode: AssessmentMode;
+  questionCount: number;
+  difficulty: AssessmentDifficulty;
+  language: Locale;
+  sourceDocument?: AssessmentGenerationSourceDocument | null;
+}) {
+  const fallbackSummary = buildAssessmentSummary({
+    prompt: input.prompt,
+    mode: input.mode,
+    questionCount: input.questionCount,
+    difficulty: input.difficulty,
+    language: input.language,
+    sourceDocument: input.sourceDocument,
+  });
+  const providerSummary = normalizeAssessmentSummaryCandidate(input.summary);
+
+  /* This is the single server-owned summary quality gate for every assessment lane.
+     Keep validation/compaction centralized here so preview, result API, and all exports
+     share one durable summary contract instead of drifting with per-surface fallbacks. */
+  if (!providerSummary || isWeakAssessmentSummary(providerSummary)) {
+    return fallbackSummary;
+  }
+
+  const compactProviderSummary = clampAssessmentSummaryForSmallSurfaces(providerSummary);
+  return isWeakAssessmentSummary(compactProviderSummary)
+    ? fallbackSummary
+    : compactProviderSummary;
 }
 
 export function prepareAssessmentDocumentContext(value: string | null | undefined) {
@@ -1217,17 +1368,16 @@ export function normalizeAssessmentGenerationRecord(
     request,
     questions: normalizedResult.normalizedQuestions,
     meta: {
-      summary:
-        normalizeOptionalString(record.meta?.summary) ??
-        buildAssessmentSummary({
-          prompt: request.prompt,
-          mode: request.options.mode,
-          questionCount:
-            normalizedResult.normalizedQuestions.length || questionCount,
-          difficulty: request.options.difficulty,
-          language: request.options.language,
-          sourceDocument,
-        }),
+      summary: buildCanonicalAssessmentSummary({
+        summary: record.meta?.summary,
+        prompt: request.prompt,
+        mode: request.options.mode,
+        questionCount:
+          normalizedResult.normalizedQuestions.length || questionCount,
+        difficulty: request.options.difficulty,
+        language: request.options.language,
+        sourceDocument,
+      }),
       questionCount: normalizedResult.normalizedQuestions.length || questionCount,
       difficulty: request.options.difficulty,
       language: request.options.language,

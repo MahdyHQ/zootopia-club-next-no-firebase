@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import {
   resolveAuthenticatedUserRedirectPath,
 } from "@/lib/return-to";
+import { isMaintenanceModeEnabled, readBooleanEnvFlag } from "@/lib/maintenance-mode";
 
 const USER_PROTECTED_MATCHERS = [
   APP_ROUTES.home,
@@ -25,6 +26,21 @@ const USER_AUTH_ENTRY_MATCHERS = [
   APP_ROUTES.confirmEmail,
 ];
 
+const PUBLIC_SITE_MATCHERS = [
+  APP_ROUTES.journey,
+  APP_ROUTES.about,
+  APP_ROUTES.privacy,
+  APP_ROUTES.contact,
+  APP_ROUTES.donation,
+  APP_ROUTES.hallOfHonor,
+];
+
+const NON_ADMIN_MAINTENANCE_MATCHERS = [
+  ...USER_PROTECTED_MATCHERS,
+  ...USER_AUTH_ENTRY_MATCHERS,
+  ...PUBLIC_SITE_MATCHERS,
+];
+
 type ProxySessionUser = {
   uid?: unknown;
   id?: unknown;
@@ -32,11 +48,6 @@ type ProxySessionUser = {
   status?: unknown;
   profileCompleted?: unknown;
 };
-
-function readBooleanEnvFlag(value: string | undefined) {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes";
-}
 
 function hasDurableSessionRuntime() {
   const isProduction = String(process.env.NODE_ENV ?? "").trim().toLowerCase() === "production";
@@ -92,6 +103,7 @@ function proxyHandler(request: NextRequest) {
   });
   const { pathname } = request.nextUrl;
   const isAdminLoginPath = pathname === APP_ROUTES.adminLogin;
+  const isMaintenancePath = pathname === APP_ROUTES.maintenance;
 
   if (
     hasActiveSession
@@ -107,6 +119,26 @@ function proxyHandler(request: NextRequest) {
       uid,
       role: rawRole,
     });
+  }
+
+  if (isMaintenanceModeEnabled() && !isMaintenancePath) {
+    /* Maintenance mode is environment-controlled and enforced at the proxy boundary so
+       non-admin users cannot access public auth flows or normal app surfaces during updates.
+       Admin sessions keep uninterrupted access, and admin login remains available when needed. */
+    if (
+      hasActiveSession
+      && role !== "admin"
+      && (
+        matchesRoute(pathname, NON_ADMIN_MAINTENANCE_MATCHERS)
+        || matchesRoute(pathname, ADMIN_PROTECTED_MATCHERS)
+      )
+    ) {
+      return NextResponse.redirect(new URL(APP_ROUTES.maintenance, request.url));
+    }
+
+    if (!hasActiveSession && matchesRoute(pathname, NON_ADMIN_MAINTENANCE_MATCHERS)) {
+      return NextResponse.redirect(new URL(APP_ROUTES.maintenance, request.url));
+    }
   }
 
   if (!hasActiveSession && matchesRoute(pathname, ADMIN_PROTECTED_MATCHERS) && !isAdminLoginPath) {
@@ -150,6 +182,13 @@ export const config = {
     "/reset-password",
     "/confirm-email",
     "/admin/login",
+    "/maintenance",
+    "/journey/:path*",
+    "/about/:path*",
+    "/privacy/:path*",
+    "/contact/:path*",
+    "/donation/:path*",
+    "/hall-of-honor/:path*",
     "/upload/:path*",
     "/history/:path*",
     "/assessment/:path*",

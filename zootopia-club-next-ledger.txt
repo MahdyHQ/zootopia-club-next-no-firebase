@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Protected-shell credit refresh coalescing + admin API dynamic cache guards)
+Last Updated: 2026-04-15 (Assessment prompt admin-managed entitlement: durable per-user grant/revoke)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -109,6 +109,17 @@ Key verified facts:
 - Protected shell credit header refresh now coalesces concurrent trigger paths
   (focus/visibility/event/interval) and skips hidden-tab interval polling to
   reduce duplicate `/api/assessment/credits` requests
+- Protected header credit badge now keeps a compact always-visible balance value
+  beside the wallet icon and includes an adjacent non-mutating plus action that
+  opens an Arabic urgent-credit help popover (Elmahdy Abdallah contact guidance)
+  with outside-click/Escape close behavior
+- Assessment prompt feature now uses a durable admin-managed per-user
+  entitlement gate (`enabled|disabled`) with server-authoritative enforcement,
+  while preserving the existing env-password unlock mechanism for entitled
+  users and keeping admin permanently exempt
+- Global maintenance mode now supports an env-controlled proxy guard that
+  redirects non-admin auth/public/site/protected traffic to `/maintenance`,
+  while preserving admin bypass and `/admin/login` availability
 - Admin overview/users API routes now explicitly declare dynamic runtime cache
   behavior (`dynamic = "force-dynamic"`, `revalidate = 0`) in addition to
   response-level no-store headers
@@ -373,12 +384,18 @@ Required:
 Admin & Governance:
 - ZOOTOPIA_ADMIN_EMAILS: Comma-separated admin email allowlist
 - ZOOTOPIA_MAINTENANCE_SECRET: Optional maintenance endpoint secret
+- ZOOTOPIA_MAINTENANCE_MODE_ENABLED: Optional global maintenance-mode toggle
+  (`1|true|yes` enables; missing/invalid values fail closed to disabled)
 
 Session & Credits:
 - ZOOTOPIA_SESSION_TTL_SECONDS: Session TTL (default 3600)
 - ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS: Daily AI credit cap (default 3)
 - ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS: Credit renewal window in UTC hours
   (default 24, valid range 1..168)
+- ZOOTOPIA_ASSESSMENT_PROMPT_LOCK_ENABLED: Optional lock toggle for normal-user
+  assessment prompt access (true/false)
+- ZOOTOPIA_ASSESSMENT_PROMPT_UNLOCK_PASSWORD: Server-only unlock password for
+  normal-user assessment prompt access
 - ZOOTOPIA_DEFAULT_THEME_MODE: Initial theme fallback (`dark` or `light`, invalid falls back to `dark`)
 - ZOOTOPIA_DEFAULT_LANGUAGE: Initial locale fallback (`en` or `ar`, invalid falls back to `en`)
 
@@ -470,6 +487,7 @@ Public Routes (no auth):
   /forgot-password            → Password reset email request page
   /reset-password             → Password recovery completion page
   /confirm-email              → Email confirmation page
+  /maintenance                → Maintenance-mode holding page
   /coming-soon                → Feature preview placeholder
 
 Site Routes (public marketing):
@@ -487,6 +505,7 @@ API Routes:
   /api/assessment             → POST: Create assessment
   /api/assessment/[id]        → GET: Get single assessment
   /api/assessment/credits     → GET: Daily credit status
+  /api/assessment/prompt-unlock → POST: Verify unlock password for assessment prompt
   /api/assessment/export/*    → GET: Export as PDF/JSON
   /api/assessment/linked-document → GET: Resolve linked document
   /api/assessments            → GET: List user assessments
@@ -502,7 +521,7 @@ API Routes:
   /api/admin/governance       → GET/PATCH: Governance controls (admin)
   /api/admin/logs             → GET: Admin audit logs
   /api/contact                → POST: Contact form (SMTP relay)
-  /api/maintenance            → POST: Maintenance mode (secret-protected)
+  /api/internal/maintenance/expired-uploads → POST: Secret-gated upload cleanup sweep
 
 ================================================================================
 10. ROUTE OWNERSHIP CLARIFICATION
@@ -522,6 +541,7 @@ Frontend-Owned (Client Pages):
 - apps/web/app/(public)/forgot-password/page.tsx — Forgot-password page
 - apps/web/app/(public)/reset-password/page.tsx — Reset-password page
 - apps/web/app/(public)/confirm-email/page.tsx — Email confirmation
+- apps/web/app/(public)/maintenance/page.tsx — Maintenance-mode page
 - apps/web/app/(site)/** — Marketing pages
 
 Backend-Owned (API Routes):
@@ -533,7 +553,7 @@ Backend-Owned (API Routes):
 - apps/web/app/api/infographic — Infographic generation
 - apps/web/app/api/admin/** — Admin operations
 - apps/web/app/api/contact — Contact form relay
-- apps/web/app/api/maintenance — Maintenance endpoint
+- apps/web/app/api/internal/maintenance/expired-uploads — Internal maintenance sweep endpoint
 
 Shared Ownership:
 - apps/web/auth.ts — Auth.js config (server-side, but affects client sessions)
@@ -766,6 +786,7 @@ Assessment Generation Flow:
    d. Idempotency check
    e. Credit reservation check (daily limit)
    f. Tool-scoped default-model resolution and request model validation
+  g. Assessment-prompt lock enforcement for normal users when prompt text is submitted
 5. AI generation via ai/execution.ts
 6. Assessment result saved to Postgres
 7. Admin log entry created
@@ -1257,12 +1278,14 @@ Implemented & Active:
 - [x] Session management with JWT
 - [x] Rate limiting on auth endpoints
 - [x] Admin audit logging
+- [x] Admin-managed per-user assessment prompt entitlement grant/revoke controls
+- [x] Env-controlled global maintenance mode with proxy-enforced non-admin redirects
+- [x] Secret-gated internal expired-upload maintenance cleanup endpoint
 
 Partially Implemented:
 - [~] Infographic generation (UI present, AI flow may be incomplete)
 - [~] Contact form (SMTP relay configured, may need activation)
 - [~] Governance controls (admin page may be partial)
-- [~] Maintenance endpoint (configured, may need activation)
 
 Not Implemented / Placeholder:
 - [ ] @zootopia/api extraction (placeholder only)
@@ -4790,6 +4813,82 @@ Verification:
 
 Risks / Notes:
 - Current architecture is strong on runtime normalization, grouped rendering, and export safety.
+
+---
+
+2026-04-15 — Assessment Prompt Admin Entitlement System (Durable Grant/Revocation)
+===================================================================================
+Type: Authorization hardening / admin governance / prompt-feature access control
+Scope: assessment prompt lock runtime, unlock route gate, credit-account contract, admin user visibility/actions
+
+Summary:
+- Upgraded prompt access from session-cookie-only behavior into a durable
+  admin-managed entitlement model per user.
+- Added persistent prompt entitlement state on the existing assessment credit
+  account contract (`assessmentPromptEntitlement: enabled|disabled`) and kept
+  defaults fail-closed (`disabled`) for normal users.
+- Preserved admin bypass semantics: admin users remain always unlocked.
+- Preserved existing unlock-password/env-password mechanism as a second gate for
+  entitled users (no account-password flow coupling introduced).
+- Added admin controls to grant/revoke prompt entitlement on
+  `/admin/users/[uid]` and added user-list visibility badges on `/admin/users`
+  so admins can quickly see who is enabled.
+
+What Changed:
+- Shared contract:
+  - `packages/shared-types/src/assessment.ts`
+  - Added `AssessmentPromptEntitlement` type and
+    `assessmentPromptEntitlement` on `AssessmentCreditAccountRecord`.
+- Repository/persistence:
+  - `apps/web/lib/server/repository.ts`
+  - Normalizes prompt entitlement with safe default (`disabled`).
+  - Added helpers:
+    - `getAssessmentPromptEntitlementForUser(...)`
+    - `setAssessmentPromptEntitlementForUser(...)`
+    - `listUserUidsWithAssessmentPromptEntitlementEnabled(...)`
+- Prompt access enforcement:
+  - `apps/web/lib/server/assessment-prompt-lock.ts`
+  - Entitlement check is now the first gate for non-admin users.
+  - Revoked users remain locked even if a stale unlock cookie exists.
+- Unlock route hardening:
+  - `apps/web/app/api/assessment/prompt-unlock/route.ts`
+  - Non-entitled users are denied unlock attempts and stale unlock cookies are cleared.
+- Admin UI:
+  - `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+    - Added prompt entitlement status card + toggle action.
+    - Added server-side mutation helper + audit logging.
+  - `apps/web/app/(protected)/admin/users/page.tsx`
+    - Loads enabled prompt-entitlement uid set for visibility.
+  - `apps/web/components/admin/users-table.tsx`
+    - Renders per-user prompt access enabled/locked badges.
+
+Password/Auth Isolation Verification:
+- No changes were made to:
+  - `/api/auth/password/forgot`
+  - `/api/auth/password/recovery`
+  - `/api/auth/password/change`
+  - shared password policy validation
+  - login/session bootstrap behavior
+- Prompt entitlement logic is isolated from account-password lifecycle logic.
+
+Migration Decision:
+- No SQL migration was required for this pass.
+- Rationale: active repository persistence for this domain uses the
+  `zc_entities` document-store contract (`assessmentCreditAccounts` collection),
+  so adding one account field is a backward-compatible, durable server-side
+  contract extension without relational schema coupling.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Existing users default to `assessmentPromptEntitlement=disabled` unless admins
+  explicitly enable the feature for their account.
+- Entitled non-admin users still rely on the existing unlock-password session
+  mechanism when env lock mode is enabled; this is intentional to preserve the
+  prior operator flow while adding durable admin control.
 - Current architecture is weaker on long-term raw-vs-normalized auditability and professional persistence richness because the saved assessment record remains one normalized generation snapshot instead of a richer versioned result envelope.
 - Future agents should treat the preview model as the current grouping authority, but should extend the persisted assessment contract first if analytics, auditing, or advanced filtering become first-class requirements.
 
@@ -5255,6 +5354,288 @@ Verification:
 Operational Notes:
 - App-local lockfile regeneration required `--legacy-peer-deps` in this workspace because of pre-existing optional peer-resolution tension (`next-auth` / `nodemailer`), but runtime dependencies were not changed beyond the two new Vercel packages.
 - Vercel dashboard enablement and redeploy are still required for data collection in production.
+
+---
+
+2026-04-15 — Assessment Summary Pipeline Hardening (Canonical Source Contract)
+===============================================================================
+Type: Surgical backend summary-contract hardening / prompt quality guard / cross-surface consistency
+Scope: assessment prompt orchestration, assessment generation execution, canonical record normalization
+
+Summary:
+- Traced the full assessment summary flow end-to-end before editing:
+  - prompt contract authoring
+  - provider payload extraction
+  - canonical generation persistence
+  - record normalization readback used by preview/result/export surfaces
+- Applied a minimal source-level fix so preview and all export lanes continue to consume one canonical `meta.summary`, but that field is now quality-validated and compacted server-side before persistence/use.
+- Upgraded prompt guidance so providers are explicitly asked for a meaningful lecture/document summary, not generic placeholder text, with compact length targets suitable for small surfaces.
+
+What Changed:
+- Prompt contract strengthening:
+  - Added explicit summary rules in assessment prompt orchestration requiring:
+    - meaningful context-grounded lecture/document summary
+    - compact 3–5 sentence target sized for small cards (roughly 5–8 visual lines)
+- Provider-level execution alignment:
+  - Updated the Qwen system prompt to explicitly require a meaningful compact summary in addition to existing JSON and emoji preservation rules.
+- Canonical server summary seam:
+  - Added centralized summary normalization + quality gating in `assessment-records`:
+    - normalize noisy prefixes (for example `Summary:`)
+    - reject weak placeholders / malformed JSON-leak summaries
+    - require minimum content density (length + word diversity heuristics)
+    - clamp overlong summaries to compact card-safe size with sentence-boundary preference
+  - Added `buildCanonicalAssessmentSummary(...)` as the single server-owned summary resolver.
+- Unified call sites:
+  - Generation path now persists `meta.summary` via `buildCanonicalAssessmentSummary(...)`.
+  - Record normalization/readback path now also resolves `meta.summary` via the same canonical helper.
+  - This keeps preview, result API, Markdown, DOCX, and both PDF lanes aligned without per-surface fallback drift.
+- Professional fallback improvement:
+  - Enhanced fallback summary text in both EN/AR to include clearer educational framing and mode-aware guidance while remaining compact.
+
+Files Changed:
+- `apps/web/lib/server/ai/prompt-orchestrator.ts`
+- `apps/web/lib/server/ai/execution.ts`
+- `apps/web/lib/server/assessment-records.ts`
+- `zootopia-club-next-ledger.txt`
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Summary quality heuristics are intentionally conservative to prevent malformed placeholder summaries from leaking into user-facing preview/export surfaces.
+- Extremely brief but high-quality provider summaries may now fallback to the server-authored summary if they do not meet minimum density thresholds.
+- No auth, ownership, grouped-question rendering, or export route ownership behavior was modified in this pass.
+
+---
+
+2026-04-15 — Protected Header Credit UX Hardening (Compact Balance + Arabic Help Popover)
+==========================================================================================
+Type: Surgical protected-shell UX refinement / owner-scope verification / non-mutating support action
+Scope: protected header credit chip rendering, compact adjacent help action, popover close behavior
+
+Summary:
+- Completed a trace-first verification pass before editing to confirm credit authority and scope boundaries stayed server-owned:
+  - `/api/assessment/credits` remains session-owned and owner-scoped
+  - credit reservation/commit/release authority remains in repository server logic
+  - `/api/admin/users/[uid]/credits` remains admin-only and self-mutation-blocked
+- Applied a minimal UI-only patch in the protected header so users see balance value compactly beside the wallet icon across practical breakpoints.
+- Added an adjacent plus action that opens a polished, non-intrusive popover with Arabic urgent-credit guidance directing requests to developer/admin Elmahdy Abdallah.
+
+What Changed:
+- `apps/web/components/layout/protected-shell.tsx`
+  - Kept existing credit fetch and refresh lifecycle unchanged.
+  - Updated the header credit chip layout so balance value is no longer restricted to `xl` text stack visibility.
+  - Added a small adjacent `+` action next to the credit chip.
+  - Added a compact header popover (informational only) with Arabic support guidance for urgent/private credits.
+  - Added close guards for outside pointer interaction and `Escape` key, plus an explicit close button.
+  - Preserved backend authority by keeping the new action strictly read-only (no credit mutation calls from header UI).
+
+Files Changed:
+- `apps/web/components/layout/protected-shell.tsx`
+- `zootopia-club-next-ledger.txt`
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- The new header help surface intentionally remains informational and does not replace admin credit tooling.
+- Arabic help copy is intentionally fixed to satisfy urgent-credit guidance requirements regardless of locale.
+- No repository credit arithmetic, session authority, admin guard, or assessment mutation paths were changed.
+
+---
+
+2026-04-15 — Assessment Prompt Lock (Admin Exempt + Server-Authoritative Unlock)
+=================================================================================
+Type: Feature governance hardening / backend-authoritative entitlement enforcement / premium UX lock state
+Scope: assessment prompt field access, unlock verification route, assessment create-route enforcement, env controls, assessment page/studio ownership
+
+Summary:
+- Implemented a professional lock system for the Assessment prompt feature with strict server authority.
+- Admin users now remain permanently unlocked with no password step.
+- Normal users now see a locked prompt feature and must unlock it through server-side password verification.
+- Unlock grants are user-specific, session-scoped, and stored as signed HttpOnly cookie tokens bound to:
+  - authenticated user uid
+  - current unlock-password fingerprint
+  - session TTL expiry
+- Backend now rejects locked prompt usage even if a client is tampered.
+
+What Changed:
+- Added server-only prompt-lock runtime module:
+  - `apps/web/lib/server/assessment-prompt-lock.ts`
+  - owns env parsing, lock mode resolution, timing-safe password checks, token signing/verification, and user access-state resolution
+- Added unlock API route:
+  - `apps/web/app/api/assessment/prompt-unlock/route.ts`
+  - server-authoritative password verification for normal users
+  - admin bypass lane (always unlocked)
+  - env-disabled fallback lane (auto-unlocked)
+  - issues signed HttpOnly unlock cookie on success
+- Hardened assessment create backend enforcement:
+  - `apps/web/app/api/assessment/route.ts`
+  - blocks non-admin prompt submissions when lock is active and unlock grant is missing/invalid
+  - returns explicit `ASSESSMENT_PROMPT_LOCKED` response code (tamper-resistant backend guard)
+- Wired server-authoritative access state into assessment page owner:
+  - `apps/web/app/(protected)/(completed)/assessment/page.tsx`
+  - passes initial prompt lock/unlock state to client studio
+- Added locked/unlocked premium UX in assessment studio:
+  - `apps/web/components/assessment/assessment-studio.tsx`
+  - Arabic-only lock messaging
+  - compact password input + unlock action
+  - disabled prompt textarea while locked
+  - polished success state with visible check icon + subtle reveal animation
+  - Arabic celebratory confirmation copy after successful unlock
+- Documented env controls:
+  - `.env.example`
+  - added `ZOOTOPIA_ASSESSMENT_PROMPT_LOCK_ENABLED`
+  - added `ZOOTOPIA_ASSESSMENT_PROMPT_UNLOCK_PASSWORD`
+
+Env Fallback Behavior (explicit):
+- Lock active only when:
+  - `ZOOTOPIA_ASSESSMENT_PROMPT_UNLOCK_PASSWORD` is non-empty
+  - and `ZOOTOPIA_ASSESSMENT_PROMPT_LOCK_ENABLED` is not set to false
+- Lock disabled when password is removed or toggle is false.
+- In disabled mode, normal users are treated as unlocked automatically.
+
+Persistence / Access Model Decision:
+- Chosen model: session-scoped unlock grant.
+- No DB migration required.
+- Rationale:
+  - minimal, surgical, and production-safe
+  - user-isolated by signed uid-bound grant
+  - automatic revocation when unlock password changes or expires
+
+Files Changed:
+- `apps/web/lib/server/assessment-prompt-lock.ts`
+- `apps/web/app/api/assessment/prompt-unlock/route.ts`
+- `apps/web/app/api/assessment/route.ts`
+- `apps/web/app/(protected)/(completed)/assessment/page.tsx`
+- `apps/web/components/assessment/assessment-studio.tsx`
+- `.env.example`
+- `zootopia-club-next-ledger.txt`
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Unlock is intentionally session-scoped; users may need to re-unlock after session expiry.
+- If lock is enabled but signing prerequisites are unavailable, unlock route fails closed with configuration error.
+- No auth/admin boundary, credit flow, upload flow, export lanes, or storage ownership rules were widened.
+
+---
+
+2026-04-15 — Assessment Model Selector Role Split (Admin Visible / User Hidden)
+===============================================================================
+Type: UI role-lane refinement / admin-only control visibility / non-admin premium replacement panel
+Scope: assessment setup header model-control lane, non-admin request-state guard, assessment page role contract reuse
+
+Summary:
+- Completed ledger-first and source-first verification before edits, then traced the exact ownership chain:
+  `assessment/page.tsx` -> `AssessmentStudio` -> header `assessment-model` selector block.
+- Implemented the requested role split for model selection in Assessment setup:
+  - admin users keep the full model selector and chips exactly as before
+  - normal users no longer see the selector and instead see a premium Arabic guidance panel in the same right-lane slot
+- Reused existing server-derived role truth already passed into the studio (`initialPromptAccess.isAdmin`) and kept backend authority unchanged.
+- Added a non-admin client-state guard that normalizes `request.modelId` back to `defaultModelId` so stale client state cannot keep a non-default selection after role-bound UI hiding.
+
+Files Changed:
+- `apps/web/components/assessment/assessment-studio.tsx`
+- `zootopia-club-next-ledger.txt`
+
+Behavioral Changes:
+- Admin path:
+  - `AssessmentFieldSelect` model control remains visible/interactive.
+  - Existing model metadata chips remain visible.
+- Normal-user path:
+  - Selector is hidden.
+  - Premium Arabic message panel is shown in the same model-control area.
+  - Current effective model label is shown read-only for transparency.
+- Request-state safety:
+  - when `promptAccess.isAdmin` is false, studio state now reverts `request.modelId` to the backend-provided default model and clears stale model field errors.
+
+Backend/API Contract Notes:
+- No API route changes were required.
+- `POST /api/assessment` validation remains authoritative and unchanged.
+- This pass is intentionally UI-lane gating only; backend auth/admin separation remains server-owned.
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+
+Risks / Notes:
+- Non-admin model hiding is a presentation/UX boundary and does not introduce new backend role-based model restriction logic.
+- Existing admin/user session and route ownership contracts were preserved without widening client authority.
+
+---
+
+2026-04-15 — Global Maintenance Mode (Env Toggle, Proxy Guard, Admin Bypass)
+===============================================================================
+Type: Runtime guard hardening / route-gate enforcement / premium maintenance UX
+Scope: env contract, shared routes, proxy matcher coverage, public maintenance page, locale messages
+
+Summary:
+- Added server-shared maintenance flag helper:
+  - `apps/web/lib/maintenance-mode.ts`
+  - centralizes `ZOOTOPIA_MAINTENANCE_MODE_ENABLED` parsing with explicit fail-closed defaults
+- Added canonical maintenance route constant:
+  - `packages/shared-config/src/routes.ts`
+  - `APP_ROUTES.maintenance = "/maintenance"`
+- Added public maintenance page owner:
+  - `apps/web/app/(public)/maintenance/page.tsx`
+  - Arabic-first premium layout using existing auth shell controls
+  - admin-session bypass path redirects into normal admin flow
+  - maintenance-off safety path redirects into normal auth flow
+- Hardened request-time routing enforcement in `apps/web/proxy.ts`:
+  - expanded matcher coverage to include selected site pages plus `/maintenance`
+  - redirects non-admin traffic on auth/public/site/protected lanes to `/maintenance`
+  - preserves `/admin/login` reachability so admins can still authenticate during maintenance
+  - preserves authenticated-admin bypass from maintenance redirects
+- Added i18n maintenance copy:
+  - `apps/web/messages/ar.json`
+  - `apps/web/messages/en.json`
+- Documented env contract in `.env.example`.
+
+Files Changed:
+- `apps/web/lib/maintenance-mode.ts`
+- `packages/shared-config/src/routes.ts`
+- `apps/web/proxy.ts`
+- `apps/web/app/(public)/maintenance/page.tsx`
+- `apps/web/messages/ar.json`
+- `apps/web/messages/en.json`
+- `.env.example`
+- `zootopia-club-next-ledger.txt`
+
+Verification:
+- `shell: web-lint-post-polish`: pass
+- `shell: web-typecheck-post-polish`: pass
+- `shell: web-build-post-polish`: pass
+- Standalone runtime probes (manual redirect-follow disabled):
+  - Maintenance OFF (`ZOOTOPIA_MAINTENANCE_MODE_ENABLED=false`):
+    - `/` -> `307 /login`
+    - `/login` -> `200`
+    - `/admin/login` -> `200`
+    - `/upload` -> `307 /login`
+    - `/about` -> `200`
+    - `/maintenance` -> `307 /login`
+  - Maintenance ON (`ZOOTOPIA_MAINTENANCE_MODE_ENABLED=true`):
+    - `/` -> `307 /maintenance`
+    - `/login` -> `307 /maintenance`
+    - `/forgot-password` -> `307 /maintenance`
+    - `/confirm-email` -> `307 /maintenance`
+    - `/about` -> `307 /maintenance`
+    - `/upload` -> `307 /maintenance`
+    - `/maintenance` -> `200`
+    - `/admin` -> `307 /admin/login`
+    - `/admin/login` -> `200`
+
+Risks / Notes:
+- Proxy-level maintenance gating applies only to explicitly matched paths; future public pages should be added to maintenance matcher lists when they must be gated.
+- Internal secret-gated upload cleanup maintenance route remains operationally separate from user-facing maintenance mode.
 
 ---
 

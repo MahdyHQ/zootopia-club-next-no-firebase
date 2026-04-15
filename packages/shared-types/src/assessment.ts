@@ -312,6 +312,13 @@ export const ASSESSMENT_CREDIT_ACCOUNT_ACCESS_VALUES = [
 export type AssessmentCreditAccountAccess =
   (typeof ASSESSMENT_CREDIT_ACCOUNT_ACCESS_VALUES)[number];
 
+export const ASSESSMENT_PROMPT_ENTITLEMENT_VALUES = [
+  "enabled",
+  "disabled",
+] as const;
+export type AssessmentPromptEntitlement =
+  (typeof ASSESSMENT_PROMPT_ENTITLEMENT_VALUES)[number];
+
 export const ASSESSMENT_CREDIT_GRANT_STORAGE_STATUSES = [
   "active",
   "revoked",
@@ -326,6 +333,7 @@ export type AssessmentCreditGrantEffectiveStatus =
 export interface AssessmentCreditAccountRecord {
   ownerUid: string;
   assessmentAccess: AssessmentCreditAccountAccess;
+  assessmentPromptEntitlement: AssessmentPromptEntitlement;
   dailyLimitOverride: number | null;
   manualCredits: number;
   createdAt: string;

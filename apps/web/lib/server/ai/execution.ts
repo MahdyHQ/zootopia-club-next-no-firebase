@@ -36,9 +36,9 @@ import {
   resolveAssessmentQuestionStructuredData,
 } from "@/lib/assessment-question-display";
 import {
+  buildCanonicalAssessmentSummary,
   buildAssessmentNormalizedResult,
   buildAssessmentPromptPreview,
-  buildAssessmentSummary,
   buildAssessmentTitle,
 } from "@/lib/server/assessment-records";
 import {
@@ -196,7 +196,7 @@ type GoogleProviderResponse = {
    Keep emoji guidance here so provider-specific execution stays aligned with preview/export
    surfaces and does not silently "sanitize away" deliberate expressive characters. */
 const QWEN_ASSESSMENT_SYSTEM_PROMPT =
-  "You generate scientifically reliable assessment questions, may use tasteful educationally appropriate emojis when they genuinely help clarity or recall, and must respond with valid JSON only while preserving any emoji characters directly in the JSON strings.";
+  "You generate scientifically reliable assessment questions, include a meaningful lecture/document summary in 3 to 5 compact sentences, may use tasteful educationally appropriate emojis when they genuinely help clarity or recall, and must respond with valid JSON only while preserving any emoji characters directly in the JSON strings.";
 
 const QWEN_BASE_URL_ENV_HINT = QWEN_BASE_URL_ENV_KEYS.join(", ");
 
@@ -2151,9 +2151,6 @@ export async function generateAssessment(input: {
     ignoredQuestionTypeKeys: normalizedQuestionBuild.ignoredQuestionTypeKeys,
     seedNormalizedQuestions: normalizedQuestionBuild.seedNormalizedQuestions,
   });
-  const providerSummary = normalizeWhitespace(
-    String(providerExecution.payload.summary || ""),
-  );
 
   return {
     id: generationId,
@@ -2172,16 +2169,15 @@ export async function generateAssessment(input: {
     request: canonicalRequest,
     questions: normalizedResult.normalizedQuestions,
     meta: {
-      summary:
-        providerSummary ||
-        buildAssessmentSummary({
-          prompt: canonicalRequest.prompt,
-          mode: canonicalRequest.options.mode,
-          questionCount: questions.length,
-          difficulty: canonicalRequest.options.difficulty,
-          language: canonicalRequest.options.language,
-          sourceDocument: input.sourceDocument ?? null,
-        }),
+      summary: buildCanonicalAssessmentSummary({
+        summary: providerExecution.payload.summary,
+        prompt: canonicalRequest.prompt,
+        mode: canonicalRequest.options.mode,
+        questionCount: questions.length,
+        difficulty: canonicalRequest.options.difficulty,
+        language: canonicalRequest.options.language,
+        sourceDocument: input.sourceDocument ?? null,
+      }),
       questionCount: questions.length,
       difficulty: canonicalRequest.options.difficulty,
       language: canonicalRequest.options.language,

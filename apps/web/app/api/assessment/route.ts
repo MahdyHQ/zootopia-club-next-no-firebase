@@ -21,6 +21,7 @@ import {
   deleteAssessmentArtifact,
   persistAssessmentResultArtifact,
 } from "@/lib/server/assessment-artifact-storage";
+import { getAssessmentPromptAccessStateForUser } from "@/lib/server/assessment-prompt-lock";
 import { resolveAssessmentLinkedDocumentInput } from "@/lib/server/assessment-linked-document";
 import {
   appendAdminLog,
@@ -449,6 +450,26 @@ export async function POST(request: Request) {
   }
 
   const normalized = validation.value;
+  const promptAccess = await getAssessmentPromptAccessStateForUser({
+    uid: user.uid,
+    role: user.role,
+  });
+  if (!promptAccess.unlocked && normalized.prompt) {
+    return respondAssessmentError({
+      code: "ASSESSMENT_PROMPT_LOCKED",
+      message:
+        "ميزة طلب التقييم مخصصة حالياً للطلاب المختارين. يرجى التواصل مع المطور ابن عبدالله لطلب الوصول.",
+      status: 403,
+      context: {
+        ...baseDiagnosticContext,
+        layer: "authorization",
+        subsystem: "assessment-prompt-lock",
+        operation: "enforce-assessment-prompt-lock",
+        promptLength: normalized.prompt.length,
+      },
+    });
+  }
+
   const canonicalModelId = toCanonicalToolModelId("assessment", normalized.modelId);
   const requestIdempotencyKey = readAssessmentIdempotencyKey(request);
   if (requestIdempotencyKey === "INVALID_LENGTH") {

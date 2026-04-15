@@ -1,4 +1,5 @@
 export const APP_ROUTES = {
+  maintenance: "/maintenance",
   login: "/login",
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",

@@ -12,6 +12,7 @@ import type {
   AssessmentCreditGrantAdminView,
   AssessmentCreditGrantEffectiveStatus,
   AssessmentCreditGrantRecord,
+  AssessmentPromptEntitlement,
   AssessmentDailyCreditsSummary,
   AssessmentGeneration,
   DocumentRecord,
@@ -2924,6 +2925,10 @@ function parseOptionalIsoTimestamp(value: unknown) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
+function normalizeAssessmentPromptEntitlement(value: unknown): AssessmentPromptEntitlement {
+  return value === "enabled" ? "enabled" : "disabled";
+}
+
 function normalizeAssessmentCreditAccountRecord(input: {
   ownerUid: string;
   record: Partial<AssessmentCreditAccountRecord> | null | undefined;
@@ -2932,6 +2937,9 @@ function normalizeAssessmentCreditAccountRecord(input: {
   return {
     ownerUid: input.ownerUid,
     assessmentAccess: input.record?.assessmentAccess === "disabled" ? "disabled" : "enabled",
+    assessmentPromptEntitlement: normalizeAssessmentPromptEntitlement(
+      input.record?.assessmentPromptEntitlement,
+    ),
     dailyLimitOverride: normalizeAssessmentDailyLimitOverride(input.record?.dailyLimitOverride),
     manualCredits: clampManualCredits(
       typeof input.record?.manualCredits === "number" && Number.isFinite(input.record.manualCredits)
@@ -3511,6 +3519,110 @@ async function readAssessmentCreditAccount(input: { ownerUid: string; nowIso: st
     record: getMemoryStore().assessmentCreditAccounts.get(input.ownerUid) ?? null,
     nowIso: input.nowIso,
   });
+}
+
+export async function getAssessmentPromptEntitlementForUser(ownerUid: string) {
+  const nowIso = toIsoTimestamp(new Date());
+  const account = await readAssessmentCreditAccount({
+    ownerUid,
+    nowIso,
+  });
+
+  return account.assessmentPromptEntitlement;
+}
+
+export async function setAssessmentPromptEntitlementForUser(input: {
+  ownerUid: string;
+  entitlement: AssessmentPromptEntitlement;
+}) {
+  if (input.entitlement !== "enabled" && input.entitlement !== "disabled") {
+    throw new Error("ASSESSMENT_PROMPT_ENTITLEMENT_INVALID");
+  }
+
+  const nowIso = toIsoTimestamp(new Date());
+
+  if (shouldUseDatabase()) {
+    await getZootopiaDatabase().runTransaction(async (transaction) => {
+      const accountRef = getZootopiaDatabase()
+        .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
+        .doc(input.ownerUid);
+      const accountSnapshot = await transaction.get(accountRef);
+      const account = normalizeAssessmentCreditAccountRecord({
+        ownerUid: input.ownerUid,
+        record: accountSnapshot.exists
+          ? (accountSnapshot.data() as Partial<AssessmentCreditAccountRecord>)
+          : null,
+        nowIso,
+      });
+
+      const nextAccount = {
+        ...account,
+        assessmentPromptEntitlement: input.entitlement,
+        updatedAt: nowIso,
+      } satisfies AssessmentCreditAccountRecord;
+
+      await transaction.set(accountRef, nextAccount, { merge: true });
+    });
+  } else {
+    const store = getMemoryStore();
+    const account = normalizeAssessmentCreditAccountRecord({
+      ownerUid: input.ownerUid,
+      record: store.assessmentCreditAccounts.get(input.ownerUid) ?? null,
+      nowIso,
+    });
+
+    store.assessmentCreditAccounts.set(input.ownerUid, {
+      ...account,
+      assessmentPromptEntitlement: input.entitlement,
+      updatedAt: nowIso,
+    });
+  }
+
+  return readAssessmentCreditAccount({
+    ownerUid: input.ownerUid,
+    nowIso,
+  });
+}
+
+export async function listUserUidsWithAssessmentPromptEntitlementEnabled() {
+  const enabledOwnerUids = new Set<string>();
+  const nowIso = toIsoTimestamp(new Date());
+
+  if (shouldUseDatabase()) {
+    const snapshot = await getZootopiaDatabase()
+      .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
+      .where("assessmentPromptEntitlement", "==", "enabled")
+      .limit(5000)
+      .get();
+
+    for (const accountSnapshot of snapshot.docs) {
+      const account = normalizeAssessmentCreditAccountRecord({
+        ownerUid: accountSnapshot.id,
+        record: accountSnapshot.data() as Partial<AssessmentCreditAccountRecord>,
+        nowIso,
+      });
+
+      if (account.assessmentPromptEntitlement === "enabled") {
+        enabledOwnerUids.add(account.ownerUid);
+      }
+    }
+
+    return enabledOwnerUids;
+  }
+
+  for (const accountRecord of getMemoryStore().assessmentCreditAccounts.values()) {
+    const account = normalizeAssessmentCreditAccountRecord({
+      ownerUid: accountRecord.ownerUid,
+      record: accountRecord,
+      nowIso,
+    });
+
+    if (account.assessmentPromptEntitlement === "enabled") {
+      enabledOwnerUids.add(account.ownerUid);
+    }
+  }
+
+  return enabledOwnerUids;
 }
 
 async function listAssessmentCreditGrantsForOwner(input: { ownerUid: string; nowIso: string }) {
