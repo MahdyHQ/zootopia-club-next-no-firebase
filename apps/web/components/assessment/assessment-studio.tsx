@@ -44,7 +44,11 @@ import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import type { AppMessages } from "@/lib/messages";
-import { dispatchAssessmentCreditRefresh } from "@/lib/assessment-credit-events";
+import {
+  ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT,
+  dispatchAssessmentCreditRefresh,
+  type AssessmentCreditSummaryUpdatedDetail,
+} from "@/lib/assessment-credit-events";
 import {
   createOperationalUiError,
   getOperationalSupportNotes,
@@ -759,6 +763,35 @@ export function AssessmentStudio({
   useEffect(() => {
     setCreditSummary(initialCreditSummary);
   }, [initialCreditSummary]);
+
+  useEffect(() => {
+    /* Assessment Studio renders its own credit card from local state, but external admin grants
+       are first observed by the protected shell's shared refresh lane. Listen for that shell
+       broadcast here so the studio balance updates on the same owner session without a full reload. */
+    const handleCreditSummaryUpdated = (event: Event) => {
+      const nextSummary = (
+        event as CustomEvent<AssessmentCreditSummaryUpdatedDetail>
+      ).detail?.credits;
+
+      if (!nextSummary) {
+        return;
+      }
+
+      setCreditSummary(nextSummary);
+    };
+
+    window.addEventListener(
+      ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT,
+      handleCreditSummaryUpdated,
+    );
+
+    return () => {
+      window.removeEventListener(
+        ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT,
+        handleCreditSummaryUpdated,
+      );
+    };
+  }, []);
 
   useEffect(() => {
     setPromptAccess(initialPromptAccess);

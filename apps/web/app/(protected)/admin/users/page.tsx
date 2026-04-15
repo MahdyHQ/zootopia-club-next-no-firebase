@@ -40,8 +40,8 @@ export default async function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-2xl p-8 md:p-12 shadow-2xl shadow-emerald-900/5">
+    <div className="space-y-8">
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-zinc-200/80 bg-white/78 dark:border-white/10 dark:bg-zinc-950/40 backdrop-blur-2xl p-8 md:p-12 shadow-[0_20px_48px_rgba(148,163,184,0.16)] dark:shadow-2xl dark:shadow-emerald-900/5">
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-teal-900/10 pointer-events-none" />
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
         
@@ -61,7 +61,7 @@ export default async function AdminUsersPage() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-sm">
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-zinc-200/80 dark:border-white/5 bg-white/82 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-[0_16px_38px_rgba(148,163,184,0.14)] dark:shadow-sm">
         {usersDataDegraded ? (
           <div className="mb-4 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-200">
             User records are temporarily unavailable. The page is shown with a safe fallback state.

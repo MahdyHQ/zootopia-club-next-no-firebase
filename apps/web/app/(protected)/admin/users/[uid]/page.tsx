@@ -50,6 +50,27 @@ export const runtime = "nodejs";
 
 const USER_STORAGE_NAMESPACES = [...OWNER_STORAGE_NAMESPACES] as const;
 const DELETE_USER_CONFIRMATION_PHRASE = "DELETE USER";
+/* Admin user-management is a high-signal operational surface.
+   These classes intentionally strengthen light-mode contrast and remove lift-style motion on
+   buttons/cards here only, so credit mutations stay easy to read without altering dark mode. */
+const ADMIN_USER_DETAIL_PANEL_CLASS =
+  "rounded-[2rem] border border-zinc-200/80 bg-white/82 backdrop-blur-2xl p-6 shadow-[0_16px_38px_rgba(148,163,184,0.14)] dark:border-white/5 dark:bg-zinc-950/40 dark:shadow-sm";
+const ADMIN_USER_DETAIL_SUBSECTION_CLASS =
+  "rounded-2xl border border-zinc-200/80 bg-white/84 p-4 shadow-[0_12px_28px_rgba(148,163,184,0.10)] dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-none";
+const ADMIN_USER_DETAIL_CARD_CLASS =
+  "rounded-xl border border-zinc-200/80 bg-white/90 px-4 py-3 shadow-[0_8px_22px_rgba(148,163,184,0.10)] dark:border-zinc-800 dark:bg-zinc-900/50 dark:shadow-none";
+const ADMIN_USER_DETAIL_MUTATION_CARD_CLASS =
+  "rounded-xl border border-zinc-200/80 bg-white/92 p-3 shadow-[0_8px_20px_rgba(148,163,184,0.10)] dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-none";
+const ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS =
+  "hover:translate-y-0 shadow-[0_10px_24px_rgba(16,185,129,0.16)] transition-colors dark:shadow-sm";
+const ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS =
+  "border-zinc-300 bg-white text-zinc-900 shadow-sm shadow-zinc-200/70 transition-colors hover:translate-y-0 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 dark:border-border-strong dark:bg-transparent dark:text-foreground dark:shadow-none dark:hover:bg-accent/5 dark:hover:text-accent";
+const ADMIN_USER_DETAIL_SECONDARY_BUTTON_CLASS =
+  "bg-zinc-100 text-zinc-900 shadow-sm shadow-zinc-200/70 transition-colors hover:translate-y-0 hover:bg-zinc-200 dark:bg-accent/10 dark:text-accent dark:shadow-none dark:hover:bg-accent/20";
+const ADMIN_USER_DETAIL_DANGER_BUTTON_CLASS =
+  "hover:translate-y-0 shadow-[0_10px_22px_rgba(239,68,68,0.14)] transition-colors dark:shadow-sm";
+const ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS =
+  "border-red-300 bg-white text-red-700 shadow-sm shadow-red-100/70 transition-colors hover:translate-y-0 hover:border-red-400 hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:shadow-none dark:hover:bg-red-950/30";
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -825,9 +846,9 @@ export default async function AdminUserDetailPage({
   const recentCreditHistory = creditState?.history.slice(0, 12) ?? [];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="space-y-8">
       {/* Header */}
-      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-2xl p-8 md:p-12 shadow-2xl shadow-emerald-900/5">
+      <section className="relative overflow-hidden rounded-[2.5rem] border border-zinc-200/80 bg-white/78 dark:border-white/10 dark:bg-zinc-950/40 backdrop-blur-2xl p-8 md:p-12 shadow-[0_20px_48px_rgba(148,163,184,0.16)] dark:shadow-2xl dark:shadow-emerald-900/5">
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-teal-900/10 pointer-events-none" />
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -924,7 +945,7 @@ export default async function AdminUserDetailPage({
       )}
 
       {/* Identity / Account Section */}
-      <section className="rounded-[2rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-sm">
+      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <User className="h-5 w-5" />
           Identity & Account
@@ -1053,7 +1074,7 @@ export default async function AdminUserDetailPage({
       </section>
 
       {/* Credits / Usage Section */}
-      <section className="rounded-[2rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-sm">
+      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <Gauge className="h-5 w-5" />
           Credits & Usage
@@ -1136,11 +1157,16 @@ export default async function AdminUserDetailPage({
           that call repository mutations and append admin logs. Keep browser logic display-only.
         */}
         <div className="mt-5 grid gap-4 xl:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+          <div className={ADMIN_USER_DETAIL_SUBSECTION_CLASS}>
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Credit Controls</h3>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               Every mutation is written to durable storage and reflected in the per-user audit history.
             </p>
+            {creditsAccount?.assessmentAccess === "disabled" ? (
+              <div className="mt-3 rounded-xl border border-amber-300/70 bg-amber-50 px-3.5 py-3 text-sm text-amber-800 shadow-sm shadow-amber-100/80 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200 dark:shadow-none">
+                Credit grants can persist while this user still shows no usable balance if Assessment Access is disabled. Re-enable access first if the user should consume the granted credits immediately.
+              </div>
+            ) : null}
             <div className="mt-3 space-y-3">
               <CreditAccessToggleForm
                 targetUid={targetUser.uid}
@@ -1168,7 +1194,7 @@ export default async function AdminUserDetailPage({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+          <div className={ADMIN_USER_DETAIL_SUBSECTION_CLASS}>
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Credit Grants</h3>
             {creditState?.grants.length ? (
               <div className="mt-3 space-y-2">
@@ -1177,7 +1203,7 @@ export default async function AdminUserDetailPage({
                   return (
                     <div
                       key={grant.id}
-                      className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3"
+                      className={ADMIN_USER_DETAIL_MUTATION_CARD_CLASS}
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold text-zinc-900 dark:text-white">
@@ -1224,7 +1250,7 @@ export default async function AdminUserDetailPage({
           </div>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+        <div className={`mt-5 ${ADMIN_USER_DETAIL_SUBSECTION_CLASS}`}>
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Credit Mutation History</h3>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
             Durable per-user ledger showing before/after balance snapshots for every admin mutation.
@@ -1238,7 +1264,7 @@ export default async function AdminUserDetailPage({
               {recentCreditHistory.map((entry) => (
                 <div
                   key={entry.id}
-                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3"
+                  className={ADMIN_USER_DETAIL_MUTATION_CARD_CLASS}
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-semibold text-zinc-900 dark:text-white">
@@ -1270,7 +1296,7 @@ export default async function AdminUserDetailPage({
       </section>
 
       {/* Admin Controls Section */}
-      <section className="rounded-[2rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-sm">
+      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <Shield className="h-5 w-5" />
           Admin Controls
@@ -1327,7 +1353,7 @@ export default async function AdminUserDetailPage({
       </section>
 
       {/* Storage / Content Section */}
-      <section className="rounded-[2rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-sm">
+      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <HardDrive className="h-5 w-5" />
           Storage & Content
@@ -1359,7 +1385,7 @@ export default async function AdminUserDetailPage({
           />
         </div>
 
-        <div className="mt-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+        <div className={`mt-5 ${ADMIN_USER_DETAIL_SUBSECTION_CLASS}`}>
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-white mb-3 flex items-center gap-2">
             <Database className="h-4 w-4" />
             Namespace Breakdown
@@ -1368,7 +1394,7 @@ export default async function AdminUserDetailPage({
             {storageNamespaceSummaries.map((summary) => (
               <div
                 key={summary.namespace}
-                className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3"
+                className={ADMIN_USER_DETAIL_MUTATION_CARD_CLASS}
               >
                 <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{summary.prefix}</p>
                 <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-white">
@@ -1393,7 +1419,7 @@ export default async function AdminUserDetailPage({
           )}
         </div>
 
-        <div className="mt-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+        <div className={`mt-5 ${ADMIN_USER_DETAIL_SUBSECTION_CLASS}`}>
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-white mb-3 flex items-center gap-2">
             <Clock3 className="h-4 w-4" />
             Active Retention Policies
@@ -1419,14 +1445,14 @@ export default async function AdminUserDetailPage({
       </section>
 
       {/* Activity Section */}
-      <section className="rounded-[2rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 shadow-sm">
+      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <Activity className="h-5 w-5" />
           Recent Activity
         </h2>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+          <div className={ADMIN_USER_DETAIL_SUBSECTION_CLASS}>
             <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-white">Content Timeline</h3>
             {recentActivity.length === 0 ? (
               <p className="text-sm text-zinc-500 dark:text-zinc-400">No content activity found for this user.</p>
@@ -1435,7 +1461,7 @@ export default async function AdminUserDetailPage({
                 {recentActivity.map((item) => (
                   <div
                     key={`${item.kind}-${item.id}`}
-                    className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 px-3 py-2"
+                    className="rounded-xl border border-zinc-200/80 bg-white/92 px-3 py-2 shadow-[0_8px_20px_rgba(148,163,184,0.08)] dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-none"
                   >
                     <p className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                       {item.kind} · {item.status}
@@ -1448,7 +1474,7 @@ export default async function AdminUserDetailPage({
             )}
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/40 p-4">
+          <div className={ADMIN_USER_DETAIL_SUBSECTION_CLASS}>
             <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
               <History className="h-4 w-4" />
               Admin Action Timeline
@@ -1460,7 +1486,7 @@ export default async function AdminUserDetailPage({
                 {recentAdminActionsForTarget.map((entry) => (
                   <div
                     key={entry.id}
-                    className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 px-3 py-2"
+                    className="rounded-xl border border-zinc-200/80 bg-white/92 px-3 py-2 shadow-[0_8px_20px_rgba(148,163,184,0.08)] dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-none"
                   >
                     <p className="text-sm font-medium text-zinc-900 dark:text-white">{entry.action}</p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -1481,7 +1507,7 @@ export default async function AdminUserDetailPage({
       <div className="flex justify-start">
         <a
           href="/admin/users"
-          className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+          className="inline-flex items-center rounded-lg border border-zinc-300/80 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm shadow-zinc-200/70 transition-colors hover:border-zinc-400 hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-400 dark:shadow-none dark:hover:border-zinc-700 dark:hover:bg-zinc-900/60 dark:hover:text-white"
         >
           &larr; Back to Users List
         </a>
@@ -1517,7 +1543,7 @@ function DetailCard({
   };
 
   return (
-    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/50 px-4 py-3">
+    <div className={ADMIN_USER_DETAIL_CARD_CLASS}>
       <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
         {label}
       </p>
@@ -1570,7 +1596,7 @@ function RoleToggleForm({
         variant="outline"
         size="sm"
         disabled={disabled}
-        className="w-full h-10 justify-center gap-2"
+        className={`w-full h-10 justify-center gap-2 ${ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS}`}
       >
         {isAdmin ? <ShieldX className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
         {actionLabel}
@@ -1612,8 +1638,8 @@ function StatusToggleForm({
         disabled={disabled}
         className={`w-full h-10 justify-center gap-2 ${
           isActive
-            ? "border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
-            : ""
+            ? ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS
+            : ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
         }`}
       >
         {isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
@@ -1656,7 +1682,11 @@ function PromptEntitlementToggleForm({
         variant={nextEntitlement === "enabled" ? "default" : "outline"}
         size="sm"
         disabled={disabled}
-        className="w-full h-10 justify-center gap-2"
+        className={`w-full h-10 justify-center gap-2 ${
+          nextEntitlement === "enabled"
+            ? ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
+            : ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS
+        }`}
       >
         {nextEntitlement === "enabled" ? (
           <ShieldCheck className="h-4 w-4" />
@@ -1703,7 +1733,11 @@ function CreditAccessToggleForm({
         variant={nextAccess === "enabled" ? "default" : "outline"}
         size="sm"
         disabled={disabled}
-        className="w-full h-10 justify-center gap-2"
+        className={`w-full h-10 justify-center gap-2 ${
+          nextAccess === "enabled"
+            ? ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
+            : ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS
+        }`}
       >
         {actionLabel}
       </Button>
@@ -1760,7 +1794,7 @@ function CreditDailyOverrideForm({
         });
       }}
     >
-      <div className="space-y-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3">
+      <div className={ADMIN_USER_DETAIL_MUTATION_CARD_CLASS}>
         <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
           Daily Limit Override {currentOverride !== null ? `(Current: ${currentOverride})` : "(Using default)"}
         </p>
@@ -1788,7 +1822,7 @@ function CreditDailyOverrideForm({
             value="set"
             size="sm"
             disabled={disabled}
-            className="h-9"
+            className={`h-9 ${ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS}`}
           >
             Save Override
           </Button>
@@ -1799,7 +1833,7 @@ function CreditDailyOverrideForm({
             variant="outline"
             size="sm"
             disabled={disabled}
-            className="h-9"
+            className={`h-9 ${ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS}`}
           >
             Clear Override
           </Button>
@@ -1878,7 +1912,7 @@ function CreditManualBalanceForm({
         });
       }}
     >
-      <div className="space-y-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3">
+      <div className={ADMIN_USER_DETAIL_MUTATION_CARD_CLASS}>
         <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
           Manual Credits
         </p>
@@ -1907,7 +1941,7 @@ function CreditManualBalanceForm({
             value="add"
             size="sm"
             disabled={disabled}
-            className="h-9"
+            className={`h-9 ${ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS}`}
           >
             Add
           </Button>
@@ -1918,7 +1952,7 @@ function CreditManualBalanceForm({
             variant="outline"
             size="sm"
             disabled={disabled}
-            className="h-9"
+            className={`h-9 ${ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS}`}
           >
             Subtract
           </Button>
@@ -1929,7 +1963,7 @@ function CreditManualBalanceForm({
             variant="secondary"
             size="sm"
             disabled={disabled}
-            className="h-9"
+            className={`h-9 ${ADMIN_USER_DETAIL_SECONDARY_BUTTON_CLASS}`}
           >
             Set
           </Button>
@@ -1983,7 +2017,7 @@ function CreditGrantCreateForm({
         });
       }}
     >
-      <div className="space-y-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3">
+      <div className={ADMIN_USER_DETAIL_MUTATION_CARD_CLASS}>
         <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
           Grant Credits
         </p>
@@ -2022,7 +2056,7 @@ function CreditGrantCreateForm({
           type="submit"
           size="sm"
           disabled={disabled}
-          className="h-9 w-full"
+          className={`h-9 w-full ${ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS}`}
         >
           Create Grant
         </Button>
@@ -2068,7 +2102,7 @@ function RevokeCreditGrantForm({
           variant="outline"
           size="sm"
           disabled={disabled}
-          className="h-8 w-full"
+          className={`h-8 w-full ${ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS}`}
         >
           Revoke Grant
         </Button>
@@ -2134,7 +2168,7 @@ function DeleteUserForm({
           variant="destructive"
           size="sm"
           disabled={disabled}
-          className="w-full h-10 justify-center gap-2"
+          className={`w-full h-10 justify-center gap-2 ${ADMIN_USER_DETAIL_DANGER_BUTTON_CLASS}`}
         >
           <Trash2 className="h-4 w-4" />
           Delete User
@@ -2208,7 +2242,7 @@ function DeleteUserStorageForm({
           variant="destructive"
           size="sm"
           disabled={disabled}
-          className="w-full h-10 justify-center gap-2"
+          className={`w-full h-10 justify-center gap-2 ${ADMIN_USER_DETAIL_DANGER_BUTTON_CLASS}`}
         >
           <HardDrive className="h-4 w-4" />
           Delete All Files

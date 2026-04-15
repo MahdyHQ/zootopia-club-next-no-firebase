@@ -28,6 +28,17 @@ type UsersTableProps = {
 };
 
 const USERS_EXPORT_ENDPOINT = "/api/admin/users/export";
+/* These admin-users overview surfaces stay scoped to the list page only.
+   Light mode gets stronger borders/text and motion stays disabled here so management actions
+   remain immediately legible without changing the established dark-mode visual language. */
+const ADMIN_USERS_OVERVIEW_SECTION_CLASS =
+  "rounded-2xl border border-zinc-200/80 bg-white/84 p-4 shadow-[0_12px_28px_rgba(148,163,184,0.10)] backdrop-blur-md dark:border-border dark:bg-background-elevated/80 dark:shadow-sm";
+const ADMIN_USERS_OVERVIEW_CARD_CLASS =
+  "rounded-[1.75rem] border border-zinc-200/80 bg-white/92 p-5 shadow-[0_10px_26px_rgba(148,163,184,0.12)] backdrop-blur-md dark:border-border dark:bg-background-elevated/80 dark:shadow-sm";
+const ADMIN_USERS_OVERVIEW_OUTLINE_BUTTON_CLASS =
+  "border-zinc-300 bg-white text-zinc-900 shadow-sm shadow-zinc-200/70 transition-colors hover:translate-y-0 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 dark:border-border-strong dark:bg-transparent dark:text-foreground dark:shadow-none dark:hover:bg-accent/5 dark:hover:text-accent";
+const ADMIN_USERS_OVERVIEW_LINK_CLASS =
+  "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-300/90 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 shadow-sm shadow-emerald-100/80 transition-colors hover:bg-emerald-100 hover:text-emerald-900 dark:border-accent/25 dark:bg-accent/10 dark:text-accent-strong dark:shadow-none dark:hover:bg-accent/15 dark:hover:text-accent-strong";
 
 function extractDownloadFileName(contentDisposition: string | null, fallback: string) {
   if (!contentDisposition) {
@@ -140,7 +151,7 @@ export function UsersTable({
   }
 
   return (
-    <div className="space-y-6 animate-float translate-y-0">
+    <div className="space-y-6">
       {error ? (
         <div className="flex items-center gap-3 rounded-2xl border border-danger/20 bg-danger/5 p-4 text-danger shadow-sm">
           <AlertCircle className="h-5 w-5 shrink-0" />
@@ -149,7 +160,7 @@ export function UsersTable({
       ) : null}
 
       {initialUsers.length > 0 ? (
-        <section className="rounded-2xl border border-border bg-background-elevated/80 p-4 shadow-sm backdrop-blur-md">
+        <section className={ADMIN_USERS_OVERVIEW_SECTION_CLASS}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm leading-7 text-foreground-muted">
               {messages.adminUsersExportLabel}
@@ -163,7 +174,7 @@ export function UsersTable({
               onClick={() => {
                 void handleExportUsers();
               }}
-              className="h-10 gap-2 sm:min-w-[220px]"
+              className={`h-10 gap-2 sm:min-w-[220px] ${ADMIN_USERS_OVERVIEW_OUTLINE_BUTTON_CLASS}`}
             >
               {exportingUsers ? (
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -181,7 +192,7 @@ export function UsersTable({
       ) : null}
 
       {initialUsers.length === 0 ? (
-        <div className="rounded-[2rem] border border-border bg-background-elevated px-6 py-16 text-center shadow-sm backdrop-blur-md">
+        <div className="rounded-[2rem] border border-zinc-200/80 bg-white/88 px-6 py-16 text-center shadow-[0_12px_28px_rgba(148,163,184,0.12)] backdrop-blur-md dark:border-border dark:bg-background-elevated dark:shadow-sm">
           <div className="flex flex-col items-center justify-center gap-4 text-foreground-muted">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-border-strong/10">
               <ShieldCheck className="h-6 w-6 text-foreground-muted/40" />
@@ -205,7 +216,7 @@ export function UsersTable({
             return (
               <article
                 key={user.uid}
-                className="rounded-[1.75rem] border border-border bg-background-elevated/80 p-5 shadow-sm backdrop-blur-md"
+                className={ADMIN_USERS_OVERVIEW_CARD_CLASS}
               >
                 <div className="flex items-start gap-4">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent/10 font-[family-name:var(--font-display)] text-lg font-bold text-accent shadow-sm">
@@ -309,7 +320,7 @@ export function UsersTable({
                 <div className="mt-5">
                   <Link
                     href={`/admin/users/${encodeURIComponent(user.uid)}`}
-                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-accent/25 bg-accent/10 px-4 text-sm font-semibold text-accent-strong transition-colors hover:bg-accent/15"
+                    className={ADMIN_USERS_OVERVIEW_LINK_CLASS}
                   >
                     <span>{messages.adminUserDetailsAction}</span>
                     <ArrowUpRight className="h-4 w-4" />

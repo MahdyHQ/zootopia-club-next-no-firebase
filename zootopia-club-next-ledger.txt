@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Assessment prompt-lock entitlement-aware unlock fix + Arabic failure-message hardening)
+Last Updated: 2026-04-15 (Admin credit recipient refresh sync + access-state clarity + admin users light-mode contrast polish)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -178,6 +178,15 @@ Key verified facts:
   non-entitled users do not see a misleading password form; unlock failures now
   distinguish wrong password, missing entitlement, and server misconfiguration
   with clearer Arabic feedback while unlock authority remains backend-owned
+- Admin credit mutations on `/admin/users/[uid]` currently execute through
+  server actions on the detail page (not the separate PATCH route), and the
+  recipient balance remains server-owned through `/api/assessment/credits`
+- Assessment Studio now listens to the protected shell's refreshed credit
+  summary broadcast so external admin credit grants become visible inside the
+  page-level credits card without requiring a full page reload
+- Admin user-management overview/detail surfaces now run without floating/fade
+  motion and use stronger light-mode button/surface contrast while dark mode
+  retains the existing visual language
 - Protected Home/Assessment/Infographic/Settings/Upload/History wrappers now
   share a lighter translucency baseline so background ambience reads through
   consistently without reducing form/control legibility
@@ -5939,6 +5948,103 @@ Risks / Notes:
   cause in this codebase revision; the existing trimmed password comparison was
   retained because the active environment does not indicate a whitespace-based
   misconfiguration.
+
+---
+
+2026-04-15 — Admin Credit Grant Verification + Recipient Refresh Sync + Admin Users Light-Mode Polish
+======================================================================================================
+Type: Credit-governance verification / recipient visibility hardening / admin UX contrast refinement
+Scope: admin credit grant path, user credit read visibility, admin users overview/detail UI
+
+Summary:
+- Performed a ledger-first, code-trace-first verification pass of the admin
+  credit grant system end to end:
+  - `/admin/users` overview
+  - `/admin/users/[uid]` detail controls
+  - detail-page server actions
+  - optional admin credits API route
+  - repository admin mutation transaction
+  - recipient credit read route
+  - protected-shell credit refresh path
+  - Assessment Studio credit display path
+- Verified that the current live admin detail UI does not use the PATCH admin
+  credits route for its main flow; it submits server actions on
+  `/admin/users/[uid]`, which call `applyAdminAssessmentCreditMutation(...)`
+  directly and only redirect with `credits_updated` after the repository call
+  returns successfully.
+- Verified that the repository write path itself is owner-scoped and
+  transaction-backed:
+  - target user is resolved first
+  - self-mutation is blocked
+  - grant records are created with the target `ownerUid`
+  - the post-mutation admin state is reread from the same repository path
+- Identified two real product-level causes of “grant looked successful but the
+  user did not receive credits” in this codebase revision:
+  - recipient pages could stay visually stale because the protected shell was
+    refreshing `/api/assessment/credits`, but Assessment Studio kept its own
+    one-time local summary and did not subscribe to that refreshed value
+  - grants can persist correctly while the recipient still shows `0` usable
+    credits if `assessmentAccess === "disabled"`, because the summary
+    intentionally hard-zeros usable remaining balance in that state
+- No database/schema defect requiring a new migration was found in this pass.
+  The current Supabase-backed document-store schema and repository contracts are
+  sufficient for the observed symptom.
+
+What Changed:
+- `apps/web/lib/assessment-credit-events.ts`
+  - Added a new browser event for broadcasting refreshed
+    `AssessmentDailyCreditsSummary` payloads.
+- `apps/web/components/layout/protected-shell.tsx`
+  - After each successful `/api/assessment/credits` refresh, the shell now
+    broadcasts the latest server-owned summary for same-session listeners.
+- `apps/web/components/assessment/assessment-studio.tsx`
+  - Added a listener for the protected-shell credit-summary broadcast so the
+    prominent credits card inside Assessment Studio updates after external admin
+    grants without requiring a full page reload.
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+  - Added an explicit warning when credits/grants are being managed while
+    `Assessment Access` is disabled, clarifying why a persisted grant may still
+    appear unusable to the recipient.
+  - Strengthened light-mode contrast for admin credit/action buttons and
+    related cards.
+  - Removed entry/floating motion from the page-level admin management surface.
+- `apps/web/app/(protected)/admin/users/page.tsx`
+  - Strengthened light-mode section contrast and removed entry motion from the
+    admin users overview page.
+- `apps/web/components/admin/users-table.tsx`
+  - Removed floating motion from the users list container.
+  - Strengthened light-mode export CTA, user cards, and detail-link contrast
+    while preserving dark-mode styling.
+- `zootopia-club-next-ledger.txt`
+  - Refreshed the current truth snapshot and recorded this verification pass.
+
+Verification:
+- Static path trace verified:
+  - overview -> detail link -> detail-page server action ->
+    `applyAdminAssessmentCreditMutation(...)` -> repository reread
+  - recipient path: `/api/assessment/credits` ->
+    `getAssessmentDailyCreditsSummaryForUser(...)` ->
+    `ProtectedShell` refresh lane
+  - Assessment Studio now visually follows the same refreshed summary path
+- Confirmed:
+  - admin self-credit mutation remains blocked
+  - owner-scoped writes stay isolated to the selected target user
+  - recipient credit summary remains server-owned through
+    `getAssessmentDailyCreditsSummaryForUser(...)`
+  - no new migration was needed for the symptom investigated
+- `shell: npm run lint:web`: pass
+- `shell: npm run typecheck:web`: pass
+- `shell: npm run build:web`: pass
+
+Risks / Notes:
+- This pass intentionally did not change repository credit arithmetic, grant
+  persistence schema, upload/preview/export logic, or password/account flows.
+- Recipient credit updates are now visually synchronized inside the Assessment
+  page once the protected shell receives a fresh summary (mount/focus/visibility/
+  interval lane). This removes the stale per-page card gap without adding a
+  second polling owner on the same page.
+- The separate admin credits route still exists for programmatic/admin API use,
+  but the current detail-page UI path remains server-action driven.
 
 ---
 

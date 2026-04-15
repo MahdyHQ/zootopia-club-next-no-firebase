@@ -13,7 +13,10 @@ import type {
   SessionUser,
   ThemeMode,
 } from "@zootopia/shared-types";
-import { ASSESSMENT_CREDIT_REFRESH_EVENT } from "@/lib/assessment-credit-events";
+import {
+  ASSESSMENT_CREDIT_REFRESH_EVENT,
+  dispatchAssessmentCreditSummaryUpdated,
+} from "@/lib/assessment-credit-events";
 import {
   resolveAvatarFallbackInitial,
   resolveRoleGenderAvatarSrc,
@@ -129,6 +132,7 @@ export function ProtectedShell({
           return;
         }
 
+        dispatchAssessmentCreditSummaryUpdated(payload.data.credits);
         setCreditSummary((current) =>
           areCreditSummariesEqual(current, payload.data.credits)
             ? current
