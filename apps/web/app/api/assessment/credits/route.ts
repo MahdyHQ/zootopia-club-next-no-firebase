@@ -5,6 +5,7 @@ import { getAssessmentDailyCreditsSummaryForUser } from "@/lib/server/repository
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const user = await getAuthenticatedSessionUser();

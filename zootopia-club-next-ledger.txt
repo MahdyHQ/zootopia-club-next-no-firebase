@@ -1452,3 +1452,58 @@ Risks / follow-up:
 - If production uses additional trusted proxy/front-door origins beyond env-derived values, add them to `serverActions.allowedOrigins` allowlist.
 - A full authenticated browser E2E replay of admin-submit + target-user UI refresh should be rerun in the exact production domain path where the screenshot was captured to confirm no host/proxy drift remains.
 
+2026-04-15 — Assessment Credit Freshness Sync Hardening (Route-Change + Mount Refresh + Dynamic Credits API)
+
+Type: Runtime freshness hardening + UI sync reliability
+Scope: Minimal, backward-compatible
+Migration: None
+
+Reason:
+- Admin credit mutations were persisting correctly in backend authority paths, but user-facing credit surfaces could remain stale longer than expected when the user stayed on a visible tab or navigated via prefetched routes.
+- The objective was to preserve server-owned credit truth while tightening propagation timing to header and Assessment Studio.
+
+Root Cause (verified):
+1) Stale-window in client propagation cadence:
+- Protected shell credit refresh relied on focus/visibility + a 60s interval.
+- If a user stayed on an active tab after an external admin mutation, visible credit chips/exhausted-state controls could lag until the next interval tick.
+
+2) Prefetch entry stale-snapshot risk:
+- Assessment Studio can mount from a prefetched route snapshot captured before a later admin mutation.
+- Without an immediate mount-triggered refresh signal, the studio could momentarily render outdated quota state.
+
+What changed:
+
+1) `apps/web/components/layout/protected-shell.tsx`
+- Reduced `CREDIT_SUMMARY_REFRESH_INTERVAL_MS` from `60000` to `20000` to narrow stale windows while keeping lightweight polling.
+- Added a protected-route transition refresh inside the existing `pathname` effect:
+  - route change now triggers `refreshCreditSummary()` in addition to closing the compact credit-help popover.
+- Added explicit code comments describing why route-change refresh exists and that backend credit authority remains server-side.
+
+2) `apps/web/components/assessment/assessment-studio.tsx`
+- Added a mount-time `dispatchAssessmentCreditRefresh()` effect.
+- This reuses the existing shared shell refresh lane instead of introducing a second polling owner.
+- Added comment clarifying this is a freshness trigger for prefetched/stale mount scenarios and exhausted-state re-evaluation.
+
+3) `apps/web/app/api/assessment/credits/route.ts`
+- Added `export const dynamic = "force-dynamic";` to enforce dynamic execution for the credit summary route segment.
+- Existing `applyNoStore(...)` response behavior is preserved.
+
+What was preserved:
+- Admin credit mutation authority and transaction semantics remain in repository layer (`applyAdminAssessmentCreditMutation`).
+- User credit truth remains backend-owned through `/api/assessment/credits`.
+- Existing event architecture (`ASSESSMENT_CREDIT_REFRESH_EVENT` + `ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT`) remains intact; changes only tighten refresh timing.
+- No new dependencies, no schema changes, no API contract changes.
+
+Verification:
+- Lint: `npm run lint --workspace @zootopia/web` ✅
+- Typecheck: `npm run typecheck --workspace @zootopia/web` ✅
+- Build: `npm run build --workspace @zootopia/web` ✅
+  - Build confirms relevant routes/components compile, including:
+    - `/api/assessment/credits`
+    - `/assessment`
+    - protected layout surfaces
+
+Risks / follow-up:
+- Poll interval is now tighter (20s). Expected load increase is small for current scope, but monitor if protected-session volume grows significantly.
+- For near-instant cross-session propagation beyond polling/focus/route-change, a future server-push channel (SSE/WebSocket) would be needed; current patch intentionally avoids architectural redesign.
+

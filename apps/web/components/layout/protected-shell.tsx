@@ -76,7 +76,7 @@ export function ProtectedShell({
   locale,
   themeMode,
 }: ProtectedShellProps) {
-  const CREDIT_SUMMARY_REFRESH_INTERVAL_MS = 60_000;
+  const CREDIT_SUMMARY_REFRESH_INTERVAL_MS = 20_000;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -254,6 +254,11 @@ export function ProtectedShell({
     /* Route transitions inside protected pages should not keep transient header
        popovers open; reset this local support surface on every pathname change. */
     setIsCreditHelpOpen(false);
+
+    /* Protected pages can be entered from prefetched payloads that were captured before an
+       external admin credit mutation. Force a fresh server summary on every protected-route
+       transition so header and Assessment Studio reflect current backend credit truth quickly. */
+    void refreshCreditSummary();
   }, [pathname]);
 
   const resolvedBalanceLabel = creditSummary?.isAdminExempt

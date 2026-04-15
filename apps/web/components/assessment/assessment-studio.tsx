@@ -765,6 +765,13 @@ export function AssessmentStudio({
   }, [initialCreditSummary]);
 
   useEffect(() => {
+    /* Assessment Studio can mount from a prefetched route snapshot that predates an external
+       admin credit mutation. Trigger the shared shell refresh lane immediately on mount so
+       exhausted-state controls re-evaluate against current server credit truth. */
+    dispatchAssessmentCreditRefresh();
+  }, []);
+
+  useEffect(() => {
     /* Assessment Studio renders its own credit card from local state, but external admin grants
        are first observed by the protected shell's shared refresh lane. Listen for that shell
        broadcast here so the studio balance updates on the same owner session without a full reload. */
