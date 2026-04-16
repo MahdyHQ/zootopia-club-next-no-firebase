@@ -179,3 +179,8 @@ PUPPETEER_EXECUTABLE_PATH=
 # Using NEXT_PUBLIC keys keeps server and client redirect decisions aligned in Next App Router.
 NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT=/
 NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT=/
+modalresearch_exHaTM1D1CaMLGNTmn94qNehsMK0XS-YuZ7EExieyHY
+curl -X POST "https://api.us-west-2.modal.direct/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer modalresearch_exHaTM1D1CaMLGNTmn94qNehsMK0XS-YuZ7EExieyHY" \
+  -d '{"model": "zai-org/GLM-5.1-FP8", "messages": [{"role": "user", "content": "How many r-s are in strawberry?"}], "max_tokens": 500}'

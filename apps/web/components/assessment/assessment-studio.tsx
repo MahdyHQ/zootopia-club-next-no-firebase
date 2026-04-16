@@ -52,8 +52,12 @@ import {
   logAssessmentCreditClientDiagnostic,
 } from "@/lib/assessment-credit-diagnostics";
 import {
+  formatAssessmentCreditCount,
+  resolveAssessmentCreditDisplayModel,
+  type AssessmentCreditDisplayModel,
+} from "@/lib/assessment-credit-display";
+import {
   invalidateAssessmentCreditSummaryQuery,
-  setAssessmentCreditSummaryQueryData,
   useAssessmentCreditSummaryQuery,
 } from "@/lib/assessment-credit-query";
 import {
@@ -75,7 +79,6 @@ type AssessmentStudioProps = {
   initialDocuments: DocumentRecord[];
   initialGenerations: AssessmentGeneration[];
   initialActiveDocumentId: string | null;
-  initialCreditSummary: AssessmentDailyCreditsSummary;
 };
 
 type AssessmentPromptAccess = {
@@ -450,6 +453,32 @@ function getDocumentStatusLabel(value: DocumentRecord["status"], messages: AppMe
   }
 }
 
+function areCreditSummariesEqual(
+  left: AssessmentDailyCreditsSummary | null,
+  right: AssessmentDailyCreditsSummary | null,
+) {
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return (
+    left.dayKey === right.dayKey &&
+    left.assessmentAccess === right.assessmentAccess &&
+    left.isAdminExempt === right.isAdminExempt &&
+    left.dailyLimit === right.dailyLimit &&
+    left.dailyLimitSource === right.dailyLimitSource &&
+    left.dailyRemainingCount === right.dailyRemainingCount &&
+    left.extraCreditsAvailable === right.extraCreditsAvailable &&
+    left.activeGrantCount === right.activeGrantCount &&
+    left.remainingCount === right.remainingCount &&
+    left.totalRemainingCount === right.totalRemainingCount &&
+    left.manualCreditsAvailable === right.manualCreditsAvailable &&
+    left.grantCreditsAvailable === right.grantCreditsAvailable &&
+    left.usedCount === right.usedCount &&
+    left.resetsAt === right.resetsAt
+  );
+}
+
 function resolveAssessmentResponseFallbackMessage(
   response: Response,
   rawBody: string,
@@ -724,7 +753,99 @@ function resolveAssessmentErrorMessage(
 }
 
 function isAssessmentDailyCreditsExhausted(credits: AssessmentDailyCreditsSummary) {
-  return credits.applies && credits.remainingCount === 0;
+  return (
+    credits.applies &&
+    credits.assessmentAccess !== "disabled" &&
+    credits.remainingCount === 0
+  );
+}
+
+function buildAssessmentCreditSourceLabels(
+  locale: Locale,
+  creditDisplay: AssessmentCreditDisplayModel,
+) {
+  if (creditDisplay.extraAvailable <= 0) {
+    return [];
+  }
+
+  return [
+    creditDisplay.hasManualCredits
+      ? locale === "ar"
+        ? "إضافة إدارية"
+        : "Admin-added"
+      : null,
+    creditDisplay.hasGrantCredits
+      ? locale === "ar"
+        ? "منح"
+        : "Grant"
+      : null,
+  ].filter((value): value is string => Boolean(value));
+}
+
+function buildAssessmentCreditPanelHeading(input: {
+  locale: Locale;
+  creditDisplay: AssessmentCreditDisplayModel;
+  messages: AppMessages;
+}) {
+  const { creditDisplay, locale, messages } = input;
+  if (creditDisplay.state === "admin_exempt") {
+    return messages.assessmentDailyCreditsAdminExemptTitle;
+  }
+
+  if (creditDisplay.state === "access_disabled") {
+    return locale === "ar"
+      ? "وصول التقييم موقوف حالياً"
+      : "Assessment access is currently disabled.";
+  }
+
+  if (creditDisplay.state === "none") {
+    return locale === "ar"
+      ? "لا توجد اعتمادات متاحة حالياً"
+      : "No credits available right now.";
+  }
+
+  return locale === "ar"
+    ? `المتاح الآن: ${formatAssessmentCreditCount(creditDisplay.totalAvailable ?? 0, locale)}`
+    : `Available now: ${formatAssessmentCreditCount(creditDisplay.totalAvailable ?? 0, locale)}`;
+}
+
+function buildAssessmentCreditPanelBody(input: {
+  locale: Locale;
+  creditDisplay: AssessmentCreditDisplayModel;
+  messages: AppMessages;
+}) {
+  const { creditDisplay, locale, messages } = input;
+  const extraSourceLabels = buildAssessmentCreditSourceLabels(locale, creditDisplay);
+  const extraSourcePhrase = extraSourceLabels.length === 0
+    ? locale === "ar"
+      ? "الاعتمادات الإضافية"
+      : "extra credits"
+    : extraSourceLabels.join(locale === "ar" ? " و" : " and ");
+
+  switch (creditDisplay.state) {
+    case "admin_exempt":
+      return messages.assessmentDailyCreditsAdminExemptBody;
+    case "access_disabled":
+      return messages.assessmentAccessDisabledBody;
+    case "daily_only":
+      return locale === "ar"
+        ? "الرصيد المتاح حالياً يأتي بالكامل من الحصة اليومية، وسيُعاد ضبطه تلقائياً عند نافذة التجديد التالية."
+        : "Your current balance comes entirely from today's daily allowance and will renew automatically at the next reset window.";
+    case "mixed":
+      return locale === "ar"
+        ? `لديك حالياً رصيد يومي متاح بالإضافة إلى اعتمادات إضافية من ${extraSourcePhrase}.`
+        : `You currently have daily credits available plus extra credits from ${extraSourcePhrase}.`;
+    case "extra_only":
+      return locale === "ar"
+        ? `تم استهلاك الحصة اليومية، لكن ما زالت اعتمادات إضافية من ${extraSourcePhrase} متاحة للاستخدام الآن.`
+        : `Your daily allowance is exhausted, but extra credits from ${extraSourcePhrase} are still available right now.`;
+    case "none":
+      return locale === "ar"
+        ? "لا توجد حصة يومية أو اعتمادات إضافية متاحة حالياً. ستتجدد الاعتمادات عند نافذة إعادة الضبط التالية."
+        : "No daily or extra credits are currently available. Credits will renew at the next reset window.";
+    default:
+      return messages.assessmentDailyCreditsRenewsTomorrow;
+  }
 }
 
 export function AssessmentStudio({
@@ -736,15 +857,19 @@ export function AssessmentStudio({
   initialDocuments,
   initialGenerations,
   initialActiveDocumentId,
-  initialCreditSummary,
 }: AssessmentStudioProps) {
   const [generations, setGenerations] = useState(initialGenerations);
   const queryClient = useQueryClient();
+  /* Assessment Studio must consume the exact same canonical credit query as the protected header.
+     Future agents: do not seed this hook from page props or mutation responses, or the studio can
+     momentarily outrun the shell before `/api/assessment/credits` finishes reconciling. */
   const creditSummaryQuery = useAssessmentCreditSummaryQuery({
     source: "assessment-studio",
-    initialData: initialCreditSummary,
   });
-  const creditSummary = creditSummaryQuery.data ?? initialCreditSummary;
+  const creditSummary = creditSummaryQuery.data ?? null;
+  const creditDisplay = creditSummary
+    ? resolveAssessmentCreditDisplayModel(creditSummary)
+    : null;
   const [request, setRequest] = useState<AssessmentRequest>(() =>
     createInitialRequest(locale, defaultModelId, initialActiveDocumentId),
   );
@@ -766,6 +891,7 @@ export function AssessmentStudio({
   const retentionNoticeGenerationIdRef = useRef<string | null>(null);
   const submitAttemptRef = useRef<AssessmentSubmitAttemptSnapshot | null>(null);
   const submitInFlightRef = useRef(false);
+  const lastAppliedCreditSummaryRef = useRef<AssessmentDailyCreditsSummary | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -794,6 +920,33 @@ export function AssessmentStudio({
       },
     });
   }, [creditSummaryQuery.error]);
+
+  useEffect(() => {
+    if (!creditSummary) {
+      return;
+    }
+
+    /* Keep a studio-specific "summary applied" trace so diagnostics can confirm that the
+       Assessment surface reconciled to the shared query result, not to any local balance owner. */
+    if (areCreditSummariesEqual(lastAppliedCreditSummaryRef.current, creditSummary)) {
+      return;
+    }
+
+    lastAppliedCreditSummaryRef.current = creditSummary;
+    logAssessmentCreditClientDiagnostic({
+      event: "assessment_studio_summary_applied",
+      details: {
+        source: "query-cache",
+        displayState: creditDisplay?.state ?? null,
+        dailyAvailable: creditDisplay?.dailyAvailable ?? null,
+        extraAvailable: creditDisplay?.extraAvailable ?? null,
+        remainingCount: creditSummary.remainingCount,
+        manualCreditsAvailable: creditSummary.manualCreditsAvailable,
+        grantCreditsAvailable: creditSummary.grantCreditsAvailable,
+        assessmentAccess: creditSummary.assessmentAccess,
+      },
+    });
+  }, [creditDisplay, creditSummary]);
 
   useEffect(() => {
     setPromptAccess(initialPromptAccess);
@@ -876,7 +1029,48 @@ export function AssessmentStudio({
   const latestDocument =
     documentOptions.find((document) => document.isActive) ?? documentOptions[0] ?? null;
   const latestGeneration = generations[0] ?? null;
-  const creditsExhausted = isAssessmentDailyCreditsExhausted(creditSummary);
+  const creditsExhausted = creditSummary
+    ? isAssessmentDailyCreditsExhausted(creditSummary)
+    : false;
+  const creditSummaryHeading = !creditDisplay
+    ? messages.loading
+    : buildAssessmentCreditPanelHeading({
+        locale,
+        creditDisplay,
+        messages,
+      });
+  const creditSummaryBody = !creditDisplay
+    ? messages.loading
+    : buildAssessmentCreditPanelBody({
+        locale,
+        creditDisplay,
+        messages,
+      });
+  const creditSourceLabels = creditDisplay
+    ? buildAssessmentCreditSourceLabels(locale, creditDisplay)
+    : [];
+  const totalAvailableChipLabel =
+    !creditDisplay || creditDisplay.state === "admin_exempt"
+      ? null
+      : locale === "ar"
+        ? `المتاح الآن: ${formatAssessmentCreditCount(creditDisplay.totalAvailable ?? 0, locale)}`
+        : `Available now: ${formatAssessmentCreditCount(creditDisplay.totalAvailable ?? 0, locale)}`;
+  const dailyAvailableChipLabel =
+    !creditDisplay
+    || creditDisplay.state === "admin_exempt"
+    || creditDisplay.dailyAvailable === null
+      ? null
+      : locale === "ar"
+        ? `اليومي المتاح: ${formatAssessmentCreditCount(creditDisplay.dailyAvailable, locale)}`
+        : `Daily available: ${formatAssessmentCreditCount(creditDisplay.dailyAvailable, locale)}`;
+  const extraAvailableChipLabel =
+    !creditDisplay
+    || creditDisplay.state === "admin_exempt"
+    || creditDisplay.extraAvailable <= 0
+      ? null
+      : locale === "ar"
+        ? `الإضافي المتاح: ${formatAssessmentCreditCount(creditDisplay.extraAvailable, locale)}`
+        : `Extra available: ${formatAssessmentCreditCount(creditDisplay.extraAvailable, locale)}`;
   const promptFeatureLocked =
     promptAccess.lockEnabled && !promptAccess.unlocked && !promptAccess.isAdmin;
   /* The server owns entitlement state and decides whether this account should ever see the
@@ -945,11 +1139,14 @@ export function AssessmentStudio({
     logAssessmentCreditClientDiagnostic({
       event: "assessment_studio_exhausted_state_recalculated",
       details: {
-        exhausted: creditsExhausted,
-        summary: buildAssessmentCreditClientSummarySnapshot(creditSummary),
+        exhausted: creditSummary ? creditsExhausted : null,
+        displayState: creditDisplay?.state ?? null,
+        summary: creditSummary
+          ? buildAssessmentCreditClientSummarySnapshot(creditSummary)
+          : null,
       },
     });
-  }, [creditSummary, creditsExhausted]);
+  }, [creditDisplay, creditSummary, creditsExhausted]);
 
   function handleToggleQuestionType(type: AssessmentQuestionType) {
     setFieldErrors((current) => ({
@@ -1169,6 +1366,14 @@ export function AssessmentStudio({
         setRequest(requestForSubmit);
       }
 
+      /* Block submits until the canonical shared credit query has resolved. This keeps the studio
+         from acting on a stale server-rendered seed or a local mutation response before the same
+         `/api/assessment/credits` read model used by the header is available. */
+      if (!creditSummary) {
+        setError(createOperationalUiError(messages.loading, false));
+        return;
+      }
+
       // This is only a user-friendly local stop. The real exhausted-limit enforcement lives on the
       // server route so duplicate tabs, retried requests, and direct API calls stay constrained.
       if (creditsExhausted) {
@@ -1257,21 +1462,9 @@ export function AssessmentStudio({
         }
 
         if (!payload.ok && payload.error.code === "ASSESSMENT_DAILY_CREDITS_EXHAUSTED") {
-          if (creditSummary.applies) {
-            setAssessmentCreditSummaryQueryData(queryClient, {
-              source: "assessment-studio",
-              reason: "submit-daily-exhausted",
-              summary: {
-                ...creditSummary,
-                dailyRemainingCount: 0,
-                extraCreditsAvailable: 0,
-                totalRemainingCount: 0,
-                remainingCount: 0,
-                usedCount: creditSummary.dailyLimit,
-              },
-            });
-          }
-
+          /* Keep assessment credits server-authoritative on exhausted responses. Do not synthesize
+             local zero-balance snapshots from stale UI state; force the shared query to refetch
+             canonical `/api/assessment/credits` so header + studio reconcile from one source. */
           void invalidateAssessmentCreditSummaryQuery(queryClient, {
             source: "assessment-studio",
             reason: "submit-daily-exhausted",
@@ -1305,10 +1498,12 @@ export function AssessmentStudio({
 
       setGenerations((current) => replaceGeneration(current, payload.data.generation));
       setLastCreatedGeneration(payload.data.generation);
-      setAssessmentCreditSummaryQueryData(queryClient, {
+      /* Successful generations still reconcile through canonical `/api/assessment/credits` only.
+         Do not patch the shared balance cache from mutation responses here, or the studio can show
+         a provisional balance before the protected header finishes reading the same source. */
+      void invalidateAssessmentCreditSummaryQuery(queryClient, {
         source: "assessment-studio",
-        reason: "submit-succeeded",
-        summary: payload.data.credits,
+        reason: "submit-succeeded-reconcile",
         details: {
           generationId: payload.data.generation.id,
         },
@@ -1426,21 +1621,11 @@ export function AssessmentStudio({
                       {messages.assessmentDailyCreditsTitle}
                     </p>
                     <h3 className="mt-2 text-lg font-semibold text-foreground">
-                      {creditSummary.isAdminExempt
-                        ? messages.assessmentDailyCreditsAdminExemptTitle
-                        : creditsExhausted
-                          ? messages.assessmentDailyCreditsExhaustedTitle
-                          : `${creditSummary.remainingCount} ${messages.assessmentDailyCreditsRemainingLabel}`}
+                      {creditSummaryHeading}
                     </h3>
                     <div className="mt-2 space-y-1 text-sm leading-6 text-foreground-muted">
-                      <p>
-                        {creditSummary.isAdminExempt
-                          ? messages.assessmentDailyCreditsAdminExemptBody
-                          : creditsExhausted
-                            ? messages.assessmentDailyCreditsExhaustedInline
-                            : messages.assessmentDailyCreditsRenewsTomorrow}
-                      </p>
-                      {creditSummary.isAdminExempt || !creditsExhausted ? null : (
+                      <p>{creditSummaryBody}</p>
+                      {!creditSummary || creditSummary.isAdminExempt || !creditsExhausted ? null : (
                         <p className="text-[0.92em] text-foreground-muted/90">
                           {messages.assessmentDailyCreditsExhaustedSupportNote}
                         </p>
@@ -1449,15 +1634,35 @@ export function AssessmentStudio({
                   </div>
 
                   <div className="flex flex-wrap gap-2 sm:justify-end">
-                    <span className="inline-flex items-center rounded-full border border-emerald-500/15 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-200">
-                      {creditSummary.dailyLimit} {messages.assessmentDailyCreditsLimitLabel}
-                    </span>
-                    {creditSummary.applies ? (
+                    {totalAvailableChipLabel ? (
+                      <span className="inline-flex items-center rounded-full border border-emerald-500/15 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-200">
+                        {totalAvailableChipLabel}
+                      </span>
+                    ) : null}
+                    {dailyAvailableChipLabel ? (
+                      <span className="inline-flex items-center rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-700 dark:text-sky-200">
+                        {dailyAvailableChipLabel}
+                      </span>
+                    ) : null}
+                    {extraAvailableChipLabel ? (
+                      <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-700 dark:text-amber-200">
+                        {extraAvailableChipLabel}
+                      </span>
+                    ) : null}
+                    {creditSummary?.applies ? (
                       <span className="inline-flex items-center rounded-full border border-border-strong bg-background-strong px-3 py-1 text-xs font-semibold text-foreground-muted">
                         {creditSummary.usedCount}/{creditSummary.dailyLimit}{" "}
                         {messages.assessmentDailyCreditsUsedLabel}
                       </span>
                     ) : null}
+                    {creditSourceLabels.map((label) => (
+                      <span
+                        key={label}
+                        className="inline-flex items-center rounded-full border border-border-strong bg-background/70 px-3 py-1 text-xs font-semibold text-foreground-muted"
+                      >
+                        {label}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1921,6 +2126,7 @@ export function AssessmentStudio({
                 type="submit"
                 disabled={
                   pending ||
+                  !creditSummary ||
                   creditsExhausted ||
                   (!request.prompt.trim() && !request.documentId) ||
                   !linkedDocumentReady ||

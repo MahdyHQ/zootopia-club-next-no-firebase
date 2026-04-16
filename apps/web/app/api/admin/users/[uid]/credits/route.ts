@@ -10,6 +10,15 @@ import {
 } from "@/lib/server/assessment-credit-diagnostics";
 import { publishAssessmentCreditLiveUpdate } from "@/lib/server/assessment-credit-live-updates";
 import {
+  getAdminAccessRequiredError,
+  getAssessmentCreditStateUnavailablePlatformError,
+  getInvalidJsonPlatformError,
+  getUserLookupUnavailablePlatformError,
+  getUserNotFoundPlatformError,
+  mapAdminAssessmentCreditMutationError,
+  readPlatformErrorCode,
+} from "@/lib/server/assessment-platform-errors";
+import {
   appendAdminLog,
   applyAdminAssessmentCreditMutation,
   getAdminAssessmentCreditStateForUser,
@@ -19,62 +28,15 @@ import { getAdminSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
 const ADMIN_CREDITS_MUTATION_ROUTE = "/api/admin/users/[uid]/credits";
+const ASSESSMENT_CREDIT_TRACE_ID_HEADER = "X-Zootopia-Assessment-Credit-Trace-Id";
 
-function mapCreditMutationError(error: unknown) {
-  const code = error instanceof Error ? error.message : "ASSESSMENT_CREDIT_UPDATE_FAILED";
-
-  switch (code) {
-    case "USER_NOT_FOUND":
-      return {
-        code,
-        message: "The selected user was not found.",
-        status: 404,
-      };
-    case "ASSESSMENT_CREDIT_GRANT_NOT_FOUND":
-      return {
-        code,
-        message: "The selected grant was not found.",
-        status: 404,
-      };
-    case "ASSESSMENT_CREDIT_GRANT_ALREADY_REVOKED":
-      return {
-        code,
-        message: "This grant has already been revoked.",
-        status: 409,
-      };
-    case "ASSESSMENT_CREDIT_GRANT_OWNER_MISMATCH":
-      return {
-        code,
-        message: "The selected grant does not belong to this user.",
-        status: 400,
-      };
-    case "ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN":
-      return {
-        code,
-        message: "Admins cannot mutate their own assessment credit balances.",
-        status: 403,
-      };
-    case "ASSESSMENT_CREDIT_ACTION_UNSUPPORTED":
-    case "ASSESSMENT_CREDIT_AMOUNT_INVALID":
-    case "ASSESSMENT_CREDIT_ACCESS_INVALID":
-    case "ASSESSMENT_DAILY_OVERRIDE_INVALID":
-    case "ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID":
-    case "ASSESSMENT_CREDIT_GRANT_ID_REQUIRED":
-      return {
-        code,
-        message: "The credit mutation request is invalid.",
-        status: 400,
-      };
-    default:
-      return {
-        code: "ASSESSMENT_CREDIT_UPDATE_FAILED",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to update assessment credits right now.",
-        status: 400,
-      };
-  }
+function applyAssessmentCreditTraceIdHeader<T extends Response>(response: T, traceId: string) {
+  /* Admin credit mutations already mint a structured trace ID for server diagnostics.
+     Exposing the same opaque identifier on API responses lets browser tooling and future
+     operators correlate the API result with repository/realtime logs without leaking balance
+     data or cross-user metadata. */
+  response.headers.set(ASSESSMENT_CREDIT_TRACE_ID_HEADER, traceId);
+  return response;
 }
 
 export async function GET(
@@ -85,7 +47,8 @@ export async function GET(
      server-side so only claim-verified admins can inspect or mutate account credit state. */
   const admin = await getAdminSessionUser();
   if (!admin) {
-    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
+    const error = getAdminAccessRequiredError();
+    return applyNoStore(apiError(error.code, error.message, error.status));
   }
 
   const { uid } = await context.params;
@@ -98,17 +61,15 @@ export async function GET(
       adminUid: admin.uid,
       error: error instanceof Error ? error.name : "UNKNOWN",
     });
+    const mapped = getUserLookupUnavailablePlatformError();
     return applyNoStore(
-      apiError(
-        "USER_LOOKUP_UNAVAILABLE",
-        "The selected user could not be resolved right now.",
-        503,
-      ),
+      apiError(mapped.code, mapped.message, mapped.status),
     );
   }
 
   if (!user) {
-    return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
+    const error = getUserNotFoundPlatformError();
+    return applyNoStore(apiError(error.code, error.message, error.status));
   }
 
   let state: Awaited<ReturnType<typeof getAdminAssessmentCreditStateForUser>>;
@@ -122,22 +83,16 @@ export async function GET(
       adminUid: admin.uid,
       error: error instanceof Error ? error.name : "UNKNOWN",
     });
+    const mapped = getAssessmentCreditStateUnavailablePlatformError();
     return applyNoStore(
-      apiError(
-        "ASSESSMENT_CREDIT_STATE_UNAVAILABLE",
-        "Unable to load assessment credit state for this user.",
-        503,
-      ),
+      apiError(mapped.code, mapped.message, mapped.status),
     );
   }
 
   if (!state) {
+    const error = getAssessmentCreditStateUnavailablePlatformError(500);
     return applyNoStore(
-      apiError(
-        "ASSESSMENT_CREDIT_STATE_UNAVAILABLE",
-        "Unable to load assessment credit state for this user.",
-        500,
-      ),
+      apiError(error.code, error.message, error.status),
     );
   }
 
@@ -157,28 +112,30 @@ export async function PATCH(
      manual credits, overrides, and grants authoritative in one backend path. */
   const admin = await getAdminSessionUser();
   if (!admin) {
-    return applyNoStore(apiError("FORBIDDEN", "Admin access is required.", 403));
+    const error = getAdminAccessRequiredError();
+    return applyNoStore(apiError(error.code, error.message, error.status));
   }
 
   const { uid } = await context.params;
   if (uid === admin.uid) {
-    return applyNoStore(
-      apiError(
-        "ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN",
-        "Admins cannot mutate their own assessment credit balances.",
-        403,
-      ),
+    const mapped = mapAdminAssessmentCreditMutationError(
+      new Error("ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN"),
     );
+    return applyNoStore(apiError(mapped.code, mapped.message, mapped.status));
   }
 
   let body: AdminAssessmentCreditMutationInput;
+  const creditTraceId = createAssessmentCreditTraceId();
   try {
     body = (await request.json()) as AdminAssessmentCreditMutationInput;
   } catch {
-    return applyNoStore(apiError("INVALID_JSON", "Request body must be valid JSON.", 400));
+    const error = getInvalidJsonPlatformError();
+    return applyAssessmentCreditTraceIdHeader(
+      applyNoStore(apiError(error.code, error.message, error.status)),
+      creditTraceId,
+    );
   }
 
-  const creditTraceId = createAssessmentCreditTraceId();
   let user: Awaited<ReturnType<typeof getUserByUid>>;
 
   logAssessmentCreditDiagnostic({
@@ -187,6 +144,7 @@ export async function PATCH(
     details: {
       route: ADMIN_CREDITS_MUTATION_ROUTE,
       actorUid: admin.uid,
+      actorEmail: admin.email ?? null,
       targetUid: uid,
       action: body.action,
     },
@@ -202,22 +160,29 @@ export async function PATCH(
       details: {
         route: ADMIN_CREDITS_MUTATION_ROUTE,
         actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
         targetUid: uid,
         action: body.action,
       },
       error,
     });
+    const mapped = getUserLookupUnavailablePlatformError();
     return applyNoStore(
-      apiError(
-        "USER_LOOKUP_UNAVAILABLE",
-        "The selected user could not be resolved right now.",
-        503,
+      applyAssessmentCreditTraceIdHeader(
+        apiError(mapped.code, mapped.message, mapped.status),
+        creditTraceId,
       ),
     );
   }
 
   if (!user) {
-    return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
+    const error = getUserNotFoundPlatformError();
+    return applyNoStore(
+      applyAssessmentCreditTraceIdHeader(
+        apiError(error.code, error.message, error.status),
+        creditTraceId,
+      ),
+    );
   }
 
   logAssessmentCreditDiagnostic({
@@ -226,6 +191,7 @@ export async function PATCH(
     details: {
       route: ADMIN_CREDITS_MUTATION_ROUTE,
       actorUid: admin.uid,
+      actorEmail: admin.email ?? null,
       targetUid: uid,
       targetRole: user.role,
     },
@@ -239,8 +205,9 @@ export async function PATCH(
     backendMutationResult: "started",
   });
 
+  let state: Awaited<ReturnType<typeof applyAdminAssessmentCreditMutation>>;
   try {
-    const state = await applyAdminAssessmentCreditMutation({
+    state = await applyAdminAssessmentCreditMutation({
       ownerUid: uid,
       admin: {
         uid: admin.uid,
@@ -252,7 +219,45 @@ export async function PATCH(
         source: "admin-api-route",
       },
     });
+  } catch (error) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_api_failed",
+      level: "error",
+      traceId: creditTraceId,
+      details: {
+        route: ADMIN_CREDITS_MUTATION_ROUTE,
+        actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
+        targetUid: uid,
+        action: body.action,
+      },
+      error,
+    });
+    console.warn("[admin-users-mutation]", {
+      action: `assessment-credits:${body.action}`,
+      targetUid: uid,
+      actingAdminUid: admin.uid,
+      routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
+      backendMutationResult: "failed",
+      failureReason: error instanceof Error ? error.message : "ASSESSMENT_CREDIT_UPDATE_FAILED",
+    });
 
+    const mapped = mapAdminAssessmentCreditMutationError(error);
+    return applyNoStore(
+      applyAssessmentCreditTraceIdHeader(
+        apiError(mapped.code, mapped.message, mapped.status),
+        creditTraceId,
+      ),
+    );
+  }
+
+  let adminLogStatus = "succeeded";
+  let adminLogErrorCode: string | null = null;
+
+  /* Admin audit logging is observability-only follow-up. Keep it best-effort after the
+     repository commit so operators never receive a false mutation failure after balance truth
+     has already been durably updated for the target user. */
+  try {
     await appendAdminLog({
       actorUid: admin.uid,
       actorRole: admin.role,
@@ -277,99 +282,124 @@ export async function PATCH(
         note: body.note ?? null,
       },
     });
-
-    let broadcastStatus: string | null = null;
-    let broadcastErrorCode: string | null = null;
-
-    /* Broadcast only the repository-returned post-commit summary for the mutated owner UID.
-       This route stays server-authoritative by reusing the exact effective summary model already
-       returned to admins and `/api/assessment/credits`, rather than computing a client-side delta. */
-    try {
-      const liveUpdate = await publishAssessmentCreditLiveUpdate({
-        ownerUid: uid,
-        credits: state.credits,
-        reason: `admin-api:${body.action}`,
-        traceId: creditTraceId,
-      });
-      broadcastStatus = liveUpdate.broadcast.status;
-      broadcastErrorCode = liveUpdate.broadcast.errorCode;
-      logAssessmentCreditDiagnostic({
-        event: "assessment_credit_admin_api_publish_result",
-        traceId: creditTraceId,
-        details: {
-          route: ADMIN_CREDITS_MUTATION_ROUTE,
-          actorUid: admin.uid,
-          targetUid: uid,
-          action: body.action,
-          broadcastStatus,
-          broadcastErrorCode,
-          eventId: liveUpdate.eventId,
-        },
-      });
-    } catch (error) {
-      console.warn("[admin-users-mutation] live update publish failed", {
-        action: `assessment-credits:${body.action}`,
-        targetUid: uid,
-        actingAdminUid: admin.uid,
-        routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
-        error: error instanceof Error ? error.name : "UNKNOWN",
-      });
-    }
-
+  } catch (error) {
+    adminLogStatus = "failed";
+    adminLogErrorCode = readPlatformErrorCode(error);
     logAssessmentCreditDiagnostic({
-      event: "assessment_credit_admin_api_succeeded",
+      event: "assessment_credit_admin_api_admin_log_failed",
+      level: "warn",
       traceId: creditTraceId,
       details: {
         route: ADMIN_CREDITS_MUTATION_ROUTE,
         actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
+        targetUid: uid,
+        action: body.action,
+        adminLogErrorCode,
+      },
+      error,
+    });
+    console.warn("[admin-users-mutation] admin audit log failed after committed mutation", {
+      action: `assessment-credits:${body.action}`,
+      targetUid: uid,
+      actingAdminUid: admin.uid,
+      routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
+      adminLogErrorCode,
+    });
+  }
+
+  let broadcastStatus: string | null = null;
+  let broadcastErrorCode: string | null = null;
+
+  /* Broadcast only the repository-returned post-commit summary for the mutated owner UID.
+     This route stays server-authoritative by reusing the exact effective summary model already
+     returned to admins and `/api/assessment/credits`, rather than computing a client-side delta. */
+  try {
+    const liveUpdate = await publishAssessmentCreditLiveUpdate({
+      ownerUid: uid,
+      credits: state.credits,
+      reason: `admin-api:${body.action}`,
+      traceId: creditTraceId,
+    });
+    broadcastStatus = liveUpdate.broadcast.status;
+    broadcastErrorCode = liveUpdate.broadcast.errorCode;
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_api_publish_result",
+      traceId: creditTraceId,
+      details: {
+        route: ADMIN_CREDITS_MUTATION_ROUTE,
+        actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
         targetUid: uid,
         action: body.action,
         broadcastStatus,
         broadcastErrorCode,
-        remainingCount: state.credits.remainingCount,
+        eventId: liveUpdate.eventId,
       },
     });
-
-    console.info("[admin-users-mutation]", {
-      action: `assessment-credits:${body.action}`,
-      targetUid: uid,
-      actingAdminUid: admin.uid,
-      routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
-      backendMutationResult: "success",
-      broadcastStatus,
-      broadcastErrorCode,
-      remainingCount: state.credits.remainingCount,
-    });
-
-    return applyNoStore(
-      apiSuccess<AdminUserAssessmentCreditsResponse>({
-        user,
-        state,
-      }),
-    );
   } catch (error) {
+    broadcastStatus = "error";
+    broadcastErrorCode = readPlatformErrorCode(error);
     logAssessmentCreditDiagnostic({
-      event: "assessment_credit_admin_api_failed",
-      level: "error",
+      event: "assessment_credit_admin_api_publish_failed",
+      level: "warn",
       traceId: creditTraceId,
       details: {
         route: ADMIN_CREDITS_MUTATION_ROUTE,
         actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
         targetUid: uid,
         action: body.action,
+        broadcastErrorCode,
       },
       error,
     });
-    console.warn("[admin-users-mutation]", {
+    console.warn("[admin-users-mutation] live update publish failed", {
       action: `assessment-credits:${body.action}`,
       targetUid: uid,
       actingAdminUid: admin.uid,
       routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
-      backendMutationResult: "failed",
-      failureReason: error instanceof Error ? error.message : "ASSESSMENT_CREDIT_UPDATE_FAILED",
+      error: error instanceof Error ? error.name : "UNKNOWN",
     });
-
-    const mapped = mapCreditMutationError(error);
-    return applyNoStore(apiError(mapped.code, mapped.message, mapped.status));
   }
+
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_admin_api_succeeded",
+    traceId: creditTraceId,
+    details: {
+      route: ADMIN_CREDITS_MUTATION_ROUTE,
+      actorUid: admin.uid,
+      actorEmail: admin.email ?? null,
+      targetUid: uid,
+      action: body.action,
+      adminLogStatus,
+      adminLogErrorCode,
+      broadcastStatus,
+      broadcastErrorCode,
+      remainingCount: state.credits.remainingCount,
+    },
+  });
+
+  console.info("[admin-users-mutation]", {
+    action: `assessment-credits:${body.action}`,
+    targetUid: uid,
+    actingAdminUid: admin.uid,
+    routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
+    backendMutationResult: "success",
+    adminLogStatus,
+    adminLogErrorCode,
+    broadcastStatus,
+    broadcastErrorCode,
+    remainingCount: state.credits.remainingCount,
+  });
+
+  return applyNoStore(
+    applyAssessmentCreditTraceIdHeader(
+      apiSuccess<AdminUserAssessmentCreditsResponse>({
+        user,
+        state,
+      }),
+      creditTraceId,
+    ),
+  );
 }

@@ -6,6 +6,10 @@ import {
   createAssessmentCreditTraceId,
   logAssessmentCreditDiagnostic,
 } from "@/lib/server/assessment-credit-diagnostics";
+import {
+  getAssessmentAuthenticationRequiredError,
+  getAssessmentCreditSummaryUnavailablePlatformError,
+} from "@/lib/server/assessment-platform-errors";
 import { getAssessmentDailyCreditsSummaryForUser } from "@/lib/server/repository";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
@@ -18,8 +22,9 @@ export async function GET() {
   const requestId = createAssessmentCreditTraceId();
   const user = await getAuthenticatedSessionUser();
   if (!user) {
+    const error = getAssessmentAuthenticationRequiredError();
     const response = applyNoStore(
-      apiError("UNAUTHENTICATED", "Sign in is required for assessments.", 401),
+      apiError(error.code, error.message, error.status),
     );
     response.headers.set(ASSESSMENT_CREDIT_REQUEST_ID_HEADER, requestId);
     return response;
@@ -68,12 +73,9 @@ export async function GET() {
       error,
     });
 
+    const mapped = getAssessmentCreditSummaryUnavailablePlatformError();
     const response = applyNoStore(
-      apiError(
-        "ASSESSMENT_CREDIT_SUMMARY_UNAVAILABLE",
-        "Unable to load assessment credits right now.",
-        503,
-      ),
+      apiError(mapped.code, mapped.message, mapped.status),
     );
     response.headers.set(ASSESSMENT_CREDIT_REQUEST_ID_HEADER, requestId);
     return response;

@@ -3,9 +3,9 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-16 (Assessment credit realtime/query architecture repair + runtime smoke verification)
+Last Updated: 2026-04-16 (Dynamic assessment credit source-aware UX and truthful shared-balance presentation)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
-Current Commit: 091720a391d987f9bd52e148a11a153f81154926
+Current Commit: 655c73d8bc5ee3fa481773a38bdccdd7329d7171
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
 Runtime: Node.js >= 20.9.0
 
@@ -110,15 +110,37 @@ Key verified facts:
   summary for the exact target UID from both the admin detail-page server action
   flow and the admin PATCH route, without moving mutation authority out of the
   backend repository layer
+- Admin credit mutation follow-up work (`appendAdminLog` and live publish) is
+  now explicitly best-effort after the repository commit in both admin mutation
+  lanes, so audit-log degradation can no longer falsely surface a committed
+  balance mutation as an API/server-action failure
 - Assessment credit diagnostics now support opt-in low-noise structured tracing
   through `ZOOTOPIA_ASSESSMENT_CREDIT_DIAGNOSTICS` and
   `NEXT_PUBLIC_ZOOTOPIA_ASSESSMENT_CREDIT_DIAGNOSTICS`, with correlation IDs
   across mutation, recompute, live publish, credit reads, shell refresh, studio
   updates, and exhausted-state recalculation
+- Admin credit diagnostics now include actor email at the request boundary,
+  explicit admin-log failure events, and route-level live-publish result/failure
+  events, while Assessment Studio now emits a canonical `summary_applied`
+  client diagnostic so header apply and studio apply can both be correlated
 - Assessment credit live delivery now uses owner-scoped Supabase realtime
-  broadcasts as the primary cross-tab/cross-instance invalidation lane
+  broadcasts as the primary cross-tab/cross-instance invalidation lane, and
+  those browser payloads are now invalidation-only envelopes (event/correlation
+  metadata only, no client-applied balance summary payload)
+- Successful assessment credit commits from `POST /api/assessment` now publish
+  the same owner-scoped invalidation signal used by admin mutations, improving
+  same-user multi-tab reconciliation without turning realtime into a balance
+  truth source
 - Protected shell and Assessment Studio now share one TanStack Query cache key
-  for `/api/assessment/credits`, removing duplicate local credit owners
+  for `/api/assessment/credits`, and the Assessment page/studio no longer seed
+  or patch that shared balance cache from page props, mutation responses, or
+  client-calculated deltas
+- Assessment credit summary shape already distinguishes the user-facing balance
+  sources needed for truthful UX (`dailyRemainingCount`,
+  `manualCreditsAvailable`, `grantCreditsAvailable`, `extraCreditsAvailable`,
+  `remainingCount`), so the latest balance-presentation pass did not extend the
+  backend contract and instead kept `/api/assessment/credits` as the single
+  canonical read model
 - Assessment create requests now require a route-level `Idempotency-Key`, and
   Assessment Studio persists a short-lived per-tab logical-attempt key across
   duplicate submits / refresh retries so one successful generation attempt
@@ -218,9 +240,35 @@ Key verified facts:
   secondary mutation lane; both paths reuse the same repository mutation
   authority and keep recipient balance server-owned through
   `/api/assessment/credits`
-- Assessment Studio now reads and writes the same shared TanStack credit query
-  cache used by the protected header so admin grants and submit outcomes
-  converge immediately without cross-component browser events
+- Assessment Studio and the protected header now read the same shared TanStack
+  credit query without studio-owned cache seeding or mutation-response cache
+  writes, so balance visibility stays on one canonical client path
+- Protected header balance now formats the canonical shared `remainingCount`
+  with locale-aware digits and uses a source-aware tooltip derived from the same
+  shared summary object (daily vs extra availability, plus manual/grant source
+  hints) without introducing any client-side balance math
+- Assessment Studio credit guidance now derives a small source-aware display
+  model from the canonical summary so the panel can distinguish daily-only,
+  mixed daily+extra, extra-only, exhausted, disabled, and admin-exempt states
+  while preserving the shared TanStack query as the only client-visible balance
+  owner
+- Assessment credit client diagnostics now capture the display state plus the
+  exact summary fields that drive wording (`dailyAvailable`, `extraAvailable`,
+  `manualCreditsAvailable`, `grantCreditsAvailable`) so runtime tracing can
+  explain why a given header/panel message was shown without leaking secure
+  mutation authority into the browser
+- Assessment Studio exhausted-credit, success, mount, and realtime-driven
+  reconciliation now converge through shared query invalidation/refetch against
+  canonical `/api/assessment/credits`, with loading/reconciling UI used instead
+  of provisional balance patching
+- Assessment/admin credit failure classification is now centralized in
+  `apps/web/lib/server/assessment-platform-errors.ts` and reused by the
+  assessment create route, admin credits API route, and admin user detail
+  server-action query-code mapping
+- The same platform-error file now also owns the common touched-flow operational
+  error registry for assessment auth, admin access, invalid JSON, user lookup,
+  credit-state read, and canonical credit-summary read failures so those routes
+  no longer depend on scattered local error strings
 - Admin user-management overview/detail surfaces now run without floating/fade
   motion and use stronger light-mode button/surface contrast while dark mode
   retains the existing visual language
@@ -873,8 +921,14 @@ Credit System:
 - GET /api/assessment/credits returns current status with explicit no-store headers
 - Owner-scoped Supabase realtime broadcast is the live invalidation lane for
   near-real-time credit freshness
+- Successful `POST /api/assessment` commits now publish an owner-scoped
+  invalidation signal after the durable credit commit so other tabs for the
+  same user refetch canonical `/api/assessment/credits`
 - Protected shell and Assessment Studio consume one shared TanStack Query key
   for `/api/assessment/credits`
+- The active credit flow has no studio/page `initialData`, no direct
+  `setQueryData`, and no mutation-response/realtime-payload balance patching in
+  the shared client cache; invalidation/refetch is the only live refresh path
 - Credit reservation before AI generation
 - Credit consumed on success, released on failure
 - Protected shell credit badge now follows TanStack invalidation + periodic
@@ -1437,100 +1491,161 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
-2026-04-16 — Full-Stack Assessment Credit Realtime Repair (Supabase Realtime + TanStack Query)
-
-Type: Runtime sync architecture hardening
-Scope: Minimal, backward-compatible
-Migration: None
+2026-04-16 — Dynamic assessment credit source-aware UX and truthful shared-balance presentation
 
 Reason:
-- Protected header and Assessment Studio still relied on mixed sync paths
-  (local component state, custom browser events, and legacy SSE compatibility),
-  which increased drift risk and made credit freshness ownership unclear.
-- Target architecture required one canonical client cache owner with backend
-  authority preserved in repository + `/api/assessment/credits`.
-
-What changed:
-
-1) Shared query foundation (protected scope)
-- Added `@tanstack/react-query` in `@zootopia/web`.
-- Added `apps/web/components/layout/protected-workspace-query-provider.tsx` and
-  wrapped protected layout content so shell + page components share one query
-  client.
-- Added `apps/web/lib/assessment-credit-query.ts` with:
-  - shared `ASSESSMENT_CREDIT_SUMMARY_QUERY_KEY`
-  - canonical `/api/assessment/credits` query fetcher
-  - cache set + invalidation helpers with diagnostics hooks.
-
-2) Protected shell migration to query invalidation
-- `apps/web/components/layout/protected-shell.tsx` now consumes the shared query
-  instead of owning a separate credit state model.
-- Supabase realtime events now trigger query invalidation, keeping realtime as
-  an invalidation signal and `/api/assessment/credits` as the applied truth.
-- Focus/visibility/path transitions now trigger query invalidation fallback
-  without legacy custom browser event lanes.
-
-3) Assessment Studio migration to shared cache
-- `apps/web/components/assessment/assessment-studio.tsx` removed legacy
-  window-event listeners and now reads/writes shared credit query data.
-- Submit success writes authoritative returned credits into query cache.
-- Exhausted/access-disabled failure paths invalidate query for backend truth
-  reconciliation.
-
-4) Legacy sync path retirement
-- Deleted `apps/web/lib/assessment-credit-events.ts`.
-- Deleted `apps/web/app/api/assessment/credits/stream/route.ts` (SSE endpoint).
-- Deleted unused `apps/web/lib/server/assessment-credit-realtime.ts`.
-- Simplified `apps/web/lib/server/assessment-credit-live-updates.ts` to
-  Supabase realtime broadcast only (no in-memory SSE registry).
-
-5) Admin publish-path observability alignment
-- Updated admin credit publish logs in:
-  - `apps/web/app/api/admin/users/[uid]/credits/route.ts`
-  - `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
-- Logging now records realtime broadcast status/error code instead of removed
-  listener delivery counts.
-
-What was preserved:
-- Server mutation authority remains in repository/server paths.
-- `/api/assessment/credits` remains the canonical owner-scoped read model.
-- Admin mutation semantics and audit logging remain intact.
-- User/session auth boundaries and owner-topic derivation remain server-owned.
-
-Verification:
-- Lint: `npm run lint --workspace @zootopia/web` ✅
-- Typecheck: `npm run typecheck --workspace @zootopia/web` ✅
-- Build: `npm run build --workspace @zootopia/web` ✅
-- Build route output confirms `/api/assessment/credits` and protected routes
-  compile successfully; legacy `/api/assessment/credits/stream` no longer
-  appears in the route table ✅
-- Runtime smoke (standalone): `HOSTNAME=127.0.0.1 PORT=3020 node apps/web/.next/standalone/server.js` ✅
-- Health route: `GET /api/health` returned `{"ok":true,...}` ✅
-- Canonical credits route (unauthenticated): `GET /api/assessment/credits`
-  returned `401` with `UNAUTHENTICATED` payload ✅
-- Retired stream route: `GET /api/assessment/credits/stream` returned `404` ✅
-- Note: workspace start arg forwarding via `npm run start --workspace @zootopia/web -- --hostname 127.0.0.1 --port 3025`
-  misrouted `127.0.0.1` as a project directory in this environment; standalone
-  server launch was used for deterministic endpoint verification.
+- Upgrade the user-facing credit surfaces without touching the authoritative
+  credit-computation architecture.
+- Keep the header tied to the true current usable total while making the
+  Assessment credit panel describe whether the currently available balance comes
+  from daily allowance, extra/admin-added credits, grants, a mix of both, or no
+  available credits at all.
+- Preserve `/api/assessment/credits`, TanStack Query, and Supabase Realtime as
+  the existing canonical balance path instead of creating a second client-side
+  credit system.
 
 Files changed:
-- `apps/web/package.json`
-- `apps/web/package-lock.json`
-- `package-lock.json`
-- `apps/web/app/(protected)/layout.tsx`
-- `apps/web/components/layout/protected-workspace-query-provider.tsx` (new)
-- `apps/web/lib/assessment-credit-query.ts` (new)
+- `apps/web/lib/assessment-credit-display.ts` (new)
+- `apps/web/lib/assessment-credit-diagnostics.ts`
 - `apps/web/components/layout/protected-shell.tsx`
 - `apps/web/components/assessment/assessment-studio.tsx`
-- `apps/web/lib/server/assessment-credit-live-updates.ts`
+- `zootopia-club-next-ledger.txt`
+
+Technical details:
+- Added `assessment-credit-display.ts` as a small shared presentation helper
+  that classifies the canonical server summary into `admin_exempt`,
+  `access_disabled`, `daily_only`, `mixed`, `extra_only`, and `none` states
+  using only existing server-returned fields.
+- Confirmed the backend summary contract was already sufficient:
+  - `dailyRemainingCount` identifies remaining daily allowance
+  - `manualCreditsAvailable` identifies account-level admin/manual balance
+  - `grantCreditsAvailable` identifies available grant balance
+  - `extraCreditsAvailable` identifies currently usable extra balance
+  - `remainingCount` remains the authoritative total usable balance
+- Kept header balance ownership unchanged: `ProtectedShell` still renders the
+  shared query result from `/api/assessment/credits`, but now formats the
+  visible number with locale-aware digits and derives a more truthful tooltip
+  from the same summary state.
+- Upgraded the Assessment credit panel to render dynamic source-aware messaging
+  and compact breakdown chips (available now, daily available, extra available,
+  used today, source tags) from the same shared summary path already used by
+  the header.
+- Fixed an important messaging edge case: `assessmentAccess === "disabled"` no
+  longer reads like simple exhaustion in Assessment Studio, because the new
+  display model treats disabled state separately from zero available balance.
+- Expanded client diagnostic snapshots and `summary_applied` / exhausted-state
+  events so logs now show the derived display state and the exact summary fields
+  that influenced the visible wording.
+
+Impact assessment before editing:
+- Canonical credit path was already correct: repository/server summary →
+  `/api/assessment/credits` → shared TanStack query key →
+  protected header + Assessment Studio.
+- Header balance was already reading the true authoritative total
+  (`remainingCount`), so the weak point was presentation clarity, not backend
+  ownership.
+- The backend summary shape did not need extension for this task; the existing
+  contract already exposed enough structure to differentiate daily vs extra and
+  manual vs grant sources for user-facing messaging.
+
+Verification:
+- `npm run lint --workspace @zootopia/web` ✅
+- `npm run typecheck --workspace @zootopia/web` ✅
+- `npm run build --workspace @zootopia/web` ✅
+- Static/code-path verification confirmed:
+  - header still reads the shared `useAssessmentCreditSummaryQuery()` result
+    keyed by `ASSESSMENT_CREDIT_SUMMARY_QUERY_KEY`
+  - Assessment Studio still reads the same shared query and only invalidates it
+    for reconciliation
+  - `/api/assessment/credits` remained unchanged as the canonical summary route
+  - no client-side mutation-response cache patching or alternate balance owner
+    was introduced
+- Helper scenario verification with the real
+  `resolveAssessmentCreditDisplayModel()` implementation confirmed expected
+  states for:
+  - daily-only
+  - mixed daily + extra
+  - extra-only / daily exhausted but extra still available
+  - no credits available
+  - access disabled
+  - admin exempt
+
+Risks / constraints:
+- No authenticated browser session or protected-page runtime credentials were
+  available in this task turn, so header/panel synchronization and localized
+  copy changes were verified through code tracing, helper scenario execution,
+  lint, typecheck, and build rather than live signed-in browser clicks.
+- `extraCreditsAvailable` is reservation-aware while `manualCreditsAvailable`
+  and `grantCreditsAvailable` remain raw source buckets, so the new UI uses
+  source tags qualitatively rather than claiming reservation-adjusted per-source
+  counts that the backend contract does not currently expose.
+
+2026-04-16 — Assessment credit follow-up hardening, realtime invalidation expansion, and error/diagnostic alignment
+
+Reason:
+- Keep the current Supabase Realtime + TanStack Query architecture intact while hardening the remaining operational gaps discovered during the repo audit.
+- Eliminate the false-failure window where admin credit mutations could already be committed in the repository but still be reported as failed if audit logging degraded afterwards.
+- Improve same-user multi-tab balance freshness after successful assessment credit consumption without reintroducing any client-side balance patching.
+
+Files changed:
+- `apps/web/lib/server/assessment-platform-errors.ts`
 - `apps/web/app/api/admin/users/[uid]/credits/route.ts`
 - `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
-- `apps/web/app/api/assessment/credits/stream/route.ts` (deleted)
-- `apps/web/lib/assessment-credit-events.ts` (deleted)
-- `apps/web/lib/server/assessment-credit-realtime.ts` (deleted)
+- `apps/web/app/api/assessment/route.ts`
+- `apps/web/app/api/assessment/credits/route.ts`
+- `apps/web/components/assessment/assessment-studio.tsx`
 
-Risks / follow-up:
-- Authenticated multi-user/manual QA should still be run to validate
-  admin-target delivery and wrong-user non-delivery in live sessions.
-- If future protected features need shared query state, reuse protected query
-  provider instead of adding per-page query clients.
+Technical details:
+- Expanded `assessment-platform-errors.ts` into the authoritative touched-flow platform error registry for:
+  - assessment auth required
+  - admin access required
+  - invalid JSON
+  - user lookup / user not found
+  - assessment credit state unavailable
+  - assessment credit summary unavailable
+  - admin mutation normalization
+  - assessment finalization classification
+- Updated `/api/admin/users/[uid]/credits` to consume the centralized platform error helpers for common route failures and to attach an opaque `X-Zootopia-Assessment-Credit-Trace-Id` response header on mutation responses.
+- Split the admin PATCH mutation lane into:
+  1. authoritative repository mutation
+  2. best-effort admin audit log
+  3. best-effort realtime publish
+  so post-commit logging failures can no longer make a committed mutation look failed.
+- Applied the same post-commit hardening to the admin detail-page server action on `/admin/users/[uid]`; it now redirects success after a committed mutation even if audit logging degrades, while still logging diagnostic warnings.
+- Added actor-email correlation at the admin mutation request boundary and explicit diagnostic events for admin-log failure and route-level publish result/failure in both admin mutation lanes.
+- Added owner-scoped invalidation publish after successful `POST /api/assessment` credit commit, using the same invalidation-only realtime payload model as admin mutations. This improves same-user multi-tab freshness while keeping `/api/assessment/credits` as the only balance truth source.
+- Updated `/api/assessment/credits` to use the centralized platform error registry for auth and summary-unavailable failures while preserving the existing request-id response header.
+- Added `assessment_studio_summary_applied` client diagnostics so Assessment Studio application of the canonical shared query can be correlated alongside the protected header’s existing summary-application diagnostic.
+
+Temporary cache drift / studio patching investigation:
+- Root cause previously identified in the repo: the Assessment page/studio had old local seeding and direct cache patch paths (`initialData`, `setQueryData`, mutation-response credits, realtime payload credits). Those had already been removed earlier on 2026-04-16 before this hardening pass.
+- Exact files/functions involved in the original drift removal:
+  - `apps/web/components/assessment/assessment-studio.tsx`
+  - `apps/web/app/(protected)/(completed)/assessment/page.tsx`
+  - `apps/web/lib/assessment-credit-query.ts`
+  - `apps/web/components/layout/protected-shell.tsx`
+  - `apps/web/lib/assessment-credit-realtime.ts`
+  - `apps/web/lib/server/assessment-credit-live-updates.ts`
+- What changed in the current pass:
+  - No balance cache patching was reintroduced.
+  - Assessment Studio now adds diagnostics for canonical summary application only.
+  - Successful assessment credit commits now publish invalidation-only realtime signals, which still force header/studio reconciliation through `/api/assessment/credits`.
+- Why drift can no longer occur:
+  - Header and Assessment Studio still read one shared TanStack Query key.
+  - The browser still never receives balance values from realtime.
+  - The studio still does not seed, hydrate, or patch the shared credit summary cache locally.
+  - Refresh still happens by invalidation/refetch against canonical `/api/assessment/credits` only.
+
+Verification:
+- `npm run lint --workspace @zootopia/web` ✅
+- `npm run typecheck --workspace @zootopia/web` ✅
+- `npm run build --workspace @zootopia/web` ✅
+- Static code verification confirmed:
+  - `publishAssessmentCreditLiveUpdate()` is now called from the admin detail-page server action, the admin PATCH route, and the assessment create route
+  - no active `setQueryData`, `setAssessmentCreditSummaryQueryData`, or live `initialData` path remains in the assessment credit shared-cache flow
+  - admin diagnostics now include actor email plus explicit admin-log failure events
+  - Assessment Studio now emits `assessment_studio_summary_applied`
+
+Risks / constraints:
+- No authenticated browser session or live admin/user credentials were available in this task turn, so realtime delivery, wrong-user non-delivery, and multi-tab reconciliation were verified by code-path tracing plus lint/type/build rather than by live signed-in interaction.
+- `apps/web/lib/server/assessment-platform-errors.ts` is still an uncommitted worktree file in this checkout, so future agents should treat it as active local truth even though it is not yet committed to Git history.

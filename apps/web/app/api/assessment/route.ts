@@ -21,6 +21,15 @@ import {
   deleteAssessmentArtifact,
   persistAssessmentResultArtifact,
 } from "@/lib/server/assessment-artifact-storage";
+import {
+  createAssessmentCreditTraceId,
+  logAssessmentCreditDiagnostic,
+} from "@/lib/server/assessment-credit-diagnostics";
+import { publishAssessmentCreditLiveUpdate } from "@/lib/server/assessment-credit-live-updates";
+import {
+  classifyAssessmentFinalizationFailure,
+  readPlatformErrorCode,
+} from "@/lib/server/assessment-platform-errors";
 import { getAssessmentPromptAccessStateForUser } from "@/lib/server/assessment-prompt-lock";
 import { resolveAssessmentLinkedDocumentInput } from "@/lib/server/assessment-linked-document";
 import {
@@ -42,8 +51,6 @@ export const maxDuration = 120;
 const ASSESSMENT_IDEMPOTENCY_KEY_MAX_LENGTH = 200;
 const ASSESSMENT_ROUTE = "/api/assessment" as const;
 const ASSESSMENT_FLOW = "assessment-create" as const;
-const ASSESSMENT_FINALIZATION_GENERIC_MESSAGE =
-  "The assessment finished, but it could not be finalized safely. No daily credit was used.";
 
 type AssessmentSessionLane = "anonymous" | "admin" | "user";
 type AssessmentRequestLane =
@@ -204,84 +211,6 @@ function buildDeterministicAssessmentGenerationId(input: {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
 }
 
-function resolveInternalAssessmentErrorCode(error: unknown) {
-  if (error && typeof error === "object") {
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === "string" && code.trim().length > 0) {
-      return code.trim();
-    }
-  }
-
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message.trim();
-  }
-
-  return "UNKNOWN_ASSESSMENT_FINALIZATION_ERROR";
-}
-
-function classifyAssessmentFinalizationFailure(error: unknown) {
-  const internalCode = resolveInternalAssessmentErrorCode(error);
-
-  switch (internalCode) {
-    case "ASSESSMENT_ACCESS_DISABLED":
-      return {
-        code: "ASSESSMENT_ACCESS_DISABLED",
-        message: "Assessment generation is disabled for this account.",
-        status: 403,
-        internalCode,
-        internalCategory: "access-control",
-      } as const;
-    case "ASSESSMENT_DAILY_CREDIT_RESERVATION_MISSING":
-      return {
-        code: "ASSESSMENT_FINALIZATION_FAILED",
-        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
-        status: 409,
-        internalCode,
-        internalCategory: "credit-reservation-missing",
-      } as const;
-    case "ASSESSMENT_DAILY_CREDIT_LIMIT_CONFLICT":
-      return {
-        code: "ASSESSMENT_FINALIZATION_FAILED",
-        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
-        status: 409,
-        internalCode,
-        internalCategory: "credit-conflict",
-      } as const;
-    case "ASSESSMENT_DAILY_CREDIT_RESERVATION_REQUIRED":
-      return {
-        code: "ASSESSMENT_FINALIZATION_FAILED",
-        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
-        status: 500,
-        internalCode,
-        internalCategory: "credit-reservation-required",
-      } as const;
-    case "ASSESSMENT_OWNER_MISMATCH":
-      return {
-        code: "ASSESSMENT_FINALIZATION_FAILED",
-        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
-        status: 403,
-        internalCode,
-        internalCategory: "ownership-mismatch",
-      } as const;
-    case "ZOOTOPIA_DURABLE_PERSISTENCE_REQUIRED":
-      return {
-        code: "ASSESSMENT_FINALIZATION_FAILED",
-        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
-        status: 503,
-        internalCode,
-        internalCategory: "durable-persistence-unavailable",
-      } as const;
-    default:
-      return {
-        code: "ASSESSMENT_FINALIZATION_FAILED",
-        message: ASSESSMENT_FINALIZATION_GENERIC_MESSAGE,
-        status: 500,
-        internalCode,
-        internalCategory: "unknown-finalization-failure",
-      } as const;
-  }
-}
-
 export async function POST(request: Request) {
   const anonymousSessionLane = resolveSessionLane(null);
   const anonymousRequestLane = resolveRequestLane(anonymousSessionLane);
@@ -305,6 +234,7 @@ export async function POST(request: Request) {
 
   const sessionLane = resolveSessionLane(user);
   const requestLane = resolveRequestLane(sessionLane);
+  const assessmentCreditTraceId = createAssessmentCreditTraceId();
   const baseDiagnosticContext = {
     route: ASSESSMENT_ROUTE,
     flow: ASSESSMENT_FLOW,
@@ -976,6 +906,57 @@ export async function POST(request: Request) {
           "Assessment idempotency completion failed unexpectedly.",
           completionError,
         );
+        });
+      }
+
+    let creditRealtimeBroadcastStatus: string | null = null;
+    let creditRealtimeBroadcastErrorCode: string | null = null;
+
+    /* Assessment generation changes the same server-owned balance that admin mutations change.
+       Publish the same owner-scoped invalidation signal after the durable credit commit so other
+       tabs for this user refetch canonical `/api/assessment/credits` instead of waiting on
+       focus/poll heuristics or trying to infer a local balance delta. */
+    try {
+      const liveUpdate = await publishAssessmentCreditLiveUpdate({
+        ownerUid: user.uid,
+        credits: savedGeneration.credits,
+        reason: "assessment-route:credit-commit",
+        traceId: assessmentCreditTraceId,
+      });
+      creditRealtimeBroadcastStatus = liveUpdate.broadcast.status;
+      creditRealtimeBroadcastErrorCode = liveUpdate.broadcast.errorCode;
+      logAssessmentCreditDiagnostic({
+        event: "assessment_credit_assessment_route_publish_result",
+        traceId: assessmentCreditTraceId,
+        details: {
+          ownerUid: user.uid,
+          generationId: savedGeneration.generation.id,
+          route: ASSESSMENT_ROUTE,
+          status: creditRealtimeBroadcastStatus,
+          errorCode: creditRealtimeBroadcastErrorCode,
+          eventId: liveUpdate.eventId,
+        },
+      });
+    } catch (publishError) {
+      creditRealtimeBroadcastStatus = "error";
+      creditRealtimeBroadcastErrorCode = readPlatformErrorCode(publishError);
+      logAssessmentCreditDiagnostic({
+        event: "assessment_credit_assessment_route_publish_failed",
+        level: "warn",
+        traceId: assessmentCreditTraceId,
+        details: {
+          ownerUid: user.uid,
+          generationId: savedGeneration.generation.id,
+          route: ASSESSMENT_ROUTE,
+          errorCode: creditRealtimeBroadcastErrorCode,
+        },
+        error: publishError,
+      });
+      console.warn("Assessment credit live update publish failed after committed generation.", {
+        ...baseDiagnosticContext,
+        generationId: savedGeneration.generation.id,
+        route: ASSESSMENT_ROUTE,
+        creditRealtimeBroadcastErrorCode,
       });
     }
 
@@ -996,6 +977,8 @@ export async function POST(request: Request) {
         artifactPersistenceDegraded,
         durableGenerationPersisted,
         dailyCreditsRemaining: savedGeneration.credits.remainingCount ?? "admin-exempt",
+        creditRealtimeBroadcastStatus,
+        creditRealtimeBroadcastErrorCode,
         creditReservationRequired: creditLifecycle.reservationRequired,
         creditReservationReserved: creditLifecycle.reservationReserved,
         creditReservationReleased: creditLifecycle.reservationReleased,

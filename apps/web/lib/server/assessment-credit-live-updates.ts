@@ -65,7 +65,6 @@ export async function publishAssessmentCreditLiveUpdate(input: {
   const emittedAt = new Date().toISOString();
   const realtimeTopic = getAssessmentCreditRealtimeTopic(input.ownerUid);
   const realtimePayload: AssessmentCreditRealtimePayload = {
-    credits: input.credits,
     eventId,
     emittedAt,
     traceId: traceId ?? null,
@@ -74,9 +73,10 @@ export async function publishAssessmentCreditLiveUpdate(input: {
   let realtimeStatus: string | null = null;
   let realtimeErrorCode: string | null = null;
 
-  /* Supabase Realtime becomes the cross-instance delivery backbone here. Keep the payload limited
-     to the server-owned credit summary plus opaque correlation identifiers so multi-tab delivery
-     works without exposing actor/target/admin metadata to normal-user clients. */
+  /* Supabase Realtime becomes the cross-instance delivery backbone here, but delivery stays
+     invalidation-only. Keep the payload limited to opaque correlation identifiers so browser
+     clients must re-read canonical `/api/assessment/credits` instead of applying broadcast data
+     directly and risking header/studio drift during concurrent mutations. */
   if (!realtimeTopic) {
     realtimeStatus = "topic_unavailable";
     logAssessmentCreditDiagnostic({

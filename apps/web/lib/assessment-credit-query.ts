@@ -29,7 +29,6 @@ type AssessmentCreditSummaryQueryError = Error & {
 type UseAssessmentCreditSummaryQueryInput = {
   source: string;
   enabled?: boolean;
-  initialData?: AssessmentDailyCreditsSummary;
   refetchIntervalMs?: number | false;
 };
 
@@ -88,6 +87,10 @@ async function fetchAssessmentCreditSummary(input: {
 export function useAssessmentCreditSummaryQuery(
   input: UseAssessmentCreditSummaryQueryInput,
 ): UseQueryResult<AssessmentDailyCreditsSummary, AssessmentCreditSummaryQueryError> {
+  /* Protected shell chrome and Assessment Studio intentionally populate this shared query only by
+     fetching canonical `/api/assessment/credits`. Future agents: do not reintroduce `initialData`
+     or mutation-response cache writes here, or the header/studio can render a provisional balance
+     before the authoritative read model finishes reconciling. */
   return useQuery<AssessmentDailyCreditsSummary, AssessmentCreditSummaryQueryError>({
     queryKey: ASSESSMENT_CREDIT_SUMMARY_QUERY_KEY,
     queryFn: () =>
@@ -95,36 +98,12 @@ export function useAssessmentCreditSummaryQuery(
         source: input.source,
       }),
     enabled: input.enabled ?? true,
-    initialData: input.initialData,
     staleTime: 15_000,
     gcTime: 5 * 60_000,
     retry: 1,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchInterval: input.refetchIntervalMs ?? false,
-  });
-}
-
-export function setAssessmentCreditSummaryQueryData(
-  queryClient: QueryClient,
-  input: {
-    summary: AssessmentDailyCreditsSummary;
-    source: string;
-    reason: string;
-    details?: Record<string, unknown>;
-  },
-) {
-  queryClient.setQueryData(ASSESSMENT_CREDIT_SUMMARY_QUERY_KEY, input.summary);
-
-  logAssessmentCreditClientDiagnostic({
-    event: "assessment_credit_query_cache_set",
-    details: {
-      source: input.source,
-      reason: input.reason,
-      remainingCount: input.summary.remainingCount,
-      assessmentAccess: input.summary.assessmentAccess,
-      ...(input.details ?? {}),
-    },
   });
 }
 

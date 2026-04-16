@@ -15,6 +15,10 @@ import type {
 } from "@zootopia/shared-types";
 import { logAssessmentCreditClientDiagnostic } from "@/lib/assessment-credit-diagnostics";
 import {
+  formatAssessmentCreditCount,
+  resolveAssessmentCreditDisplayModel,
+} from "@/lib/assessment-credit-display";
+import {
   invalidateAssessmentCreditSummaryQuery,
   useAssessmentCreditSummaryQuery,
 } from "@/lib/assessment-credit-query";
@@ -79,6 +83,37 @@ const CREDIT_HELP_DIALOG_BODY_AR =
 const CREDIT_HELP_DIALOG_NOTE_AR =
   "يرجى إرسال البريد الإلكتروني للحساب وسبب الطلب لتسريع المعالجة.";
 
+function buildHeaderCreditHint(input: {
+  locale: Locale;
+  totalAvailable: number;
+  dailyAvailable: number;
+  extraAvailable: number;
+  hasManualCredits: boolean;
+  hasGrantCredits: boolean;
+}) {
+  const total = formatAssessmentCreditCount(input.totalAvailable, input.locale);
+  const daily = formatAssessmentCreditCount(input.dailyAvailable, input.locale);
+  const extra = formatAssessmentCreditCount(input.extraAvailable, input.locale);
+  const sourceLabels = [
+    input.extraAvailable > 0 && input.hasManualCredits
+      ? input.locale === "ar"
+        ? "إضافة إدارية"
+        : "Admin-added"
+      : null,
+    input.extraAvailable > 0 && input.hasGrantCredits
+      ? input.locale === "ar"
+        ? "منح"
+        : "Grant"
+      : null,
+  ].filter((value): value is string => Boolean(value));
+
+  const summaryParts = input.locale === "ar"
+    ? [`المتاح الآن: ${total}`, `اليومي: ${daily}`, `الإضافي: ${extra}`]
+    : [`Available now: ${total}`, `Daily: ${daily}`, `Extra: ${extra}`];
+
+  return [...summaryParts, ...sourceLabels].join(" • ");
+}
+
 export function ProtectedShell({
   children,
   messages,
@@ -108,6 +143,9 @@ export function ProtectedShell({
       : CREDIT_SUMMARY_RECONCILE_INTERVAL_MS,
   });
   const creditSummary = creditSummaryQuery.data ?? null;
+  const creditDisplay = creditSummary
+    ? resolveAssessmentCreditDisplayModel(creditSummary)
+    : null;
   const siteContent = getSiteContent(locale);
   const headerAvatarSrc = resolveRoleGenderAvatarSrc(user);
   const headerAvatarInitial = resolveAvatarFallbackInitial(user);
@@ -172,11 +210,16 @@ export function ProtectedShell({
       details: {
         source: "query-cache",
         path: pathname,
+        displayState: creditDisplay?.state ?? null,
+        dailyAvailable: creditDisplay?.dailyAvailable ?? null,
+        extraAvailable: creditDisplay?.extraAvailable ?? null,
         remainingCount: creditSummary.remainingCount,
+        manualCreditsAvailable: creditSummary.manualCreditsAvailable,
+        grantCreditsAvailable: creditSummary.grantCreditsAvailable,
         assessmentAccess: creditSummary.assessmentAccess,
       },
     });
-  }, [creditSummary, pathname]);
+  }, [creditDisplay, creditSummary, pathname]);
 
   useEffect(() => {
     if (!creditSummaryQuery.error) {
@@ -313,8 +356,9 @@ export function ProtectedShell({
     );
 
     /* This provider-backed channel replaces the same-instance SSE lane for credit delivery.
-       Keep the shell as the only browser subscriber and continue applying only server-resolved
-       summary payloads so protected chrome and Assessment Studio stay aligned to one truth source. */
+       Keep the shell as the only browser subscriber and continue treating broadcasts as
+       invalidation-only signals so protected chrome and Assessment Studio stay aligned to one
+       canonical `/api/assessment/credits` read path. */
     creditRealtimeChannel.on(
       "broadcast",
       { event: ASSESSMENT_CREDIT_REALTIME_EVENT },
@@ -391,14 +435,28 @@ export function ProtectedShell({
     };
   }, [pathname]);
 
-  const resolvedBalanceLabel = creditSummary?.isAdminExempt
-    ? messages.roleAdmin
-    : String(creditSummary?.remainingCount ?? siteContent.navigation.balancePlaceholder);
-  const resolvedBalanceHint = creditSummary?.isAdminExempt
-    ? messages.assessmentDailyCreditsAdminExemptBody
-    : creditSummary
-      ? `${creditSummary.remainingCount ?? 0} / ${creditSummary.totalRemainingCount ?? 0}`
-      : siteContent.navigation.balanceHint;
+  /* Keep the header neutral until the canonical shared query resolves. Rendering a placeholder
+     balance here while Assessment Studio waits on the same query would recreate a temporary
+     two-state credit UI during first load or post-mutation reconciliation. */
+  const resolvedBalanceLabel = !creditSummary
+    ? messages.loading
+    : creditDisplay?.state === "admin_exempt"
+      ? messages.roleAdmin
+      : formatAssessmentCreditCount(creditDisplay?.totalAvailable ?? 0, locale);
+  const resolvedBalanceHint = !creditSummary
+    ? messages.loading
+    : creditDisplay?.state === "admin_exempt"
+      ? messages.assessmentDailyCreditsAdminExemptBody
+      : creditDisplay?.state === "access_disabled"
+        ? messages.assessmentAccessDisabledBody
+        : buildHeaderCreditHint({
+            locale,
+            totalAvailable: creditDisplay?.totalAvailable ?? 0,
+            dailyAvailable: creditDisplay?.dailyAvailable ?? 0,
+            extraAvailable: creditDisplay?.extraAvailable ?? 0,
+            hasManualCredits: creditDisplay?.hasManualCredits ?? false,
+            hasGrantCredits: creditDisplay?.hasGrantCredits ?? false,
+          });
   const creditHelpTriggerLabel =
     locale === "ar" ? "طلب كريدت عاجل" : "Urgent credit help";
   const creditHelpCloseLabel =

@@ -30,6 +30,10 @@ import {
   logAssessmentCreditDiagnostic,
 } from "@/lib/server/assessment-credit-diagnostics";
 import {
+  mapAdminAssessmentCreditMutationErrorToQueryCode as mapAdminCreditMutationErrorToQueryCode,
+  readPlatformErrorCode,
+} from "@/lib/server/assessment-platform-errors";
+import {
   getAdminAssessmentCreditStateForUser,
   getUserByUid,
   listAdminActivityLogs,
@@ -325,33 +329,7 @@ function buildAdminUserDetailPath(
 }
 
 function mapCreditMutationErrorToQueryCode(error: unknown) {
-  const code = error instanceof Error ? error.message : "ASSESSMENT_CREDIT_UPDATE_FAILED";
-
-  switch (code) {
-    case "USER_NOT_FOUND":
-      return "credits_user_not_found";
-    case "ASSESSMENT_CREDIT_GRANT_NOT_FOUND":
-      return "credits_grant_not_found";
-    case "ASSESSMENT_CREDIT_GRANT_ALREADY_REVOKED":
-      return "credits_grant_already_revoked";
-    case "ASSESSMENT_CREDIT_GRANT_OWNER_MISMATCH":
-      return "credits_grant_owner_mismatch";
-    case "ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN":
-      return "credits_self_mutation_forbidden";
-    case "ASSESSMENT_CREDIT_AMOUNT_INVALID":
-      return "credits_amount_invalid";
-    case "ASSESSMENT_DAILY_OVERRIDE_INVALID":
-      return "credits_daily_override_invalid";
-    case "ASSESSMENT_CREDIT_GRANT_EXPIRY_INVALID":
-      return "credits_grant_expiry_invalid";
-    case "ASSESSMENT_CREDIT_GRANT_ID_REQUIRED":
-      return "credits_grant_id_required";
-    case "ASSESSMENT_CREDIT_ACTION_UNSUPPORTED":
-    case "ASSESSMENT_CREDIT_ACCESS_INVALID":
-      return "credits_invalid_request";
-    default:
-      return "credits_update_failed";
-  }
+  return mapAdminCreditMutationErrorToQueryCode(error);
 }
 
 function mapPromptEntitlementMutationErrorToQueryCode(error: unknown) {
@@ -469,6 +447,7 @@ async function runAdminCreditMutationFromDetailPage(input: {
     details: {
       route: "/admin/users/[uid]",
       actorUid: admin.uid,
+      actorEmail: admin.email ?? null,
       targetUid: input.targetUid,
       action: input.mutation.action,
     },
@@ -501,13 +480,15 @@ async function runAdminCreditMutationFromDetailPage(input: {
     details: {
       route: "/admin/users/[uid]",
       actorUid: admin.uid,
+      actorEmail: admin.email ?? null,
       targetUid: input.targetUid,
       targetRole: targetUser.role,
     },
   });
 
+  let state: Awaited<ReturnType<typeof applyAdminAssessmentCreditMutation>>;
   try {
-    const state = await applyAdminAssessmentCreditMutation({
+    state = await applyAdminAssessmentCreditMutation({
       ownerUid: input.targetUid,
       admin: {
         uid: admin.uid,
@@ -519,7 +500,34 @@ async function runAdminCreditMutationFromDetailPage(input: {
         source: "admin-user-detail",
       },
     });
+  } catch (error) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_detail_failed",
+      level: "error",
+      traceId: creditTraceId,
+      details: {
+        route: "/admin/users/[uid]",
+        actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
+        targetUid: input.targetUid,
+        action: input.mutation.action,
+      },
+      error,
+    });
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: mapCreditMutationErrorToQueryCode(error),
+      }),
+    );
+  }
 
+  let adminLogStatus = "succeeded";
+  let adminLogErrorCode: string | null = null;
+
+  /* The admin detail page is a server-action shell over the same repository mutation lane as
+     the API route. Keep appendAdminLog best-effort here so a committed balance change never
+     redirects back as a false failure just because audit logging degraded afterwards. */
+  try {
     await appendAdminLog({
       actorUid: admin.uid,
       actorRole: admin.role,
@@ -547,65 +555,111 @@ async function runAdminCreditMutationFromDetailPage(input: {
             : null,
       },
     });
-
-    /* Live credit delivery must publish the repository-returned post-commit summary for this
-       exact owner UID. Keep the detail page on the same server truth object so header/studio
-       listeners never receive guessed balances or cross-user payloads. */
-    try {
-      const liveUpdate = await publishAssessmentCreditLiveUpdate({
-        ownerUid: input.targetUid,
-        credits: state.credits,
-        reason: `admin-user-detail:${input.mutation.action}`,
-        traceId: creditTraceId,
-      });
-
-      console.info("[admin-user-detail] published assessment credit live update", {
-        targetUid: input.targetUid,
-        actingAdminUid: admin.uid,
-        action: input.mutation.action,
-        broadcastStatus: liveUpdate.broadcast.status,
-        broadcastErrorCode: liveUpdate.broadcast.errorCode,
-        remainingCount: state.credits.remainingCount,
-      });
-    } catch (error) {
-      console.warn("[admin-user-detail] failed to publish assessment credit live update", {
-        targetUid: input.targetUid,
-        actingAdminUid: admin.uid,
-        action: input.mutation.action,
-        error: error instanceof Error ? error.name : "UNKNOWN",
-      });
-    }
-
-    logAssessmentCreditDiagnostic({
-      event: "assessment_credit_admin_detail_succeeded",
-      traceId: creditTraceId,
-      details: {
-        route: "/admin/users/[uid]",
-        actorUid: admin.uid,
-        targetUid: input.targetUid,
-        action: input.mutation.action,
-        remainingCount: state.credits.remainingCount,
-      },
-    });
   } catch (error) {
+    adminLogStatus = "failed";
+    adminLogErrorCode = readPlatformErrorCode(error);
     logAssessmentCreditDiagnostic({
-      event: "assessment_credit_admin_detail_failed",
-      level: "error",
+      event: "assessment_credit_admin_detail_admin_log_failed",
+      level: "warn",
       traceId: creditTraceId,
       details: {
         route: "/admin/users/[uid]",
         actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
         targetUid: input.targetUid,
         action: input.mutation.action,
+        adminLogErrorCode,
       },
       error,
     });
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: mapCreditMutationErrorToQueryCode(error),
-      }),
-    );
+    console.warn("[admin-user-detail] admin audit log failed after committed mutation", {
+      targetUid: input.targetUid,
+      actingAdminUid: admin.uid,
+      action: input.mutation.action,
+      adminLogErrorCode,
+    });
   }
+
+  let broadcastStatus: string | null = null;
+  let broadcastErrorCode: string | null = null;
+
+  /* Live credit delivery must publish the repository-returned post-commit summary for this
+     exact owner UID. Keep the detail page on the same server truth object so header/studio
+     listeners never receive guessed balances or cross-user payloads. */
+  try {
+    const liveUpdate = await publishAssessmentCreditLiveUpdate({
+      ownerUid: input.targetUid,
+      credits: state.credits,
+      reason: `admin-user-detail:${input.mutation.action}`,
+      traceId: creditTraceId,
+    });
+    broadcastStatus = liveUpdate.broadcast.status;
+    broadcastErrorCode = liveUpdate.broadcast.errorCode;
+
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_detail_publish_result",
+      traceId: creditTraceId,
+      details: {
+        route: "/admin/users/[uid]",
+        actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
+        targetUid: input.targetUid,
+        action: input.mutation.action,
+        broadcastStatus,
+        broadcastErrorCode,
+        eventId: liveUpdate.eventId,
+      },
+    });
+
+    console.info("[admin-user-detail] published assessment credit live update", {
+      targetUid: input.targetUid,
+      actingAdminUid: admin.uid,
+      action: input.mutation.action,
+      broadcastStatus,
+      broadcastErrorCode,
+      remainingCount: state.credits.remainingCount,
+    });
+  } catch (error) {
+    broadcastStatus = "error";
+    broadcastErrorCode = readPlatformErrorCode(error);
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_detail_publish_failed",
+      level: "warn",
+      traceId: creditTraceId,
+      details: {
+        route: "/admin/users/[uid]",
+        actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
+        targetUid: input.targetUid,
+        action: input.mutation.action,
+        broadcastErrorCode,
+      },
+      error,
+    });
+    console.warn("[admin-user-detail] failed to publish assessment credit live update", {
+      targetUid: input.targetUid,
+      actingAdminUid: admin.uid,
+      action: input.mutation.action,
+      error: error instanceof Error ? error.name : "UNKNOWN",
+    });
+  }
+
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_admin_detail_succeeded",
+    traceId: creditTraceId,
+    details: {
+      route: "/admin/users/[uid]",
+      actorUid: admin.uid,
+      actorEmail: admin.email ?? null,
+      targetUid: input.targetUid,
+      action: input.mutation.action,
+      adminLogStatus,
+      adminLogErrorCode,
+      broadcastStatus,
+      broadcastErrorCode,
+      remainingCount: state.credits.remainingCount,
+    },
+  });
 
   redirect(
     buildAdminUserDetailPath(input.targetUid, {

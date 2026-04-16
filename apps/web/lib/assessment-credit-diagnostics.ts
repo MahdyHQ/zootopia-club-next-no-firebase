@@ -43,9 +43,12 @@ export function buildAssessmentCreditClientSummarySnapshot(
     dayKey: summary.dayKey,
     dailyLimit: summary.dailyLimit,
     usedCount: summary.usedCount,
+    dailyRemainingCount: summary.dailyRemainingCount,
     manualCreditsAvailable: summary.manualCreditsAvailable,
     grantCreditsAvailable: summary.grantCreditsAvailable,
     extraCreditsAvailable: summary.extraCreditsAvailable,
+    activeGrantCount: summary.activeGrantCount,
+    totalRemainingCount: summary.totalRemainingCount,
     remainingCount: summary.remainingCount,
     resetsAt: summary.resetsAt,
   };

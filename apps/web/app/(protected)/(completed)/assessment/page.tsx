@@ -1,5 +1,4 @@
 import { APP_ROUTES, getModelsForTool } from "@zootopia/shared-config";
-import type { AssessmentDailyCreditsSummary } from "@zootopia/shared-types";
 import { BrainCircuit } from "lucide-react";
 
 import { AssessmentStudio } from "@/components/assessment/assessment-studio";   
@@ -8,37 +7,10 @@ import { getAssessmentPromptAccessStateForUser } from "@/lib/server/assessment-p
 import { getRequestUiContext } from "@/lib/server/request-context";
 import {
   getActiveDocumentForOwner,
-  getAssessmentDailyCreditsSummaryForUser,
   listAssessmentGenerationsForUser,
   listDocumentsForUser,
 } from "@/lib/server/repository";
 import { requireCompletedUser } from "@/lib/server/session";
-
-function buildFallbackAssessmentDailyCreditsSummary(
-  role: "admin" | "user",
-): AssessmentDailyCreditsSummary {
-  const now = new Date();
-  const dayKey = now.toISOString().slice(0, 10);
-
-  return {
-    applies: role !== "admin",
-    isAdminExempt: role === "admin",
-    assessmentAccess: "enabled",
-    dayKey,
-    dailyDefaultLimit: 0,
-    dailyLimit: 0,
-    dailyLimitSource: "default",
-    usedCount: 0,
-    dailyRemainingCount: null,
-    manualCreditsAvailable: 0,
-    grantCreditsAvailable: 0,
-    extraCreditsAvailable: 0,
-    activeGrantCount: 0,
-    totalRemainingCount: null,
-    remainingCount: null,
-    resetsAt: now.toISOString(),
-  };
-}
 
 export default async function AssessmentPage() {
   const [user, uiContext] = await Promise.all([
@@ -53,18 +25,13 @@ export default async function AssessmentPage() {
   let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
   let generations = [] as Awaited<ReturnType<typeof listAssessmentGenerationsForUser>>;
   let activeDocument: Awaited<ReturnType<typeof listDocumentsForUser>>[number] | null = null;
-  let credits = buildFallbackAssessmentDailyCreditsSummary(user.role);
   let assessmentDataDegraded = false;
 
   try {
-    [documents, generations, activeDocument, credits] = await Promise.all([
+    [documents, generations, activeDocument] = await Promise.all([
       listDocumentsForUser(user.uid),
       listAssessmentGenerationsForUser(user.uid),
       getActiveDocumentForOwner(user.uid),
-      getAssessmentDailyCreditsSummaryForUser({
-        uid: user.uid,
-        role: user.role,
-      }),
     ]);
   } catch (error) {
     assessmentDataDegraded = true;
@@ -110,7 +77,6 @@ export default async function AssessmentPage() {
         initialDocuments={documents}
         initialGenerations={generations}
         initialActiveDocumentId={activeDocument?.id ?? null}
-        initialCreditSummary={credits}
       />
     </div>
   );
