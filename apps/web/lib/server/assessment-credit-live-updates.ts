@@ -3,9 +3,21 @@ import "server-only";
 import type { AssessmentDailyCreditsSummary } from "@zootopia/shared-types";
 import { randomUUID } from "node:crypto";
 
+import {
+  createAssessmentCreditTraceId,
+  logAssessmentCreditDiagnostic,
+} from "@/lib/server/assessment-credit-diagnostics";
+
+type AssessmentCreditLiveUpdate = {
+  credits: AssessmentDailyCreditsSummary;
+  eventId: string;
+  emittedAt: string;
+  traceId: string | null;
+};
+
 type AssessmentCreditLiveListener = {
   id: string;
-  emit: (credits: AssessmentDailyCreditsSummary) => void;
+  emit: (update: AssessmentCreditLiveUpdate) => void;
 };
 
 type AssessmentCreditLiveRegistry = Map<string, Map<string, AssessmentCreditLiveListener>>;
@@ -27,7 +39,7 @@ function getAssessmentCreditLiveRegistry() {
    so Vercel multi-instance traffic still converges without trusting process memory as authority. */
 export function subscribeAssessmentCreditLiveUpdates(input: {
   ownerUid: string;
-  emit: (credits: AssessmentDailyCreditsSummary) => void;
+  emit: (update: AssessmentCreditLiveUpdate) => void;
 }) {
   const registry = getAssessmentCreditLiveRegistry();
   const listenerId = randomUUID();
@@ -39,16 +51,19 @@ export function subscribeAssessmentCreditLiveUpdates(input: {
   });
   registry.set(input.ownerUid, listenersForOwner);
 
-  return () => {
-    const activeListeners = registry.get(input.ownerUid);
-    if (!activeListeners) {
-      return;
-    }
+  return {
+    listenerCount: listenersForOwner.size,
+    unsubscribe: () => {
+      const activeListeners = registry.get(input.ownerUid);
+      if (!activeListeners) {
+        return;
+      }
 
-    activeListeners.delete(listenerId);
-    if (activeListeners.size === 0) {
-      registry.delete(input.ownerUid);
-    }
+      activeListeners.delete(listenerId);
+      if (activeListeners.size === 0) {
+        registry.delete(input.ownerUid);
+      }
+    },
   };
 }
 
@@ -82,10 +97,33 @@ export function publishAssessmentCreditLiveUpdate(input: {
   ownerUid: string;
   credits: AssessmentDailyCreditsSummary;
   reason: string;
+  traceId?: string | null;
 }) {
   const listenersForOwner = getAssessmentCreditLiveRegistry().get(input.ownerUid);
+  const traceId = input.traceId
+    ? createAssessmentCreditTraceId(input.traceId)
+    : null;
+  const eventId = randomUUID();
+  const emittedAt = new Date().toISOString();
+  const listenerCount = listenersForOwner?.size ?? 0;
+
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_sse_publish_attempted",
+    traceId,
+    details: {
+      ownerUid: input.ownerUid,
+      reason: input.reason,
+      listenerCount,
+      summarySignature: createAssessmentCreditSummarySignature(input.credits),
+      remainingCount: input.credits.remainingCount,
+    },
+  });
+
   if (!listenersForOwner || listenersForOwner.size === 0) {
     return {
+      eventId,
+      emittedAt,
+      listenerCount,
       deliveredCount: 0,
     };
   }
@@ -95,7 +133,12 @@ export function publishAssessmentCreditLiveUpdate(input: {
 
   for (const listener of listenersForOwner.values()) {
     try {
-      listener.emit(input.credits);
+      listener.emit({
+        credits: input.credits,
+        eventId,
+        emittedAt,
+        traceId,
+      });
       deliveredCount += 1;
     } catch (error) {
       failedListenerIds.push(listener.id);
@@ -117,7 +160,25 @@ export function publishAssessmentCreditLiveUpdate(input: {
     }
   }
 
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_sse_publish_result",
+    traceId,
+    details: {
+      ownerUid: input.ownerUid,
+      reason: input.reason,
+      eventId,
+      emittedAt,
+      listenerCount,
+      deliveredCount,
+      failedListenerCount: failedListenerIds.length,
+      remainingCount: input.credits.remainingCount,
+    },
+  });
+
   return {
+    eventId,
+    emittedAt,
+    listenerCount,
     deliveredCount,
   };
 }

@@ -1764,14 +1764,16 @@ html[dir="rtl"] .field-control {
 @media (min-width: 768px) {
   .assessment-setup-top-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(15.25rem, 21rem);
+    /* Give the rights/support rail slightly more horizontal budget so the Arabic
+       legal sentence can stay on a single line at tablet/desktop sizes. */
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22.5rem);
     align-items: start;
     gap: 1rem 1.5rem;
   }
 
   .assessment-model-control {
     justify-self: end;
-    width: min(100%, 21rem);
+    width: min(100%, 22.5rem);
     padding: 0.64rem;
   }
 
@@ -1803,11 +1805,11 @@ html[dir="rtl"] .field-control {
 
 @media (min-width: 1280px) {
   .assessment-setup-top-row {
-    grid-template-columns: minmax(0, 1fr) minmax(17.75rem, 24rem);
+    grid-template-columns: minmax(0, 1fr) minmax(18.5rem, 25.5rem);
   }
 
   .assessment-model-control {
-    width: min(100%, 24rem);
+    width: min(100%, 25.5rem);
   }
 }
 

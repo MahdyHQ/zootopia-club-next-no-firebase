@@ -1,9 +1,14 @@
 import type { AssessmentDailyCreditsSummary } from "@zootopia/shared-types";
+import { randomUUID } from "node:crypto";
 
 import {
   createAssessmentCreditSummarySignature,
   subscribeAssessmentCreditLiveUpdates,
 } from "@/lib/server/assessment-credit-live-updates";
+import {
+  createAssessmentCreditTraceId,
+  logAssessmentCreditDiagnostic,
+} from "@/lib/server/assessment-credit-diagnostics";
 import { getAssessmentDailyCreditsSummaryForUser } from "@/lib/server/repository";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
@@ -24,15 +29,16 @@ function createNoStoreHeaders(input: Record<string, string> = {}) {
   };
 }
 
-function formatSseComment(comment: string) {
-  return `:${comment}\n\n`;
-}
-
-function formatSseEvent(event: string, data: unknown) {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+function formatSseEvent(input: {
+  event: string;
+  data: unknown;
+  id?: string;
+}) {
+  return `${input.id ? `id: ${input.id}\n` : ""}event: ${input.event}\ndata: ${JSON.stringify(input.data)}\n\n`;
 }
 
 export async function GET(request: Request) {
+  const streamRequestId = createAssessmentCreditTraceId();
   const user = await getAuthenticatedSessionUser();
   if (!user) {
     return new Response("Sign in is required for assessments.", {
@@ -41,6 +47,15 @@ export async function GET(request: Request) {
     });
   }
 
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_stream_started",
+    traceId: streamRequestId,
+    details: {
+      ownerUid: user.uid,
+      route: "/api/assessment/credits/stream",
+    },
+  });
+
   let initialCredits: AssessmentDailyCreditsSummary;
   try {
     initialCredits = await getAssessmentDailyCreditsSummaryForUser({
@@ -48,6 +63,17 @@ export async function GET(request: Request) {
       role: user.role,
     });
   } catch (error) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_stream_initial_summary_failed",
+      level: "error",
+      traceId: streamRequestId,
+      details: {
+        ownerUid: user.uid,
+        route: "/api/assessment/credits/stream",
+      },
+      error,
+    });
+
     console.error("[assessment-credit-stream] failed to resolve initial summary", {
       ownerUid: user.uid,
       error: error instanceof Error ? error.name : "UNKNOWN",
@@ -68,35 +94,6 @@ export async function GET(request: Request) {
       let lastSummarySignature: string | null = null;
       let refreshInFlight = false;
 
-      const enqueue = (chunk: string) => {
-        if (closed) {
-          return;
-        }
-
-        try {
-          controller.enqueue(encoder.encode(chunk));
-        } catch {
-          closeStream();
-        }
-      };
-
-      const emitSummary = (credits: AssessmentDailyCreditsSummary) => {
-        const nextSignature = createAssessmentCreditSummarySignature(credits);
-        if (nextSignature === lastSummarySignature) {
-          return;
-        }
-
-        lastSummarySignature = nextSignature;
-        enqueue(
-          formatSseEvent("summary", {
-            credits,
-          }),
-        );
-      };
-
-      /* This route is a read-only owner-scoped SSE lane for the authenticated user's credit truth.
-         Keep it cookie-authenticated and same-origin only, then pair it with a periodic server
-         recheck so Vercel instance rotation or cross-instance admin writes still converge quickly. */
       const closeStream = () => {
         if (closed) {
           return;
@@ -110,22 +107,86 @@ export async function GET(request: Request) {
         } catch {
           // Ignore close races when the platform or browser already closed the stream.
         }
+
+        logAssessmentCreditDiagnostic({
+          event: "assessment_credit_stream_closed",
+          traceId: streamRequestId,
+          details: {
+            ownerUid: user.uid,
+            route: "/api/assessment/credits/stream",
+          },
+        });
       };
 
-      enqueue(`retry: ${SSE_RETRY_MS}\n\n`);
-      enqueue(formatSseComment("connected"));
-      emitSummary(initialCredits);
+      const enqueue = (chunk: string) => {
+        if (closed) {
+          return;
+        }
 
-      const unsubscribe = subscribeAssessmentCreditLiveUpdates({
-        ownerUid: user.uid,
-        emit: emitSummary,
-      });
+        try {
+          controller.enqueue(encoder.encode(chunk));
+        } catch {
+          closeStream();
+        }
+      };
 
-      const heartbeatInterval = setInterval(() => {
-        enqueue(formatSseComment("keepalive"));
-      }, SSE_HEARTBEAT_INTERVAL_MS);
+      const emitHeartbeat = () => {
+        enqueue(
+          formatSseEvent({
+            id: randomUUID(),
+            event: "heartbeat",
+            data: {
+              emittedAt: new Date().toISOString(),
+            },
+          }),
+        );
+      };
 
-      const refreshInterval = setInterval(async () => {
+      const emitSummary = (input: {
+        credits: AssessmentDailyCreditsSummary;
+        source: "initial" | "publish" | "post-subscribe-recheck" | "fallback-refresh";
+        traceId?: string | null;
+        eventId?: string;
+        emittedAt?: string;
+      }) => {
+        const nextSignature = createAssessmentCreditSummarySignature(input.credits);
+        if (nextSignature === lastSummarySignature) {
+          return;
+        }
+
+        lastSummarySignature = nextSignature;
+        const eventId = input.eventId ?? randomUUID();
+        const emittedAt = input.emittedAt ?? new Date().toISOString();
+
+        enqueue(
+          formatSseEvent({
+            id: eventId,
+            event: "summary",
+            data: {
+              credits: input.credits,
+              emittedAt,
+            },
+          }),
+        );
+
+        logAssessmentCreditDiagnostic({
+          event: "assessment_credit_stream_summary_emitted",
+          traceId: input.traceId ?? streamRequestId,
+          details: {
+            ownerUid: user.uid,
+            route: "/api/assessment/credits/stream",
+            source: input.source,
+            eventId,
+            emittedAt,
+            summarySignature: nextSignature,
+            remainingCount: input.credits.remainingCount,
+          },
+        });
+      };
+
+      const refreshAuthoritativeSummary = async (
+        source: "post-subscribe-recheck" | "fallback-refresh",
+      ) => {
         if (closed || refreshInFlight) {
           return;
         }
@@ -136,8 +197,24 @@ export async function GET(request: Request) {
             uid: user.uid,
             role: user.role,
           });
-          emitSummary(nextCredits);
+          emitSummary({
+            credits: nextCredits,
+            source,
+            traceId: streamRequestId,
+          });
         } catch (error) {
+          logAssessmentCreditDiagnostic({
+            event: "assessment_credit_stream_refresh_failed",
+            level: "warn",
+            traceId: streamRequestId,
+            details: {
+              ownerUid: user.uid,
+              route: "/api/assessment/credits/stream",
+              source,
+            },
+            error,
+          });
+
           console.warn("[assessment-credit-stream] fallback refresh failed", {
             ownerUid: user.uid,
             error: error instanceof Error ? error.name : "UNKNOWN",
@@ -145,6 +222,49 @@ export async function GET(request: Request) {
         } finally {
           refreshInFlight = false;
         }
+      };
+
+      enqueue(`retry: ${SSE_RETRY_MS}\n\n`);
+      emitSummary({
+        credits: initialCredits,
+        source: "initial",
+        traceId: streamRequestId,
+      });
+
+      const subscription = subscribeAssessmentCreditLiveUpdates({
+        ownerUid: user.uid,
+        emit: (update) => {
+          emitSummary({
+            credits: update.credits,
+            source: "publish",
+            traceId: update.traceId ?? streamRequestId,
+            eventId: update.eventId,
+            emittedAt: update.emittedAt,
+          });
+        },
+      });
+
+      logAssessmentCreditDiagnostic({
+        event: "assessment_credit_stream_subscribed",
+        traceId: streamRequestId,
+        details: {
+          ownerUid: user.uid,
+          route: "/api/assessment/credits/stream",
+          listenerCount: subscription.listenerCount,
+        },
+      });
+
+      /* The initial summary is fetched before subscription to fail fast on broken auth/read state.
+         Immediately rechecking after subscription closes the tiny publish gap where an admin
+         mutation could otherwise land between the initial fetch and live-listener registration. */
+      void refreshAuthoritativeSummary("post-subscribe-recheck");
+
+      const heartbeatInterval = setInterval(() => {
+        emitHeartbeat();
+      }, SSE_HEARTBEAT_INTERVAL_MS);
+
+      const refreshInterval = setInterval(async () => {
+        await refreshAuthoritativeSummary("fallback-refresh");
       }, SSE_FALLBACK_REFRESH_INTERVAL_MS);
 
       const abortHandler = () => {
@@ -156,7 +276,7 @@ export async function GET(request: Request) {
       cleanup = () => {
         clearInterval(heartbeatInterval);
         clearInterval(refreshInterval);
-        unsubscribe();
+        subscription.unsubscribe();
         request.signal.removeEventListener("abort", abortHandler);
       };
     },

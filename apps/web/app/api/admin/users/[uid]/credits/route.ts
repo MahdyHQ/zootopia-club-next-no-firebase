@@ -4,6 +4,10 @@ import type {
 } from "@zootopia/shared-types";
 
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
+import {
+  createAssessmentCreditTraceId,
+  logAssessmentCreditDiagnostic,
+} from "@/lib/server/assessment-credit-diagnostics";
 import { publishAssessmentCreditLiveUpdate } from "@/lib/server/assessment-credit-live-updates";
 import {
   appendAdminLog,
@@ -174,6 +178,59 @@ export async function PATCH(
     return applyNoStore(apiError("INVALID_JSON", "Request body must be valid JSON.", 400));
   }
 
+  const creditTraceId = createAssessmentCreditTraceId();
+  let user: Awaited<ReturnType<typeof getUserByUid>>;
+
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_admin_api_requested",
+    traceId: creditTraceId,
+    details: {
+      route: ADMIN_CREDITS_MUTATION_ROUTE,
+      actorUid: admin.uid,
+      targetUid: uid,
+      action: body.action,
+    },
+  });
+
+  try {
+    user = await getUserByUid(uid);
+  } catch (error) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_api_target_lookup_failed",
+      level: "error",
+      traceId: creditTraceId,
+      details: {
+        route: ADMIN_CREDITS_MUTATION_ROUTE,
+        actorUid: admin.uid,
+        targetUid: uid,
+        action: body.action,
+      },
+      error,
+    });
+    return applyNoStore(
+      apiError(
+        "USER_LOOKUP_UNAVAILABLE",
+        "The selected user could not be resolved right now.",
+        503,
+      ),
+    );
+  }
+
+  if (!user) {
+    return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
+  }
+
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_admin_api_target_resolved",
+    traceId: creditTraceId,
+    details: {
+      route: ADMIN_CREDITS_MUTATION_ROUTE,
+      actorUid: admin.uid,
+      targetUid: uid,
+      targetRole: user.role,
+    },
+  });
+
   console.info("[admin-users-mutation]", {
     action: `assessment-credits:${body.action}`,
     targetUid: uid,
@@ -190,11 +247,11 @@ export async function PATCH(
         role: admin.role,
       },
       mutation: body,
+      diagnostics: {
+        traceId: creditTraceId,
+        source: "admin-api-route",
+      },
     });
-    const user = await getUserByUid(uid);
-    if (!user) {
-      return applyNoStore(apiError("USER_NOT_FOUND", "The selected user was not found.", 404));
-    }
 
     await appendAdminLog({
       actorUid: admin.uid,
@@ -231,8 +288,23 @@ export async function PATCH(
         ownerUid: uid,
         credits: state.credits,
         reason: `admin-api:${body.action}`,
+        traceId: creditTraceId,
       });
+      const listenerCount = liveUpdate.listenerCount;
       deliveredCount = liveUpdate.deliveredCount;
+      logAssessmentCreditDiagnostic({
+        event: "assessment_credit_admin_api_publish_result",
+        traceId: creditTraceId,
+        details: {
+          route: ADMIN_CREDITS_MUTATION_ROUTE,
+          actorUid: admin.uid,
+          targetUid: uid,
+          action: body.action,
+          listenerCount,
+          deliveredCount,
+          eventId: liveUpdate.eventId,
+        },
+      });
     } catch (error) {
       console.warn("[admin-users-mutation] live update publish failed", {
         action: `assessment-credits:${body.action}`,
@@ -242,6 +314,19 @@ export async function PATCH(
         error: error instanceof Error ? error.name : "UNKNOWN",
       });
     }
+
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_api_succeeded",
+      traceId: creditTraceId,
+      details: {
+        route: ADMIN_CREDITS_MUTATION_ROUTE,
+        actorUid: admin.uid,
+        targetUid: uid,
+        action: body.action,
+        deliveredCount,
+        remainingCount: state.credits.remainingCount,
+      },
+    });
 
     console.info("[admin-users-mutation]", {
       action: `assessment-credits:${body.action}`,
@@ -260,6 +345,18 @@ export async function PATCH(
       }),
     );
   } catch (error) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_api_failed",
+      level: "error",
+      traceId: creditTraceId,
+      details: {
+        route: ADMIN_CREDITS_MUTATION_ROUTE,
+        actorUid: admin.uid,
+        targetUid: uid,
+        action: body.action,
+      },
+      error,
+    });
     console.warn("[admin-users-mutation]", {
       action: `assessment-credits:${body.action}`,
       targetUid: uid,

@@ -50,6 +50,10 @@ import {
   type AssessmentCreditSummaryUpdatedDetail,
 } from "@/lib/assessment-credit-events";
 import {
+  buildAssessmentCreditClientSummarySnapshot,
+  logAssessmentCreditClientDiagnostic,
+} from "@/lib/assessment-credit-diagnostics";
+import {
   createOperationalUiError,
   getOperationalSupportNotes,
   type OperationalUiError,
@@ -118,9 +122,9 @@ const ASSESSMENT_PROMPT_LOCK_COPY = {
   lockedPlaceholder: "هذا الحقل مقفل حالياً حتى يتم التحقق من كلمة المرور",
   entitlementPlaceholder:
     "هذا الحقل غير متاح لهذا الحساب حالياً حتى يتم تفعيل الصلاحية من الإدارة",
-  successTitle: "تم فتح الميزة بنجاح",
+  successTitle: "🎉✨ تم فتح الميزة بنجاح",
   successBody:
-    "تم التحقق من كلمة المرور وتفعيل طلب التقييم لهذا الحساب. يمكنك الآن متابعة إنشاء التقييم.",
+    "🎉✨ تم التحقق من كلمة المرور وتفعيل طلب التقييم لهذا الحساب بنجاح - من قبل المطوّر ابن عبدالله. يمكنك الآن متابعة إنشاء التقييم.",
 };
 
 const ASSESSMENT_MODEL_VISIBILITY_COPY = {
@@ -776,14 +780,27 @@ export function AssessmentStudio({
        are first observed by the protected shell's shared refresh lane. Listen for that shell
        broadcast here so the studio balance updates on the same owner session without a full reload. */
     const handleCreditSummaryUpdated = (event: Event) => {
-      const nextSummary = (
+      const detail = (
         event as CustomEvent<AssessmentCreditSummaryUpdatedDetail>
-      ).detail?.credits;
+      ).detail;
+      const nextSummary = detail?.credits;
 
       if (!nextSummary) {
         return;
       }
 
+      logAssessmentCreditClientDiagnostic({
+        event: "assessment_studio_summary_update_received",
+        details: {
+          source: detail?.source ?? null,
+          requestId: detail?.requestId ?? null,
+          eventId: detail?.eventId ?? null,
+          emittedAt: detail?.emittedAt ?? null,
+          receivedAt: detail?.receivedAt ?? null,
+          remainingCount: nextSummary.remainingCount,
+          assessmentAccess: nextSummary.assessmentAccess,
+        },
+      });
       setCreditSummary(nextSummary);
     };
 
@@ -945,6 +962,16 @@ export function AssessmentStudio({
       badge: document.isActive ? messages.assessmentActiveLinkedDocument : undefined,
     })),
   ];
+
+  useEffect(() => {
+    logAssessmentCreditClientDiagnostic({
+      event: "assessment_studio_exhausted_state_recalculated",
+      details: {
+        exhausted: creditsExhausted,
+        summary: buildAssessmentCreditClientSummarySnapshot(creditSummary),
+      },
+    });
+  }, [creditSummary, creditsExhausted]);
 
   function handleToggleQuestionType(type: AssessmentQuestionType) {
     setFieldErrors((current) => ({
@@ -1372,10 +1399,12 @@ export function AssessmentStudio({
                       <ShieldCheck className="h-3 w-3" />
                     </span>
                     <div className="min-w-0 w-full space-y-1">
-                      <p className="max-w-full whitespace-normal break-words text-[0.71rem] font-semibold leading-[1.05rem] tracking-tight text-foreground [overflow-wrap:anywhere] sm:text-[0.72rem] md:text-[0.74rem]">
+                      {/* Keep this legal-rights sentence on a single line whenever physically possible.
+                          Clamp-based sizing and tighter tracking preserve readability while reducing wrap pressure. */}
+                      <p className="max-w-full whitespace-nowrap text-[clamp(0.5rem,1.08vw,0.74rem)] font-semibold leading-tight tracking-[-0.02em] text-foreground">
                         {ASSESSMENT_MODEL_VISIBILITY_COPY.rightsLine}
                       </p>
-                      <p className="flex max-w-full items-center gap-1 text-[0.62rem] leading-[0.95rem] text-foreground-muted/82 sm:text-[0.63rem] md:text-[0.64rem]">
+                      <p className="flex max-w-full items-center gap-1 text-[clamp(0.55rem,0.9vw,0.64rem)] leading-tight text-foreground-muted/82">
                         <HandHeart className="h-3 w-3 shrink-0 text-rose-500 dark:text-rose-300" />
                         <span className="min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
                           {ASSESSMENT_MODEL_VISIBILITY_COPY.supportHint}
@@ -1748,17 +1777,18 @@ export function AssessmentStudio({
                 {unlockSuccessVisible ? (
                   <div
                     dir="rtl"
-                    className={`mt-4 rounded-[1rem] border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.09)] transition-all duration-500 ease-out ${unlockSuccessEntered ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-[0.98] opacity-0"}`}
+                    className={`mt-4 rounded-[1.1rem] border border-emerald-400/30 bg-[linear-gradient(140deg,rgba(16,185,129,0.16),rgba(52,211,153,0.07))] px-4 py-3.5 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_10px_24px_rgba(16,185,129,0.14)] transition-all duration-500 ease-out ${unlockSuccessEntered ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-[0.98] opacity-0"}`}
                   >
                     <div className="flex items-start gap-2.5">
-                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200">
+                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-500/35 bg-emerald-500/18 text-emerald-800 dark:text-emerald-200">
                         <CheckCircle2 className="h-4.5 w-4.5" />
                       </span>
                       <div className="space-y-1">
-                        <p className="text-sm font-semibold text-foreground">
-                          {ASSESSMENT_PROMPT_LOCK_COPY.successTitle}
+                        <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                          <Sparkles className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-200" />
+                          <span>{ASSESSMENT_PROMPT_LOCK_COPY.successTitle}</span>
                         </p>
-                        <p className="text-sm leading-6 text-foreground-muted">
+                        <p className="text-sm leading-6 text-foreground-muted/95">
                           {ASSESSMENT_PROMPT_LOCK_COPY.successBody}
                         </p>
                       </div>

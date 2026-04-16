@@ -5,8 +5,15 @@ export const ASSESSMENT_CREDIT_REFRESH_EVENT =
 export const ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT =
   "zootopia:assessment-credit-summary-updated";
 
+export type AssessmentCreditSummaryUpdateSource = "fetch" | "sse";
+
 export type AssessmentCreditSummaryUpdatedDetail = {
   credits: AssessmentDailyCreditsSummary;
+  source?: AssessmentCreditSummaryUpdateSource;
+  requestId?: string | null;
+  eventId?: string | null;
+  emittedAt?: string | null;
+  receivedAt?: string;
 };
 
 export function dispatchAssessmentCreditRefresh() {
@@ -22,7 +29,7 @@ export function dispatchAssessmentCreditRefresh() {
    local balance card in sync after external admin grants without adding a second polling client.
    Future agents: preserve this as a display-sync bridge only, not as an authority source. */
 export function dispatchAssessmentCreditSummaryUpdated(
-  credits: AssessmentDailyCreditsSummary,
+  detail: AssessmentCreditSummaryUpdatedDetail,
 ) {
   if (typeof window === "undefined") {
     return;
@@ -32,7 +39,10 @@ export function dispatchAssessmentCreditSummaryUpdated(
     new CustomEvent<AssessmentCreditSummaryUpdatedDetail>(
       ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT,
       {
-        detail: { credits },
+        detail: {
+          ...detail,
+          receivedAt: detail.receivedAt ?? new Date().toISOString(),
+        },
       },
     ),
   );

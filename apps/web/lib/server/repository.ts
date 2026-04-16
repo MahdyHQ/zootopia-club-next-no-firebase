@@ -75,6 +75,11 @@ import {
   type AuthTraceContext,
 } from "@/lib/server/auth-tracing";
 import {
+  buildAssessmentCreditSummaryDiagnosticSnapshot,
+  createAssessmentCreditTraceId,
+  logAssessmentCreditDiagnostic,
+} from "@/lib/server/assessment-credit-diagnostics";
+import {
   deleteDocumentBinaryFromStorage,
   resolveUploadWorkspaceExpiryTimestamp,
 } from "@/lib/server/document-runtime";
@@ -4181,6 +4186,10 @@ export async function applyAdminAssessmentCreditMutation(input: {
   ownerUid: string;
   admin: Pick<SessionUser, "uid" | "role">;
   mutation: AdminAssessmentCreditMutationInput;
+  diagnostics?: {
+    traceId?: string | null;
+    source?: string | null;
+  };
 }) {
   const owner = await getUserByUid(input.ownerUid);
   if (!owner) {
@@ -4198,47 +4207,249 @@ export async function applyAdminAssessmentCreditMutation(input: {
   const historyRecordId = randomUUID();
   const mutationReason = sanitizeCreditMutationText(input.mutation.reason);
   const mutationNote = sanitizeCreditMutationText(input.mutation.note, 1000);
+  const creditTraceId = input.diagnostics?.traceId
+    ? createAssessmentCreditTraceId(input.diagnostics.traceId)
+    : null;
+  let beforeCreditSummary: AssessmentDailyCreditsSummary | null = null;
+  let afterCreditSummary: AssessmentDailyCreditsSummary | null = null;
 
-  if (shouldUseDatabase()) {
-    await getZootopiaDatabase().runTransaction(async (transaction) => {
-      const accountRef = getZootopiaDatabase()
-        .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
-        .doc(input.ownerUid);
-      const ledgerRef = getZootopiaDatabase()
-        .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
-        .doc(buildAssessmentDailyCreditDocumentId(input.ownerUid, creditWindow.dayKey));
-      const grantsQuery = getZootopiaDatabase()
-        .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
-        .where("ownerUid", "==", input.ownerUid)
-        .limit(400);
+  if (creditTraceId) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_mutation_requested",
+      traceId: creditTraceId,
+      details: {
+        source: input.diagnostics?.source ?? "unknown",
+        ownerUid: input.ownerUid,
+        actorUid: input.admin.uid,
+        action: input.mutation.action,
+      },
+    });
+  }
 
-      const [accountSnapshot, ledgerSnapshot, grantsSnapshot] = await Promise.all([
-        transaction.get(accountRef),
-        transaction.get(ledgerRef),
-        transaction.get(grantsQuery),
-      ]);
+  try {
+    if (creditTraceId) {
+      logAssessmentCreditDiagnostic({
+        event: "assessment_credit_persistence_write_started",
+        traceId: creditTraceId,
+        details: {
+          source: input.diagnostics?.source ?? "unknown",
+          ownerUid: input.ownerUid,
+          actorUid: input.admin.uid,
+          action: input.mutation.action,
+          persistenceMode: shouldUseDatabase() ? "database" : "memory",
+        },
+      });
+    }
 
+    if (shouldUseDatabase()) {
+      await getZootopiaDatabase().runTransaction(async (transaction) => {
+        const accountRef = getZootopiaDatabase()
+          .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
+          .doc(input.ownerUid);
+        const ledgerRef = getZootopiaDatabase()
+          .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
+          .doc(buildAssessmentDailyCreditDocumentId(input.ownerUid, creditWindow.dayKey));
+        const grantsQuery = getZootopiaDatabase()
+          .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
+          .where("ownerUid", "==", input.ownerUid)
+          .limit(400);
+
+        const [accountSnapshot, ledgerSnapshot, grantsSnapshot] = await Promise.all([
+          transaction.get(accountRef),
+          transaction.get(ledgerRef),
+          transaction.get(grantsQuery),
+        ]);
+
+        const account = normalizeAssessmentCreditAccountRecord({
+          ownerUid: input.ownerUid,
+          record: accountSnapshot.exists
+            ? (accountSnapshot.data() as Partial<AssessmentCreditAccountRecord>)
+            : null,
+          nowIso,
+        });
+        const grants = grantsSnapshot.docs.map((grantSnapshot) =>
+          normalizeAssessmentCreditGrantRecord({
+            ownerUid: input.ownerUid,
+            grantId: grantSnapshot.id,
+            record: grantSnapshot.data() as Partial<AssessmentCreditGrantRecord>,
+            nowIso,
+          }),
+        );
+        const ledger = normalizeAssessmentDailyCreditLedger({
+          ownerUid: input.ownerUid,
+          dayKey: creditWindow.dayKey,
+          record: ledgerSnapshot.exists
+            ? (ledgerSnapshot.data() as Partial<AssessmentDailyCreditLedgerDocument>)
+            : null,
+          nowIso,
+        });
+        const activeReservations = filterActiveAssessmentDailyCreditReservations(
+          ledger.pendingReservations,
+          nowMs,
+        );
+        const dailyReservationCount = activeReservations.filter(
+          (entry) => entry.source === "daily",
+        ).length;
+        const extraReservationCount = activeReservations.filter(
+          (entry) => entry.source === "extra",
+        ).length;
+
+        if (creditTraceId) {
+          logAssessmentCreditDiagnostic({
+            event: "assessment_credit_summary_recompute_started",
+            traceId: creditTraceId,
+            details: {
+              ownerUid: input.ownerUid,
+              phase: "before",
+            },
+          });
+        }
+
+        const beforeComputation = buildAssessmentCreditComputation({
+          role: owner.role,
+          dayKey: creditWindow.dayKey,
+          resetsAt: creditWindow.resetsAt,
+          ledger,
+          account,
+          grants,
+          dailyReservationCount,
+          extraReservationCount,
+        });
+        beforeCreditSummary = beforeComputation.summary;
+
+        if (creditTraceId) {
+          logAssessmentCreditDiagnostic({
+            event: "assessment_credit_summary_recompute_result",
+            traceId: creditTraceId,
+            details: {
+              ownerUid: input.ownerUid,
+              phase: "before",
+              summary: buildAssessmentCreditSummaryDiagnosticSnapshot(
+                beforeComputation.summary,
+              ),
+            },
+          });
+        }
+
+        const mutationResult = applyAssessmentCreditMutationToState({
+          ownerUid: input.ownerUid,
+          admin: input.admin,
+          mutation: input.mutation,
+          account,
+          grants,
+          nowIso,
+          nowMs,
+          mutationReason,
+          mutationNote,
+        });
+
+        if (mutationResult.accountChanged) {
+          transaction.set(accountRef, mutationResult.nextAccount, { merge: true });
+        }
+
+        for (const grantRecord of mutationResult.upsertGrants) {
+          transaction.set(
+            getZootopiaDatabase()
+              .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
+              .doc(grantRecord.id),
+            grantRecord,
+            { merge: true },
+          );
+        }
+
+        if (creditTraceId) {
+          logAssessmentCreditDiagnostic({
+            event: "assessment_credit_summary_recompute_started",
+            traceId: creditTraceId,
+            details: {
+              ownerUid: input.ownerUid,
+              phase: "after",
+            },
+          });
+        }
+
+        const afterComputation = buildAssessmentCreditComputation({
+          role: owner.role,
+          dayKey: creditWindow.dayKey,
+          resetsAt: creditWindow.resetsAt,
+          ledger,
+          account: mutationResult.nextAccount,
+          grants: mutationResult.nextGrants,
+          dailyReservationCount,
+          extraReservationCount,
+        });
+        afterCreditSummary = afterComputation.summary;
+
+        if (creditTraceId) {
+          logAssessmentCreditDiagnostic({
+            event: "assessment_credit_summary_recompute_result",
+            traceId: creditTraceId,
+            details: {
+              ownerUid: input.ownerUid,
+              phase: "after",
+              summary: buildAssessmentCreditSummaryDiagnosticSnapshot(
+                afterComputation.summary,
+              ),
+            },
+          });
+        }
+
+        const historyRecord: AdminAssessmentCreditMutationRecord = {
+          id: historyRecordId,
+          ownerUid: input.ownerUid,
+          action: input.mutation.action,
+          amount: mutationResult.history.amount,
+          access: mutationResult.history.access,
+          dailyLimitOverride: mutationResult.history.dailyLimitOverride,
+          grantId: mutationResult.history.grantId,
+          expiresAt: mutationResult.history.expiresAt,
+          reason: mutationReason,
+          note: mutationNote,
+          adminUid: input.admin.uid,
+          adminRole: input.admin.role,
+          before: buildAssessmentCreditMutationBalanceSnapshot({
+            account,
+            summary: beforeComputation.summary,
+          }),
+          after: buildAssessmentCreditMutationBalanceSnapshot({
+            account: mutationResult.nextAccount,
+            summary: afterComputation.summary,
+          }),
+          createdAt: nowIso,
+        };
+
+        transaction.set(
+          getZootopiaDatabase()
+            .collection(ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION)
+            .doc(historyRecordId),
+          historyRecord,
+          { merge: true },
+        );
+      });
+    } else {
+      const store = getMemoryStore();
       const account = normalizeAssessmentCreditAccountRecord({
         ownerUid: input.ownerUid,
-        record: accountSnapshot.exists
-          ? (accountSnapshot.data() as Partial<AssessmentCreditAccountRecord>)
-          : null,
+        record: store.assessmentCreditAccounts.get(input.ownerUid) ?? null,
         nowIso,
       });
-      const grants = grantsSnapshot.docs.map((grantSnapshot) =>
-        normalizeAssessmentCreditGrantRecord({
-          ownerUid: input.ownerUid,
-          grantId: grantSnapshot.id,
-          record: grantSnapshot.data() as Partial<AssessmentCreditGrantRecord>,
-          nowIso,
-        }),
-      );
+      const grants = [...store.assessmentCreditGrants.values()]
+        .filter((grant) => grant.ownerUid === input.ownerUid)
+        .map((grant) =>
+          normalizeAssessmentCreditGrantRecord({
+            ownerUid: input.ownerUid,
+            grantId: grant.id,
+            record: grant,
+            nowIso,
+          }),
+        );
       const ledger = normalizeAssessmentDailyCreditLedger({
         ownerUid: input.ownerUid,
         dayKey: creditWindow.dayKey,
-        record: ledgerSnapshot.exists
-          ? (ledgerSnapshot.data() as Partial<AssessmentDailyCreditLedgerDocument>)
-          : null,
+        record:
+          store.assessmentDailyCredits.get(
+            buildAssessmentDailyCreditDocumentId(input.ownerUid, creditWindow.dayKey),
+          ) ?? null,
         nowIso,
       });
       const activeReservations = filterActiveAssessmentDailyCreditReservations(
@@ -4252,6 +4463,17 @@ export async function applyAdminAssessmentCreditMutation(input: {
         (entry) => entry.source === "extra",
       ).length;
 
+      if (creditTraceId) {
+        logAssessmentCreditDiagnostic({
+          event: "assessment_credit_summary_recompute_started",
+          traceId: creditTraceId,
+          details: {
+            ownerUid: input.ownerUid,
+            phase: "before",
+          },
+        });
+      }
+
       const beforeComputation = buildAssessmentCreditComputation({
         role: owner.role,
         dayKey: creditWindow.dayKey,
@@ -4262,6 +4484,21 @@ export async function applyAdminAssessmentCreditMutation(input: {
         dailyReservationCount,
         extraReservationCount,
       });
+      beforeCreditSummary = beforeComputation.summary;
+
+      if (creditTraceId) {
+        logAssessmentCreditDiagnostic({
+          event: "assessment_credit_summary_recompute_result",
+          traceId: creditTraceId,
+          details: {
+            ownerUid: input.ownerUid,
+            phase: "before",
+            summary: buildAssessmentCreditSummaryDiagnosticSnapshot(
+              beforeComputation.summary,
+            ),
+          },
+        });
+      }
 
       const mutationResult = applyAssessmentCreditMutationToState({
         ownerUid: input.ownerUid,
@@ -4276,17 +4513,22 @@ export async function applyAdminAssessmentCreditMutation(input: {
       });
 
       if (mutationResult.accountChanged) {
-        transaction.set(accountRef, mutationResult.nextAccount, { merge: true });
+        store.assessmentCreditAccounts.set(input.ownerUid, mutationResult.nextAccount);
       }
 
       for (const grantRecord of mutationResult.upsertGrants) {
-        transaction.set(
-          getZootopiaDatabase()
-            .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
-            .doc(grantRecord.id),
-          grantRecord,
-          { merge: true },
-        );
+        store.assessmentCreditGrants.set(grantRecord.id, grantRecord);
+      }
+
+      if (creditTraceId) {
+        logAssessmentCreditDiagnostic({
+          event: "assessment_credit_summary_recompute_started",
+          traceId: creditTraceId,
+          details: {
+            ownerUid: input.ownerUid,
+            phase: "after",
+          },
+        });
       }
 
       const afterComputation = buildAssessmentCreditComputation({
@@ -4299,8 +4541,23 @@ export async function applyAdminAssessmentCreditMutation(input: {
         dailyReservationCount,
         extraReservationCount,
       });
+      afterCreditSummary = afterComputation.summary;
 
-      const historyRecord: AdminAssessmentCreditMutationRecord = {
+      if (creditTraceId) {
+        logAssessmentCreditDiagnostic({
+          event: "assessment_credit_summary_recompute_result",
+          traceId: creditTraceId,
+          details: {
+            ownerUid: input.ownerUid,
+            phase: "after",
+            summary: buildAssessmentCreditSummaryDiagnosticSnapshot(
+              afterComputation.summary,
+            ),
+          },
+        });
+      }
+
+      store.assessmentCreditMutationHistory.set(historyRecordId, {
         id: historyRecordId,
         ownerUid: input.ownerUid,
         action: input.mutation.action,
@@ -4322,128 +4579,53 @@ export async function applyAdminAssessmentCreditMutation(input: {
           summary: afterComputation.summary,
         }),
         createdAt: nowIso,
-      };
+      });
+    }
 
-      transaction.set(
-        getZootopiaDatabase()
-          .collection(ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION)
-          .doc(historyRecordId),
-        historyRecord,
-        { merge: true },
-      );
+    const state = await getAdminAssessmentCreditStateForUser(input.ownerUid, {
+      ownerRole: owner.role,
     });
-  } else {
-    const store = getMemoryStore();
-    const account = normalizeAssessmentCreditAccountRecord({
-      ownerUid: input.ownerUid,
-      record: store.assessmentCreditAccounts.get(input.ownerUid) ?? null,
-      nowIso,
-    });
-    const grants = [...store.assessmentCreditGrants.values()]
-      .filter((grant) => grant.ownerUid === input.ownerUid)
-      .map((grant) =>
-        normalizeAssessmentCreditGrantRecord({
+    if (!state) {
+      throw new Error("ASSESSMENT_CREDIT_STATE_UNAVAILABLE");
+    }
+
+    if (creditTraceId) {
+      logAssessmentCreditDiagnostic({
+        event: "assessment_credit_persistence_write_succeeded",
+        traceId: creditTraceId,
+        details: {
+          source: input.diagnostics?.source ?? "unknown",
           ownerUid: input.ownerUid,
-          grantId: grant.id,
-          record: grant,
-          nowIso,
-        }),
-      );
-    const ledger = normalizeAssessmentDailyCreditLedger({
-      ownerUid: input.ownerUid,
-      dayKey: creditWindow.dayKey,
-      record:
-        store.assessmentDailyCredits.get(
-          buildAssessmentDailyCreditDocumentId(input.ownerUid, creditWindow.dayKey),
-        ) ?? null,
-      nowIso,
-    });
-    const activeReservations = filterActiveAssessmentDailyCreditReservations(
-      ledger.pendingReservations,
-      nowMs,
-    );
-    const dailyReservationCount = activeReservations.filter(
-      (entry) => entry.source === "daily",
-    ).length;
-    const extraReservationCount = activeReservations.filter(
-      (entry) => entry.source === "extra",
-    ).length;
-
-    const beforeComputation = buildAssessmentCreditComputation({
-      role: owner.role,
-      dayKey: creditWindow.dayKey,
-      resetsAt: creditWindow.resetsAt,
-      ledger,
-      account,
-      grants,
-      dailyReservationCount,
-      extraReservationCount,
-    });
-
-    const mutationResult = applyAssessmentCreditMutationToState({
-      ownerUid: input.ownerUid,
-      admin: input.admin,
-      mutation: input.mutation,
-      account,
-      grants,
-      nowIso,
-      nowMs,
-      mutationReason,
-      mutationNote,
-    });
-
-    if (mutationResult.accountChanged) {
-      store.assessmentCreditAccounts.set(input.ownerUid, mutationResult.nextAccount);
+          actorUid: input.admin.uid,
+          action: input.mutation.action,
+          beforeRemainingCount: beforeCreditSummary?.remainingCount ?? null,
+          afterRemainingCount: afterCreditSummary?.remainingCount ?? null,
+          stateRemainingCount: state.credits.remainingCount,
+        },
+      });
     }
 
-    for (const grantRecord of mutationResult.upsertGrants) {
-      store.assessmentCreditGrants.set(grantRecord.id, grantRecord);
+    return state;
+  } catch (error) {
+    if (creditTraceId) {
+      logAssessmentCreditDiagnostic({
+        event: "assessment_credit_persistence_write_failed",
+        level: "error",
+        traceId: creditTraceId,
+        details: {
+          source: input.diagnostics?.source ?? "unknown",
+          ownerUid: input.ownerUid,
+          actorUid: input.admin.uid,
+          action: input.mutation.action,
+          beforeRemainingCount: beforeCreditSummary?.remainingCount ?? null,
+          afterRemainingCount: afterCreditSummary?.remainingCount ?? null,
+        },
+        error,
+      });
     }
 
-    const afterComputation = buildAssessmentCreditComputation({
-      role: owner.role,
-      dayKey: creditWindow.dayKey,
-      resetsAt: creditWindow.resetsAt,
-      ledger,
-      account: mutationResult.nextAccount,
-      grants: mutationResult.nextGrants,
-      dailyReservationCount,
-      extraReservationCount,
-    });
-
-    store.assessmentCreditMutationHistory.set(historyRecordId, {
-      id: historyRecordId,
-      ownerUid: input.ownerUid,
-      action: input.mutation.action,
-      amount: mutationResult.history.amount,
-      access: mutationResult.history.access,
-      dailyLimitOverride: mutationResult.history.dailyLimitOverride,
-      grantId: mutationResult.history.grantId,
-      expiresAt: mutationResult.history.expiresAt,
-      reason: mutationReason,
-      note: mutationNote,
-      adminUid: input.admin.uid,
-      adminRole: input.admin.role,
-      before: buildAssessmentCreditMutationBalanceSnapshot({
-        account,
-        summary: beforeComputation.summary,
-      }),
-      after: buildAssessmentCreditMutationBalanceSnapshot({
-        account: mutationResult.nextAccount,
-        summary: afterComputation.summary,
-      }),
-      createdAt: nowIso,
-    });
+    throw error;
   }
-
-  const state = await getAdminAssessmentCreditStateForUser(input.ownerUid, {
-    ownerRole: owner.role,
-  });
-  if (!state) {
-    throw new Error("ASSESSMENT_CREDIT_STATE_UNAVAILABLE");
-  }
-
-  return state;
 }
 
 /* Reserving a short-lived slot before model execution prevents duplicate in-flight requests from

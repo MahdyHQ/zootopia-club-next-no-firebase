@@ -7,14 +7,12 @@ import type {
 import {
   Activity,
   AlertCircle,
-  Calendar,
   Clock3,
   Database,
   FileText,
   Gauge,
   HardDrive,
   History,
-  Mail,
   Shield,
   ShieldCheck,
   ShieldX,
@@ -27,6 +25,10 @@ import { notFound, redirect } from "next/navigation";
 
 import { AdminCreditManagementWorkspace } from "@/components/admin/admin-credit-management-workspace";
 import { Button } from "@/components/ui/button";
+import {
+  createAssessmentCreditTraceId,
+  logAssessmentCreditDiagnostic,
+} from "@/lib/server/assessment-credit-diagnostics";
 import {
   getAdminAssessmentCreditStateForUser,
   getUserByUid,
@@ -458,7 +460,20 @@ async function runAdminCreditMutationFromDetailPage(input: {
   const { requireAdminUser } = await import("@/lib/server/session");
 
   const admin = await requireAdminUser();
+  const creditTraceId = createAssessmentCreditTraceId();
   let targetUser: Awaited<ReturnType<typeof getUserByUid>> = null;
+
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_admin_detail_requested",
+    traceId: creditTraceId,
+    details: {
+      route: "/admin/users/[uid]",
+      actorUid: admin.uid,
+      targetUid: input.targetUid,
+      action: input.mutation.action,
+    },
+  });
+
   /* Credit mutations must never crash the admin route on transient lookup failures.
      Keep this pre-mutation owner read fail-closed and redirect-based so operators get
      an explicit error state instead of the global application error boundary. */
@@ -480,6 +495,17 @@ async function runAdminCreditMutationFromDetailPage(input: {
     );
   }
 
+  logAssessmentCreditDiagnostic({
+    event: "assessment_credit_admin_detail_target_resolved",
+    traceId: creditTraceId,
+    details: {
+      route: "/admin/users/[uid]",
+      actorUid: admin.uid,
+      targetUid: input.targetUid,
+      targetRole: targetUser.role,
+    },
+  });
+
   try {
     const state = await applyAdminAssessmentCreditMutation({
       ownerUid: input.targetUid,
@@ -488,6 +514,10 @@ async function runAdminCreditMutationFromDetailPage(input: {
         role: admin.role,
       },
       mutation: input.mutation,
+      diagnostics: {
+        traceId: creditTraceId,
+        source: "admin-user-detail",
+      },
     });
 
     await appendAdminLog({
@@ -526,12 +556,14 @@ async function runAdminCreditMutationFromDetailPage(input: {
         ownerUid: input.targetUid,
         credits: state.credits,
         reason: `admin-user-detail:${input.mutation.action}`,
+        traceId: creditTraceId,
       });
 
       console.info("[admin-user-detail] published assessment credit live update", {
         targetUid: input.targetUid,
         actingAdminUid: admin.uid,
         action: input.mutation.action,
+        listenerCount: liveUpdate.listenerCount,
         deliveredCount: liveUpdate.deliveredCount,
         remainingCount: state.credits.remainingCount,
       });
@@ -543,7 +575,31 @@ async function runAdminCreditMutationFromDetailPage(input: {
         error: error instanceof Error ? error.name : "UNKNOWN",
       });
     }
+
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_detail_succeeded",
+      traceId: creditTraceId,
+      details: {
+        route: "/admin/users/[uid]",
+        actorUid: admin.uid,
+        targetUid: input.targetUid,
+        action: input.mutation.action,
+        remainingCount: state.credits.remainingCount,
+      },
+    });
   } catch (error) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_detail_failed",
+      level: "error",
+      traceId: creditTraceId,
+      details: {
+        route: "/admin/users/[uid]",
+        actorUid: admin.uid,
+        targetUid: input.targetUid,
+        action: input.mutation.action,
+      },
+      error,
+    });
     redirect(
       buildAdminUserDetailPath(input.targetUid, {
         error: mapCreditMutationErrorToQueryCode(error),
@@ -874,6 +930,41 @@ export default async function AdminUserDetailPage({
     : null;
   const feedbackError = errorCode ? (errorMessages[errorCode] ?? "The requested admin action failed.") : null;
 
+  /* Keep redirected action feedback inside the owning section so operators can immediately
+     correlate success/failure with the controls they just used, without scanning the full page. */
+  const creditFeedbackCodes = new Set([
+    "credits_user_not_found",
+    "credits_self_mutation_forbidden",
+    "credits_amount_invalid",
+    "credits_daily_override_invalid",
+    "credits_grant_expiry_invalid",
+    "credits_grant_id_required",
+    "credits_grant_not_found",
+    "credits_grant_owner_mismatch",
+    "credits_grant_already_revoked",
+    "credits_invalid_request",
+    "credits_update_failed",
+    "prompt_user_not_found",
+    "prompt_self_mutation_forbidden",
+    "prompt_invalid_request",
+    "prompt_update_failed",
+  ]);
+  const adminControlsFeedbackCodes = new Set([
+    "confirmation_required",
+    "confirmation_mismatch",
+    "delete_failed",
+    "storage_confirmation_mismatch",
+    "storage_cleanup_failed",
+  ]);
+  const creditSectionFeedbackError =
+    errorCode && creditFeedbackCodes.has(errorCode) ? feedbackError : null;
+  const adminControlsFeedbackError =
+    errorCode && adminControlsFeedbackCodes.has(errorCode) ? feedbackError : null;
+  const globalFeedbackError =
+    errorCode && !creditSectionFeedbackError && !adminControlsFeedbackError
+      ? feedbackError
+      : null;
+
   const isAdmin = targetUser.role === "admin";
   const isActive = targetUser.status === "active";
   const isCurrentUser = targetUser.uid === adminUser.uid;
@@ -896,6 +987,18 @@ export default async function AdminUserDetailPage({
     : isCurrentUser
       ? "Credit controls are intentionally disabled for your current admin account. Open another user record to add, subtract, set, or grant credits."
       : null;
+  const rawObservabilityMetadata = JSON.stringify(
+    {
+      metadataTrust: "Best-effort/non-authoritative (observability only)",
+      serverObservedSignInMetadata: targetUser.serverObservedSignInMetadata ?? null,
+      clientBestEffortSignInMetadata: targetUser.clientBestEffortSignInMetadata ?? null,
+      deviceLabel: targetUser.deviceLabel ?? null,
+      deviceLabelSource: targetUser.deviceLabelSource ?? null,
+      deviceLabelConfidence: targetUser.deviceLabelConfidence ?? null,
+    },
+    null,
+    2,
+  );
 
   async function runUnifiedCreditWorkspaceMutation(formData: FormData) {
     "use server";
@@ -1125,50 +1228,10 @@ export default async function AdminUserDetailPage({
         </div>
       </section>
 
-      {storageCleaned && (
-        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
-          <HardDrive className="h-5 w-5 shrink-0" />
-          <p className="text-sm font-medium">
-            Per-user storage cleanup completed. User-owned objects were removed from canonical
-            {" "}
-            <span className="font-mono">{`users/${targetUser.uid}/...`}</span>
-            {" "}
-            namespaces and legacy uploads/temp, documents, assessment-results,
-            and assessment-exports paths.
-          </p>
-        </div>
-      )}
-
-      {creditMutationSuccess && (
-        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
-          <ShieldCheck className="h-5 w-5 shrink-0" />
-          <p className="text-sm font-medium">{creditMutationSuccess}</p>
-        </div>
-      )}
-
-      {creditsUpdatedAction && latestCreditMutation ? (
-        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-4 text-emerald-900 dark:text-emerald-200 shadow-sm">
-          <p className="text-sm font-semibold">Resolved Credit Snapshot (Server Truth)</p>
-          <p className="mt-1 text-xs text-emerald-800/90 dark:text-emerald-200/90">
-            {formatAdminCreditMutationAction(latestCreditMutation.action)} at {formatDateTime(dateFormatter, latestCreditMutation.createdAt)} by {latestCreditMutation.adminUid}
-          </p>
-          <p className="mt-2 text-xs text-emerald-800/90 dark:text-emerald-200/90">
-            Manual {numberFormatter.format(latestCreditMutation.before.manualCredits)} to {numberFormatter.format(latestCreditMutation.after.manualCredits)} | Remaining {latestCreditMutation.before.remainingCount === null ? "No limit" : numberFormatter.format(latestCreditMutation.before.remainingCount)} to {latestCreditMutation.after.remainingCount === null ? "No limit" : numberFormatter.format(latestCreditMutation.after.remainingCount)}
-          </p>
-        </div>
-      ) : null}
-
-      {promptMutationSuccess && (
-        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
-          <ShieldCheck className="h-5 w-5 shrink-0" />
-          <p className="text-sm font-medium">{promptMutationSuccess}</p>
-        </div>
-      )}
-
-      {feedbackError && (
+      {globalFeedbackError && (
         <div className="flex items-center gap-3 rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-4 text-red-700 dark:text-red-300 shadow-sm">
           <AlertCircle className="h-5 w-5 shrink-0" />
-          <p className="text-sm font-medium">{feedbackError}</p>
+          <p className="text-sm font-medium">{globalFeedbackError}</p>
         </div>
       )}
 
@@ -1176,128 +1239,173 @@ export default async function AdminUserDetailPage({
       <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <User className="h-5 w-5" />
-          Identity & Account
+          Identity & Account Summary
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <DetailCard label="UID" value={targetUser.uid} mono />
-          <DetailCard label="Email" value={targetUser.email || "Not set"} icon={<Mail className="h-4 w-4" />} />
-          <DetailCard label="Display Name" value={targetUser.displayName || "Not set"} />
-          <DetailCard
-            label="Metadata Trust"
-            value="Best-effort/non-authoritative (observability only)"
-          />
-          <DetailCard
-            label="Server Observed At"
-            value={formatDateTime(dateFormatter, targetUser.serverObservedSignInMetadata?.observedAt)}
-          />
-          <DetailCard
-            label="Server Public IP"
-            value={formatMetadataValue(targetUser.serverObservedSignInMetadata?.publicIp)}
-          />
-          <DetailCard
-            label="Server Forwarded IP Chain"
-            value={formatMetadataStringArray(targetUser.serverObservedSignInMetadata?.forwardedIpChain)}
-          />
-          <DetailCard
-            label="Server Geo (CDN/Edge)"
-            value={formatServerObservedGeo(targetUser.serverObservedSignInMetadata?.requestGeo)}
-          />
-          <DetailCard
-            label="Server Accept-Language"
-            value={formatMetadataValue(targetUser.serverObservedSignInMetadata?.acceptLanguage)}
-          />
-          <DetailCard
-            label="Client Captured At"
-            value={formatDateTime(dateFormatter, targetUser.clientBestEffortSignInMetadata?.capturedAt)}
-          />
-          <DetailCard
-            label="Client Browser / OS / Platform"
-            value={[
-              targetUser.clientBestEffortSignInMetadata?.browser,
-              targetUser.clientBestEffortSignInMetadata?.operatingSystem,
-              targetUser.clientBestEffortSignInMetadata?.platform,
-            ].filter((entry): entry is string => Boolean(entry)).join(" / ") || "Unavailable"}
-          />
-          <DetailCard
-            label="Client UAData Hints"
-            value={formatClientUserAgentDataHints(targetUser.clientBestEffortSignInMetadata?.userAgentData)}
-          />
-          <DetailCard
-            label="Client Screen / Viewport"
-            value={formatClientScreenViewport({
-              screen: targetUser.clientBestEffortSignInMetadata?.screen ?? null,
-              viewport: targetUser.clientBestEffortSignInMetadata?.viewport ?? null,
-            })}
-          />
-          <DetailCard
-            label="Client Timezone / Language"
-            value={[
-              targetUser.clientBestEffortSignInMetadata?.timezone
-                ? `tz=${targetUser.clientBestEffortSignInMetadata.timezone}`
-                : null,
-              targetUser.clientBestEffortSignInMetadata?.language
-                ? `lang=${targetUser.clientBestEffortSignInMetadata.language}`
-                : null,
-              targetUser.clientBestEffortSignInMetadata?.languages
-                ? `langs=${targetUser.clientBestEffortSignInMetadata.languages.join(",")}`
-                : null,
-            ].filter((entry): entry is string => Boolean(entry)).join("; ") || "Unavailable"}
-          />
-          <DetailCard
-            label="Client Touch / Hardware"
-            value={formatClientTouchHardware({
-              maxTouchPoints: targetUser.clientBestEffortSignInMetadata?.maxTouchPoints ?? null,
-              touchCapable: targetUser.clientBestEffortSignInMetadata?.touchCapable ?? null,
-              deviceMemoryGb: targetUser.clientBestEffortSignInMetadata?.deviceMemoryGb ?? null,
-              hardwareConcurrency: targetUser.clientBestEffortSignInMetadata?.hardwareConcurrency ?? null,
-            })}
-          />
-          <DetailCard
-            label="Client Network Hints"
-            value={formatClientNetworkHints(targetUser.clientBestEffortSignInMetadata?.network)}
-          />
-          <DetailCard
-            label="Approx Device Label (Best-effort)"
-            value={targetUser.deviceLabel || "Unavailable"}
-          />
-          <DetailCard
-            label="Approx Device Label Source"
-            value={targetUser.deviceLabelSource || "Unavailable"}
-          />
-          <DetailCard
-            label="Approx Device Label Confidence"
-            value={formatDeviceLabelConfidence(targetUser.deviceLabelConfidence)}
-          />
-          <DetailCard label="Full Name" value={targetUser.fullName || "Not set"} />
-          <DetailCard label="University Code" value={targetUser.universityCode || "Not set"} />
-          <DetailCard label="Phone" value={targetUser.phoneNumber || "Not set"} />
-          <DetailCard label="Gender" value={formatStoredGender(targetUser.gender)} />
-          <DetailCard label="Nationality" value={targetUser.nationality || "Not set"} />
-          <DetailCard
-            label="Role"
-            value={targetUser.role}
-            badge={targetUser.role === "admin" ? "accent" : "default"}
-          />
-          <DetailCard
-            label="Status"
-            value={targetUser.status}
-            badge={targetUser.status === "active" ? "success" : "danger"}
-          />
-          <DetailCard
-            label="Created"
-            value={formatDateTime(dateFormatter, targetUser.createdAt)}
-            icon={<Calendar className="h-4 w-4" />}
-          />
-          <DetailCard
-            label="Last Updated"
-            value={formatDateTime(dateFormatter, targetUser.updatedAt)}
-            icon={<Calendar className="h-4 w-4" />}
-          />
-          <DetailCard
-            label="Profile Completed"
-            value={targetUser.profileCompleted ? "Yes" : "No"}
-            badge={targetUser.profileCompleted ? "success" : "warning"}
-          />
+
+        <div className={ADMIN_USER_DETAIL_SUBSECTION_CLASS}>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            High-signal profile and account fields for fast operator scanning.
+          </p>
+          <dl className="mt-3 divide-y divide-zinc-200/75 dark:divide-zinc-800/80">
+            <AdminDefinitionRow label="UID" value={targetUser.uid} mono />
+            <AdminDefinitionRow label="Email" value={targetUser.email || "Not set"} />
+            <AdminDefinitionRow label="Display Name" value={targetUser.displayName || "Not set"} />
+            <AdminDefinitionRow label="Full Name" value={targetUser.fullName || "Not set"} />
+            <AdminDefinitionRow label="University Code" value={targetUser.universityCode || "Not set"} />
+            <AdminDefinitionRow label="Phone" value={targetUser.phoneNumber || "Not set"} />
+            <AdminDefinitionRow label="Gender" value={formatStoredGender(targetUser.gender)} />
+            <AdminDefinitionRow label="Nationality" value={targetUser.nationality || "Not set"} />
+            <AdminDefinitionRow label="Created" value={formatDateTime(dateFormatter, targetUser.createdAt)} />
+            <AdminDefinitionRow
+              label="Last Updated"
+              value={formatDateTime(dateFormatter, targetUser.updatedAt)}
+            />
+          </dl>
+        </div>
+
+        <div className={`mt-5 ${ADMIN_USER_DETAIL_SUBSECTION_CLASS}`}>
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Access / Role / Status Flags</h3>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <DetailCard
+              label="Role"
+              value={targetUser.role}
+              badge={targetUser.role === "admin" ? "accent" : "default"}
+            />
+            <DetailCard
+              label="Status"
+              value={targetUser.status}
+              badge={targetUser.status === "active" ? "success" : "danger"}
+            />
+            <DetailCard
+              label="Profile Completed"
+              value={targetUser.profileCompleted ? "Yes" : "No"}
+              badge={targetUser.profileCompleted ? "success" : "warning"}
+            />
+            <DetailCard
+              label="Metadata Trust"
+              value="Best-effort/non-authoritative"
+              subtitle="Observability only"
+            />
+          </div>
+        </div>
+
+        {/* Keep high-noise observability payloads collapsed by default so operators can
+            prioritize account-critical decisions before drilling into diagnostics. */}
+        <div className="mt-5 space-y-3">
+          <AdminMetadataDisclosure
+            title="Server IP / Geo / Header Metadata"
+            description="Edge-observed request context and trust signals."
+          >
+            <dl className="divide-y divide-zinc-200/75 dark:divide-zinc-800/80">
+              <AdminDefinitionRow
+                label="Server Observed At"
+                value={formatDateTime(dateFormatter, targetUser.serverObservedSignInMetadata?.observedAt)}
+              />
+              <AdminDefinitionRow
+                label="Server Public IP"
+                value={formatMetadataValue(targetUser.serverObservedSignInMetadata?.publicIp)}
+              />
+              <AdminDefinitionRow
+                label="Server Forwarded IP Chain"
+                value={formatMetadataStringArray(targetUser.serverObservedSignInMetadata?.forwardedIpChain)}
+              />
+              <AdminDefinitionRow
+                label="Server Geo (CDN/Edge)"
+                value={formatServerObservedGeo(targetUser.serverObservedSignInMetadata?.requestGeo)}
+              />
+              <AdminDefinitionRow
+                label="Server Accept-Language"
+                value={formatMetadataValue(targetUser.serverObservedSignInMetadata?.acceptLanguage)}
+              />
+            </dl>
+          </AdminMetadataDisclosure>
+
+          <AdminMetadataDisclosure
+            title="Client / Browser Details"
+            description="Best-effort browser and locale metadata captured at sign-in."
+          >
+            <dl className="divide-y divide-zinc-200/75 dark:divide-zinc-800/80">
+              <AdminDefinitionRow
+                label="Client Captured At"
+                value={formatDateTime(dateFormatter, targetUser.clientBestEffortSignInMetadata?.capturedAt)}
+              />
+              <AdminDefinitionRow
+                label="Client Browser / OS / Platform"
+                value={[
+                  targetUser.clientBestEffortSignInMetadata?.browser,
+                  targetUser.clientBestEffortSignInMetadata?.operatingSystem,
+                  targetUser.clientBestEffortSignInMetadata?.platform,
+                ].filter((entry): entry is string => Boolean(entry)).join(" / ") || "Unavailable"}
+              />
+              <AdminDefinitionRow
+                label="Client Timezone / Language"
+                value={[
+                  targetUser.clientBestEffortSignInMetadata?.timezone
+                    ? `tz=${targetUser.clientBestEffortSignInMetadata.timezone}`
+                    : null,
+                  targetUser.clientBestEffortSignInMetadata?.language
+                    ? `lang=${targetUser.clientBestEffortSignInMetadata.language}`
+                    : null,
+                  targetUser.clientBestEffortSignInMetadata?.languages
+                    ? `langs=${targetUser.clientBestEffortSignInMetadata.languages.join(",")}`
+                    : null,
+                ].filter((entry): entry is string => Boolean(entry)).join("; ") || "Unavailable"}
+              />
+              <AdminDefinitionRow
+                label="Approx Device Label (Best-effort)"
+                value={targetUser.deviceLabel || "Unavailable"}
+              />
+              <AdminDefinitionRow
+                label="Approx Device Label Source"
+                value={targetUser.deviceLabelSource || "Unavailable"}
+              />
+              <AdminDefinitionRow
+                label="Approx Device Label Confidence"
+                value={formatDeviceLabelConfidence(targetUser.deviceLabelConfidence)}
+              />
+            </dl>
+          </AdminMetadataDisclosure>
+
+          <AdminMetadataDisclosure
+            title="Viewport / Touch / Device Capability"
+            description="Device hints used only for observability and support diagnostics."
+          >
+            <dl className="divide-y divide-zinc-200/75 dark:divide-zinc-800/80">
+              <AdminDefinitionRow
+                label="Client UAData Hints"
+                value={formatClientUserAgentDataHints(targetUser.clientBestEffortSignInMetadata?.userAgentData)}
+              />
+              <AdminDefinitionRow
+                label="Client Screen / Viewport"
+                value={formatClientScreenViewport({
+                  screen: targetUser.clientBestEffortSignInMetadata?.screen ?? null,
+                  viewport: targetUser.clientBestEffortSignInMetadata?.viewport ?? null,
+                })}
+              />
+              <AdminDefinitionRow
+                label="Client Touch / Hardware"
+                value={formatClientTouchHardware({
+                  maxTouchPoints: targetUser.clientBestEffortSignInMetadata?.maxTouchPoints ?? null,
+                  touchCapable: targetUser.clientBestEffortSignInMetadata?.touchCapable ?? null,
+                  deviceMemoryGb: targetUser.clientBestEffortSignInMetadata?.deviceMemoryGb ?? null,
+                  hardwareConcurrency: targetUser.clientBestEffortSignInMetadata?.hardwareConcurrency ?? null,
+                })}
+              />
+              <AdminDefinitionRow
+                label="Client Network Hints"
+                value={formatClientNetworkHints(targetUser.clientBestEffortSignInMetadata?.network)}
+              />
+            </dl>
+          </AdminMetadataDisclosure>
+
+          <AdminMetadataDisclosure
+            title="Raw Observability Snapshot (Verbose)"
+            description="Unformatted metadata payload for deep troubleshooting."
+          >
+            <pre className="max-h-72 overflow-auto rounded-xl border border-zinc-200/80 bg-white/92 p-3 text-xs text-zinc-700 shadow-[0_8px_20px_rgba(148,163,184,0.08)] dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300 dark:shadow-none">
+              {rawObservabilityMetadata}
+            </pre>
+          </AdminMetadataDisclosure>
         </div>
       </section>
 
@@ -1307,6 +1415,42 @@ export default async function AdminUserDetailPage({
           <Gauge className="h-5 w-5" />
           Credits & Usage
         </h2>
+
+        {/* Credit and prompt controls submit server actions then redirect with query params.
+            Keep feedback next to this section's controls so context remains local and unambiguous. */}
+        {creditMutationSuccess ? (
+          <div className="mb-3 flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
+            <ShieldCheck className="h-5 w-5 shrink-0" />
+            <p className="text-sm font-medium">{creditMutationSuccess}</p>
+          </div>
+        ) : null}
+
+        {creditsUpdatedAction && latestCreditMutation ? (
+          <div className="mb-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-4 text-emerald-900 dark:text-emerald-200 shadow-sm">
+            <p className="text-sm font-semibold">Resolved Credit Snapshot (Server Truth)</p>
+            <p className="mt-1 text-xs text-emerald-800/90 dark:text-emerald-200/90">
+              {formatAdminCreditMutationAction(latestCreditMutation.action)} at {formatDateTime(dateFormatter, latestCreditMutation.createdAt)} by {latestCreditMutation.adminUid}
+            </p>
+            <p className="mt-2 text-xs text-emerald-800/90 dark:text-emerald-200/90">
+              Manual {numberFormatter.format(latestCreditMutation.before.manualCredits)} to {numberFormatter.format(latestCreditMutation.after.manualCredits)} | Remaining {latestCreditMutation.before.remainingCount === null ? "No limit" : numberFormatter.format(latestCreditMutation.before.remainingCount)} to {latestCreditMutation.after.remainingCount === null ? "No limit" : numberFormatter.format(latestCreditMutation.after.remainingCount)}
+            </p>
+          </div>
+        ) : null}
+
+        {promptMutationSuccess ? (
+          <div className="mb-3 flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
+            <ShieldCheck className="h-5 w-5 shrink-0" />
+            <p className="text-sm font-medium">{promptMutationSuccess}</p>
+          </div>
+        ) : null}
+
+        {creditSectionFeedbackError ? (
+          <div className="mb-3 flex items-center gap-3 rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-4 text-red-700 dark:text-red-300 shadow-sm">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <p className="text-sm font-medium">{creditSectionFeedbackError}</p>
+          </div>
+        ) : null}
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <DetailCard
             label="Assessment Access"
@@ -1384,7 +1528,7 @@ export default async function AdminUserDetailPage({
           Credit mutations stay server-authoritative: these controls only submit server actions
           that call repository mutations and append admin logs. Keep browser logic display-only.
         */}
-        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        <div className="mt-5 space-y-4">
           <div className={ADMIN_USER_DETAIL_SUBSECTION_CLASS}>
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Credit Management Workspace</h3>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -1400,7 +1544,7 @@ export default async function AdminUserDetailPage({
               Access and prompt-entitlement controls stay server-authoritative and separate from
               numeric credit mutations. They remain available as secondary governance toggles.
             */}
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="mt-3 grid gap-2 md:grid-cols-2 md:gap-3">
               <CreditAccessToggleForm
                 targetUid={targetUser.uid}
                 currentAccess={creditsAccount?.assessmentAccess ?? "enabled"}
@@ -1545,6 +1689,27 @@ export default async function AdminUserDetailPage({
             You cannot perform destructive actions on your own account from this page.
           </div>
         )}
+
+        {storageCleaned ? (
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
+            <HardDrive className="h-5 w-5 shrink-0" />
+            <p className="text-sm font-medium">
+              Per-user storage cleanup completed. User-owned objects were removed from canonical
+              {" "}
+              <span className="font-mono">{`users/${targetUser.uid}/...`}</span>
+              {" "}
+              namespaces and legacy uploads/temp, documents, assessment-results,
+              and assessment-exports paths.
+            </p>
+          </div>
+        ) : null}
+
+        {adminControlsFeedbackError ? (
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-4 text-red-700 dark:text-red-300 shadow-sm">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <p className="text-sm font-medium">{adminControlsFeedbackError}</p>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
           {/* Role toggle */}
@@ -1753,6 +1918,63 @@ export default async function AdminUserDetailPage({
   );
 }
 
+function AdminDefinitionRow({
+  label,
+  value,
+  mono,
+  hint,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div className="grid gap-1 py-2.5 sm:grid-cols-[minmax(10.5rem,12.75rem)_minmax(0,1fr)] sm:gap-4">
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
+        {label}
+      </dt>
+      <dd className="min-w-0">
+        <p className={`text-sm font-medium text-zinc-900 dark:text-white ${mono ? "font-mono text-xs break-all" : "break-words"}`}>
+          {value}
+        </p>
+        {hint ? (
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>
+        ) : null}
+      </dd>
+    </div>
+  );
+}
+
+function AdminMetadataDisclosure({
+  title,
+  description,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details open={defaultOpen} className={ADMIN_USER_DETAIL_SUBSECTION_CLASS}>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</p>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
+        </div>
+        <span className="inline-flex shrink-0 rounded-full border border-zinc-300/80 bg-zinc-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+          Toggle
+        </span>
+      </summary>
+      <div className="mt-3 border-t border-zinc-200/75 pt-3 dark:border-zinc-800/80">
+        {children}
+      </div>
+    </details>
+  );
+}
+
 /**
  * Reusable detail card for the admin user detail page.
  */
@@ -1919,7 +2141,7 @@ function PromptEntitlementToggleForm({
         variant={nextEntitlement === "enabled" ? "default" : "outline"}
         size="sm"
         disabled={disabled}
-        className={`w-full h-10 justify-center gap-2 ${
+        className={`w-full min-h-10 h-auto justify-center gap-2 px-3 py-2 text-center leading-tight whitespace-normal ${
           nextEntitlement === "enabled"
             ? ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
             : ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS
@@ -1970,7 +2192,7 @@ function CreditAccessToggleForm({
         variant={nextAccess === "enabled" ? "default" : "outline"}
         size="sm"
         disabled={disabled}
-        className={`w-full h-10 justify-center gap-2 ${
+        className={`w-full min-h-10 h-auto justify-center gap-2 px-3 py-2 text-center leading-tight whitespace-normal ${
           nextAccess === "enabled"
             ? ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
             : ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS

@@ -34,6 +34,7 @@ yarn-error.log*
 debug.log
 .tmp-dev-stdout.txt
 .tmp-dev-stderr.txt
+apps/web/.next-dev-test*.log
 
 # env files (can opt-in for committing if needed)
 .env*

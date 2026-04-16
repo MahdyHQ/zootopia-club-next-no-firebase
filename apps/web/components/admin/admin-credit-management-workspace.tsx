@@ -132,12 +132,12 @@ export function AdminCreditManagementWorkspace({
 
   const manualCredits = currentAccount?.manualCredits ?? 0;
   const remainingCount = currentCredits?.remainingCount ?? null;
-    const numberFormatter = new Intl.NumberFormat("en-US");
+  const numberFormatter = new Intl.NumberFormat("en-US");
 
   /* Preview is intentionally computed from the latest server-resolved snapshot shown on this page.
      For actions where an exact post-submit balance cannot be guaranteed client-side, we say so
      explicitly instead of inventing certainty. */
-    const preview: WorkspacePreview = (() => {
+  const preview: WorkspacePreview = (() => {
     switch (actionMode) {
       case "add": {
         const amount = parsePositiveInteger(amountInput);
@@ -454,7 +454,7 @@ export function AdminCreditManagementWorkspace({
           <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
             Action Type
           </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5" role="radiogroup" aria-label="Credit action type">
+          <div className="mt-3 grid gap-2 md:grid-cols-2 md:gap-3 xl:grid-cols-5 xl:gap-3" role="radiogroup" aria-label="Credit action type">
             {ACTION_OPTIONS.map((option) => {
               const selected = option.mode === actionMode;
 
@@ -466,7 +466,7 @@ export function AdminCreditManagementWorkspace({
                   aria-checked={selected}
                   disabled={disabled}
                   onClick={() => setActionMode(option.mode)}
-                  className={`h-10 rounded-lg border px-3 text-xs font-semibold uppercase tracking-wider transition-colors ${selected ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-500/15 dark:text-emerald-200" : "border-zinc-300 bg-white text-zinc-700 hover:border-emerald-400 hover:text-emerald-800 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300 dark:hover:border-emerald-500/40 dark:hover:text-emerald-200"}`}
+                  className={`min-h-10 rounded-lg border px-3 py-2 text-[11px] font-semibold uppercase leading-tight tracking-wider whitespace-normal transition-colors ${selected ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-500/15 dark:text-emerald-200" : "border-zinc-300 bg-white text-zinc-700 hover:border-emerald-400 hover:text-emerald-800 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300 dark:hover:border-emerald-500/40 dark:hover:text-emerald-200"}`}
                 >
                   {option.label}
                 </button>

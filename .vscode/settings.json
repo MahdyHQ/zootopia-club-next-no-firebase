@@ -15,6 +15,9 @@
       "**/node_modules"
     ]
   },
+  // Keep line endings aligned with repository LF policy on Windows saves.
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
   // Windows cloud instances without dedicated GPU acceleration are generally
   // more stable with software terminal rendering.
   "terminal.integrated.gpuAcceleration": "off"

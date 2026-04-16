@@ -3,9 +3,9 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-15 (Near-real-time assessment credit sync: owner-scoped SSE + fallback refresh)
+Last Updated: 2026-04-16 (Git line-ending hardening + dev-test log tracking guard)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
-Current Commit: 58e639b4e42c9f46f6405074b4bed019d2605fa2
+Current Commit: 091720a391d987f9bd52e148a11a153f81154926
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
 Runtime: Node.js >= 20.9.0
 
@@ -69,7 +69,7 @@ Domain Purpose: AI-powered document analysis, assessment generation, and
 2. CURRENT TRUTH SNAPSHOT
 ================================================================================
 
-As of 2026-04-15, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
+As of 2026-04-16, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
 using Supabase as the unified backend provider (Postgres database, Auth, Storage).
 
 Key verified facts:
@@ -110,6 +110,18 @@ Key verified facts:
   summary for the exact target UID from both the admin detail-page server action
   flow and the admin PATCH route, without moving mutation authority out of the
   backend repository layer
+- Assessment credit diagnostics now support opt-in low-noise structured tracing
+  through `ZOOTOPIA_ASSESSMENT_CREDIT_DIAGNOSTICS` and
+  `NEXT_PUBLIC_ZOOTOPIA_ASSESSMENT_CREDIT_DIAGNOSTICS`, with correlation IDs
+  across mutation, recompute, live publish, credit reads, shell refresh, studio
+  updates, and exhausted-state recalculation
+- Assessment credit SSE now emits visible heartbeat events, performs an
+  immediate post-subscribe authoritative recheck to close the initial listener
+  race window, and keeps a 3s server-truth reconciliation path for cross-
+  instance convergence without inventing a second credit authority
+- Protected shell credit sync now marks the live stream stale when heartbeats or
+  summaries stop arriving and resumes authoritative `/api/assessment/credits`
+  fetch reconciliation instead of trusting `EventSource.open` indefinitely
 - Assessment create requests now require a route-level `Idempotency-Key`, and
   Assessment Studio persists a short-lived per-tab logical-attempt key across
   duplicate submits / refresh retries so one successful generation attempt
@@ -130,12 +142,26 @@ Key verified facts:
   entitlement gate (`enabled|disabled`) with server-authoritative enforcement,
   while preserving the existing env-password unlock mechanism for entitled
   users and keeping admin permanently exempt
+- Assessment prompt unlock success state now keeps backend unlock authority
+  unchanged while rendering celebratory Arabic success copy (with explicit
+  developer attribution) and refined success-banner styling after verified
+  password acceptance only
 - Assessment setup non-admin model-replacement panel now uses compact Arabic
   rights ownership copy and a subtle donation/support hint with small icons,
   preserving premium visual balance in the top setup row across breakpoints
-- Assessment setup non-admin rights panel now enforces overflow-safe responsive
-  wrapping/sizing so Arabic rights text stays fully contained on mobile, tablet,
-  desktop, and large-width surfaces without escaping the panel container
+- Assessment setup non-admin rights panel now prioritizes single-line Arabic
+  rights rendering through responsive clamp sizing, tighter tracking, and a
+  slightly wider desktop/tablet control rail while keeping text inside the
+  existing panel surface
+- Admin user detail page now prioritizes scanability with a concise identity
+  summary, dedicated access/status flag group, and collapsible observability
+  disclosures (server metadata, client metadata, device capability, and raw
+  verbose snapshot) while preserving all existing backend-owned data/actions
+- Admin user detail credit operations now keep credit/prompt feedback scoped to
+  the Credits & Usage section, keep storage/deletion feedback scoped to Admin
+  Controls, render Credit Grants below the main credit workspace, and use
+  wrapped min-height credit action controls to avoid overlap/crowding on
+  narrow breakpoints without changing backend mutation authority
 - Global maintenance mode now supports an env-controlled proxy guard that
   redirects non-admin auth/public/site/protected traffic to `/maintenance`,
   while preserving admin bypass and `/admin/login` availability
@@ -173,6 +199,14 @@ Key verified facts:
 - Web workspace `typecheck` and `build` now clear stale `.next/dev` cache state
   before invoking Next typegen/build so malformed dev-only route helper files do
   not poison later TypeScript or production build runs
+- Web workspace `dev` startup now performs a narrow `.next/dev` integrity check
+  before `next dev`, automatically resetting half-written Turbopack dev output
+  when manifests or the generated SSR runtime chunk are missing so routes like
+  `/contact` recover without requiring a manual full `.next` wipe
+- Repository line-ending governance is now reinforced for Windows workspaces:
+  tracked source/config/log text remains LF via `.gitattributes`, VS Code
+  workspace defaults enforce LF saves, and transient `apps/web/.next-dev-test*.log`
+  artifacts are ignored so routine `git add .` flows stay warning-free
 - Assessment Pro PDF export now traces the hoisted Chromium Brotli payload from
   the workspace root for Vercel, uses explicit `maxDuration = 120`, and emits
   stage-classified internal diagnostics without exposing raw failure details to
@@ -186,9 +220,11 @@ Key verified facts:
   non-entitled users do not see a misleading password form; unlock failures now
   distinguish wrong password, missing entitlement, and server misconfiguration
   with clearer Arabic feedback while unlock authority remains backend-owned
-- Admin credit mutations on `/admin/users/[uid]` currently execute through
-  server actions on the detail page (not the separate PATCH route), and the
-  recipient balance remains server-owned through `/api/assessment/credits`
+- Admin credit mutations on `/admin/users/[uid]` are currently initiated by the
+  detail-page server-action UI while the admin PATCH route remains an active
+  secondary mutation lane; both paths reuse the same repository mutation
+  authority and keep recipient balance server-owned through
+  `/api/assessment/credits`
 - Assessment Studio now listens to the protected shell's refreshed credit
   summary broadcast so external admin credit grants become visible inside the
   page-level credits card without requiring a full page reload
@@ -1406,6 +1442,354 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
+2026-04-16 — Git Line-Ending Hardening + Dev-Test Log Guard (Windows Workspace)
+
+Type: Repository hygiene / source-control stability
+Scope: Minimal, backward-compatible
+Migration: None
+
+Reason:
+- `git add .` emitted repeated CRLF/LF warnings in the active Windows workspace,
+  including source files that should remain LF-normalized and transient
+  `apps/web/.next-dev-test*.log` artifacts.
+- Existing LF policy files were present, but local editor/save behavior and
+  staged drift still produced noisy add-time conversion warnings.
+
+What changed:
+
+1) `.gitattributes`
+- Added explicit `*.log text eol=lf` so tracked logs follow the same LF policy
+  as source/config files and do not inherit platform defaults.
+
+2) `.vscode/settings.json`
+- Added workspace save defaults:
+  - `"files.eol": "\n"`
+  - `"files.insertFinalNewline": true`
+- Keeps Windows saves aligned with repository LF normalization.
+
+3) `.gitignore`
+- Added `apps/web/.next-dev-test*.log` to prevent transient local dev-test logs
+  from being staged in normal commit flows.
+
+4) One-time LF normalization for active warning sources
+- Normalized working-tree line endings to LF for:
+  - `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+  - `apps/web/components/admin/admin-credit-management-workspace.tsx`
+- Also normalized updated policy files touched in this pass to LF.
+
+5) Local repository Git EOL config hardening (machine/worktree local)
+- Set:
+  - `core.autocrlf=false`
+  - `core.eol=lf`
+  - `core.safecrlf=false`
+- This removes add-time warning noise for this workspace while preserving
+  repository-side LF normalization via `.gitattributes`.
+
+What was preserved:
+- No runtime/business logic changed.
+- No auth/credit/storage/security authority moved.
+- Existing staged application feature work remained intact.
+
+Verification:
+- `git add .` (same user command path) produced no warnings ✅
+- `git ls-files --eol` for the staged set returned no `w/crlf` or `w/mixed`
+  entries ✅
+- Effective local config verified as:
+  - `core.autocrlf=false`
+  - `core.eol=lf`
+  - `core.safecrlf=false` ✅
+
+Files changed:
+- `.gitattributes`
+- `.gitignore`
+- `.vscode/settings.json`
+- `apps/web/app/api/admin/users/[uid]/credits/route.ts` (line-ending normalization only)
+- `apps/web/components/admin/admin-credit-management-workspace.tsx` (line-ending normalization only)
+
+Risks / follow-up:
+- `core.safecrlf` is local Git config and is not committed; other clones should
+  apply the same local setting if they want identical warning behavior.
+- If future generated log names change, extend `.gitignore` with the new
+  transient patterns.
+
+2026-04-16 — Dev Startup Turbopack Cache Integrity Recovery
+
+Type: Local runtime reliability hardening
+Scope: Minimal, backward-compatible
+Migration: None
+
+Reason:
+- Local `next dev` could boot into a broken `.next/dev` state where server
+  entrypoints already existed but required Turbopack runtime/manifests did not.
+- The visible symptom was `/contact` returning 500 with `MODULE_NOT_FOUND` for
+  `[turbopack]_runtime.js` plus `ENOENT` for `.next/dev/routes-manifest.json`.
+- The repo already reset `.next/dev` before `typecheck` and `build`, but the
+  normal `dev` startup path still trusted a stale dev cache.
+
+Root Cause (verified):
+1) Half-written Turbopack dev cache:
+- `apps/web/.next/dev/server/pages/_document.js` and route server entries
+  referenced `[turbopack]_runtime.js`.
+- The corresponding runtime file and `routes-manifest.json` were missing while
+  other dev artifacts such as `server/app-paths-manifest.json` already existed.
+- `apps/web/.next/dev/logs/next-development.log` confirmed repeated ENOENT /
+  MODULE_NOT_FOUND failures from that partial cache state.
+
+2) Startup gap in repo scripts:
+- `apps/web/scripts/reset-next-dev-cache.mjs` already protected `typecheck` and
+  `build`, but `apps/web/package.json` started local dev directly with
+  `next dev --turbopack`.
+- That meant normal `npm run dev` boots could reuse a corrupted `.next/dev`
+  tree instead of self-healing.
+
+What changed:
+
+1) `apps/web/scripts/reset-next-dev-cache.mjs`
+- Extended the existing cleanup script with an `--if-invalid` mode.
+- Added integrity checks for:
+  - missing `.next/dev/routes-manifest.json` when server app manifests already
+    exist
+  - missing `.next/dev/server/chunks/ssr/[turbopack]_runtime.js` when generated
+    server entrypoints reference it
+- Kept cleanup scoped to `.next/dev` only, preserving the rest of `.next`.
+- Added comments explaining what the guard controls, why it exists for local
+  Next 16/Turbopack recovery, and which failure shape it is protecting.
+
+2) `apps/web/package.json`
+- Changed workspace `dev` to run `next dev --turbopack` directly.
+- Added `predev` to execute the new integrity-check mode before local dev boot.
+- Kept `dev:local` available by routing it through `npm run dev`, so root/workspace
+  startup paths all inherit the same recovery behavior.
+
+What was preserved:
+- Turbopack remains the dev bundler; this was not converted to Webpack.
+- Build/typecheck cleanup behavior remains intact.
+- No application routes, runtime authority boundaries, or production deployment
+  configuration changed.
+
+Verification:
+- Direct integrity check before boot:
+  - `node ./scripts/reset-next-dev-cache.mjs --if-invalid` ✅
+  - Removed broken `.next/dev` and reported:
+    `server app paths manifest exists but routes-manifest.json is missing`
+- Local dev boot via the real startup path:
+  - `npm run dev -- --port 3025` from `apps/web` ✅
+  - Predev hook ran automatically and skipped cleanup when cache was healthy ✅
+  - `/contact` returned HTTP 200 after compile ✅
+- Lint: `npm run lint:web` ✅
+- Typecheck: `npm run typecheck:web` ✅
+- Build: `npm run build:web` ✅
+
+Files changed:
+- `apps/web/scripts/reset-next-dev-cache.mjs`
+- `apps/web/package.json`
+
+Risks / follow-up:
+- This fix targets the verified broken-cache shape and preserves healthy dev
+  caches for faster restarts; if new corruption signatures appear, extend the
+  integrity checks instead of falling back to blanket `.next` deletion.
+- If multiple local dev servers intentionally target the same workspace at once,
+  Turbopack cache contention can still produce noisy compaction warnings; prefer
+  a single active dev server per workspace during local QA.
+
+2026-04-16 — Admin User Detail Credit UX Refinement (Section-Scoped Feedback + Grants Reflow + Responsive Action Controls)
+
+Type: UI/UX refinement (admin detail route only)
+Scope: Minimal, backward-compatible
+Migration: None
+
+Reason:
+- Admin operators reported crowded/overlapping credit action controls and a
+  layout hierarchy where Credit Grants competed with the mutation workspace in
+  the same row.
+- Action feedback for credits, prompt entitlement, storage cleanup, and delete
+  flows was rendered as a shared top-of-page lane, which made issue triage
+  slower because users had to scan away from the section they just used.
+
+What changed:
+
+1) `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- Introduced explicit section feedback routing for redirected query-param
+  outcomes:
+  - credit/prompt mutation outcomes now render inside Credits & Usage
+  - storage/delete outcomes now render inside Admin Controls
+  - retained a global fallback error lane for unscoped/unknown error codes
+- Reflowed the credit operation area so Credit Grants now renders below the
+  Credit Management Workspace (no side-by-side competition at `xl`).
+- Tightened responsive spacing for the access/prompt toggle row using
+  `md:grid-cols-2` + `md:gap-3`.
+- Updated credit-related governance buttons (access + prompt entitlement) to
+  wrapped min-height controls (`min-h-10`, `h-auto`, `whitespace-normal`) so
+  long labels do not crowd or clip on narrower breakpoints.
+
+2) `apps/web/components/admin/admin-credit-management-workspace.tsx`
+- Hardened Action Type control responsiveness:
+  - action chooser grid now uses `md:grid-cols-2` with larger responsive gaps
+    and `xl` spacing tuned for five-option rows
+  - option buttons now use wrapped min-height typography (`min-h-10`,
+    `leading-tight`, `whitespace-normal`) to prevent overlap/clipping
+- Corrected indentation drift around local formatter/preview declarations to
+  keep the component consistent and maintainable.
+
+What was preserved:
+- No mutation authority moved to the client.
+- `runUnifiedCreditWorkspaceMutation(...)` and
+  `runAdminCreditMutationFromDetailPage(...)` remain server-action-owned.
+- Repository-side mutation/validation/audit ownership remains unchanged
+  (`applyAdminAssessmentCreditMutation`, history snapshots, admin logs, live
+  publish).
+- Existing query-param contracts (`credits_updated`, `prompt_access_updated`,
+  `error`, `storage_cleaned`) were preserved; only render placement changed.
+
+Verification:
+- `npm run lint --workspace @zootopia/web` ✅
+- `npm run typecheck --workspace @zootopia/web` ✅
+- `npm run build --workspace @zootopia/web` ✅
+- Build output includes `/admin/users/[uid]` route in successful route table ✅
+- Manual authenticated browser QA was not executed in-session (no credentials)
+  ⚠️
+
+Files changed:
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- `apps/web/components/admin/admin-credit-management-workspace.tsx`
+
+Risks / follow-up:
+- Feedback is now section-scoped by error-code mapping; if future admin action
+  codes are added, they should be categorized into the same scoped sets to
+  avoid fallback-to-global placement drift.
+- If operators want instant in-section focus after redirect, a follow-up could
+  append section anchors to redirect URLs while keeping server authority intact.
+
+2026-04-16 — Assessment Credit Failure Investigation (Structured Diagnostics + SSE Freshness Hardening)
+
+Type: Runtime investigation + diagnostics + realtime hardening
+Scope: Minimal, backward-compatible
+Migration: None
+
+Reason:
+- Admin credit success UI still did not reliably propagate to the target user's
+  protected header, Assessment Studio, or exhausted-credit state.
+- The requirement was to prove the exact break point across mutation →
+  persistence → summary recompute → `/api/assessment/credits` → SSE/fallback
+  delivery → UI render, without introducing a second credit model or moving
+  secure mutation authority into the client.
+
+Root Cause (verified):
+1) Server truth path was already correct:
+- `applyAdminAssessmentCreditMutation(...)` remained the single admin mutation
+  authority and correctly recomputed the authoritative post-commit summary.
+- `/api/assessment/credits` already resolved owner-scoped server truth for the
+  authenticated session user.
+- Protected header and Assessment Studio already converged on the same
+  protected-shell summary owner instead of independent competing balances.
+
+2) Delivery path had three concrete failure points:
+- `/api/assessment/credits/stream` emitted the initial summary before the live
+  listener registry subscription existed, so a mutation in that gap could miss
+  the immediate push and wait for later fallback reconciliation.
+- `apps/web/components/layout/protected-shell.tsx` treated EventSource `open`
+  as a durable healthy state and skipped authoritative fetch reconciliation
+  while the connection appeared open, even though SSE keepalive comments were
+  not visible to the client-side health logic.
+- `apps/web/app/api/admin/users/[uid]/credits/route.ts` re-fetched the target
+  user after a successful mutation before publish/response finalization; a
+  transient lookup failure there could suppress live publish even though
+  persistence had already succeeded.
+
+3) Deployment caveat (preserved, not misdiagnosed as the primary bug):
+- The in-memory live listener registry remains same-instance only, so Vercel
+  cross-instance convergence still depends on authoritative route rechecks
+  rather than process memory pretending to be global truth.
+
+What changed:
+
+1) `apps/web/lib/server/assessment-credit-diagnostics.ts`
+   `apps/web/lib/assessment-credit-diagnostics.ts`
+- Added opt-in structured diagnostics helpers for the assessment-credit path.
+- Logs are correlation-ID scoped, low-noise by default, and omit secrets or
+  cross-user payload leakage.
+
+2) `apps/web/lib/server/repository.ts`
+- Added trace-aware diagnostics around admin credit mutation request, target
+  resolution, before/after summary recomputation, persistence write start,
+  success, and failure.
+- Preserved repository ownership of mutation authority and returned summary
+  truth.
+
+3) `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+   `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+- Added per-mutation trace IDs and structured diagnostics for request, target
+  resolution, mutation outcome, and live publish.
+- Hardened the PATCH route to resolve the target user before mutation so the
+  post-commit publish/response path no longer depends on a second lookup after
+  persistence success.
+
+4) `apps/web/lib/server/assessment-credit-live-updates.ts`
+   `apps/web/app/api/assessment/credits/stream/route.ts`
+- Extended live publish results with `eventId`, `emittedAt`, `listenerCount`,
+  and `deliveredCount`.
+- Stream route now emits visible `heartbeat` SSE events every 15 seconds,
+  performs an immediate authoritative post-subscribe recheck to close the
+  initial listener race, and keeps a 3-second fallback reconciliation interval
+  for cross-instance convergence.
+
+5) `apps/web/app/api/assessment/credits/route.ts`
+- Added structured diagnostics and an `X-Zootopia-Assessment-Credit-Request-Id`
+  response header so fetch reconciliation can be correlated with mutation/live
+  delivery traces.
+
+6) `apps/web/components/layout/protected-shell.tsx`
+   `apps/web/components/assessment/assessment-studio.tsx`
+   `apps/web/lib/assessment-credit-events.ts`
+- Added source/request/event metadata to the shared credit-summary browser
+  event.
+- Protected shell now tracks the last real SSE signal time, marks the stream
+  stale when heartbeats/summaries stop arriving, and resumes authoritative
+  fetch reconciliation instead of trusting `open` forever.
+- Assessment Studio now logs incoming summary updates plus exhausted-state
+  recalculation from the same server-owned summary source.
+
+What was preserved:
+- No new dependency, schema, migration, or parallel credit system was added.
+- Backend mutation authority remains in repository/server paths.
+- `/api/assessment/credits` remains the canonical read model.
+- User-scoped auth boundaries still prevent cross-user live update leakage.
+
+Verification:
+- `npm run lint:web` ✅
+- `npm run typecheck:web` ✅
+- `npm run build:web` ✅
+- Built-app smoke check via `npx next start --port 3001` from `apps/web`:
+  `/login` returned HTTP 200 ✅
+- Unauthenticated `GET /api/assessment/credits` returned `401` with no-store
+  caching headers and `X-Zootopia-Assessment-Credit-Request-Id` ✅
+- Unauthenticated `GET /api/assessment/credits/stream` returned `401` with
+  no-store caching headers ✅
+- Authenticated admin → target-user replay was not executed from this machine
+  because no disposable admin/user credentials were provided in-session and no
+  unknown remote production data was mutated for verification ⚠️
+
+Files changed:
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+- `apps/web/app/api/assessment/credits/route.ts`
+- `apps/web/app/api/assessment/credits/stream/route.ts`
+- `apps/web/components/assessment/assessment-studio.tsx`
+- `apps/web/components/layout/protected-shell.tsx`
+- `apps/web/lib/assessment-credit-diagnostics.ts`
+- `apps/web/lib/assessment-credit-events.ts`
+- `apps/web/lib/server/assessment-credit-diagnostics.ts`
+- `apps/web/lib/server/assessment-credit-live-updates.ts`
+- `apps/web/lib/server/repository.ts`
+
+Risks / follow-up:
+- A real authenticated replay still needs one admin session, one target-user
+  session, and ideally a second target-user tab plus an unrelated-user tab to
+  prove exact delivery/non-delivery behavior in a live environment.
+- If sub-second cross-instance delivery becomes mandatory on Vercel, the next
+  step is a provider-backed pub/sub lane rather than expanding the same-instance
+  in-memory registry.
+
 2026-04-15 — Near-Real-Time Assessment Credit Synchronization (Owner-Scoped SSE + Fallback Refresh)
 
 Type: Runtime sync hardening + auth-scoped server push
@@ -1622,3 +2006,76 @@ Verification:
 Risks / follow-up:
 - Poll interval is now tighter (20s). Expected load increase is small for current scope, but monitor if protected-session volume grows significantly.
 - For near-instant cross-session propagation beyond polling/focus/route-change, a future server-push channel (SSE/WebSocket) would be needed; current patch intentionally avoids architectural redesign.
+
+2026-04-16 — Assessment UI Readability + Unlock Success Tone + Admin Detail IA Restructure
+
+Type: UI/UX restructuring + copy polish (no authority shift)
+Scope: Minimal, backward-compatible
+Migration: None
+
+Reason:
+- The assessment non-admin rights sentence needed to stay single-line on medium/large viewports and avoid ugly mobile wrapping pressure while preserving containment and readability.
+- Prompt unlock success UX needed celebratory Arabic copy with explicit developer attribution while keeping all unlock/security authority server-owned.
+- `/admin/users/[uid]` had become visually card-heavy for dense identity/observability fields, reducing scan speed for operators.
+
+Root Cause (verified):
+1) Rights sentence readability pressure came from a narrow control rail + wrap-first copy classes:
+- The non-admin rights sentence used `whitespace-normal`/word wrapping in the top model-control rail.
+- On several widths this produced multi-line legal copy even when the surrounding lane could be optimized for one-line display.
+
+2) Unlock success lane had correct state authority but plain presentation:
+- Success visibility was already correctly gated behind `payload.ok && payload.data.unlocked`.
+- Visual treatment/copy did not yet reflect the requested celebratory tone and explicit attribution.
+
+3) Admin detail information architecture emphasized many parallel cards over grouped scan hierarchy:
+- Identity + observability rows were rendered as one dense multi-card grid.
+- Operators had to scan many equally weighted cards instead of starting with high-value account data and then expanding technical diagnostics.
+
+What changed:
+
+1) `apps/web/components/assessment/assessment-studio.tsx`
+- Updated unlock success copy to celebratory Arabic phrasing with explicit attribution to "المطوّر ابن عبدالله" and confetti/star emojis.
+- Kept unlock visibility gating unchanged: success still renders only after positive API unlock response.
+- Polished success-banner styling with subtle celebratory gradient/shadow and Sparkles accent while preserving existing state transitions.
+- Reworked the non-admin rights sentence class to prioritize one-line rendering using `whitespace-nowrap` + clamp-based responsive font sizing + tighter tracking.
+
+2) `apps/web/app/globals.css`
+- Slightly widened the assessment setup model-control rail at `md` and `xl` breakpoints.
+- Kept the same layout ownership and styling system, only increasing horizontal budget to support one-line rights copy in realistic desktop/tablet widths.
+
+3) `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- Replaced the old identity mega-grid with a clearer structure:
+  - concise identity/account summary via definition-row layout
+  - dedicated access/role/status/high-value flags block
+  - collapsible technical metadata groups (server metadata, client metadata, device capability)
+  - collapsible raw observability snapshot (verbose) for deep debugging
+- Preserved all previously visible fields; no backend data source or authority path was removed.
+- Added focused helper components (`AdminDefinitionRow`, `AdminMetadataDisclosure`) to reduce card fatigue and keep mobile stacking/tablet/desktop density predictable.
+
+What was preserved:
+- No backend unlock logic changes in `/api/assessment/prompt-unlock`; server remains authority for entitlement/password/lock state.
+- No credit-sync, SSE, repository mutation, or admin action authority changes.
+- Existing admin controls (role/status/toggle, credit mutations, destructive actions) remain intact.
+- Existing dark/light theme surface language remains intact.
+
+Verification:
+- Lint: `npm run lint --workspace @zootopia/web` ✅
+- Typecheck: `npm run typecheck --workspace @zootopia/web` ✅
+- Build: `npm run build --workspace @zootopia/web` ✅
+  - Build includes relevant routes/components:
+    - `/assessment`
+    - `/admin/users/[uid]`
+    - `/api/assessment/prompt-unlock`
+
+Manual/runtime validation status:
+- Code-path verification confirms unlock success visibility is still gated behind successful API unlock response.
+- Visual browser validation across authenticated real sessions/viewports remains recommended for final polish sign-off.
+
+Files changed:
+- `apps/web/components/assessment/assessment-studio.tsx`
+- `apps/web/app/globals.css`
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+
+Risks / follow-up:
+- Ultra-narrow viewport edge cases may still require a final visual pass to confirm preferred one-line rights readability threshold.
+- The admin page now exposes more structured disclosure UI; future additions should keep verbose observability in collapsibles to avoid reintroducing card fatigue.

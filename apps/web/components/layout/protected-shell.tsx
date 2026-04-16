@@ -17,6 +17,7 @@ import {
   ASSESSMENT_CREDIT_REFRESH_EVENT,
   dispatchAssessmentCreditSummaryUpdated,
 } from "@/lib/assessment-credit-events";
+import { logAssessmentCreditClientDiagnostic } from "@/lib/assessment-credit-diagnostics";
 import {
   resolveAvatarFallbackInitial,
   resolveRoleGenderAvatarSrc,
@@ -76,7 +77,10 @@ export function ProtectedShell({
   locale,
   themeMode,
 }: ProtectedShellProps) {
-  const CREDIT_SUMMARY_REFRESH_INTERVAL_MS = 20_000;
+  const CREDIT_SUMMARY_RECONCILE_INTERVAL_MS = 5_000;
+  const CREDIT_STREAM_STALE_AFTER_MS = 25_000;
+  const ASSESSMENT_CREDIT_REQUEST_ID_HEADER =
+    "x-zootopia-assessment-credit-request-id";
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -87,6 +91,7 @@ export function ProtectedShell({
   const mainScrollRef = useRef<HTMLElement | null>(null);
   const creditSummaryRequestRef = useRef<Promise<void> | null>(null);
   const creditSummaryRef = useRef<AssessmentDailyCreditsSummary | null>(null);
+  const lastCreditStreamSignalAtRef = useRef(0);
   const creditHelpTriggerRef = useRef<HTMLButtonElement | null>(null);
   const creditHelpPanelRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
@@ -116,14 +121,39 @@ export function ProtectedShell({
      pages. Keep all incoming fetch and SSE updates funneled through this one deduped handler so
      header chrome and downstream Assessment Studio listeners stay aligned to the same server truth. */
   const applyCreditSummary = useEffectEvent(
-    (nextSummary: AssessmentDailyCreditsSummary) => {
+    (
+      nextSummary: AssessmentDailyCreditsSummary,
+      meta: {
+        source: "fetch" | "sse";
+        requestId?: string | null;
+        eventId?: string | null;
+        emittedAt?: string | null;
+      },
+    ) => {
       if (areCreditSummariesEqual(creditSummaryRef.current, nextSummary)) {
         return;
       }
 
       creditSummaryRef.current = nextSummary;
       setCreditSummary(nextSummary);
-      dispatchAssessmentCreditSummaryUpdated(nextSummary);
+      dispatchAssessmentCreditSummaryUpdated({
+        credits: nextSummary,
+        source: meta.source,
+        requestId: meta.requestId ?? null,
+        eventId: meta.eventId ?? null,
+        emittedAt: meta.emittedAt ?? null,
+      });
+      logAssessmentCreditClientDiagnostic({
+        event: "protected_shell_summary_applied",
+        details: {
+          source: meta.source,
+          path: pathname,
+          requestId: meta.requestId ?? null,
+          eventId: meta.eventId ?? null,
+          remainingCount: nextSummary.remainingCount,
+          assessmentAccess: nextSummary.assessmentAccess,
+        },
+      });
     },
   );
 
@@ -138,19 +168,56 @@ export function ProtectedShell({
 
     const requestPromise = (async () => {
       try {
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_refresh_started",
+          details: {
+            path: pathname,
+          },
+        });
+
         const response = await fetch("/api/assessment/credits", {
           method: "GET",
           cache: "no-store",
         });
+        const requestId =
+          response.headers.get(ASSESSMENT_CREDIT_REQUEST_ID_HEADER) ?? null;
         const payload = (await response.json()) as ApiResult<{
           credits: AssessmentDailyCreditsSummary;
         }>;
         if (!response.ok || !payload.ok) {
+          logAssessmentCreditClientDiagnostic({
+            event: "protected_shell_refresh_failed",
+            details: {
+              path: pathname,
+              requestId,
+              status: response.status,
+              errorCode: payload.ok ? null : payload.error.code,
+            },
+          });
           return;
         }
 
-        applyCreditSummary(payload.data.credits);
+        applyCreditSummary(payload.data.credits, {
+          source: "fetch",
+          requestId,
+        });
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_refresh_result",
+          details: {
+            path: pathname,
+            requestId,
+            remainingCount: payload.data.credits.remainingCount,
+            assessmentAccess: payload.data.credits.assessmentAccess,
+          },
+        });
       } catch {
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_refresh_failed",
+          details: {
+            path: pathname,
+            failureKind: "network_or_parse",
+          },
+        });
         // Keep the header chip resilient: transient network failures should not break shell UI.
       }
     })();
@@ -209,12 +276,28 @@ export function ProtectedShell({
         return;
       }
 
-      if (isCreditStreamHealthy) {
+      const lastSignalAt = lastCreditStreamSignalAtRef.current;
+      const streamSignalAgeMs = lastSignalAt > 0 ? Date.now() - lastSignalAt : Number.POSITIVE_INFINITY;
+      const hasFreshStreamSignal =
+        isCreditStreamHealthy && streamSignalAgeMs < CREDIT_STREAM_STALE_AFTER_MS;
+
+      if (isCreditStreamHealthy && !hasFreshStreamSignal) {
+        setIsCreditStreamHealthy(false);
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_stream_marked_stale",
+          details: {
+            path: pathname,
+            streamSignalAgeMs,
+          },
+        });
+      }
+
+      if (hasFreshStreamSignal) {
         return;
       }
 
       void refreshCreditSummary();
-    }, CREDIT_SUMMARY_REFRESH_INTERVAL_MS);
+    }, CREDIT_SUMMARY_RECONCILE_INTERVAL_MS);
 
     void refreshCreditSummary();
     window.addEventListener(ASSESSMENT_CREDIT_REFRESH_EVENT, handleRefreshCredits);
@@ -230,11 +313,12 @@ export function ProtectedShell({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(intervalId);
     };
-  }, [isCreditStreamHealthy]);
+  }, [isCreditStreamHealthy, pathname]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.EventSource === "undefined") {
       setIsCreditStreamHealthy(false);
+      lastCreditStreamSignalAtRef.current = 0;
       return;
     }
 
@@ -247,37 +331,98 @@ export function ProtectedShell({
       try {
         const payload = JSON.parse(
           (event as MessageEvent<string>).data,
-        ) as { credits?: AssessmentDailyCreditsSummary };
+        ) as {
+          credits?: AssessmentDailyCreditsSummary;
+          emittedAt?: string;
+        };
         if (!payload.credits) {
           return;
         }
 
-        applyCreditSummary(payload.credits);
+        lastCreditStreamSignalAtRef.current = Date.now();
+        setIsCreditStreamHealthy(true);
+        const eventId = (event as MessageEvent<string>).lastEventId || null;
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_stream_summary_received",
+          details: {
+            path: pathname,
+            eventId,
+            emittedAt: payload.emittedAt ?? null,
+            remainingCount: payload.credits.remainingCount,
+            assessmentAccess: payload.credits.assessmentAccess,
+          },
+        });
+        applyCreditSummary(payload.credits, {
+          source: "sse",
+          eventId,
+          emittedAt: payload.emittedAt ?? null,
+        });
       } catch {
         // Leave fallback refresh active if the stream emits an unreadable payload.
       }
     };
 
+    /* Heartbeats stay intentionally visible to the client so the shell can distinguish
+       a genuinely fresh live stream from a socket that opened once but stopped delivering
+       actionable credit events. */
+    const handleStreamHeartbeat = (event: Event) => {
+      try {
+        const payload = JSON.parse(
+          (event as MessageEvent<string>).data,
+        ) as { emittedAt?: string };
+        lastCreditStreamSignalAtRef.current = Date.now();
+        setIsCreditStreamHealthy(true);
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_stream_heartbeat_received",
+          details: {
+            path: pathname,
+            eventId: (event as MessageEvent<string>).lastEventId || null,
+            emittedAt: payload.emittedAt ?? null,
+          },
+        });
+      } catch {
+        lastCreditStreamSignalAtRef.current = Date.now();
+        setIsCreditStreamHealthy(true);
+      }
+    };
+
     const handleStreamOpen = () => {
+      lastCreditStreamSignalAtRef.current = Date.now();
       setIsCreditStreamHealthy(true);
+      logAssessmentCreditClientDiagnostic({
+        event: "protected_shell_stream_opened",
+        details: {
+          path: pathname,
+        },
+      });
     };
 
     const handleStreamError = () => {
       setIsCreditStreamHealthy(false);
+      lastCreditStreamSignalAtRef.current = 0;
+      logAssessmentCreditClientDiagnostic({
+        event: "protected_shell_stream_error",
+        details: {
+          path: pathname,
+        },
+      });
     };
 
     creditStream.addEventListener("summary", handleStreamSummary);
+    creditStream.addEventListener("heartbeat", handleStreamHeartbeat);
     creditStream.addEventListener("open", handleStreamOpen);
     creditStream.addEventListener("error", handleStreamError);
 
     return () => {
       setIsCreditStreamHealthy(false);
+      lastCreditStreamSignalAtRef.current = 0;
       creditStream.removeEventListener("summary", handleStreamSummary);
+      creditStream.removeEventListener("heartbeat", handleStreamHeartbeat);
       creditStream.removeEventListener("open", handleStreamOpen);
       creditStream.removeEventListener("error", handleStreamError);
       creditStream.close();
     };
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     if (!isCreditHelpOpen) {
