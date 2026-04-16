@@ -19,7 +19,8 @@ import {
   resolveAssessmentCreditDisplayModel,
 } from "@/lib/assessment-credit-display";
 import {
-  invalidateAssessmentCreditSummaryQuery,
+  ASSESSMENT_CREDIT_SUMMARY_STALE_TIME_MS,
+  reconcileAssessmentCreditSummaryQuery,
   useAssessmentCreditSummaryQuery,
 } from "@/lib/assessment-credit-query";
 import {
@@ -77,6 +78,12 @@ function areCreditSummariesEqual(
   );
 }
 
+const CREDIT_SUMMARY_RECONCILE_INTERVAL_MS = 5_000;
+const CREDIT_SUMMARY_HEALTHY_REVALIDATE_INTERVAL_MS = 60_000;
+const CREDIT_SUMMARY_RETURN_RESET_THRESHOLD_MS =
+  ASSESSMENT_CREDIT_SUMMARY_STALE_TIME_MS;
+const CREDIT_SUMMARY_RESUME_DEDUP_WINDOW_MS = 1_500;
+
 const CREDIT_HELP_DIALOG_TITLE_AR = "طلب كريدت تقييم إضافي";
 const CREDIT_HELP_DIALOG_BODY_AR =
   "إذا كنت بحاجة إلى كريدت خاص أو عاجل، يُرجى التواصل مباشرة مع المطور والأدمن Elmahdy Abdallah.";
@@ -122,8 +129,6 @@ export function ProtectedShell({
   themeMode,
   assessmentCreditRealtimeTopic,
 }: ProtectedShellProps) {
-  const CREDIT_SUMMARY_RECONCILE_INTERVAL_MS = 5_000;
-  const CREDIT_SUMMARY_HEALTHY_REVALIDATE_INTERVAL_MS = 60_000;
   const queryClient = useQueryClient();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
@@ -135,6 +140,8 @@ export function ProtectedShell({
   const creditHelpPanelRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedCreditSummaryRef =
     useRef<AssessmentDailyCreditsSummary | null>(null);
+  const hiddenAtRef = useRef<number | null>(null);
+  const lastResumeReconcileAtRef = useRef(0);
   const pathname = usePathname();
   const creditSummaryQuery = useAssessmentCreditSummaryQuery({
     source: "protected-shell",
@@ -168,15 +175,20 @@ export function ProtectedShell({
     );
   });
 
-  /* ProtectedShell no longer keeps a private credit state copy. All refresh triggers invalidate
+  /* ProtectedShell no longer keeps a private credit state copy. All refresh triggers reconcile
      the shared query key so the header and Assessment Studio consume the same cached server
      truth object regardless of which surface initiated the refresh. */
   const requestCreditSummaryRefetch = useEffectEvent(
-    async (reason: string, details?: Record<string, unknown>) => {
+    async (
+      reason: string,
+      details?: Record<string, unknown>,
+      strategy: "invalidate-active" | "reset-active" = "invalidate-active",
+    ) => {
       try {
-        await invalidateAssessmentCreditSummaryQuery(queryClient, {
+        await reconcileAssessmentCreditSummaryQuery(queryClient, {
           source: "protected-shell",
           reason,
+          strategy,
           details: {
             path: pathname,
             ...(details ?? {}),
@@ -188,7 +200,7 @@ export function ProtectedShell({
           details: {
             path: pathname,
             reason,
-            failureKind: "query_invalidation_failed",
+            failureKind: "query_reconcile_failed",
           },
         });
       }
@@ -315,12 +327,50 @@ export function ProtectedShell({
        Focus and visibility still trigger query invalidation so tabs recover quickly after sleep,
        network blips, or auth-refresh windows without reviving the old custom browser event bridge. */
     const handleWindowFocus = () => {
+      if (
+        Date.now() - lastResumeReconcileAtRef.current
+        < CREDIT_SUMMARY_RESUME_DEDUP_WINDOW_MS
+      ) {
+        return;
+      }
+
       void requestCreditSummaryRefetch("window-focus");
     };
 
     const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+
       if (document.visibilityState === "visible") {
-        void requestCreditSummaryRefetch("visibility-visible");
+        const hiddenDurationMs = hiddenAtRef.current === null
+          ? null
+          : Math.max(0, Date.now() - hiddenAtRef.current);
+        hiddenAtRef.current = null;
+
+        if (
+          hiddenDurationMs !== null
+          && hiddenDurationMs >= CREDIT_SUMMARY_RETURN_RESET_THRESHOLD_MS
+        ) {
+          lastResumeReconcileAtRef.current = Date.now();
+          /* Returning from a longer absence can leave an old balance resident in the in-memory
+             React Query cache until the background refetch finishes. Reset the shared credit query
+             for this protected-shell resume path so header and Assessment Studio show loading
+             instead of a stale number while `/api/assessment/credits` resolves fresh truth. */
+          void requestCreditSummaryRefetch(
+            "visibility-visible-return",
+            {
+              hiddenDurationMs,
+            },
+            "reset-active",
+          );
+          return;
+        }
+
+        void requestCreditSummaryRefetch("visibility-visible", {
+          hiddenDurationMs,
+        });
       }
     };
 

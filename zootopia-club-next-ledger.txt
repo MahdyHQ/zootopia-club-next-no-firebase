@@ -1748,3 +1748,133 @@ Verification:
 Risks / constraints:
 - No authenticated browser session or live admin/user credentials were available in this task turn, so realtime delivery, wrong-user non-delivery, and multi-tab reconciliation were verified by code-path tracing plus lint/type/build rather than by live signed-in interaction.
 - During that earlier pass, `apps/web/lib/server/assessment-platform-errors.ts` was an uncommitted worktree file in the checkout. Future agents should re-check `git status` for current truth instead of relying on this historical note.
+
+2026-04-16 — Assessment credit returning-tab freshness hardening for protected-shell shared query
+
+Reason:
+- Audit the current admin-to-user credit delivery path without redesigning the
+  live Supabase Realtime + TanStack Query architecture.
+- Preserve the already-correct server-authoritative mutation/read model while
+  fixing the remaining UX risk for returning protected tabs: old in-memory
+  credit data could stay visible briefly while the canonical refetch was still
+  in flight after a long hidden/offline interval.
+- Keep `/api/assessment/credits` canonical, keep Realtime invalidation-only,
+  and avoid any optimistic or mutation-response balance patching.
+
+Files changed:
+- `apps/web/lib/assessment-credit-query.ts`
+- `apps/web/components/layout/protected-workspace-query-provider.tsx`
+- `apps/web/components/layout/protected-shell.tsx`
+- `zootopia-club-next-ledger.txt`
+
+Root cause confirmed before editing:
+- The main admin mutation, persistence, effective-summary recompute,
+  `/api/assessment/credits` canonical read path, and Realtime invalidation flow
+  were already correct in the current repo.
+- The residual production risk was not incorrect backend truth. It was
+  long-lived client memory: the protected shared React Query cache could keep a
+  previously fetched credit summary rendered for a short window while a
+  returning tab refetched after sleep/background/offline absence.
+- This mattered most for the "user was away, then comes back" scenario, not the
+  "fresh login/new tab/new session" scenario. Fresh protected sessions already
+  mount without persisted query storage and fetch the canonical summary.
+
+Technical details:
+- Added shared exported query timing constants in
+  `apps/web/lib/assessment-credit-query.ts` so the protected query provider,
+  query hook, and protected-shell resume policy all reference one source of
+  truth for credit-summary staleness and GC timing.
+- Introduced
+  `reconcileAssessmentCreditSummaryQuery(queryClient, { strategy })` in
+  `apps/web/lib/assessment-credit-query.ts` with two explicit strategies:
+  - `invalidate-active`: preserve current behavior for ordinary realtime,
+    mount, pathname, and mutation-triggered reconciliation
+  - `reset-active`: clear the last in-memory credit summary before refetch so
+    the UI shows loading instead of a stale balance while
+    `/api/assessment/credits` resolves
+- Kept `invalidateAssessmentCreditSummaryQuery()` as a backward-compatible
+  wrapper so existing assessment-studio call sites and the current shared cache
+  contract did not need redesign.
+- Updated `ProtectedWorkspaceQueryProvider` to consume the shared query timing
+  constants instead of duplicating stale/gc timings in two places.
+- Hardened `ProtectedShell` so visibility resume now tracks how long the
+  document stayed hidden:
+  - short absences still use normal invalidation
+  - longer absences at or beyond the credit-summary stale window use
+    `reset-active`
+  - focus events are deduplicated briefly after a visibility-return reset so a
+    single tab resume does not immediately trigger a second redundant refresh
+- Left the current server-owned architecture intact:
+  - admin detail page/API route still mutate through
+    `applyAdminAssessmentCreditMutation()`
+  - Realtime still sends invalidation-only envelopes
+  - header + Assessment Studio still read one shared TanStack query key backed
+    only by `/api/assessment/credits`
+
+Impact assessment before editing:
+- Auth and authorization were already fail-closed and server-owned through
+  `requireAdminUser()`, `getAdminSessionUser()`, and the live repository-backed
+  session lookup.
+- Persistence and effective-summary recomputation were already transaction- and
+  repository-backed in `applyAdminAssessmentCreditMutation()` and
+  `getAssessmentDailyCreditsSummaryForUser()`.
+- Wrong-user isolation was already based on authenticated protected routing plus
+  server-derived per-owner Realtime topics; this pass did not widen the browser
+  subscription surface or introduce any client-chosen owner identifier.
+- Offline/signed-out next-open correctness was already strong because the repo
+  has no persisted React Query cache, uses `cache: "no-store"` on the client
+  fetch, and serves `/api/assessment/credits` from a `force-dynamic` +
+  `applyNoStore()` route. The only gap worth changing was stale in-memory UI
+  during long-lived tab return.
+
+Verification:
+- `npm run lint:web` ✅
+- `npm run typecheck:web` ✅
+- `npm run build:web` ✅
+- `npm run build:vercel` ✅
+- Static/code-path verification confirmed:
+  - admin auth/authorization still gates mutations on the server and still
+    resolves the target UID from the server route/page boundary instead of
+    trusting browser ownership
+  - admin credit mutation persistence still flows through
+    `applyAdminAssessmentCreditMutation()`
+  - effective summary still recomputes in the repository before admin/API
+    callers publish follow-up invalidation
+  - `/api/assessment/credits` remains the only canonical browser truth source
+  - protected header and Assessment Studio still read the same
+    `ASSESSMENT_CREDIT_SUMMARY_QUERY_KEY`
+  - returning protected tabs now have an explicit `reset-active` recovery path
+    after longer hidden intervals, so stale credit values no longer have to
+    remain visible while the canonical refetch completes
+  - active-session Realtime behavior remains unchanged: invalidation-only
+    broadcast -> shared query reconcile -> `/api/assessment/credits`
+  - multi-tab same-user behavior remains unchanged architecturally because each
+    protected tab still owns the same shared query + owner-scoped topic, and
+    now also benefits from the stronger return-from-absence reset behavior if a
+    tab wakes up late
+  - local vs Vercel behavior remains compatible because the hardening is purely
+    client-side query reconciliation and does not depend on process-local
+    runtime state
+
+Local vs Vercel notes:
+- Local development:
+  - the new behavior relies only on client visibility/focus handling and the
+    existing local `force-dynamic` + `no-store` canonical route
+  - verification completed with local lint/type/build
+- Vercel production:
+  - the same client-side reset/invalidate behavior works regardless of
+    serverless instance rotation because browser state still refetches
+    canonical truth from `/api/assessment/credits`
+  - active-session Realtime remains cross-instance because publish/subscribe
+    still rides Supabase Realtime rather than same-process memory
+  - Vercel build completed successfully with `npm run build:vercel`
+
+Risks / constraints:
+- No real authenticated admin + target-user browser pair was available during
+  this task turn, so active-session delivery, wrong-user non-delivery, and
+  next-login proof were verified by end-to-end code tracing plus
+  lint/type/build rather than a live signed-in browser mutation.
+- The repo still uses server-derived owner-scoped topic secrecy for browser
+  credit channels instead of full private-channel Supabase-authenticated Realtime
+  authorization. This pass intentionally did not redesign auth/runtime coupling
+  because that would be broader than a surgical hardening change.

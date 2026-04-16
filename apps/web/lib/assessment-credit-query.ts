@@ -15,6 +15,8 @@ import { logAssessmentCreditClientDiagnostic } from "@/lib/assessment-credit-dia
 const ASSESSMENT_CREDIT_REQUEST_ID_HEADER =
   "x-zootopia-assessment-credit-request-id";
 
+export const ASSESSMENT_CREDIT_SUMMARY_STALE_TIME_MS = 15_000;
+export const ASSESSMENT_CREDIT_SUMMARY_GC_TIME_MS = 5 * 60_000;
 export const ASSESSMENT_CREDIT_SUMMARY_QUERY_KEY =
   ["assessment-credit-summary"] as const;
 
@@ -98,8 +100,8 @@ export function useAssessmentCreditSummaryQuery(
         source: input.source,
       }),
     enabled: input.enabled ?? true,
-    staleTime: 15_000,
-    gcTime: 5 * 60_000,
+    staleTime: ASSESSMENT_CREDIT_SUMMARY_STALE_TIME_MS,
+    gcTime: ASSESSMENT_CREDIT_SUMMARY_GC_TIME_MS,
     retry: 1,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -107,25 +109,51 @@ export function useAssessmentCreditSummaryQuery(
   });
 }
 
-export async function invalidateAssessmentCreditSummaryQuery(
+type AssessmentCreditSummaryQueryReconcileInput = {
+  source: string;
+  reason: string;
+  details?: Record<string, unknown>;
+  strategy?: "invalidate-active" | "reset-active";
+};
+
+export async function reconcileAssessmentCreditSummaryQuery(
   queryClient: QueryClient,
-  input: {
-    source: string;
-    reason: string;
-    details?: Record<string, unknown>;
-  },
+  input: AssessmentCreditSummaryQueryReconcileInput,
 ) {
+  const strategy = input.strategy ?? "invalidate-active";
   logAssessmentCreditClientDiagnostic({
-    event: "assessment_credit_query_invalidation_requested",
+    event: "assessment_credit_query_reconcile_requested",
     details: {
       source: input.source,
       reason: input.reason,
+      strategy,
       ...(input.details ?? {}),
     },
   });
 
+  /* Resetting the shared query is reserved for return-from-absence recovery in the protected
+     workspace. It intentionally drops the last in-memory balance before refetch so reopened tabs
+     cannot keep rendering a stale credit total while canonical `/api/assessment/credits` catches up. */
+  if (strategy === "reset-active") {
+    await queryClient.resetQueries({
+      queryKey: ASSESSMENT_CREDIT_SUMMARY_QUERY_KEY,
+      exact: true,
+    });
+    return;
+  }
+
   await queryClient.invalidateQueries({
     queryKey: ASSESSMENT_CREDIT_SUMMARY_QUERY_KEY,
     refetchType: "active",
+  });
+}
+
+export async function invalidateAssessmentCreditSummaryQuery(
+  queryClient: QueryClient,
+  input: Omit<AssessmentCreditSummaryQueryReconcileInput, "strategy">,
+) {
+  await reconcileAssessmentCreditSummaryQuery(queryClient, {
+    ...input,
+    strategy: "invalidate-active",
   });
 }
