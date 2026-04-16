@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Users,
   Activity,
+  WalletCards,
   Route as RouteIcon,
   LogOut,
 } from "lucide-react";
@@ -57,6 +58,8 @@ export function ShellNav({
         return Activity;
       case APP_ROUTES.assessment:
         return FileText;
+      case APP_ROUTES.assessmentCredits:
+        return WalletCards;
       case APP_ROUTES.infographic:
         return PieChart;
       case APP_ROUTES.settings:
@@ -85,6 +88,10 @@ export function ShellNav({
           { href: APP_ROUTES.home, label: messages.navHome || "Platform Home" },
           { href: APP_ROUTES.history, label: messages.navHistory || "History" },
           { href: APP_ROUTES.assessment, label: messages.navAssessment || "AI Assessment" },
+          {
+            href: APP_ROUTES.assessmentCredits,
+            label: messages.navAssessmentCredits || "Credit Details",
+          },
           {
             href: APP_ROUTES.infographic,
             label: messages.navInfographic || "Generate Visual",

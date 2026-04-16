@@ -17,8 +17,9 @@ export function isSupabaseWebConfigured() {
 
 /**
  * Browser Supabase client. Uses `createBrowserClient` from `@supabase/ssr` per Supabase
- * Next.js guidance; session persistence stays disabled so Auth.js remains the single
- * source of session truth and Supabase tokens are transient to active sign-in flows.
+ * Next.js guidance. Auth.js still remains the app-session authority for route/data access,
+ * while the browser Supabase session is retained to authorize private Realtime channels and
+ * keep that channel token refreshed during active protected workspace usage.
  */
 export function getSupabaseClient() {
   if (cachedClient) {
@@ -34,8 +35,8 @@ export function getSupabaseClient() {
 
   cachedClient = createBrowserClient(supabaseUrl, publishableKey, {
     auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+      persistSession: true,
+      autoRefreshToken: true,
       detectSessionInUrl: false,
     },
   });

@@ -363,7 +363,10 @@ export function LoginPanel({
           title: messages.loginStatusSuccessTitle,
           body: messages.loginStatusSuccessBody,
         });
-        await clearClientSession();
+
+          /* Keep the Supabase browser session alive after Auth.js bootstrap so protected routes can
+            authorize private Realtime channel subscriptions. App route/data authority remains owned
+            by Auth.js server session checks, not by this browser session. */
 
         /* Keep post-bootstrap handoff aligned with centralized role/profile redirect policy
            so NEXT_PUBLIC_ZOOTOPIA_AUTH_* defaults remain authoritative for login completion. */
@@ -401,7 +404,7 @@ export function LoginPanel({
     } finally {
       bootstrapRequestRef.current = null;
     }
-  }, [clearClientSession, messages, router, setFinishingStatus]);
+  }, [messages, router, setFinishingStatus]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

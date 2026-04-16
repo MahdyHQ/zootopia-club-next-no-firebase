@@ -1013,10 +1013,9 @@ export function ConfirmEmailPanel({
           profileCompleted: sessionUser.profileCompleted,
         });
 
-        // Confirm-email callback can create a temporary Supabase browser session.
-        // Auth.js remains the single app-session authority, so clear provider session
-        // right before client handoff after Auth.js cookie bootstrap succeeds.
-        await supabase.auth.signOut({ scope: "local" });
+        // Keep the provider session after confirmation bootstrap so private Realtime channels can
+        // authenticate in protected routes. Auth.js session checks remain the authoritative gate
+        // for protected navigation and API ownership.
 
         console.info("[auth-confirmation]", {
           routePath: APP_ROUTES.confirmEmail,

@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-16 (Admin credit workspace scroll-preserving action-state hardening)
+Last Updated: 2026-04-16 (Assessment credit private-channel auth hardening + protected credit details route)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: c2bad35d88b3150a694d4fd49de8765b511cf67c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -129,18 +129,29 @@ Key verified facts:
   explicit admin-log failure events, and route-level live-publish result/failure
   events, while Assessment Studio now emits a canonical `summary_applied`
   client diagnostic so header apply and studio apply can both be correlated
-- Assessment credit live delivery now uses owner-scoped Supabase realtime
-  broadcasts as the primary cross-tab/cross-instance invalidation lane, and
-  those browser payloads are now invalidation-only envelopes (event/correlation
-  metadata only, no client-applied balance summary payload)
+- Assessment credit live delivery now uses owner-scoped private Supabase
+  realtime channels (`assessment-credit:owner:{uid}`) as the primary
+  cross-tab/cross-instance invalidation lane, and protected-shell subscribers
+  now apply provider access tokens to Realtime auth before joining those
+  private channels
+- Assessment credit browser payloads remain invalidation-only envelopes
+  (event/correlation metadata only, no client-applied balance summary payload)
 - Successful assessment credit commits from `POST /api/assessment` now publish
   the same owner-scoped invalidation signal used by admin mutations, improving
   same-user multi-tab reconciliation without turning realtime into a balance
   truth source
+- User/admin/confirm-email auth completion flows now preserve the Supabase
+  browser session after successful Auth.js bootstrap so private Realtime
+  channel authorization can remain healthy in protected pages; Auth.js session
+  checks remain the sole authority for route/API access
 - Protected shell and Assessment Studio now share one TanStack Query cache key
   for `/api/assessment/credits`, and the Assessment page/studio no longer seed
   or patch that shared balance cache from page props, mutation responses, or
   client-calculated deltas
+- Protected workspace navigation now includes `/assessment/credits`, a
+  dedicated owner-facing credit-details route that reads the canonical shared
+  `/api/assessment/credits` query path and keeps refresh behavior on shared
+  invalidation/refetch instead of local balance patching
 - Assessment credit summary shape already distinguishes the user-facing balance
   sources needed for truthful UX (`dailyRemainingCount`,
   `manualCreditsAvailable`, `grantCreditsAvailable`, `extraCreditsAvailable`,
@@ -290,7 +301,7 @@ Key verified facts:
 - Admin panel includes user management, storage management, governance dashboard
 - Database uses Supabase Postgres with RLS policies
 - Migration management via scripts/supabase/apply-migrations.mjs
-- 11 migration files tracked in supabase/migrations (latest adds user password security event/state persistence)
+- 12 migration files tracked in supabase/migrations (latest hardens private assessment-credit Realtime channel authorization on `realtime.messages`)
 
 ================================================================================
 3. PROJECT PURPOSE & PLATFORM DIRECTION
@@ -595,6 +606,7 @@ Root:
 Protected Routes (requires auth):
   /upload                     → Document upload workspace
   /assessment                 → AI assessment generation studio
+  /assessment/credits         → Assessment credit details page
   /infographic                → Infographic generation (admin-only)
   /history                    → Upload & assessment history viewer
   /settings                   → User profile settings
@@ -652,6 +664,7 @@ Frontend-Owned (Client Pages):
 - apps/web/app/(protected)/(completed)/page.tsx — Home dashboard
 - apps/web/app/(protected)/(completed)/upload/page.tsx — Upload workspace
 - apps/web/app/(protected)/(completed)/assessment/page.tsx — Assessment studio
+- apps/web/app/(protected)/(completed)/assessment/credits/page.tsx — Assessment credit details
 - apps/web/app/(protected)/(completed)/infographic/page.tsx — Infographic page
 - apps/web/app/(protected)/(completed)/history/page.tsx — History viewer
 - apps/web/app/(protected)/settings/page.tsx — Settings page
@@ -784,6 +797,9 @@ Session Configuration:
 - Strategy: JWT (no database sessions)
 - Max age: ZOOTOPIA_SESSION_TTL_SECONDS (default 3600 = 1 hour)
 - Cookie: httpOnly, secure, sameSite: lax
+- Supabase browser auth session now intentionally persists and auto-refreshes
+  only to keep private Realtime channel authorization healthy in protected UI;
+  it does not grant route/API authority outside Auth.js server session checks
 
 Key Files:
 - apps/web/auth.ts — Auth.js configuration
@@ -925,8 +941,12 @@ Credit System:
 - Daily credit limit: ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS (default 3)
 - Renewal window: ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS (default 24h UTC)
 - GET /api/assessment/credits returns current status with explicit no-store headers
-- Owner-scoped Supabase realtime broadcast is the live invalidation lane for
+- Owner-scoped private Supabase Realtime channel topics
+  (`assessment-credit:owner:{uid}`) are the live invalidation lane for
   near-real-time credit freshness
+- Protected shell channel setup applies current Supabase session access tokens
+  to `supabase.realtime.setAuth(...)` and re-syncs on auth state change before
+  subscribing, keeping private-channel auth aligned with token refresh/sign-out
 - Successful `POST /api/assessment` commits now publish an owner-scoped
   invalidation signal after the durable credit commit so other tabs for the
   same user refetch canonical `/api/assessment/credits`
@@ -1059,6 +1079,9 @@ Migrations (supabase/migrations/):
 11. 20260414230000_user_password_security_events.sql
   - Adds `user_password_security_events` append-only telemetry table for password reset/change events
   - Adds `user_password_security_state` latest-state table with backend-only deny-all RLS for anon/authenticated
+12. 20260416193000_assessment_credit_private_realtime_authorization.sql
+  - Adds owner-authenticated private-channel SELECT policy on `realtime.messages`
+    for `assessment-credit:owner:{auth.uid}` topic namespace
 
 Migration Application:
 - scripts/supabase/apply-migrations.mjs
@@ -1394,6 +1417,7 @@ Implemented & Active:
 - [x] Document upload with retention policies
 - [x] AI assessment generation with credit limits
 - [x] Near-real-time server-authoritative assessment credit synchronization
+- [x] Dedicated protected `/assessment/credits` summary/details page
 - [x] Assessment history viewer
 - [x] Assessment export (PDF, JSON)
 - [x] User settings page
@@ -1496,6 +1520,90 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-16 — Assessment credit private-channel authorization hardening and protected credit details route
+
+Reason:
+- Complete the Supabase private-channel migration for assessment-credit live
+  invalidation with an owner-scoped topic contract and authenticated Realtime
+  channel joins.
+- Keep Auth.js as the sole route/API authority while ensuring browser Realtime
+  token continuity after login/admin/confirm-email bootstrap flows.
+- Add a dedicated protected `/assessment/credits` page so users can inspect the
+  canonical credit summary without introducing a second balance state owner.
+
+Files changed:
+- `packages/shared-config/src/routes.ts`
+- `apps/web/lib/assessment-credit-realtime.ts`
+- `apps/web/lib/server/assessment-credit-live-updates.ts`
+- `apps/web/lib/supabase/client.ts`
+- `apps/web/components/layout/protected-shell.tsx`
+- `apps/web/components/auth/login-panel.tsx`
+- `apps/web/components/auth/admin-login-panel.tsx`
+- `apps/web/components/auth/confirm-email-panel.tsx`
+- `apps/web/components/layout/shell-nav.tsx`
+- `apps/web/components/assessment/assessment-studio.tsx`
+- `apps/web/app/(protected)/(completed)/assessment/credits/page.tsx` (new)
+- `apps/web/components/assessment/assessment-credit-details-panel.tsx` (new)
+- `apps/web/messages/en.json`
+- `apps/web/messages/ar.json`
+- `supabase/migrations/20260416193000_assessment_credit_private_realtime_authorization.sql` (new)
+- `zootopia-club-next-ledger.txt`
+
+Technical details:
+- Added `APP_ROUTES.assessmentCredits` and wired it into protected nav and the
+  Assessment Studio credit panel action.
+- Added shared topic helper `buildAssessmentCreditPrivateTopic(ownerUid)` with
+  stable topic contract `assessment-credit:owner:{uid}` so publisher,
+  subscriber, and database policy logic share one namespace.
+- Updated server live-publish flow to use the shared topic helper and private
+  channel config when broadcasting invalidation events.
+- Updated protected-shell Realtime lifecycle to:
+  - read initial Supabase session
+  - apply Realtime auth token via `supabase.realtime.setAuth(...)`
+  - subscribe to private channel only after auth is applied
+  - react to `onAuthStateChange` token/session updates
+  - remove channel + mark health false when session/token is missing
+  - keep diagnostics for auth/session/channel failure points
+- Enabled browser Supabase auth persistence/refresh in the shared client and
+  removed post-bootstrap local sign-out from user/admin/confirm-email success
+  paths so private Realtime channel authorization remains available in
+  protected pages.
+- Added protected credit-details route/page + client panel that reuses the same
+  shared assessment-credit query key and invalidation helper as header/studio.
+- Added EN/AR localization keys for new credit-details labels/actions.
+- Added migration `20260416193000_assessment_credit_private_realtime_authorization.sql`
+  to enforce owner-authenticated private-channel SELECT authorization on
+  `realtime.messages` topic scope.
+
+Impact assessment before editing:
+- Kept canonical credit summary ownership unchanged:
+  repository/server summary -> `/api/assessment/credits` -> shared TanStack
+  query key -> protected header + Assessment Studio + credit-details page.
+- Kept Realtime payload semantics unchanged as invalidation-only envelopes;
+  no client-applied balance truth was introduced.
+- Kept all credit mutation authority server-owned; this change touched
+  subscription/auth continuity and read-surface expansion only.
+
+Verification:
+- `npm run lint --workspace @zootopia/web` ✅
+- `npm run typecheck --workspace @zootopia/web` ✅
+- `npm run build --workspace @zootopia/web` ✅
+- `npm run build:vercel` ✅
+- Production route output includes `ƒ /assessment/credits` in both build modes.
+- Targeted diagnostics check (`get_errors`) on all touched files reported no
+  file-level lint/type errors after final edits.
+
+Risks / constraints:
+- Private channel authorization depends on applying migration
+  `20260416193000_assessment_credit_private_realtime_authorization.sql` in the
+  target Supabase environment; creating the SQL file alone does not apply it.
+- Browser Supabase session persistence is now intentionally enabled for private
+  Realtime auth continuity; future agents must not treat that browser session
+  as a substitute for Auth.js-protected route/API server checks.
+- This task turn validated compile/lint/type/build paths but did not run a live
+  authenticated browser proof against a migrated Supabase project, so end-to-end
+  private-channel authorization should be confirmed after migration rollout.
 
 2026-04-16 — Admin credit workspace scroll-preserving action-state hardening
 

@@ -394,40 +394,188 @@ export function ProtectedShell({
     }
 
     const supabaseClient = getSupabaseClient();
-    const creditRealtimeChannel = supabaseClient.channel(
-      assessmentCreditRealtimeTopic,
-      {
-        config: {
-          broadcast: {
-            self: false,
+    let disposed = false;
+    let creditRealtimeChannel: ReturnType<typeof supabaseClient.channel> | null =
+      null;
+
+    const removeCreditRealtimeChannel = () => {
+      if (!creditRealtimeChannel) {
+        return;
+      }
+
+      const channelToRemove = creditRealtimeChannel;
+      creditRealtimeChannel = null;
+      void supabaseClient.removeChannel(channelToRemove);
+    };
+
+    const attachCreditRealtimeChannel = async (input: {
+      accessToken: string;
+      reason: string;
+      authEvent: string;
+    }) => {
+      if (disposed) {
+        return;
+      }
+
+      const normalizedAccessToken = input.accessToken.trim();
+      if (!normalizedAccessToken) {
+        setIsCreditRealtimeHealthy(false);
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_realtime_auth_missing_token",
+          details: {
+            path: pathname,
+            reason: input.reason,
+            authEvent: input.authEvent,
+          },
+        });
+        removeCreditRealtimeChannel();
+        return;
+      }
+
+      try {
+        await supabaseClient.realtime.setAuth(normalizedAccessToken);
+      } catch {
+        setIsCreditRealtimeHealthy(false);
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_realtime_auth_apply_failed",
+          details: {
+            path: pathname,
+            reason: input.reason,
+            authEvent: input.authEvent,
+          },
+        });
+        removeCreditRealtimeChannel();
+        return;
+      }
+
+      logAssessmentCreditClientDiagnostic({
+        event: "protected_shell_realtime_auth_applied",
+        details: {
+          path: pathname,
+          reason: input.reason,
+          authEvent: input.authEvent,
+        },
+      });
+
+      if (creditRealtimeChannel) {
+        return;
+      }
+
+      const nextRealtimeChannel = supabaseClient.channel(
+        assessmentCreditRealtimeTopic,
+        {
+          config: {
+            private: true,
+            broadcast: {
+              self: false,
+            },
           },
         },
-      },
-    );
+      );
 
-    /* This provider-backed channel replaces the same-instance SSE lane for credit delivery.
-       Keep the shell as the only browser subscriber and continue treating broadcasts as
-       invalidation-only signals so protected chrome and Assessment Studio stay aligned to one
-       canonical `/api/assessment/credits` read path. */
-    creditRealtimeChannel.on(
-      "broadcast",
-      { event: ASSESSMENT_CREDIT_REALTIME_EVENT },
-      ({ payload }) => {
-        handleCreditRealtimeMessage(
-          payload as AssessmentCreditRealtimePayload | null | undefined,
-        );
-      },
-    );
+      /* This provider-backed private channel replaces the same-instance SSE lane for credit
+         delivery. Keep the shell as the only browser subscriber and continue treating
+         broadcasts as invalidation-only signals so protected chrome and Assessment Studio stay
+         aligned to one canonical `/api/assessment/credits` read path. */
+      nextRealtimeChannel.on(
+        "broadcast",
+        { event: ASSESSMENT_CREDIT_REALTIME_EVENT },
+        ({ payload }) => {
+          handleCreditRealtimeMessage(
+            payload as AssessmentCreditRealtimePayload | null | undefined,
+          );
+        },
+      );
 
-    creditRealtimeChannel.subscribe((status) => {
-      handleCreditRealtimeStatus(status);
+      nextRealtimeChannel.subscribe((status) => {
+        handleCreditRealtimeStatus(status);
+      });
+
+      creditRealtimeChannel = nextRealtimeChannel;
+    };
+
+    const initializeCreditRealtimeChannel = async () => {
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (disposed) {
+        return;
+      }
+
+      if (error) {
+        setIsCreditRealtimeHealthy(false);
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_realtime_auth_session_read_failed",
+          details: {
+            path: pathname,
+            reason: "initial-session-read",
+          },
+        });
+        return;
+      }
+
+      const accessToken = data.session?.access_token ?? "";
+      if (!accessToken.trim()) {
+        setIsCreditRealtimeHealthy(false);
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_realtime_auth_session_missing",
+          details: {
+            path: pathname,
+            reason: "initial-session-read",
+          },
+        });
+        return;
+      }
+
+      await attachCreditRealtimeChannel({
+        accessToken,
+        reason: "initial-session-read",
+        authEvent: "initial-session",
+      });
+    };
+
+    void initializeCreditRealtimeChannel();
+
+    const authStateChange = supabaseClient.auth.onAuthStateChange((event, session) => {
+      const normalizedEvent = String(event ?? "UNKNOWN").toUpperCase();
+      const nextAccessToken = session?.access_token ?? "";
+
+      logAssessmentCreditClientDiagnostic({
+        event: "protected_shell_realtime_auth_state_changed",
+        details: {
+          path: pathname,
+          authEvent: normalizedEvent,
+          hasSession: Boolean(session),
+        },
+      });
+
+      /* Supabase recommends deferring extra auth client calls outside of the auth callback.
+         Use a zero-delay task so Realtime token updates cannot deadlock with auth event
+         processing while still reacting immediately to token refresh/sign-out changes. */
+      window.setTimeout(() => {
+        if (disposed) {
+          return;
+        }
+
+        if (!nextAccessToken.trim()) {
+          setIsCreditRealtimeHealthy(false);
+          removeCreditRealtimeChannel();
+          return;
+        }
+
+        void attachCreditRealtimeChannel({
+          accessToken: nextAccessToken,
+          reason: "auth-state-change",
+          authEvent: normalizedEvent,
+        });
+      }, 0);
     });
 
     return () => {
+      disposed = true;
       setIsCreditRealtimeHealthy(false);
-      void supabaseClient.removeChannel(creditRealtimeChannel);
+      authStateChange.data.subscription.unsubscribe();
+      removeCreditRealtimeChannel();
     };
-  }, [assessmentCreditRealtimeTopic]);
+  }, [assessmentCreditRealtimeTopic, pathname]);
 
   useEffect(() => {
     if (!isCreditHelpOpen) {

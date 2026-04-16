@@ -1,10 +1,11 @@
 import "server-only";
 
 import type { AssessmentDailyCreditsSummary } from "@zootopia/shared-types";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import {
   ASSESSMENT_CREDIT_REALTIME_EVENT,
+  buildAssessmentCreditPrivateTopic,
   type AssessmentCreditRealtimePayload,
 } from "@/lib/assessment-credit-realtime";
 import {
@@ -16,40 +17,11 @@ import {
   hasSupabaseAdminRuntime,
 } from "@/lib/server/supabase-admin";
 
-const ASSESSMENT_CREDIT_REALTIME_TOPIC_PREFIX = "assessment-credit";
-const ASSESSMENT_CREDIT_REALTIME_TOPIC_VERSION = 1;
-
-function readAssessmentCreditRealtimeSigningSecret() {
-  const authSecret = String(process.env.AUTH_SECRET ?? "").trim();
-  if (authSecret.length > 0) {
-    return authSecret;
-  }
-
-  const nextAuthSecret = String(process.env.NEXTAUTH_SECRET ?? "").trim();
-  return nextAuthSecret.length > 0 ? nextAuthSecret : null;
-}
-
-/* Realtime topics are derived from the authenticated owner UID on the server and signed with the
-   same secret family that protects Auth.js cookies. Future agents should preserve this server-only
-   derivation so clients never choose cross-user channel topics themselves. */
+/* Private Realtime channels use an owner-scoped topic contract (`assessment-credit:owner:{uid}`)
+   so database RLS policies can verify `auth.uid()` against the topic itself. Keep this topic shape
+   stable across publisher + subscriber code and Supabase migration policy logic. */
 export function getAssessmentCreditRealtimeTopic(ownerUid: string) {
-  const normalizedOwnerUid = String(ownerUid ?? "").trim();
-  if (!normalizedOwnerUid) {
-    return null;
-  }
-
-  const signingSecret = readAssessmentCreditRealtimeSigningSecret();
-  if (!signingSecret) {
-    return null;
-  }
-
-  const topicHash = createHmac("sha256", signingSecret)
-    .update(
-      `${ASSESSMENT_CREDIT_REALTIME_TOPIC_PREFIX}:v${ASSESSMENT_CREDIT_REALTIME_TOPIC_VERSION}:${normalizedOwnerUid}`,
-    )
-    .digest("base64url");
-
-  return `${ASSESSMENT_CREDIT_REALTIME_TOPIC_PREFIX}:${topicHash}`;
+  return buildAssessmentCreditPrivateTopic(ownerUid);
 }
 
 export async function publishAssessmentCreditLiveUpdate(input: {
@@ -119,7 +91,14 @@ export async function publishAssessmentCreditLiveUpdate(input: {
     });
 
     const supabaseAdminClient = getSupabaseAdminClient();
-    const realtimeChannel = supabaseAdminClient.channel(realtimeTopic);
+    const realtimeChannel = supabaseAdminClient.channel(realtimeTopic, {
+      config: {
+        private: true,
+        broadcast: {
+          self: false,
+        },
+      },
+    });
 
     try {
       const result = await realtimeChannel.send({

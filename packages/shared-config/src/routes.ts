@@ -15,6 +15,7 @@ export const APP_ROUTES = {
   upload: "/upload",
   history: "/history",
   assessment: "/assessment",
+  assessmentCredits: "/assessment/credits",
   infographic: "/infographic",
   settings: "/settings",
   admin: "/admin",

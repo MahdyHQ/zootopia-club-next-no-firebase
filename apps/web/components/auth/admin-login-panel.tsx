@@ -436,7 +436,8 @@ export function AdminLoginPanel({
         title: messages.adminLoginStatusSuccessTitle,
         body: messages.adminLoginStatusSuccessBody,
       });
-      await clearClientSession();
+      /* Preserve the Supabase browser session after successful admin bootstrap so private
+         assessment-credit Realtime subscriptions can authenticate in protected workspace pages. */
       router.replace(redirectTo);
       router.refresh();
     } catch (nextError) {
