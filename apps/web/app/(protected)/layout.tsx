@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 
 import { ProtectedShell } from "@/components/layout/protected-shell";
+import { ProtectedWorkspaceQueryProvider } from "@/components/layout/protected-workspace-query-provider";
 import { ProtectedWorkspaceBackground } from "@/components/layout/protected-workspace-background";
+import { getAssessmentCreditRealtimeTopic } from "@/lib/server/assessment-credit-live-updates";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { requireAuthenticatedUser } from "@/lib/server/session";
 
@@ -16,6 +18,8 @@ export default async function ProtectedLayout({
     requireAuthenticatedUser(),
     getRequestUiContext(),
   ]);
+  const assessmentCreditRealtimeTopic =
+    getAssessmentCreditRealtimeTopic(user.uid);
 
   return (
     <div className="relative min-h-screen">
@@ -24,14 +28,17 @@ export default async function ProtectedLayout({
       <ProtectedWorkspaceBackground />
 
       <div className="relative z-10">
-        <ProtectedShell
-          user={user}
-          locale={uiContext.locale}
-          themeMode={uiContext.themeMode}
-          messages={uiContext.messages}
-        >
-          {children}
-        </ProtectedShell>
+        <ProtectedWorkspaceQueryProvider>
+          <ProtectedShell
+            user={user}
+            locale={uiContext.locale}
+            themeMode={uiContext.themeMode}
+            messages={uiContext.messages}
+            assessmentCreditRealtimeTopic={assessmentCreditRealtimeTopic}
+          >
+            {children}
+          </ProtectedShell>
+        </ProtectedWorkspaceQueryProvider>
       </div>
     </div>
   );

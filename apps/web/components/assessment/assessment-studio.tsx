@@ -20,6 +20,9 @@ import {
   type Locale,
 } from "@zootopia/shared-types";
 import {
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
   BrainCircuit,
   Check,
   CheckCircle2,
@@ -45,14 +48,14 @@ import { useEffect, useRef, useState } from "react";
 
 import type { AppMessages } from "@/lib/messages";
 import {
-  ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT,
-  dispatchAssessmentCreditRefresh,
-  type AssessmentCreditSummaryUpdatedDetail,
-} from "@/lib/assessment-credit-events";
-import {
   buildAssessmentCreditClientSummarySnapshot,
   logAssessmentCreditClientDiagnostic,
 } from "@/lib/assessment-credit-diagnostics";
+import {
+  invalidateAssessmentCreditSummaryQuery,
+  setAssessmentCreditSummaryQueryData,
+  useAssessmentCreditSummaryQuery,
+} from "@/lib/assessment-credit-query";
 import {
   createOperationalUiError,
   getOperationalSupportNotes,
@@ -736,7 +739,12 @@ export function AssessmentStudio({
   initialCreditSummary,
 }: AssessmentStudioProps) {
   const [generations, setGenerations] = useState(initialGenerations);
-  const [creditSummary, setCreditSummary] = useState(initialCreditSummary);
+  const queryClient = useQueryClient();
+  const creditSummaryQuery = useAssessmentCreditSummaryQuery({
+    source: "assessment-studio",
+    initialData: initialCreditSummary,
+  });
+  const creditSummary = creditSummaryQuery.data ?? initialCreditSummary;
   const [request, setRequest] = useState<AssessmentRequest>(() =>
     createInitialRequest(locale, defaultModelId, initialActiveDocumentId),
   );
@@ -765,57 +773,27 @@ export function AssessmentStudio({
   }, [initialGenerations]);
 
   useEffect(() => {
-    setCreditSummary(initialCreditSummary);
-  }, [initialCreditSummary]);
-
-  useEffect(() => {
     /* Assessment Studio can mount from a prefetched route snapshot that predates an external
-       admin credit mutation. Trigger the shared shell refresh lane immediately on mount so
-       exhausted-state controls re-evaluate against current server credit truth. */
-    dispatchAssessmentCreditRefresh();
-  }, []);
+       admin credit mutation. Invalidate the shared query key once on mount so both the studio and
+       protected header reconcile to fresh server truth without a custom browser event bridge. */
+    void invalidateAssessmentCreditSummaryQuery(queryClient, {
+      source: "assessment-studio",
+      reason: "studio-mounted",
+    });
+  }, [queryClient]);
 
   useEffect(() => {
-    /* Assessment Studio renders its own credit card from local state, but external admin grants
-       are first observed by the protected shell's shared refresh lane. Listen for that shell
-       broadcast here so the studio balance updates on the same owner session without a full reload. */
-    const handleCreditSummaryUpdated = (event: Event) => {
-      const detail = (
-        event as CustomEvent<AssessmentCreditSummaryUpdatedDetail>
-      ).detail;
-      const nextSummary = detail?.credits;
+    if (!creditSummaryQuery.error) {
+      return;
+    }
 
-      if (!nextSummary) {
-        return;
-      }
-
-      logAssessmentCreditClientDiagnostic({
-        event: "assessment_studio_summary_update_received",
-        details: {
-          source: detail?.source ?? null,
-          requestId: detail?.requestId ?? null,
-          eventId: detail?.eventId ?? null,
-          emittedAt: detail?.emittedAt ?? null,
-          receivedAt: detail?.receivedAt ?? null,
-          remainingCount: nextSummary.remainingCount,
-          assessmentAccess: nextSummary.assessmentAccess,
-        },
-      });
-      setCreditSummary(nextSummary);
-    };
-
-    window.addEventListener(
-      ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT,
-      handleCreditSummaryUpdated,
-    );
-
-    return () => {
-      window.removeEventListener(
-        ASSESSMENT_CREDIT_SUMMARY_UPDATED_EVENT,
-        handleCreditSummaryUpdated,
-      );
-    };
-  }, []);
+    logAssessmentCreditClientDiagnostic({
+      event: "assessment_studio_summary_query_failed",
+      details: {
+        errorCode: creditSummaryQuery.error.code ?? null,
+      },
+    });
+  }, [creditSummaryQuery.error]);
 
   useEffect(() => {
     setPromptAccess(initialPromptAccess);
@@ -1279,19 +1257,28 @@ export function AssessmentStudio({
         }
 
         if (!payload.ok && payload.error.code === "ASSESSMENT_DAILY_CREDITS_EXHAUSTED") {
-          setCreditSummary((current) =>
-            current.applies
-              ? {
-                  ...current,
-                  dailyRemainingCount: 0,
-                  extraCreditsAvailable: 0,
-                  totalRemainingCount: 0,
-                  remainingCount: 0,
-                  usedCount: current.dailyLimit,
-                }
-              : current,
-          );
-          dispatchAssessmentCreditRefresh();
+          if (creditSummary.applies) {
+            setAssessmentCreditSummaryQueryData(queryClient, {
+              source: "assessment-studio",
+              reason: "submit-daily-exhausted",
+              summary: {
+                ...creditSummary,
+                dailyRemainingCount: 0,
+                extraCreditsAvailable: 0,
+                totalRemainingCount: 0,
+                remainingCount: 0,
+                usedCount: creditSummary.dailyLimit,
+              },
+            });
+          }
+
+          void invalidateAssessmentCreditSummaryQuery(queryClient, {
+            source: "assessment-studio",
+            reason: "submit-daily-exhausted",
+            details: {
+              errorCode: payload.error.code,
+            },
+          });
         }
 
         if (
@@ -1301,7 +1288,13 @@ export function AssessmentStudio({
             || payload.error.code === "ASSESSMENT_FINALIZATION_FAILED"
           )
         ) {
-          dispatchAssessmentCreditRefresh();
+          void invalidateAssessmentCreditSummaryQuery(queryClient, {
+            source: "assessment-studio",
+            reason: "submit-failed-authority-state",
+            details: {
+              errorCode: payload.error.code,
+            },
+          });
         }
 
         throw createAssessmentRequestError(
@@ -1312,8 +1305,14 @@ export function AssessmentStudio({
 
       setGenerations((current) => replaceGeneration(current, payload.data.generation));
       setLastCreatedGeneration(payload.data.generation);
-      setCreditSummary(payload.data.credits);
-      dispatchAssessmentCreditRefresh();
+      setAssessmentCreditSummaryQueryData(queryClient, {
+        source: "assessment-studio",
+        reason: "submit-succeeded",
+        summary: payload.data.credits,
+        details: {
+          generationId: payload.data.generation.id,
+        },
+      });
       setNotice(messages.assessmentRequestSaved);
       submitAttemptRef.current = null;
       clearStoredAssessmentSubmitAttempt();
@@ -1401,7 +1400,7 @@ export function AssessmentStudio({
                     <div className="min-w-0 w-full space-y-1">
                       {/* Keep this legal-rights sentence on a single line whenever physically possible.
                           Clamp-based sizing and tighter tracking preserve readability while reducing wrap pressure. */}
-                      <p className="max-w-full whitespace-nowrap text-[clamp(0.5rem,1.08vw,0.74rem)] font-semibold leading-tight tracking-[-0.02em] text-foreground">
+                      <p className="max-w-full whitespace-nowrap text-[clamp(0.5rem,1.08vw,0.68rem)] font-semibold leading-tight tracking-[-0.02em] text-foreground">
                         {ASSESSMENT_MODEL_VISIBILITY_COPY.rightsLine}
                       </p>
                       <p className="flex max-w-full items-center gap-1 text-[clamp(0.55rem,0.9vw,0.64rem)] leading-tight text-foreground-muted/82">

@@ -552,7 +552,7 @@ async function runAdminCreditMutationFromDetailPage(input: {
        exact owner UID. Keep the detail page on the same server truth object so header/studio
        listeners never receive guessed balances or cross-user payloads. */
     try {
-      const liveUpdate = publishAssessmentCreditLiveUpdate({
+      const liveUpdate = await publishAssessmentCreditLiveUpdate({
         ownerUid: input.targetUid,
         credits: state.credits,
         reason: `admin-user-detail:${input.mutation.action}`,
@@ -563,8 +563,8 @@ async function runAdminCreditMutationFromDetailPage(input: {
         targetUid: input.targetUid,
         actingAdminUid: admin.uid,
         action: input.mutation.action,
-        listenerCount: liveUpdate.listenerCount,
-        deliveredCount: liveUpdate.deliveredCount,
+        broadcastStatus: liveUpdate.broadcast.status,
+        broadcastErrorCode: liveUpdate.broadcast.errorCode,
         remainingCount: state.credits.remainingCount,
       });
     } catch (error) {

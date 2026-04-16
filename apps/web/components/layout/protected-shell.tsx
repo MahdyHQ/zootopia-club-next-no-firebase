@@ -3,27 +3,35 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { CSSProperties } from "react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Search, Bell, Sparkles, CheckCircle2, ChevronLeft, ChevronRight, ArrowUp, HandCoins, WalletCards, Plus, X } from "lucide-react";
 import type {
-  ApiResult,
   AssessmentDailyCreditsSummary,
   Locale,
   SessionUser,
   ThemeMode,
 } from "@zootopia/shared-types";
-import {
-  ASSESSMENT_CREDIT_REFRESH_EVENT,
-  dispatchAssessmentCreditSummaryUpdated,
-} from "@/lib/assessment-credit-events";
 import { logAssessmentCreditClientDiagnostic } from "@/lib/assessment-credit-diagnostics";
+import {
+  invalidateAssessmentCreditSummaryQuery,
+  useAssessmentCreditSummaryQuery,
+} from "@/lib/assessment-credit-query";
+import {
+  ASSESSMENT_CREDIT_REALTIME_EVENT,
+  type AssessmentCreditRealtimePayload,
+} from "@/lib/assessment-credit-realtime";
 import {
   resolveAvatarFallbackInitial,
   resolveRoleGenderAvatarSrc,
 } from "@/lib/avatar";
 import type { AppMessages } from "@/lib/messages";
 import { getSiteContent } from "@/lib/site-content";
+import {
+  getSupabaseClient,
+  isSupabaseWebConfigured,
+} from "@/lib/supabase/client";
 import { IdentityAvatar } from "@/components/ui/identity-avatar";
 import { ProtectedSignatureSeal } from "./protected-signature-seal";
 import { ShellNav } from "./shell-nav";
@@ -34,6 +42,7 @@ type ProtectedShellProps = {
   user: SessionUser;
   locale: Locale;
   themeMode: ThemeMode;
+  assessmentCreditRealtimeTopic: string | null;
 };
 
 function areCreditSummariesEqual(
@@ -76,25 +85,29 @@ export function ProtectedShell({
   user,
   locale,
   themeMode,
+  assessmentCreditRealtimeTopic,
 }: ProtectedShellProps) {
   const CREDIT_SUMMARY_RECONCILE_INTERVAL_MS = 5_000;
-  const CREDIT_STREAM_STALE_AFTER_MS = 25_000;
-  const ASSESSMENT_CREDIT_REQUEST_ID_HEADER =
-    "x-zootopia-assessment-credit-request-id";
+  const CREDIT_SUMMARY_HEALTHY_REVALIDATE_INTERVAL_MS = 60_000;
+  const queryClient = useQueryClient();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isCreditHelpOpen, setIsCreditHelpOpen] = useState(false);
-  const [creditSummary, setCreditSummary] =
-    useState<AssessmentDailyCreditsSummary | null>(null);
-  const [isCreditStreamHealthy, setIsCreditStreamHealthy] = useState(false);
+  const [isCreditRealtimeHealthy, setIsCreditRealtimeHealthy] = useState(false);
   const mainScrollRef = useRef<HTMLElement | null>(null);
-  const creditSummaryRequestRef = useRef<Promise<void> | null>(null);
-  const creditSummaryRef = useRef<AssessmentDailyCreditsSummary | null>(null);
-  const lastCreditStreamSignalAtRef = useRef(0);
   const creditHelpTriggerRef = useRef<HTMLButtonElement | null>(null);
   const creditHelpPanelRef = useRef<HTMLDivElement | null>(null);
+  const lastAppliedCreditSummaryRef =
+    useRef<AssessmentDailyCreditsSummary | null>(null);
   const pathname = usePathname();
+  const creditSummaryQuery = useAssessmentCreditSummaryQuery({
+    source: "protected-shell",
+    refetchIntervalMs: isCreditRealtimeHealthy
+      ? CREDIT_SUMMARY_HEALTHY_REVALIDATE_INTERVAL_MS
+      : CREDIT_SUMMARY_RECONCILE_INTERVAL_MS,
+  });
+  const creditSummary = creditSummaryQuery.data ?? null;
   const siteContent = getSiteContent(locale);
   const headerAvatarSrc = resolveRoleGenderAvatarSrc(user);
   const headerAvatarInitial = resolveAvatarFallbackInitial(user);
@@ -117,97 +130,18 @@ export function ProtectedShell({
     );
   });
 
-  /* The protected shell is the single shared owner of visible credit summary state for protected
-     pages. Keep all incoming fetch and SSE updates funneled through this one deduped handler so
-     header chrome and downstream Assessment Studio listeners stay aligned to the same server truth. */
-  const applyCreditSummary = useEffectEvent(
-    (
-      nextSummary: AssessmentDailyCreditsSummary,
-      meta: {
-        source: "fetch" | "sse";
-        requestId?: string | null;
-        eventId?: string | null;
-        emittedAt?: string | null;
-      },
-    ) => {
-      if (areCreditSummariesEqual(creditSummaryRef.current, nextSummary)) {
-        return;
-      }
-
-      creditSummaryRef.current = nextSummary;
-      setCreditSummary(nextSummary);
-      dispatchAssessmentCreditSummaryUpdated({
-        credits: nextSummary,
-        source: meta.source,
-        requestId: meta.requestId ?? null,
-        eventId: meta.eventId ?? null,
-        emittedAt: meta.emittedAt ?? null,
-      });
-      logAssessmentCreditClientDiagnostic({
-        event: "protected_shell_summary_applied",
-        details: {
-          source: meta.source,
-          path: pathname,
-          requestId: meta.requestId ?? null,
-          eventId: meta.eventId ?? null,
-          remainingCount: nextSummary.remainingCount,
-          assessmentAccess: nextSummary.assessmentAccess,
-        },
-      });
-    },
-  );
-
-  const refreshCreditSummary = useEffectEvent(async () => {
-    /* The protected shell receives refresh triggers from focus, visibility, interval, and
-       assessment-route events. Coalescing keeps those signals from fan-outing into duplicate
-       credit requests against the same owner session. */
-    if (creditSummaryRequestRef.current) {
-      await creditSummaryRequestRef.current;
-      return;
-    }
-
-    const requestPromise = (async () => {
+  /* ProtectedShell no longer keeps a private credit state copy. All refresh triggers invalidate
+     the shared query key so the header and Assessment Studio consume the same cached server
+     truth object regardless of which surface initiated the refresh. */
+  const requestCreditSummaryRefetch = useEffectEvent(
+    async (reason: string, details?: Record<string, unknown>) => {
       try {
-        logAssessmentCreditClientDiagnostic({
-          event: "protected_shell_refresh_started",
+        await invalidateAssessmentCreditSummaryQuery(queryClient, {
+          source: "protected-shell",
+          reason,
           details: {
             path: pathname,
-          },
-        });
-
-        const response = await fetch("/api/assessment/credits", {
-          method: "GET",
-          cache: "no-store",
-        });
-        const requestId =
-          response.headers.get(ASSESSMENT_CREDIT_REQUEST_ID_HEADER) ?? null;
-        const payload = (await response.json()) as ApiResult<{
-          credits: AssessmentDailyCreditsSummary;
-        }>;
-        if (!response.ok || !payload.ok) {
-          logAssessmentCreditClientDiagnostic({
-            event: "protected_shell_refresh_failed",
-            details: {
-              path: pathname,
-              requestId,
-              status: response.status,
-              errorCode: payload.ok ? null : payload.error.code,
-            },
-          });
-          return;
-        }
-
-        applyCreditSummary(payload.data.credits, {
-          source: "fetch",
-          requestId,
-        });
-        logAssessmentCreditClientDiagnostic({
-          event: "protected_shell_refresh_result",
-          details: {
-            path: pathname,
-            requestId,
-            remainingCount: payload.data.credits.remainingCount,
-            assessmentAccess: payload.data.credits.assessmentAccess,
+            ...(details ?? {}),
           },
         });
       } catch {
@@ -215,26 +149,103 @@ export function ProtectedShell({
           event: "protected_shell_refresh_failed",
           details: {
             path: pathname,
-            failureKind: "network_or_parse",
+            reason,
+            failureKind: "query_invalidation_failed",
           },
         });
-        // Keep the header chip resilient: transient network failures should not break shell UI.
       }
-    })();
-
-    creditSummaryRequestRef.current = requestPromise;
-    try {
-      await requestPromise;
-    } finally {
-      if (creditSummaryRequestRef.current === requestPromise) {
-        creditSummaryRequestRef.current = null;
-      }
-    }
-  });
+    },
+  );
 
   useEffect(() => {
-    creditSummaryRef.current = creditSummary;
-  }, [creditSummary]);
+    if (!creditSummary) {
+      return;
+    }
+
+    if (areCreditSummariesEqual(lastAppliedCreditSummaryRef.current, creditSummary)) {
+      return;
+    }
+
+    lastAppliedCreditSummaryRef.current = creditSummary;
+    logAssessmentCreditClientDiagnostic({
+      event: "protected_shell_summary_applied",
+      details: {
+        source: "query-cache",
+        path: pathname,
+        remainingCount: creditSummary.remainingCount,
+        assessmentAccess: creditSummary.assessmentAccess,
+      },
+    });
+  }, [creditSummary, pathname]);
+
+  useEffect(() => {
+    if (!creditSummaryQuery.error) {
+      return;
+    }
+
+    logAssessmentCreditClientDiagnostic({
+      event: "protected_shell_summary_query_failed",
+      details: {
+        path: pathname,
+        errorCode: creditSummaryQuery.error.code ?? null,
+      },
+    });
+  }, [creditSummaryQuery.error, pathname]);
+
+  const handleCreditRealtimeMessage = useEffectEvent(
+    (payload: AssessmentCreditRealtimePayload | null | undefined) => {
+      if (!payload) {
+        logAssessmentCreditClientDiagnostic({
+          event: "protected_shell_realtime_message_ignored",
+          details: {
+            path: pathname,
+            reason: "missing_payload",
+          },
+        });
+        return;
+      }
+
+      setIsCreditRealtimeHealthy(true);
+      logAssessmentCreditClientDiagnostic({
+        event: "protected_shell_realtime_message_received",
+        details: {
+          path: pathname,
+          eventId: payload.eventId,
+          emittedAt: payload.emittedAt,
+          traceId: payload.traceId ?? null,
+        },
+      });
+      /* Provider-backed realtime is an invalidation lane only. Re-fetching `/api/assessment/credits`
+         here keeps the header and Assessment Studio pinned to the same server-owned summary path
+         even if broadcasts arrive duplicated, out-of-order, or from a legacy client. */
+      void requestCreditSummaryRefetch("realtime-broadcast", {
+        eventId: payload.eventId,
+        emittedAt: payload.emittedAt,
+        traceId: payload.traceId ?? null,
+      });
+    },
+  );
+
+  const handleCreditRealtimeStatus = useEffectEvent((status: string) => {
+    const normalizedStatus = String(status ?? "").trim().toUpperCase();
+    const isHealthyStatus =
+      normalizedStatus === "SUBSCRIBED" || normalizedStatus === "JOINED";
+
+    setIsCreditRealtimeHealthy(isHealthyStatus);
+    logAssessmentCreditClientDiagnostic({
+      event: "protected_shell_realtime_status_changed",
+      details: {
+        path: pathname,
+        status: normalizedStatus || "UNKNOWN",
+      },
+    });
+
+    if (isHealthyStatus) {
+      void requestCreditSummaryRefetch("realtime-status-healthy", {
+        status: normalizedStatus,
+      });
+    }
+  });
 
   useEffect(() => {
     const scrollContainer = mainScrollRef.current;
@@ -257,172 +268,72 @@ export function ProtectedShell({
   }, []);
 
   useEffect(() => {
-    const handleRefreshCredits = () => {
-      void refreshCreditSummary();
+    /* Provider-backed realtime is the primary near-real-time lane for protected credit chrome.
+       Focus and visibility still trigger query invalidation so tabs recover quickly after sleep,
+       network blips, or auth-refresh windows without reviving the old custom browser event bridge. */
+    const handleWindowFocus = () => {
+      void requestCreditSummaryRefetch("window-focus");
     };
 
-    /* SSE is the primary near-real-time lane for protected credit chrome. Focus/visibility and
-       the existing interval remain as fallback when the stream is unsupported or reconnecting, so
-       server-truth balance still heals without trusting stale client state. */
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void refreshCreditSummary();
+        void requestCreditSummaryRefetch("visibility-visible");
       }
     };
 
-    const intervalId = window.setInterval(() => {
-      // Skip background polling for hidden tabs; focus/visibility handlers resync on return.
-      if (document.visibilityState !== "visible") {
-        return;
-      }
-
-      const lastSignalAt = lastCreditStreamSignalAtRef.current;
-      const streamSignalAgeMs = lastSignalAt > 0 ? Date.now() - lastSignalAt : Number.POSITIVE_INFINITY;
-      const hasFreshStreamSignal =
-        isCreditStreamHealthy && streamSignalAgeMs < CREDIT_STREAM_STALE_AFTER_MS;
-
-      if (isCreditStreamHealthy && !hasFreshStreamSignal) {
-        setIsCreditStreamHealthy(false);
-        logAssessmentCreditClientDiagnostic({
-          event: "protected_shell_stream_marked_stale",
-          details: {
-            path: pathname,
-            streamSignalAgeMs,
-          },
-        });
-      }
-
-      if (hasFreshStreamSignal) {
-        return;
-      }
-
-      void refreshCreditSummary();
-    }, CREDIT_SUMMARY_RECONCILE_INTERVAL_MS);
-
-    void refreshCreditSummary();
-    window.addEventListener(ASSESSMENT_CREDIT_REFRESH_EVENT, handleRefreshCredits);
-    window.addEventListener("focus", handleRefreshCredits);
+    void requestCreditSummaryRefetch("shell-mounted");
+    window.addEventListener("focus", handleWindowFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener(
-        ASSESSMENT_CREDIT_REFRESH_EVENT,
-        handleRefreshCredits,
-      );
-      window.removeEventListener("focus", handleRefreshCredits);
+      window.removeEventListener("focus", handleWindowFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(intervalId);
     };
-  }, [isCreditStreamHealthy, pathname]);
+  }, [pathname]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.EventSource === "undefined") {
-      setIsCreditStreamHealthy(false);
-      lastCreditStreamSignalAtRef.current = 0;
+    if (
+      typeof window === "undefined"
+      || !assessmentCreditRealtimeTopic
+      || !isSupabaseWebConfigured()
+    ) {
       return;
     }
 
-    const creditStream = new window.EventSource("/api/assessment/credits/stream");
-
-    /* This same-origin SSE connection is scoped by the authenticated session on the server.
-       Keep the browser client read-only here and continue routing every payload through the
-       shell's shared summary handler so other protected surfaces only ever see server-resolved truth. */
-    const handleStreamSummary = (event: Event) => {
-      try {
-        const payload = JSON.parse(
-          (event as MessageEvent<string>).data,
-        ) as {
-          credits?: AssessmentDailyCreditsSummary;
-          emittedAt?: string;
-        };
-        if (!payload.credits) {
-          return;
-        }
-
-        lastCreditStreamSignalAtRef.current = Date.now();
-        setIsCreditStreamHealthy(true);
-        const eventId = (event as MessageEvent<string>).lastEventId || null;
-        logAssessmentCreditClientDiagnostic({
-          event: "protected_shell_stream_summary_received",
-          details: {
-            path: pathname,
-            eventId,
-            emittedAt: payload.emittedAt ?? null,
-            remainingCount: payload.credits.remainingCount,
-            assessmentAccess: payload.credits.assessmentAccess,
+    const supabaseClient = getSupabaseClient();
+    const creditRealtimeChannel = supabaseClient.channel(
+      assessmentCreditRealtimeTopic,
+      {
+        config: {
+          broadcast: {
+            self: false,
           },
-        });
-        applyCreditSummary(payload.credits, {
-          source: "sse",
-          eventId,
-          emittedAt: payload.emittedAt ?? null,
-        });
-      } catch {
-        // Leave fallback refresh active if the stream emits an unreadable payload.
-      }
-    };
-
-    /* Heartbeats stay intentionally visible to the client so the shell can distinguish
-       a genuinely fresh live stream from a socket that opened once but stopped delivering
-       actionable credit events. */
-    const handleStreamHeartbeat = (event: Event) => {
-      try {
-        const payload = JSON.parse(
-          (event as MessageEvent<string>).data,
-        ) as { emittedAt?: string };
-        lastCreditStreamSignalAtRef.current = Date.now();
-        setIsCreditStreamHealthy(true);
-        logAssessmentCreditClientDiagnostic({
-          event: "protected_shell_stream_heartbeat_received",
-          details: {
-            path: pathname,
-            eventId: (event as MessageEvent<string>).lastEventId || null,
-            emittedAt: payload.emittedAt ?? null,
-          },
-        });
-      } catch {
-        lastCreditStreamSignalAtRef.current = Date.now();
-        setIsCreditStreamHealthy(true);
-      }
-    };
-
-    const handleStreamOpen = () => {
-      lastCreditStreamSignalAtRef.current = Date.now();
-      setIsCreditStreamHealthy(true);
-      logAssessmentCreditClientDiagnostic({
-        event: "protected_shell_stream_opened",
-        details: {
-          path: pathname,
         },
-      });
-    };
+      },
+    );
 
-    const handleStreamError = () => {
-      setIsCreditStreamHealthy(false);
-      lastCreditStreamSignalAtRef.current = 0;
-      logAssessmentCreditClientDiagnostic({
-        event: "protected_shell_stream_error",
-        details: {
-          path: pathname,
-        },
-      });
-    };
+    /* This provider-backed channel replaces the same-instance SSE lane for credit delivery.
+       Keep the shell as the only browser subscriber and continue applying only server-resolved
+       summary payloads so protected chrome and Assessment Studio stay aligned to one truth source. */
+    creditRealtimeChannel.on(
+      "broadcast",
+      { event: ASSESSMENT_CREDIT_REALTIME_EVENT },
+      ({ payload }) => {
+        handleCreditRealtimeMessage(
+          payload as AssessmentCreditRealtimePayload | null | undefined,
+        );
+      },
+    );
 
-    creditStream.addEventListener("summary", handleStreamSummary);
-    creditStream.addEventListener("heartbeat", handleStreamHeartbeat);
-    creditStream.addEventListener("open", handleStreamOpen);
-    creditStream.addEventListener("error", handleStreamError);
+    creditRealtimeChannel.subscribe((status) => {
+      handleCreditRealtimeStatus(status);
+    });
 
     return () => {
-      setIsCreditStreamHealthy(false);
-      lastCreditStreamSignalAtRef.current = 0;
-      creditStream.removeEventListener("summary", handleStreamSummary);
-      creditStream.removeEventListener("heartbeat", handleStreamHeartbeat);
-      creditStream.removeEventListener("open", handleStreamOpen);
-      creditStream.removeEventListener("error", handleStreamError);
-      creditStream.close();
+      setIsCreditRealtimeHealthy(false);
+      void supabaseClient.removeChannel(creditRealtimeChannel);
     };
-  }, [pathname]);
+  }, [assessmentCreditRealtimeTopic]);
 
   useEffect(() => {
     if (!isCreditHelpOpen) {
@@ -466,12 +377,18 @@ export function ProtectedShell({
   useEffect(() => {
     /* Route transitions inside protected pages should not keep transient header
        popovers open; reset this local support surface on every pathname change. */
-    setIsCreditHelpOpen(false);
+    const closeHelpPopoverTimeoutId = window.setTimeout(() => {
+      setIsCreditHelpOpen(false);
+    }, 0);
 
     /* Protected pages can be entered from prefetched payloads that were captured before an
        external admin credit mutation. Force a fresh server summary on every protected-route
        transition so header and Assessment Studio reflect current backend credit truth quickly. */
-    void refreshCreditSummary();
+    void requestCreditSummaryRefetch("pathname-change");
+
+    return () => {
+      window.clearTimeout(closeHelpPopoverTimeoutId);
+    };
   }, [pathname]);
 
   const resolvedBalanceLabel = creditSummary?.isAdminExempt

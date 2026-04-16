@@ -1,184 +1,180 @@
 import "server-only";
 
 import type { AssessmentDailyCreditsSummary } from "@zootopia/shared-types";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 
+import {
+  ASSESSMENT_CREDIT_REALTIME_EVENT,
+  type AssessmentCreditRealtimePayload,
+} from "@/lib/assessment-credit-realtime";
 import {
   createAssessmentCreditTraceId,
   logAssessmentCreditDiagnostic,
 } from "@/lib/server/assessment-credit-diagnostics";
+import {
+  getSupabaseAdminClient,
+  hasSupabaseAdminRuntime,
+} from "@/lib/server/supabase-admin";
 
-type AssessmentCreditLiveUpdate = {
-  credits: AssessmentDailyCreditsSummary;
-  eventId: string;
-  emittedAt: string;
-  traceId: string | null;
-};
+const ASSESSMENT_CREDIT_REALTIME_TOPIC_PREFIX = "assessment-credit";
+const ASSESSMENT_CREDIT_REALTIME_TOPIC_VERSION = 1;
 
-type AssessmentCreditLiveListener = {
-  id: string;
-  emit: (update: AssessmentCreditLiveUpdate) => void;
-};
-
-type AssessmentCreditLiveRegistry = Map<string, Map<string, AssessmentCreditLiveListener>>;
-
-declare global {
-  var __ZOOTOPIA_ASSESSMENT_CREDIT_LIVE_REGISTRY__: AssessmentCreditLiveRegistry | undefined;
-}
-
-function getAssessmentCreditLiveRegistry() {
-  if (!globalThis.__ZOOTOPIA_ASSESSMENT_CREDIT_LIVE_REGISTRY__) {
-    globalThis.__ZOOTOPIA_ASSESSMENT_CREDIT_LIVE_REGISTRY__ = new Map();
+function readAssessmentCreditRealtimeSigningSecret() {
+  const authSecret = String(process.env.AUTH_SECRET ?? "").trim();
+  if (authSecret.length > 0) {
+    return authSecret;
   }
 
-  return globalThis.__ZOOTOPIA_ASSESSMENT_CREDIT_LIVE_REGISTRY__;
+  const nextAuthSecret = String(process.env.NEXTAUTH_SECRET ?? "").trim();
+  return nextAuthSecret.length > 0 ? nextAuthSecret : null;
 }
 
-/* This registry only bridges live SSE listeners that currently share the same Node.js instance.
-   It is intentionally best-effort: the stream route also performs periodic server-truth rechecks
-   so Vercel multi-instance traffic still converges without trusting process memory as authority. */
-export function subscribeAssessmentCreditLiveUpdates(input: {
-  ownerUid: string;
-  emit: (update: AssessmentCreditLiveUpdate) => void;
-}) {
-  const registry = getAssessmentCreditLiveRegistry();
-  const listenerId = randomUUID();
-  const listenersForOwner = registry.get(input.ownerUid) ?? new Map<string, AssessmentCreditLiveListener>();
+/* Realtime topics are derived from the authenticated owner UID on the server and signed with the
+   same secret family that protects Auth.js cookies. Future agents should preserve this server-only
+   derivation so clients never choose cross-user channel topics themselves. */
+export function getAssessmentCreditRealtimeTopic(ownerUid: string) {
+  const normalizedOwnerUid = String(ownerUid ?? "").trim();
+  if (!normalizedOwnerUid) {
+    return null;
+  }
 
-  listenersForOwner.set(listenerId, {
-    id: listenerId,
-    emit: input.emit,
-  });
-  registry.set(input.ownerUid, listenersForOwner);
+  const signingSecret = readAssessmentCreditRealtimeSigningSecret();
+  if (!signingSecret) {
+    return null;
+  }
 
-  return {
-    listenerCount: listenersForOwner.size,
-    unsubscribe: () => {
-      const activeListeners = registry.get(input.ownerUid);
-      if (!activeListeners) {
-        return;
-      }
+  const topicHash = createHmac("sha256", signingSecret)
+    .update(
+      `${ASSESSMENT_CREDIT_REALTIME_TOPIC_PREFIX}:v${ASSESSMENT_CREDIT_REALTIME_TOPIC_VERSION}:${normalizedOwnerUid}`,
+    )
+    .digest("base64url");
 
-      activeListeners.delete(listenerId);
-      if (activeListeners.size === 0) {
-        registry.delete(input.ownerUid);
-      }
-    },
-  };
+  return `${ASSESSMENT_CREDIT_REALTIME_TOPIC_PREFIX}:${topicHash}`;
 }
 
-/* SSE streams dedupe against a stable signature of the exact server-owned summary shape.
-   Keep this aligned with `/api/assessment/credits` so push delivery and pull refresh compare the
-   same authoritative fields instead of drifting on partial client-side heuristics. */
-export function createAssessmentCreditSummarySignature(
-  summary: AssessmentDailyCreditsSummary,
-) {
-  return JSON.stringify([
-    summary.applies,
-    summary.isAdminExempt,
-    summary.assessmentAccess,
-    summary.dayKey,
-    summary.dailyDefaultLimit,
-    summary.dailyLimit,
-    summary.dailyLimitSource,
-    summary.usedCount,
-    summary.dailyRemainingCount,
-    summary.manualCreditsAvailable,
-    summary.grantCreditsAvailable,
-    summary.extraCreditsAvailable,
-    summary.activeGrantCount,
-    summary.totalRemainingCount,
-    summary.remainingCount,
-    summary.resetsAt,
-  ]);
-}
-
-export function publishAssessmentCreditLiveUpdate(input: {
+export async function publishAssessmentCreditLiveUpdate(input: {
   ownerUid: string;
   credits: AssessmentDailyCreditsSummary;
   reason: string;
   traceId?: string | null;
 }) {
-  const listenersForOwner = getAssessmentCreditLiveRegistry().get(input.ownerUid);
   const traceId = input.traceId
     ? createAssessmentCreditTraceId(input.traceId)
     : null;
   const eventId = randomUUID();
   const emittedAt = new Date().toISOString();
-  const listenerCount = listenersForOwner?.size ?? 0;
+  const realtimeTopic = getAssessmentCreditRealtimeTopic(input.ownerUid);
+  const realtimePayload: AssessmentCreditRealtimePayload = {
+    credits: input.credits,
+    eventId,
+    emittedAt,
+    traceId: traceId ?? null,
+  };
 
-  logAssessmentCreditDiagnostic({
-    event: "assessment_credit_sse_publish_attempted",
-    traceId,
-    details: {
-      ownerUid: input.ownerUid,
-      reason: input.reason,
-      listenerCount,
-      summarySignature: createAssessmentCreditSummarySignature(input.credits),
-      remainingCount: input.credits.remainingCount,
-    },
-  });
+  let realtimeStatus: string | null = null;
+  let realtimeErrorCode: string | null = null;
 
-  if (!listenersForOwner || listenersForOwner.size === 0) {
-    return {
-      eventId,
-      emittedAt,
-      listenerCount,
-      deliveredCount: 0,
-    };
-  }
-
-  const failedListenerIds: string[] = [];
-  let deliveredCount = 0;
-
-  for (const listener of listenersForOwner.values()) {
-    try {
-      listener.emit({
-        credits: input.credits,
-        eventId,
-        emittedAt,
-        traceId,
-      });
-      deliveredCount += 1;
-    } catch (error) {
-      failedListenerIds.push(listener.id);
-      console.warn("[assessment-credit-live] failed to emit live update", {
+  /* Supabase Realtime becomes the cross-instance delivery backbone here. Keep the payload limited
+     to the server-owned credit summary plus opaque correlation identifiers so multi-tab delivery
+     works without exposing actor/target/admin metadata to normal-user clients. */
+  if (!realtimeTopic) {
+    realtimeStatus = "topic_unavailable";
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_realtime_publish_skipped",
+      level: "warn",
+      traceId,
+      details: {
         ownerUid: input.ownerUid,
         reason: input.reason,
-        error: error instanceof Error ? error.name : "UNKNOWN",
+        eventId,
+        emittedAt,
+        skipReason: realtimeStatus,
+      },
+    });
+  } else if (!hasSupabaseAdminRuntime()) {
+    realtimeStatus = "supabase_admin_runtime_missing";
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_realtime_publish_skipped",
+      level: "warn",
+      traceId,
+      details: {
+        ownerUid: input.ownerUid,
+        reason: input.reason,
+        eventId,
+        emittedAt,
+        skipReason: realtimeStatus,
+      },
+    });
+  } else {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_realtime_publish_attempted",
+      traceId,
+      details: {
+        ownerUid: input.ownerUid,
+        reason: input.reason,
+        eventId,
+        emittedAt,
+        remainingCount: input.credits.remainingCount,
+      },
+    });
+
+    const supabaseAdminClient = getSupabaseAdminClient();
+    const realtimeChannel = supabaseAdminClient.channel(realtimeTopic);
+
+    try {
+      const result = await realtimeChannel.send({
+        type: "broadcast",
+        event: ASSESSMENT_CREDIT_REALTIME_EVENT,
+        payload: realtimePayload,
       });
+      realtimeStatus = String(result ?? "unknown");
+    } catch (error) {
+      realtimeStatus = "error";
+      realtimeErrorCode =
+        typeof error === "object"
+        && error !== null
+        && "code" in error
+        && typeof (error as { code?: unknown }).code === "string"
+          ? ((error as { code?: string }).code ?? null)
+          : null;
+
+      logAssessmentCreditDiagnostic({
+        event: "assessment_credit_realtime_publish_failed",
+        level: "warn",
+        traceId,
+        details: {
+          ownerUid: input.ownerUid,
+          reason: input.reason,
+          eventId,
+          emittedAt,
+        },
+        error,
+      });
+    } finally {
+      void supabaseAdminClient.removeChannel(realtimeChannel);
     }
+
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_realtime_publish_result",
+      traceId,
+      details: {
+        ownerUid: input.ownerUid,
+        reason: input.reason,
+        eventId,
+        emittedAt,
+        status: realtimeStatus,
+        errorCode: realtimeErrorCode,
+        remainingCount: input.credits.remainingCount,
+      },
+    });
   }
-
-  if (failedListenerIds.length > 0) {
-    for (const listenerId of failedListenerIds) {
-      listenersForOwner.delete(listenerId);
-    }
-
-    if (listenersForOwner.size === 0) {
-      getAssessmentCreditLiveRegistry().delete(input.ownerUid);
-    }
-  }
-
-  logAssessmentCreditDiagnostic({
-    event: "assessment_credit_sse_publish_result",
-    traceId,
-    details: {
-      ownerUid: input.ownerUid,
-      reason: input.reason,
-      eventId,
-      emittedAt,
-      listenerCount,
-      deliveredCount,
-      failedListenerCount: failedListenerIds.length,
-      remainingCount: input.credits.remainingCount,
-    },
-  });
 
   return {
     eventId,
     emittedAt,
-    listenerCount,
-    deliveredCount,
+    broadcast: {
+      status: realtimeStatus,
+      errorCode: realtimeErrorCode,
+    },
   };
 }

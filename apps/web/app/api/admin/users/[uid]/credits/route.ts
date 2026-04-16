@@ -278,20 +278,21 @@ export async function PATCH(
       },
     });
 
-    let deliveredCount = 0;
+    let broadcastStatus: string | null = null;
+    let broadcastErrorCode: string | null = null;
 
     /* Broadcast only the repository-returned post-commit summary for the mutated owner UID.
        This route stays server-authoritative by reusing the exact effective summary model already
        returned to admins and `/api/assessment/credits`, rather than computing a client-side delta. */
     try {
-      const liveUpdate = publishAssessmentCreditLiveUpdate({
+      const liveUpdate = await publishAssessmentCreditLiveUpdate({
         ownerUid: uid,
         credits: state.credits,
         reason: `admin-api:${body.action}`,
         traceId: creditTraceId,
       });
-      const listenerCount = liveUpdate.listenerCount;
-      deliveredCount = liveUpdate.deliveredCount;
+      broadcastStatus = liveUpdate.broadcast.status;
+      broadcastErrorCode = liveUpdate.broadcast.errorCode;
       logAssessmentCreditDiagnostic({
         event: "assessment_credit_admin_api_publish_result",
         traceId: creditTraceId,
@@ -300,8 +301,8 @@ export async function PATCH(
           actorUid: admin.uid,
           targetUid: uid,
           action: body.action,
-          listenerCount,
-          deliveredCount,
+          broadcastStatus,
+          broadcastErrorCode,
           eventId: liveUpdate.eventId,
         },
       });
@@ -323,7 +324,8 @@ export async function PATCH(
         actorUid: admin.uid,
         targetUid: uid,
         action: body.action,
-        deliveredCount,
+        broadcastStatus,
+        broadcastErrorCode,
         remainingCount: state.credits.remainingCount,
       },
     });
@@ -334,7 +336,8 @@ export async function PATCH(
       actingAdminUid: admin.uid,
       routeHit: ADMIN_CREDITS_MUTATION_ROUTE,
       backendMutationResult: "success",
-      deliveredCount,
+      broadcastStatus,
+      broadcastErrorCode,
       remainingCount: state.credits.remainingCount,
     });
 

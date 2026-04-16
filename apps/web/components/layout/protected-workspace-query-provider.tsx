@@ -1,0 +1,33 @@
+"use client";
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+type ProtectedWorkspaceQueryProviderProps = {
+  children: ReactNode;
+};
+
+export function ProtectedWorkspaceQueryProvider({
+  children,
+}: ProtectedWorkspaceQueryProviderProps) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 15_000,
+            gcTime: 5 * 60_000,
+            retry: 1,
+            refetchOnWindowFocus: true,
+            refetchOnReconnect: true,
+          },
+        },
+      }),
+  );
+
+  /* This provider is scoped to protected pages so credit/header/assessment cache ownership stays
+     in one authenticated tree. Future agents should reuse this provider for protected shared state
+     instead of introducing parallel per-page query clients that can drift. */
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
