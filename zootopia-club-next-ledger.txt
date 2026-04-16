@@ -3,9 +3,9 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-16 (Dynamic assessment credit source-aware UX and truthful shared-balance presentation)
+Last Updated: 2026-04-16 (Admin credit workspace scroll-preserving action-state hardening)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
-Current Commit: 655c73d8bc5ee3fa481773a38bdccdd7329d7171
+Current Commit: c2bad35d88b3150a694d4fd49de8765b511cf67c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
 Runtime: Node.js >= 20.9.0
 
@@ -110,6 +110,12 @@ Key verified facts:
   summary for the exact target UID from both the admin detail-page server action
   flow and the admin PATCH route, without moving mutation authority out of the
   backend repository layer
+- The main Admin user-detail credit workspace no longer uses same-page
+  redirect/query-param flashes for add/subtract/set/grant/override submits;
+  it now returns section-local server-action feedback and performs a
+  scroll-preserving `router.refresh()` after successful commits, while smaller
+  credit/prompt toggle controls on the same page still use their existing
+  redirect-based flows
 - Admin credit mutation follow-up work (`appendAdminLog` and live publish) is
   now explicitly best-effort after the repository commit in both admin mutation
   lanes, so audit-log degradation can no longer falsely surface a committed
@@ -1491,6 +1497,99 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
+2026-04-16 — Admin credit workspace scroll-preserving action-state hardening
+
+Reason:
+- Fix the `/admin/users/[uid]` credit workspace so `Apply Credits` no longer
+  throws the operator back to the top of the page after a same-page mutation.
+- Keep credit success/error feedback inside the Credits & Usage section instead
+  of relying on route-level flash transport.
+- Preserve the current server-authoritative credit mutation lane, canonical
+  `/api/assessment/credits` read model, and Supabase Realtime + TanStack Query
+  synchronization architecture.
+
+Files changed:
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- `apps/web/components/admin/admin-credit-management-workspace.tsx`
+- `apps/web/lib/admin-credit-feedback.ts` (new)
+- `zootopia-club-next-ledger.txt`
+
+Root cause confirmed before editing:
+- `Apply Credits` was a native server-action form submit rendered inside the
+  client `AdminCreditManagementWorkspace`, but the submit path ended in the
+  page-level server action `runAdminCreditMutationFromDetailPage()`, which
+  always called `redirect()` back to `/admin/users/[uid]?credits_updated=...`
+  or `?error=...`.
+- That same-page redirect remounted the admin route and protected scroll
+  context, which is why the viewport jumped to the top and why feedback felt
+  page-global instead of section-local.
+- No competing cause was found in this flow: there was no anchor/hash
+  navigation, no client `router.push/replace`, no explicit `scrollTo`, and no
+  realtime/TanStack balance patch path causing the jump.
+
+Technical details:
+- Added `apps/web/lib/admin-credit-feedback.ts` as the shared touched-flow
+  source for admin credit workspace success/error copy and returned
+  `AdminCreditWorkspaceFeedbackState`.
+- Split the admin detail-page mutation lane into:
+  - `commitAdminCreditMutationFromDetailPage()` for the authoritative
+    repository mutation plus best-effort admin-log / live-publish follow-up
+  - `runAdminCreditMutationFromDetailPage()` for the smaller redirect-based
+    controls that still intentionally use query-param flash feedback
+- Rebuilt `runUnifiedCreditWorkspaceMutation()` to return structured
+  success/error state instead of redirecting, while preserving the same
+  backend-owned mutation authority and central error-code mapping.
+- Updated `AdminCreditManagementWorkspace` to use `useActionState()` and keep
+  pending, success, and error rendering inside the credit section itself.
+- On successful workspace submit, the client now clears the local draft inputs
+  and performs `router.refresh()` inside a transition so the page reloads the
+  latest server-rendered credit cards/history without triggering a route jump
+  or losing the admin's section context.
+- Smaller prompt/access/revoke flows on the same page were left on their
+  existing redirect/query-param delivery path to keep this change surgical.
+
+Impact assessment before editing:
+- The authoritative mutation path was already correct and had to remain:
+  admin detail page/API route -> repository mutation ->
+  best-effort admin log/live publish -> server-owned credit state.
+- Shared balance ownership was already correct and had to remain:
+  `/api/assessment/credits` -> shared TanStack Query key ->
+  Protected Shell + Assessment Studio.
+- The defect was UX transport, not credit ownership: same-page redirect flash
+  handling was the source of the jump, not Supabase Realtime or TanStack Query.
+
+Verification:
+- `npm run lint:web` ✅
+- `npm run typecheck:web` ✅
+- `npm run build:web` ✅
+- `npm run build:vercel` ✅
+- Static/code-path verification confirmed:
+  - the main credit workspace no longer redirects on success/error
+  - success/error messages for the workspace now render inside the workspace
+    section
+  - successful workspace mutations still execute the same
+    `commitAdminCreditMutationFromDetailPage()` repository-backed server path
+  - owner-scoped realtime publish remains best-effort and unchanged in the
+    committed mutation helper
+  - canonical balance read ownership remains `/api/assessment/credits` via the
+    shared assessment credit TanStack Query cache
+- Live protected-browser verification gap:
+  - no authenticated admin credentials/session were available in this task turn
+    for a real click-through of `/admin/users/[uid]`, so the no-scroll-jump and
+    in-section feedback behavior were verified by end-to-end code tracing plus
+    lint/type/build rather than a live signed-in browser submit
+
+Risks / constraints:
+- The main workspace now refreshes the current route after success to pull the
+  latest server-rendered cards/history. This preserves scroll/client state in
+  the intended Next.js flow, but it still depends on route-local server
+  rendering remaining stable; future agents should not reintroduce redirect
+  flashes or top-level remount triggers for this workspace.
+- Redirect-based credit/prompt controls on the same page still use query-param
+  feedback intentionally. If future UX work expands this hardening, those
+  smaller forms should be reviewed separately instead of being folded into a
+  larger rewrite.
+
 2026-04-16 — Dynamic assessment credit source-aware UX and truthful shared-balance presentation
 
 Reason:
@@ -1648,4 +1747,4 @@ Verification:
 
 Risks / constraints:
 - No authenticated browser session or live admin/user credentials were available in this task turn, so realtime delivery, wrong-user non-delivery, and multi-tab reconciliation were verified by code-path tracing plus lint/type/build rather than by live signed-in interaction.
-- `apps/web/lib/server/assessment-platform-errors.ts` is still an uncommitted worktree file in this checkout, so future agents should treat it as active local truth even though it is not yet committed to Git history.
+- During that earlier pass, `apps/web/lib/server/assessment-platform-errors.ts` was an uncommitted worktree file in the checkout. Future agents should re-check `git status` for current truth instead of relying on this historical note.

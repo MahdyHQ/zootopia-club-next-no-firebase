@@ -26,6 +26,11 @@ import { notFound, redirect } from "next/navigation";
 import { AdminCreditManagementWorkspace } from "@/components/admin/admin-credit-management-workspace";
 import { Button } from "@/components/ui/button";
 import {
+  getAdminCreditMutationErrorMessage,
+  getAdminCreditMutationSuccessMessage,
+  type AdminCreditWorkspaceFeedbackState,
+} from "@/lib/admin-credit-feedback";
+import {
   createAssessmentCreditTraceId,
   logAssessmentCreditDiagnostic,
 } from "@/lib/server/assessment-credit-diagnostics";
@@ -425,7 +430,7 @@ function formatAdminCreditMutationAction(action: AdminAssessmentCreditMutationIn
   }
 }
 
-async function runAdminCreditMutationFromDetailPage(input: {
+async function commitAdminCreditMutationFromDetailPage(input: {
   targetUid: string;
   mutation: AdminAssessmentCreditMutationInput;
 }) {
@@ -453,25 +458,33 @@ async function runAdminCreditMutationFromDetailPage(input: {
     },
   });
 
-  /* Credit mutations must never crash the admin route on transient lookup failures.
-     Keep this pre-mutation owner read fail-closed and redirect-based so operators get
-     an explicit error state instead of the global application error boundary. */
+  /* Credit mutations must never crash the admin detail experience on transient lookup failures.
+     Keep this pre-mutation owner read fail-closed so both redirect-based controls and the
+     section-local workspace can surface explicit operator feedback instead of the global
+     application error boundary. */
   try {
     targetUser = await getUserByUid(input.targetUid);
-  } catch {
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: "credits_update_failed",
-      }),
-    );
+  } catch (error) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_credit_admin_detail_target_lookup_failed",
+      level: "error",
+      traceId: creditTraceId,
+      details: {
+        route: "/admin/users/[uid]",
+        actorUid: admin.uid,
+        actorEmail: admin.email ?? null,
+        targetUid: input.targetUid,
+        action: input.mutation.action,
+      },
+      error,
+    });
+    throw error;
   }
 
   if (!targetUser) {
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: "credits_user_not_found",
-      }),
-    );
+    throw Object.assign(new Error("USER_NOT_FOUND"), {
+      code: "USER_NOT_FOUND",
+    });
   }
 
   logAssessmentCreditDiagnostic({
@@ -514,11 +527,7 @@ async function runAdminCreditMutationFromDetailPage(input: {
       },
       error,
     });
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: mapCreditMutationErrorToQueryCode(error),
-      }),
-    );
+    throw error;
   }
 
   let adminLogStatus = "succeeded";
@@ -660,6 +669,23 @@ async function runAdminCreditMutationFromDetailPage(input: {
       remainingCount: state.credits.remainingCount,
     },
   });
+
+  return state;
+}
+
+async function runAdminCreditMutationFromDetailPage(input: {
+  targetUid: string;
+  mutation: AdminAssessmentCreditMutationInput;
+}) {
+  try {
+    await commitAdminCreditMutationFromDetailPage(input);
+  } catch (error) {
+    redirect(
+      buildAdminUserDetailPath(input.targetUid, {
+        error: mapCreditMutationErrorToQueryCode(error),
+      }),
+    );
+  }
 
   redirect(
     buildAdminUserDetailPath(input.targetUid, {
@@ -940,16 +966,6 @@ export default async function AdminUserDetailPage({
   const creditsUpdatedAction = getFirstSearchParamValue(resolvedSearchParams.credits_updated).trim();
   const promptAccessUpdated = getFirstSearchParamValue(resolvedSearchParams.prompt_access_updated).trim();
   const storageCleaned = getFirstSearchParamValue(resolvedSearchParams.storage_cleaned) === "true";
-  const creditMutationSuccessMessages: Record<string, string> = {
-    set_access: "Assessment access was updated successfully.",
-    set_daily_override: "Daily credit override was saved successfully.",
-    clear_daily_override: "Daily credit override was cleared successfully.",
-    add_manual_credits: "Manual credits were added successfully.",
-    subtract_manual_credits: "Manual credits were deducted successfully.",
-    set_manual_credits: "Manual credits were set successfully.",
-    grant_credits: "Credit grant was created successfully.",
-    revoke_grant: "Credit grant was revoked successfully.",
-  };
   const promptMutationSuccessMessages: Record<string, string> = {
     enabled: "Assessment prompt entitlement is now enabled for this user.",
     disabled: "Assessment prompt entitlement is now disabled for this user.",
@@ -977,27 +993,23 @@ export default async function AdminUserDetailPage({
     prompt_update_failed: "Unable to update prompt entitlement right now. Try again shortly.",
   };
   const creditMutationSuccess = creditsUpdatedAction
-    ? creditMutationSuccessMessages[creditsUpdatedAction] ?? "Assessment credits updated successfully."
+    ? getAdminCreditMutationSuccessMessage(creditsUpdatedAction)
     : null;
   const promptMutationSuccess = promptAccessUpdated
     ? promptMutationSuccessMessages[promptAccessUpdated] ?? "Assessment prompt entitlement updated successfully."
     : null;
-  const feedbackError = errorCode ? (errorMessages[errorCode] ?? "The requested admin action failed.") : null;
+  const creditFeedbackError = getAdminCreditMutationErrorMessage(errorCode);
+  const feedbackError = errorCode
+    ? (
+        creditFeedbackError
+        ?? errorMessages[errorCode]
+        ?? "The requested admin action failed."
+      )
+    : null;
 
   /* Keep redirected action feedback inside the owning section so operators can immediately
      correlate success/failure with the controls they just used, without scanning the full page. */
-  const creditFeedbackCodes = new Set([
-    "credits_user_not_found",
-    "credits_self_mutation_forbidden",
-    "credits_amount_invalid",
-    "credits_daily_override_invalid",
-    "credits_grant_expiry_invalid",
-    "credits_grant_id_required",
-    "credits_grant_not_found",
-    "credits_grant_owner_mismatch",
-    "credits_grant_already_revoked",
-    "credits_invalid_request",
-    "credits_update_failed",
+  const creditSectionRedirectFeedbackCodes = new Set([
     "prompt_user_not_found",
     "prompt_self_mutation_forbidden",
     "prompt_invalid_request",
@@ -1011,7 +1023,8 @@ export default async function AdminUserDetailPage({
     "storage_cleanup_failed",
   ]);
   const creditSectionFeedbackError =
-    errorCode && creditFeedbackCodes.has(errorCode) ? feedbackError : null;
+    creditFeedbackError
+    ?? (errorCode && creditSectionRedirectFeedbackCodes.has(errorCode) ? feedbackError : null);
   const adminControlsFeedbackError =
     errorCode && adminControlsFeedbackCodes.has(errorCode) ? feedbackError : null;
   const globalFeedbackError =
@@ -1054,168 +1067,185 @@ export default async function AdminUserDetailPage({
     2,
   );
 
-  async function runUnifiedCreditWorkspaceMutation(formData: FormData) {
+  async function runUnifiedCreditWorkspaceMutation(
+    _previousState: AdminCreditWorkspaceFeedbackState,
+    formData: FormData,
+  ): Promise<AdminCreditWorkspaceFeedbackState> {
     "use server";
+
+    const buildWorkspaceFeedbackState = (
+      status: AdminCreditWorkspaceFeedbackState["status"],
+      input: {
+        action?: AdminAssessmentCreditMutationInput["action"] | null;
+        code?: string | null;
+        message?: string | null;
+      } = {},
+    ): AdminCreditWorkspaceFeedbackState => ({
+      status,
+      action: input.action ?? null,
+      code: input.code ?? null,
+      message: input.message ?? null,
+      feedbackId: createAssessmentCreditTraceId(),
+    });
 
     const targetUidFromForm = String(formData.get("targetUid") || "").trim();
     if (!targetUidFromForm || targetUidFromForm !== targetUid) {
-      redirect(
-        buildAdminUserDetailPath(targetUid, {
-          error: "credits_invalid_request",
-        }),
-      );
+      return buildWorkspaceFeedbackState("error", {
+        code: "credits_invalid_request",
+        message: getAdminCreditMutationErrorMessage("credits_invalid_request"),
+      });
     }
 
     if (targetUidFromForm === adminUser.uid) {
-      redirect(
-        buildAdminUserDetailPath(targetUid, {
-          error: "credits_self_mutation_forbidden",
-        }),
-      );
+      return buildWorkspaceFeedbackState("error", {
+        code: "credits_self_mutation_forbidden",
+        message: getAdminCreditMutationErrorMessage("credits_self_mutation_forbidden"),
+      });
     }
 
     const workspaceAction = String(formData.get("workspaceAction") || "").trim();
     const reason = parseOptionalMutationText(formData.get("reason"));
+    let mutation: AdminAssessmentCreditMutationInput | null = null;
 
     switch (workspaceAction) {
       case "add": {
         const amount = parsePositiveIntegerFromForm(formData.get("amount"));
         if (!amount) {
-          redirect(
-            buildAdminUserDetailPath(targetUid, {
-              error: "credits_amount_invalid",
-            }),
-          );
+          return buildWorkspaceFeedbackState("error", {
+            code: "credits_amount_invalid",
+            message: getAdminCreditMutationErrorMessage("credits_amount_invalid"),
+          });
         }
 
-        await runAdminCreditMutationFromDetailPage({
-          targetUid: targetUidFromForm,
-          mutation: {
-            action: "add_manual_credits",
-            amount,
-            reason,
-          },
-        });
-        return;
+        mutation = {
+          action: "add_manual_credits",
+          amount,
+          reason,
+        };
+        break;
       }
 
       case "subtract": {
         const amount = parsePositiveIntegerFromForm(formData.get("amount"));
         if (!amount) {
-          redirect(
-            buildAdminUserDetailPath(targetUid, {
-              error: "credits_amount_invalid",
-            }),
-          );
+          return buildWorkspaceFeedbackState("error", {
+            code: "credits_amount_invalid",
+            message: getAdminCreditMutationErrorMessage("credits_amount_invalid"),
+          });
         }
 
-        await runAdminCreditMutationFromDetailPage({
-          targetUid: targetUidFromForm,
-          mutation: {
-            action: "subtract_manual_credits",
-            amount,
-            reason,
-          },
-        });
-        return;
+        mutation = {
+          action: "subtract_manual_credits",
+          amount,
+          reason,
+        };
+        break;
       }
 
       case "set": {
         const amount = parseNonNegativeIntegerFromForm(formData.get("amount"));
         if (amount === null) {
-          redirect(
-            buildAdminUserDetailPath(targetUid, {
-              error: "credits_amount_invalid",
-            }),
-          );
+          return buildWorkspaceFeedbackState("error", {
+            code: "credits_amount_invalid",
+            message: getAdminCreditMutationErrorMessage("credits_amount_invalid"),
+          });
         }
 
-        await runAdminCreditMutationFromDetailPage({
-          targetUid: targetUidFromForm,
-          mutation: {
-            action: "set_manual_credits",
-            amount,
-            reason,
-          },
-        });
-        return;
+        mutation = {
+          action: "set_manual_credits",
+          amount,
+          reason,
+        };
+        break;
       }
 
       case "grant": {
         const amount = parsePositiveIntegerFromForm(formData.get("amount"));
         if (!amount) {
-          redirect(
-            buildAdminUserDetailPath(targetUid, {
-              error: "credits_amount_invalid",
-            }),
-          );
+          return buildWorkspaceFeedbackState("error", {
+            code: "credits_amount_invalid",
+            message: getAdminCreditMutationErrorMessage("credits_amount_invalid"),
+          });
         }
 
         const parsedExpiry = parseOptionalMutationExpiry(formData.get("expiresAt"));
         if (parsedExpiry === "INVALID") {
-          redirect(
-            buildAdminUserDetailPath(targetUid, {
-              error: "credits_grant_expiry_invalid",
-            }),
-          );
+          return buildWorkspaceFeedbackState("error", {
+            code: "credits_grant_expiry_invalid",
+            message: getAdminCreditMutationErrorMessage("credits_grant_expiry_invalid"),
+          });
         }
 
-        await runAdminCreditMutationFromDetailPage({
-          targetUid: targetUidFromForm,
-          mutation: {
-            action: "grant_credits",
-            amount,
-            expiresAt: parsedExpiry,
-            reason,
-            note: parseOptionalMutationText(formData.get("note"), 1000),
-          },
-        });
-        return;
+        mutation = {
+          action: "grant_credits",
+          amount,
+          expiresAt: parsedExpiry,
+          reason,
+          note: parseOptionalMutationText(formData.get("note"), 1000),
+        };
+        break;
       }
 
       case "override": {
         const overrideMode = String(formData.get("overrideMode") || "set").trim();
 
         if (overrideMode === "clear") {
-          await runAdminCreditMutationFromDetailPage({
-            targetUid: targetUidFromForm,
-            mutation: {
-              action: "clear_daily_override",
-              reason,
-            },
-          });
-          return;
+          mutation = {
+            action: "clear_daily_override",
+            reason,
+          };
+          break;
         }
 
         const dailyLimitOverride = parsePositiveIntegerFromForm(
           formData.get("dailyLimitOverride"),
         );
         if (!dailyLimitOverride) {
-          redirect(
-            buildAdminUserDetailPath(targetUid, {
-              error: "credits_daily_override_invalid",
-            }),
-          );
+          return buildWorkspaceFeedbackState("error", {
+            code: "credits_daily_override_invalid",
+            message: getAdminCreditMutationErrorMessage("credits_daily_override_invalid"),
+          });
         }
 
-        await runAdminCreditMutationFromDetailPage({
-          targetUid: targetUidFromForm,
-          mutation: {
-            action: "set_daily_override",
-            dailyLimitOverride,
-            reason,
-          },
-        });
-        return;
+        mutation = {
+          action: "set_daily_override",
+          dailyLimitOverride,
+          reason,
+        };
+        break;
       }
 
       default:
-        redirect(
-          buildAdminUserDetailPath(targetUid, {
-            error: "credits_invalid_request",
-          }),
-        );
+        return buildWorkspaceFeedbackState("error", {
+          code: "credits_invalid_request",
+          message: getAdminCreditMutationErrorMessage("credits_invalid_request"),
+        });
     }
+
+    if (!mutation) {
+      return buildWorkspaceFeedbackState("error", {
+        code: "credits_invalid_request",
+        message: getAdminCreditMutationErrorMessage("credits_invalid_request"),
+      });
+    }
+
+    try {
+      await commitAdminCreditMutationFromDetailPage({
+        targetUid: targetUidFromForm,
+        mutation,
+      });
+    } catch (error) {
+      const code = mapCreditMutationErrorToQueryCode(error);
+      return buildWorkspaceFeedbackState("error", {
+        code,
+        message: getAdminCreditMutationErrorMessage(code),
+      });
+    }
+
+    return buildWorkspaceFeedbackState("success", {
+      action: mutation.action,
+      message: getAdminCreditMutationSuccessMessage(mutation.action),
+    });
   }
 
   return (
@@ -1470,8 +1500,9 @@ export default async function AdminUserDetailPage({
           Credits & Usage
         </h2>
 
-        {/* Credit and prompt controls submit server actions then redirect with query params.
-            Keep feedback next to this section's controls so context remains local and unambiguous. */}
+        {/* Credit feedback stays inside this section even though the controls use different
+            server-action delivery paths. The workspace returns section-local action state,
+            while the smaller toggle/revoke forms still use redirect query params. */}
         {creditMutationSuccess ? (
           <div className="mb-3 flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
             <ShieldCheck className="h-5 w-5 shrink-0" />

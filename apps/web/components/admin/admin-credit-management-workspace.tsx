@@ -15,9 +15,14 @@ import {
   Plus,
   SlidersHorizontal,
 } from "lucide-react";
-import { useState } from "react";
+import { startTransition, useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import {
+  INITIAL_ADMIN_CREDIT_WORKSPACE_FEEDBACK_STATE,
+  type AdminCreditWorkspaceFeedbackState,
+} from "@/lib/admin-credit-feedback";
 
 type WorkspaceActionMode = "add" | "subtract" | "set" | "grant" | "override";
 
@@ -37,7 +42,10 @@ type AdminCreditManagementWorkspaceProps = {
   latestMutation: AdminAssessmentCreditMutationRecord | null;
   disabled: boolean;
   disabledReason: string | null;
-  mutationAction: (formData: FormData) => void | Promise<void>;
+  mutationAction: (
+    previousState: AdminCreditWorkspaceFeedbackState,
+    formData: FormData,
+  ) => AdminCreditWorkspaceFeedbackState | Promise<AdminCreditWorkspaceFeedbackState>;
 };
 
 const ACTION_OPTIONS: Array<{ mode: WorkspaceActionMode; label: string }> = [
@@ -122,6 +130,7 @@ export function AdminCreditManagementWorkspace({
   disabledReason,
   mutationAction,
 }: AdminCreditManagementWorkspaceProps) {
+  const router = useRouter();
   const [actionMode, setActionMode] = useState<WorkspaceActionMode>("add");
   const [amountInput, setAmountInput] = useState("");
   const [dailyOverrideInput, setDailyOverrideInput] = useState("");
@@ -129,10 +138,42 @@ export function AdminCreditManagementWorkspace({
   const [reasonInput, setReasonInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [clearOverride, setClearOverride] = useState(false);
+  /* The credit workspace keeps mutation authority on the server action, but the client owns
+     local pending/feedback rendering plus the post-success route refresh. Future agents: do not
+     reintroduce redirect-based same-page flashes here, or the protected scroll container will
+     jump away from the operator's current section context. */
+  const runWorkspaceMutation = async (
+    previousState: AdminCreditWorkspaceFeedbackState,
+    formData: FormData,
+  ) => {
+    const nextState = await mutationAction(previousState, formData);
+
+    if (nextState.status === "success") {
+      /* Successful credit mutations should clear the operator's draft inputs and refresh the
+         server-rendered admin cards/history without losing scroll or section-local feedback.
+         Keep this in the action lane itself so React does not need an effect-driven reset pass. */
+      setAmountInput("");
+      setDailyOverrideInput("");
+      setGrantExpiryInput("");
+      setReasonInput("");
+      setNoteInput("");
+      setClearOverride(false);
+      startTransition(() => {
+        router.refresh();
+      });
+    }
+
+    return nextState;
+  };
+  const [mutationState, formAction, pending] = useActionState(
+    runWorkspaceMutation,
+    INITIAL_ADMIN_CREDIT_WORKSPACE_FEEDBACK_STATE,
+  );
 
   const manualCredits = currentAccount?.manualCredits ?? 0;
   const remainingCount = currentCredits?.remainingCount ?? null;
   const numberFormatter = new Intl.NumberFormat("en-US");
+  const controlsDisabled = disabled || pending;
 
   /* Preview is intentionally computed from the latest server-resolved snapshot shown on this page.
      For actions where an exact post-submit balance cannot be guaranteed client-side, we say so
@@ -446,7 +487,20 @@ export function AdminCreditManagementWorkspace({
         </div>
       ) : null}
 
-      <form action={mutationAction} className="space-y-4">
+      {mutationState.message ? (
+        <div
+          aria-live={mutationState.status === "error" ? "assertive" : "polite"}
+          className={`rounded-xl px-3.5 py-3 text-sm shadow-sm ${
+            mutationState.status === "error"
+              ? "border border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300"
+              : "border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"
+          }`}
+        >
+          {mutationState.message}
+        </div>
+      ) : null}
+
+      <form action={formAction} className="space-y-4" aria-busy={pending}>
         <input type="hidden" name="targetUid" value={targetUid} />
         <input type="hidden" name="workspaceAction" value={actionMode} />
 
@@ -464,7 +518,7 @@ export function AdminCreditManagementWorkspace({
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  disabled={disabled}
+                  disabled={controlsDisabled}
                   onClick={() => setActionMode(option.mode)}
                   className={`min-h-10 rounded-lg border px-3 py-2 text-[11px] font-semibold uppercase leading-tight tracking-wider whitespace-normal transition-colors ${selected ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-500/15 dark:text-emerald-200" : "border-zinc-300 bg-white text-zinc-700 hover:border-emerald-400 hover:text-emerald-800 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300 dark:hover:border-emerald-500/40 dark:hover:text-emerald-200"}`}
                 >
@@ -485,7 +539,7 @@ export function AdminCreditManagementWorkspace({
                   step={1}
                   value={amountInput}
                   onChange={(event) => setAmountInput(event.target.value)}
-                  disabled={disabled}
+                  disabled={controlsDisabled}
                   className="mt-1 h-10 w-full rounded-lg border border-zinc-300/90 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 focus:border-emerald-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
                   placeholder={actionMode === "set" ? "Set manual credits to..." : "Enter amount"}
                 />
@@ -501,7 +555,7 @@ export function AdminCreditManagementWorkspace({
                     name="expiresAt"
                     value={grantExpiryInput}
                     onChange={(event) => setGrantExpiryInput(event.target.value)}
-                    disabled={disabled}
+                    disabled={controlsDisabled}
                     className="mt-1 h-10 w-full rounded-lg border border-zinc-300/90 bg-white px-3 text-sm text-zinc-900 focus:border-emerald-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
                   />
                 </label>
@@ -511,7 +565,7 @@ export function AdminCreditManagementWorkspace({
                     name="note"
                     value={noteInput}
                     onChange={(event) => setNoteInput(event.target.value)}
-                    disabled={disabled}
+                    disabled={controlsDisabled}
                     maxLength={1000}
                     className="mt-1 min-h-20 w-full resize-y rounded-lg border border-zinc-300/90 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-500 focus:border-emerald-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
                     placeholder="Optional internal context for this grant"
@@ -533,7 +587,7 @@ export function AdminCreditManagementWorkspace({
                       type="checkbox"
                       checked={clearOverride}
                       onChange={(event) => setClearOverride(event.target.checked)}
-                      disabled={disabled}
+                      disabled={controlsDisabled}
                       className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
                     />
                     Clear current override ({numberFormatter.format(currentAccount.dailyLimitOverride)})
@@ -549,7 +603,7 @@ export function AdminCreditManagementWorkspace({
                       step={1}
                       value={dailyOverrideInput}
                       onChange={(event) => setDailyOverrideInput(event.target.value)}
-                      disabled={disabled}
+                      disabled={controlsDisabled}
                       className="mt-1 h-10 w-full rounded-lg border border-zinc-300/90 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 focus:border-emerald-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
                       placeholder="Override daily limit"
                     />
@@ -565,7 +619,7 @@ export function AdminCreditManagementWorkspace({
                 name="reason"
                 value={reasonInput}
                 onChange={(event) => setReasonInput(event.target.value)}
-                disabled={disabled}
+                disabled={controlsDisabled}
                 maxLength={320}
                 className="mt-1 h-10 w-full rounded-lg border border-zinc-300/90 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-500 focus:border-emerald-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
                 placeholder="Short operator note for audit context"
@@ -611,11 +665,11 @@ export function AdminCreditManagementWorkspace({
           <Button
             type="submit"
             size="sm"
-            disabled={disabled || !preview.valid}
+            disabled={controlsDisabled || !preview.valid}
             className={`h-10 px-5 ${preview.tone === "danger" ? "border border-red-500/80 bg-red-600 text-white hover:border-red-700 hover:bg-red-700 dark:border-red-500/40 dark:bg-danger dark:hover:bg-danger/90" : "border border-emerald-500/70 bg-emerald-600 text-white hover:border-emerald-700 hover:bg-emerald-700 dark:border-accent/40 dark:bg-accent dark:hover:bg-accent/90"}`}
           >
             <Coins className="h-4 w-4" />
-            {preview.submitLabel}
+            {pending ? "Applying..." : preview.submitLabel}
           </Button>
         </div>
       </form>
@@ -629,4 +683,3 @@ export function AdminCreditManagementWorkspace({
     </div>
   );
 }
-
