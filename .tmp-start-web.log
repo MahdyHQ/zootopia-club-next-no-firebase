@@ -1,0 +1,33 @@
+
+> zootopia-club-next@0.1.0 start:web
+> npm run start --workspace=@zootopia/web --port 3101 --hostname 127.0.0.1
+
+npm warn "3101" is being parsed as a normal command line argument.
+npm warn "127.0.0.1" is being parsed as a normal command line argument.
+npm warn Unknown cli config "--port". This will stop working in the next major version of npm.
+npm warn Unknown cli config "--hostname". This will stop working in the next major version of npm.
+
+> @zootopia/web@0.1.0 start
+> npm run start:local 3101 127.0.0.1
+
+npm warn Unknown env config "hostname". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown env config "port". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> @zootopia/web@0.1.0 start:local
+> next start 3101 127.0.0.1
+
+Invalid project directory provided, no such directory: C:\zootopia-club-next\apps\web\3101
+npm error Lifecycle script `start:local` failed with error:
+npm error code 1
+npm error path C:\zootopia-club-next\apps\web
+npm error workspace @zootopia/web@0.1.0
+npm error location C:\zootopia-club-next\apps\web
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c next start 3101 127.0.0.1
+npm error Lifecycle script `start` failed with error:
+npm error code 1
+npm error path C:\zootopia-club-next\apps\web
+npm error workspace @zootopia/web@0.1.0
+npm error location C:\zootopia-club-next\apps\web
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c npm run start:local 3101 127.0.0.1

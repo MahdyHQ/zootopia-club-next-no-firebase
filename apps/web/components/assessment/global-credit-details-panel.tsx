@@ -23,7 +23,7 @@ import {
 } from "@/lib/assessment-credit-query";
 import type { AppMessages } from "@/lib/messages";
 
-type AssessmentCreditDetailsPanelProps = {
+type GlobalCreditDetailsPanelProps = {
   locale: Locale;
   messages: AppMessages;
 };
@@ -42,7 +42,7 @@ type CreditBreakdownRow = {
   note: string | null;
 };
 
-function getAssessmentCreditDetailsCopy(locale: Locale) {
+function getGlobalCreditDetailsCopy(locale: Locale) {
   return locale === "ar"
     ? {
         accessStatusLabel: "حالة الوصول",
@@ -118,7 +118,7 @@ function getAssessmentCreditDetailsCopy(locale: Locale) {
         disabledLabel: "disabled",
         sourceBreakdownTitle: "Source Breakdown",
         sourceBreakdownSubtitle:
-          "The live server-resolved sources behind your usable assessment balance.",
+          "The live server-resolved sources behind your usable global balance.",
         sourceBreakdownUnavailable:
           "Detailed credit-source data is temporarily unavailable. The canonical summary above is still the trusted balance truth.",
         sourceBreakdownEmpty:
@@ -243,7 +243,7 @@ function formatSnapshotSummary(input: {
 
 function resolveGrantStatusLabel(input: {
   grant: AssessmentCreditGrantAdminView;
-  copy: ReturnType<typeof getAssessmentCreditDetailsCopy>;
+  copy: ReturnType<typeof getGlobalCreditDetailsCopy>;
 }) {
   switch (input.grant.effectiveStatus) {
     case "revoked":
@@ -259,7 +259,7 @@ function resolveGrantStatusLabel(input: {
 
 function resolveHistoryActionLabel(input: {
   action: AdminAssessmentCreditMutationRecord["action"];
-  copy: ReturnType<typeof getAssessmentCreditDetailsCopy>;
+  copy: ReturnType<typeof getGlobalCreditDetailsCopy>;
 }) {
   switch (input.action) {
     case "add_manual_credits":
@@ -285,7 +285,7 @@ function resolveHistoryActionLabel(input: {
 
 function resolveHistorySourceType(input: {
   action: AdminAssessmentCreditMutationRecord["action"];
-  copy: ReturnType<typeof getAssessmentCreditDetailsCopy>;
+  copy: ReturnType<typeof getGlobalCreditDetailsCopy>;
 }) {
   switch (input.action) {
     case "add_manual_credits":
@@ -308,7 +308,7 @@ function resolveHistorySourceType(input: {
 function buildBreakdownRows(input: {
   details: AssessmentCreditDetailsResponse;
   locale: Locale;
-  copy: ReturnType<typeof getAssessmentCreditDetailsCopy>;
+  copy: ReturnType<typeof getGlobalCreditDetailsCopy>;
 }) {
   const { account, credits, grants } = input.details;
   const accessStatusLabel = credits.assessmentAccess === "disabled"
@@ -374,13 +374,13 @@ function buildBreakdownRows(input: {
   ] satisfies CreditBreakdownRow[];
 }
 
-export function AssessmentCreditDetailsPanel({
+export function GlobalCreditDetailsPanel({
   locale,
   messages,
-}: AssessmentCreditDetailsPanelProps) {
+}: GlobalCreditDetailsPanelProps) {
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const copy = useMemo(() => getAssessmentCreditDetailsCopy(locale), [locale]);
+  const copy = useMemo(() => getGlobalCreditDetailsCopy(locale), [locale]);
 
   /* This page intentionally keeps the shared summary query as the owner of the total usable
      balance. The details query only enriches the same server truth with grant/history metadata

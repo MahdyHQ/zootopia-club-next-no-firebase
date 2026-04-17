@@ -84,9 +84,9 @@ const CREDIT_SUMMARY_RETURN_RESET_THRESHOLD_MS =
   ASSESSMENT_CREDIT_SUMMARY_STALE_TIME_MS;
 const CREDIT_SUMMARY_RESUME_DEDUP_WINDOW_MS = 1_500;
 
-const CREDIT_HELP_DIALOG_TITLE_AR = "طلب كريدت تقييم إضافي";
+const CREDIT_HELP_DIALOG_TITLE_AR = "طلب رصيد إضافي";
 const CREDIT_HELP_DIALOG_BODY_AR =
-  "إذا كنت بحاجة إلى كريدت خاص أو عاجل، يُرجى التواصل مباشرة مع المطور والأدمن Elmahdy Abdallah.";
+  "إذا كنت بحاجة إلى رصيد خاص أو عاجل، يُرجى التواصل مباشرة مع المطور والأدمن Elmahdy Abdallah.";
 const CREDIT_HELP_DIALOG_NOTE_AR =
   "يرجى إرسال البريد الإلكتروني للحساب وسبب الطلب لتسريع المعالجة.";
 
@@ -735,8 +735,8 @@ export function ProtectedShell({
                </span>
              </Link>
 
-             {/* The shell badge mirrors server-authoritative assessment credits for the signed-in
-                 owner. Keep this read-only so quota authority remains in backend reserve/commit routes. */}
+             {/* The shell badge mirrors the server-authoritative global balance for the signed-in
+               owner. Keep this read-only so quota authority remains in backend reserve/commit routes. */}
             <div className="relative flex items-center gap-1.5">
               <Link
                 href={APP_ROUTES.globalCredits}

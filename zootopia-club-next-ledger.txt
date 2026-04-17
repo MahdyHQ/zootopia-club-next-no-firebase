@@ -3,9 +3,9 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Global credits route alias + admin detail no-jump section anchors)
+Last Updated: 2026-04-17 (Pro PDF lane version bump for cache invalidation)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
-Current Commit: c2bad35d88b3150a694d4fd49de8765b511cf67c
+Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
 Runtime: Node.js >= 20.9.0
 
@@ -69,7 +69,7 @@ Domain Purpose: AI-powered document analysis, assessment generation, and
 2. CURRENT TRUTH SNAPSHOT
 ================================================================================
 
-As of 2026-04-16, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
+As of 2026-04-17, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
 using Supabase as the unified backend provider (Postgres database, Auth, Storage).
 
 Key verified facts:
@@ -110,16 +110,19 @@ Key verified facts:
   summary for the exact target UID from both the admin detail-page server action
   flow and the admin PATCH route, without moving mutation authority out of the
   backend repository layer
-- The main Admin user-detail credit workspace no longer uses same-page
-  redirect/query-param flashes for add/subtract/set/grant/override submits;
-  it now returns section-local server-action feedback and performs a
-  scroll-preserving `router.refresh()` after successful commits, while smaller
-  credit/prompt toggle controls on the same page still use their existing
-  redirect-based flows
+- Admin user-detail same-page controls now use inline action-state feedback
+  with scroll-preserving `router.refresh()` instead of same-page redirect/
+  query-param remount flashes for the credit workspace, credit access toggle,
+  prompt entitlement toggle, credit-grant revoke, role/status toggles, and
+  per-user storage cleanup; the user-delete control intentionally keeps its
+  redirect-to-list behavior by design
 - Admin credit mutation follow-up work (`appendAdminLog` and live publish) is
   now explicitly best-effort after the repository commit in both admin mutation
   lanes, so audit-log degradation can no longer falsely surface a committed
   balance mutation as an API/server-action failure
+- Admin prompt-entitlement mutations on `/admin/users/[uid]` now also treat
+  admin audit logging as best-effort after persistence commits, preventing
+  false UI failure reports when entitlement state was already durably updated
 - Assessment credit diagnostics now support opt-in low-noise structured tracing
   through `ZOOTOPIA_ASSESSMENT_CREDIT_DIAGNOSTICS` and
   `NEXT_PUBLIC_ZOOTOPIA_ASSESSMENT_CREDIT_DIAGNOSTICS`, with correlation IDs
@@ -270,6 +273,20 @@ Key verified facts:
 - Assessment Pro PDF static-section layout now reserves explicit per-page
   footer height budget with deterministic print sizing and tighter card spacing
   so page footers remain fully contained on their own page (no bleed/overlap)
+- The active Pro PDF lane at `/api/assessment/export/pdf/pro/[id]` keeps
+  Puppeteer/Chromium as the primary export engine, keeps deterministic
+  page-grouping inside the Pro lane (2 questions on page 1, 3 on later
+  question pages), and now hands the fixed-height cover body down into the
+  page-1 shell so the two opening cards consume the reserved body space above
+  the compact footer instead of leaving a detached blank gap
+- The active Pro renderer/export lane version is now
+  `pro-2026-04-17-deterministic-pagination-v5`, so Pro artifact reuse only
+  occurs for artifacts stamped with that exact version tag; older cached Pro
+  artifacts are forced to regenerate through the current hardened renderer path
+- Local workspace verification is currently healthy again for the web app:
+  `npm run lint:web`, `npm run typecheck:web`, and `npm run build:web` all
+  succeeded on 2026-04-17; older ledger entries describing missing
+  `next`/`eslint` binaries are historical environment notes, not current truth
 - Assessment prompt-lock password input now includes a local eye/eye-off
   visibility toggle in the locked prompt UI without changing server lock logic
 - Assessment prompt-lock UI now consumes the server-owned entitlement state so
@@ -1550,6 +1567,108 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
+2026-04-17 — Pro PDF renderer/export version bump to invalidate old cached artifacts
+
+Reason:
+- Ensure previously cached Pro PDF artifacts cannot be reused after the recent
+  Pro pagination/layout hardening.
+- Keep the existing Pro export architecture intact while forcing regeneration
+  through the current live renderer/template.
+
+Files changed:
+- `apps/web/lib/server/assessment-pro-print-renderer.ts`
+- `zootopia-club-next-ledger.txt`
+
+Technical details:
+- Bumped `ASSESSMENT_PRO_PRINT_RENDERER_VERSION` from
+  `pro-2026-04-17-deterministic-pagination-v4` to
+  `pro-2026-04-17-deterministic-pagination-v5`.
+- Confirmed `apps/web/lib/server/assessment-pro-pdf-export.ts` derives
+  `ASSESSMENT_PRO_PDF_LANE_VERSION` directly from
+  `ASSESSMENT_PRO_PRINT_RENDERER_VERSION`, so the lane version follows
+  automatically with no second constant to maintain.
+- Confirmed Pro artifact reuse remains guarded by exact version equality
+  (`existingArtifact.versionTag === ASSESSMENT_PRO_PDF_LANE_VERSION`), so
+  older cached Pro artifacts now miss cache and regenerate via the current
+  hardened renderer.
+- Preserved all existing Pro route, renderer, Puppeteer capture, and artifact
+  persistence architecture; no refactor or contract change was introduced.
+
+Verification:
+- `npm run lint --workspace @zootopia/web` ✅
+- `npm run typecheck --workspace @zootopia/web` ✅
+- `npm run build --workspace @zootopia/web` ✅
+- Build output still includes `ƒ /api/assessment/export/pdf/pro/[id]` ✅
+
+Risks / constraints:
+- None introduced by this pass beyond expected one-time Pro artifact
+  regeneration after deployment due to the intentional version bump.
+
+2026-04-17 — Global credits surface naming alignment (no backend contract churn)
+
+Reason:
+- Complete the requested surgical global-vs-assessment terminology audit by
+  aligning remaining user-facing credit surface naming to global/platform
+  language while preserving the current production authority model.
+- Keep compatibility route behavior explicit and documented without creating a
+  second credit system or renaming internal assessment-owned APIs/contracts.
+
+Files changed:
+- `apps/web/components/assessment/assessment-credit-details-panel.tsx` (renamed to
+  `apps/web/components/assessment/global-credit-details-panel.tsx`)
+- `apps/web/components/assessment/global-credits-unlock-gate.tsx`
+- `apps/web/components/layout/protected-shell.tsx`
+- `apps/web/app/(protected)/(completed)/assessment/credits/page.tsx`
+- `apps/web/messages/en.json`
+- `apps/web/messages/ar.json`
+- `zootopia-club-next-ledger.txt`
+
+Technical details:
+- Renamed the global credits details surface component/file from
+  `AssessmentCreditDetailsPanel` / `assessment-credit-details-panel.tsx` to
+  `GlobalCreditDetailsPanel` / `global-credit-details-panel.tsx`.
+- Kept component behavior unchanged: it still reads canonical shared summary
+  and details queries backed by `/api/assessment/credits` and
+  `/api/assessment/credits/details`.
+- Updated `global-credits-unlock-gate.tsx` import wiring to the new global
+  component name/path only (no logic changes).
+- Updated a remaining EN copy line inside the details panel from
+  “usable assessment balance” to “usable global balance”.
+- Updated protected-header Arabic urgent-credit help wording from
+  assessment-specific phrasing to global balance phrasing.
+- Added a high-value compatibility comment and clearer function name in
+  `/assessment/credits` redirect page to preserve legacy bookmark intent.
+- Updated legacy fallback i18n values (`assessmentCreditsPage*` and
+  `assessmentCreditsOpenDetailsAction`) in EN/AR to global wording while
+  preserving existing key names for backward compatibility.
+
+Explicitly preserved unchanged (risk avoidance):
+- `/api/assessment/credits` and `/api/assessment/credits/details` route paths
+- `assessment-credit` realtime topic namespace and invalidation semantics
+- `assessment-credit` TanStack query keys and shared cache ownership
+- repository/server mutation authority and database schema names
+- admin mutation route contracts and assessment-tool logic boundaries
+
+Verification:
+- `npm run lint --workspace @zootopia/web` ✅
+- `npm run typecheck --workspace @zootopia/web` ✅
+- `npm run build --workspace @zootopia/web` ✅
+- Runtime smoke (local production start) ✅
+  - `npm run start --workspace @zootopia/web` started successfully
+  - `/api/health` returned `200` with `ok: true`
+  - `/credits` returned `307` -> `/login` (expected unauthenticated guard)
+  - `/assessment/credits` returned `307` -> `/login` (expected unauthenticated guard)
+- Existing workspace runtime task `web-start-3025` failed due argument wiring
+  mismatch with `next start` script shape; this task-level failure did not
+  affect the successful direct runtime smoke path above.
+
+Risks / constraints:
+- Unauthenticated runtime probing cannot prove the authenticated
+  `/assessment/credits` -> `/credits` redirect branch; that branch remains code-
+  verified and build-verified.
+- `next start` still emits Next.js standalone warning in this workspace setup;
+  this pass intentionally did not alter runtime packaging/start strategy.
+
 2026-04-17 — Admin detail no-jump hardening + global credits surface rename/alias
 
 Reason:
@@ -2304,3 +2423,194 @@ Risks / follow-up:
 - A live authenticated browser verification (admin + normal user + multi-tab) is
   still recommended after dependencies are available, to capture end-to-end gate
   UX proof and private-channel/session alignment evidence in runtime.
+
+2026-04-17 — Pro PDF pagination/layout hardening for page-1 footer fill
+
+Reason:
+- Harden the existing production Pro PDF export lane without replacing its
+  engine or redesigning unrelated assessment flows.
+- Fix the remaining page-1 layout drift where the first-page cover body kept a
+  reserved footer slot but did not pass its remaining height into the two-card
+  question shell, leaving detached dead space above the footer even after the
+  Pro lane moved to deterministic 2-then-3 grouping.
+
+Files changed:
+- `apps/web/lib/server/assessment-pro-print-renderer.ts`
+- `zootopia-club-next-ledger.txt`
+
+Files inspected during this task:
+- `zootopia-club-next-ledger.txt`
+- `apps/web/app/api/assessment/export/pdf/pro/[id]/route.ts`
+- `apps/web/lib/server/assessment-pro-pdf-export.ts`
+- `apps/web/lib/server/assessment-pdf-download.ts`
+- `apps/web/lib/server/assessment-pro-print-renderer.ts`
+- `apps/web/lib/assessment-file-layout.ts`
+- `apps/web/lib/assessment-file-branding.ts`
+- `apps/web/lib/assessment-preview-model.ts`
+- `apps/web/lib/server/assessment-export-route-context.ts`
+- `apps/web/lib/server/assessment-preview.ts`
+- `apps/web/lib/assessment-question-display.ts`
+- `packages/shared-types/src/assessment.ts`
+
+Architecture / decision summary:
+- Kept Puppeteer/Chromium as the primary Pro PDF engine.
+- Rejected Playwright as a primary replacement because it would duplicate the
+  same Chromium print model and add churn without fixing the actual page-shell
+  issue; it remains suitable as optional future verification tooling.
+- Rejected Paged.js for this task because the Pro lane already owns explicit
+  page wrappers and deterministic grouping, so adding a second pagination system
+  would create unnecessary overlap and migration risk.
+
+Technical details:
+- Confirmed the active export path remains:
+  `assessment-export-actions.tsx` ->
+  `/api/assessment/export/pdf/pro/[id]` ->
+  `buildAssessmentProPdfResponse()` ->
+  `buildAssessmentProPrintHtml()` ->
+  `buildAssessmentPdfBuffer()` ->
+  Puppeteer/Chromium `page.pdf({ preferCSSPageSize: true, printBackground: true })`.
+- Confirmed the current Pro lane already groups questions explicitly through the
+  shared page helper in deterministic mode:
+  - page 1 = first 2 questions
+  - later question pages = chunks of 3
+- Confirmed supported exported question taxonomy remains broader than the user
+  examples and still includes cards/details for:
+  `mcq`, `true_false`, `definition`, `terminology`, `short_answer`,
+  `fill_blanks`, `comparison`, `scientific_term`, plus existing normalized
+  handling for legacy/extended types such as `essay`, `matching`,
+  `multiple_response`, `labeling`, `classification`, `sequencing`,
+  `process_mechanism`, `cause_effect`, `identify_structure`, and
+  `identify_compound`.
+- Root cause was not Puppeteer itself. The remaining instability was the page-1
+  shell contract:
+  - the Pro static-section page body is fixed-height above a reserved footer row
+  - later question pages already let their stack consume that body height
+  - page 1 still left the `first-page-shell` content-sized, so its two-card zone
+    could not inherit the remaining body height even though the cards themselves
+    were configured to stretch
+- Applied one Pro-only CSS hardening block:
+  - `.page-number-mode-static-sections .page-section-body--cover > .first-page-shell { flex: 1 1 auto; min-height: 0; }`
+- Kept the current compact footer contract intact:
+  - reserved footer row unchanged
+  - footer line remains the same Arabic sentence with laptop emoji first and
+    heart emoji last
+  - no helper-library migration
+  - no change to backend ownership, preview/theme inheritance, or route auth
+
+Why this specific fix:
+- It is the smallest safe edit surface that fixes the actual gap source.
+- It keeps the existing Pro-only deterministic grouping work intact.
+- It does not redesign question cards, shared preview logic, Fast PDF, or route
+  authority.
+- It preserves existing footer reservation so local Chrome vs Vercel Chromium
+  font-metric differences still have safety margin.
+
+Verification:
+- `npm run lint:web` ✅
+- `npm run typecheck:web` ✅
+- `npm run build:web` ✅
+- Built route list still includes `/api/assessment/export/pdf/pro/[id]` ✅
+- Generated a real synthetic mixed-type Pro artifact through the rebuilt server
+  bundle and the same local Chrome/Puppeteer capture path used by the Pro lane:
+  - explicit question page shells rendered as `2 / 3 / 3`
+  - PDF byte output generated successfully
+  - PDF byte scan confirmed 4 total pages (3 question pages + support page)
+  - footer line remained compact with the laptop emoji first and heart emoji
+    last in the rendered HTML/PDF surface
+  - page-1 body metrics confirmed the first-page shell now consumes the full
+    reserved body height (`shellHeight ~= 935.09px` inside a `941.09px` body)
+  - page-1 question zone now reaches the footer boundary
+    (`footerTopGap ~= -0.30px`, effectively flush within layout rounding)
+- Verification used a synthetic mixed-type preview because the owner-scoped live
+  route requires authenticated session/database access that was not bypassed
+  during this task.
+
+Local vs Vercel notes:
+- Local development:
+  - Pro verification ran through local installed Chrome with the same HTML/CSS
+    contract the server bundle emits.
+- Vercel / production:
+  - The active server path still uses packaged `@sparticuz/chromium` on Linux.
+  - Because the fix is a Pro-renderer HTML/CSS shell handoff rather than a new
+    engine or new margin math, it remains aligned with the existing Vercel
+    runtime architecture and should reduce, not increase, local/prod drift.
+
+Risks / follow-up:
+- Extremely dense future card types can still create pressure inside a fixed
+  2/3 slot model; any future handling for genuinely oversized cards should stay
+  explicit and type-aware instead of falling back to implicit browser
+  fragmentation.
+- Live authenticated end-to-end export verification is still recommended when a
+  representative real assessment record is available, mainly to confirm mixed
+  production content lengths and production font assets against Vercel Chromium.
+
+2026-04-17 — Admin user-detail no-jump transport + truthful mutation feedback hardening
+
+Reason:
+- Complete the strict admin user-detail control audit on `/admin/users/[uid]`
+  and remove same-page redirect remount/jump behavior from operational admin
+  controls while preserving existing server authority and persistence lanes.
+- Eliminate false negative operator feedback in prompt-entitlement mutation flow
+  when post-commit audit logging degrades.
+
+Files changed:
+- `apps/web/components/admin/admin-user-detail-inline-action-form.tsx` (new)
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- `zootopia-club-next-ledger.txt`
+
+Audit findings (root cause):
+- The main credit workspace already used `useActionState` + success-path
+  `router.refresh()` and was scroll-safe.
+- Multiple smaller same-page controls still used redirect/query-param transport
+  (credit access, prompt entitlement, grant revoke, role toggle, status toggle,
+  storage cleanup), causing route remount/jump behavior and delayed feedback
+  locality.
+- Prompt-entitlement mutation treated `appendAdminLog` as part of success
+  criteria, which could return a false failure after durable entitlement commit.
+
+Technical changes:
+- Added a reusable client wrapper `AdminUserDetailInlineActionForm` that:
+  - accepts server actions with `useActionState`
+  - shows per-control success/error feedback in place
+  - executes `router.refresh()` only on success to preserve failed-input context
+- Replaced redirect-based same-page controls on `/admin/users/[uid]` with
+  inline action-state transport for:
+  - assessment access toggle
+  - prompt-entitlement toggle
+  - grant revoke form
+  - role toggle
+  - status toggle
+  - per-user storage cleanup
+- Kept delete-user flow as redirect-to-list by design (target record removal).
+- Added inline server actions in the page server component with strict target
+  UID validation and explicit operator-safe error mapping.
+- Prompt-entitlement mutation now treats admin audit logging as best-effort
+  after successful persistence commit to avoid false failure surfaces.
+
+Persistence authority verification (unchanged backend ownership):
+- Credit access + grant revoke still commit through
+  `commitAdminCreditMutationFromDetailPage` ->
+  `repository.applyAdminAssessmentCreditMutation`.
+- Prompt entitlement still commits through
+  `repository.setAssessmentPromptEntitlementForUser`.
+- Role and status still commit through
+  `repository.setUserRole` and `repository.setUserStatus`.
+- Storage cleanup still routes through
+  `POST /api/admin/storage/cleanup` with server-side admin/session checks.
+
+Verification:
+- `npm run lint --workspace @zootopia/web` ✅
+- `npm run typecheck --workspace @zootopia/web` ✅
+- `npm run build --workspace @zootopia/web` ✅
+- Build route output still includes:
+  - `/admin/users/[uid]`
+  - `/api/admin/users/[uid]`
+  - `/api/admin/users/[uid]/credits`
+  - `/api/admin/storage/cleanup`
+
+Risks / follow-up:
+- Legacy query-param feedback parsing remains in place for backward URL
+  compatibility but is now secondary to inline control feedback.
+- No live authenticated browser QA run was executed in this task turn; a short
+  manual QA pass across desktop/mobile breakpoints is recommended for final
+  UX confirmation (focus behavior, feedback timing, scroll stability).

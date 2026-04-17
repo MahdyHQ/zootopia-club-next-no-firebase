@@ -1,0 +1,13 @@
+[repository-persistence] blocked in-memory fallback in production {
+  nodeEnv: 'production',
+  missingRequirements: [ 'supabase_admin_runtime', 'supabase_database_url' ],
+  overrideEnvKey: 'ZOOTOPIA_ALLOW_PRODUCTION_MEMORY_FALLBACK'
+}
+[31m[auth][error][0m MissingSecret: Please define a `secret`. Read more at https://errors.authjs.dev#missingsecret
+    at C:\zootopia-club-next\apps\web\.next\standalone\.next\server\chunks\_0t~grbf._.js:404:52319
+    at aD (C:\zootopia-club-next\apps\web\.next\standalone\.next\server\chunks\_0t~grbf._.js:404:54907)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[31m[auth][error][0m MissingSecret: Please define a `secret`. Read more at https://errors.authjs.dev#missingsecret
+    at C:\zootopia-club-next\apps\web\.next\standalone\.next\server\chunks\_0t~grbf._.js:404:52319
+    at aD (C:\zootopia-club-next\apps\web\.next\standalone\.next\server\chunks\_0t~grbf._.js:404:54907)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

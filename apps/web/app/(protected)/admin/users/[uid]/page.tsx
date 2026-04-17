@@ -2,7 +2,6 @@ import "server-only";
 
 import type {
   AdminAssessmentCreditMutationInput,
-  AssessmentPromptEntitlement,
 } from "@zootopia/shared-types";
 import {
   Activity,
@@ -24,6 +23,10 @@ import {
 import { notFound, redirect } from "next/navigation";
 
 import { AdminCreditManagementWorkspace } from "@/components/admin/admin-credit-management-workspace";
+import {
+  AdminUserDetailInlineActionForm,
+  type AdminUserDetailInlineActionState,
+} from "@/components/admin/admin-user-detail-inline-action-form";
 import { Button } from "@/components/ui/button";
 import {
   getAdminCreditMutationErrorMessage,
@@ -85,6 +88,42 @@ const ADMIN_USER_DETAIL_DANGER_BUTTON_CLASS =
   `hover:translate-y-0 border border-red-500/80 bg-red-600 text-white shadow-[0_10px_22px_rgba(239,68,68,0.18)] transition-colors hover:border-red-700 hover:bg-red-700 dark:border-red-500/40 dark:bg-danger dark:text-white dark:shadow-sm dark:hover:bg-danger/90 ${ADMIN_USER_DETAIL_DISABLED_BUTTON_CLASS}`;
 const ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS =
   `border-red-400 bg-red-50 text-red-800 shadow-sm shadow-red-100/70 transition-colors hover:translate-y-0 hover:border-red-500 hover:bg-red-100 hover:text-red-900 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:shadow-none dark:hover:bg-red-950/30 ${ADMIN_USER_DETAIL_DISABLED_BUTTON_CLASS}`;
+const ADMIN_USER_DETAIL_PROMPT_MUTATION_SUCCESS_MESSAGES: Record<string, string> = {
+  enabled: "Assessment prompt entitlement is now enabled for this user.",
+  disabled: "Assessment prompt entitlement is now disabled for this user.",
+};
+const ADMIN_USER_DETAIL_ROLE_MUTATION_SUCCESS_MESSAGES: Record<string, string> = {
+  admin: "User role was promoted to admin.",
+  user: "User role was demoted to user.",
+};
+const ADMIN_USER_DETAIL_STATUS_MUTATION_SUCCESS_MESSAGES: Record<string, string> = {
+  active: "User account is now active.",
+  suspended: "User account is now suspended.",
+};
+const ADMIN_USER_DETAIL_ERROR_MESSAGES: Record<string, string> = {
+  confirmation_required: "Confirmation is required before deleting a user account. Type DELETE USER exactly.",
+  confirmation_mismatch: "Confirmation must match the exact phrase \"DELETE USER\".",
+  delete_failed: "User deletion failed. Review server logs and retry.",
+  storage_confirmation_mismatch: "Storage cleanup confirmation must match the target user UID.",
+  storage_cleanup_failed: "Storage cleanup failed. Review API/admin logs and retry.",
+  credits_user_not_found: "The selected user no longer exists.",
+  credits_self_mutation_forbidden: "Admins cannot mutate their own assessment credit balances.",
+  credits_amount_invalid: "Enter a valid credit amount.",
+  credits_daily_override_invalid: "Daily override must be a positive whole number.",
+  credits_grant_expiry_invalid: "Grant expiration must be a valid future date and time.",
+  credits_grant_id_required: "A grant identifier is required for this operation.",
+  credits_grant_not_found: "The selected grant could not be found.",
+  credits_grant_owner_mismatch: "The selected grant does not belong to this user.",
+  credits_grant_already_revoked: "This grant was already revoked.",
+  credits_invalid_request: "The credit mutation request is invalid.",
+  credits_update_failed: "Unable to update credits right now. Try again shortly.",
+  prompt_user_not_found: "The selected user no longer exists.",
+  prompt_self_mutation_forbidden: "Admins cannot mutate their own prompt entitlement from this page.",
+  prompt_invalid_request: "Prompt entitlement request is invalid.",
+  prompt_update_failed: "Unable to update prompt entitlement right now. Try again shortly.",
+  role_update_failed: "Unable to update user role right now. Try again shortly.",
+  status_update_failed: "Unable to update user status right now. Try again shortly.",
+};
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -357,6 +396,21 @@ function mapPromptEntitlementMutationErrorToQueryCode(error: unknown) {
     default:
       return "prompt_update_failed";
   }
+}
+
+function buildAdminUserDetailInlineActionState(
+  status: AdminUserDetailInlineActionState["status"],
+  input: {
+    code?: string | null;
+    message?: string | null;
+  } = {},
+): AdminUserDetailInlineActionState {
+  return {
+    status,
+    code: input.code ?? null,
+    message: input.message ?? null,
+    feedbackId: createAssessmentCreditTraceId(),
+  };
 }
 
 function parsePositiveIntegerFromForm(value: FormDataEntryValue | null) {
@@ -680,100 +734,6 @@ async function commitAdminCreditMutationFromDetailPage(input: {
   return state;
 }
 
-async function runAdminCreditMutationFromDetailPage(input: {
-  targetUid: string;
-  mutation: AdminAssessmentCreditMutationInput;
-}) {
-  try {
-    await commitAdminCreditMutationFromDetailPage(input);
-  } catch (error) {
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: mapCreditMutationErrorToQueryCode(error),
-      }, "credits-usage"),
-    );
-  }
-
-  redirect(
-    buildAdminUserDetailPath(input.targetUid, {
-      credits_updated: input.mutation.action,
-    }, "credits-usage"),
-  );
-}
-
-async function runAdminPromptEntitlementMutationFromDetailPage(input: {
-  targetUid: string;
-  entitlement: AssessmentPromptEntitlement;
-}) {
-  const {
-    appendAdminLog,
-    getUserByUid,
-    setAssessmentPromptEntitlementForUser,
-  } = await import("@/lib/server/repository");
-  const { requireAdminUser } = await import("@/lib/server/session");
-
-  const admin = await requireAdminUser();
-
-  if (input.targetUid === admin.uid) {
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: "prompt_self_mutation_forbidden",
-      }, "credits-usage"),
-    );
-  }
-
-  const targetUser = await getUserByUid(input.targetUid);
-  if (!targetUser) {
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: "prompt_user_not_found",
-      }, "credits-usage"),
-    );
-  }
-
-  if (input.entitlement !== "enabled" && input.entitlement !== "disabled") {
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: "prompt_invalid_request",
-      }, "credits-usage"),
-    );
-  }
-
-  try {
-    const account = await setAssessmentPromptEntitlementForUser({
-      ownerUid: input.targetUid,
-      entitlement: input.entitlement,
-    });
-
-    await appendAdminLog({
-      actorUid: admin.uid,
-      actorRole: admin.role,
-      targetUid: input.targetUid,
-      ownerUid: input.targetUid,
-      ownerRole: targetUser.role,
-      action: `assessment-prompt-entitlement:${account.assessmentPromptEntitlement}`,
-      resourceType: "assessment-prompt-entitlement",
-      resourceId: input.targetUid,
-      route: "/admin/users/[uid]",
-      metadata: {
-        entitlement: account.assessmentPromptEntitlement,
-      },
-    });
-  } catch (error) {
-    redirect(
-      buildAdminUserDetailPath(input.targetUid, {
-        error: mapPromptEntitlementMutationErrorToQueryCode(error),
-      }, "credits-usage"),
-    );
-  }
-
-  redirect(
-    buildAdminUserDetailPath(input.targetUid, {
-      prompt_access_updated: input.entitlement,
-    }, "credits-usage"),
-  );
-}
-
 async function loadAdminDetailOptionalSection<T>(input: {
   section: string;
   load: () => Promise<T>;
@@ -975,59 +935,23 @@ export default async function AdminUserDetailPage({
   const roleUpdated = getFirstSearchParamValue(resolvedSearchParams.role_updated).trim();
   const statusUpdated = getFirstSearchParamValue(resolvedSearchParams.status_updated).trim();
   const storageCleaned = getFirstSearchParamValue(resolvedSearchParams.storage_cleaned) === "true";
-  const promptMutationSuccessMessages: Record<string, string> = {
-    enabled: "Assessment prompt entitlement is now enabled for this user.",
-    disabled: "Assessment prompt entitlement is now disabled for this user.",
-  };
-  const errorMessages: Record<string, string> = {
-    confirmation_required: "Confirmation is required before deleting a user account. Type DELETE USER exactly.",
-    confirmation_mismatch: "Confirmation must match the exact phrase \"DELETE USER\".",
-    delete_failed: "User deletion failed. Review server logs and retry.",
-    storage_confirmation_mismatch: "Storage cleanup confirmation must match the target user UID.",
-    storage_cleanup_failed: "Storage cleanup failed. Review API/admin logs and retry.",
-    credits_user_not_found: "The selected user no longer exists.",
-    credits_self_mutation_forbidden: "Admins cannot mutate their own assessment credit balances.",
-    credits_amount_invalid: "Enter a valid credit amount.",
-    credits_daily_override_invalid: "Daily override must be a positive whole number.",
-    credits_grant_expiry_invalid: "Grant expiration must be a valid future date and time.",
-    credits_grant_id_required: "A grant identifier is required for this operation.",
-    credits_grant_not_found: "The selected grant could not be found.",
-    credits_grant_owner_mismatch: "The selected grant does not belong to this user.",
-    credits_grant_already_revoked: "This grant was already revoked.",
-    credits_invalid_request: "The credit mutation request is invalid.",
-    credits_update_failed: "Unable to update credits right now. Try again shortly.",
-    prompt_user_not_found: "The selected user no longer exists.",
-    prompt_self_mutation_forbidden: "Admins cannot mutate their own prompt entitlement from this page.",
-    prompt_invalid_request: "Prompt entitlement request is invalid.",
-    prompt_update_failed: "Unable to update prompt entitlement right now. Try again shortly.",
-    role_update_failed: "Unable to update user role right now. Try again shortly.",
-    status_update_failed: "Unable to update user status right now. Try again shortly.",
-  };
-  const roleMutationSuccessMessages: Record<string, string> = {
-    admin: "User role was promoted to admin.",
-    user: "User role was demoted to user.",
-  };
-  const statusMutationSuccessMessages: Record<string, string> = {
-    active: "User account is now active.",
-    suspended: "User account is now suspended.",
-  };
   const creditMutationSuccess = creditsUpdatedAction
     ? getAdminCreditMutationSuccessMessage(creditsUpdatedAction)
     : null;
   const promptMutationSuccess = promptAccessUpdated
-    ? promptMutationSuccessMessages[promptAccessUpdated] ?? "Assessment prompt entitlement updated successfully."
+    ? ADMIN_USER_DETAIL_PROMPT_MUTATION_SUCCESS_MESSAGES[promptAccessUpdated] ?? "Assessment prompt entitlement updated successfully."
     : null;
   const roleMutationSuccess = roleUpdated
-    ? roleMutationSuccessMessages[roleUpdated] ?? "User role updated successfully."
+    ? ADMIN_USER_DETAIL_ROLE_MUTATION_SUCCESS_MESSAGES[roleUpdated] ?? "User role updated successfully."
     : null;
   const statusMutationSuccess = statusUpdated
-    ? statusMutationSuccessMessages[statusUpdated] ?? "User status updated successfully."
+    ? ADMIN_USER_DETAIL_STATUS_MUTATION_SUCCESS_MESSAGES[statusUpdated] ?? "User status updated successfully."
     : null;
   const creditFeedbackError = getAdminCreditMutationErrorMessage(errorCode);
   const feedbackError = errorCode
     ? (
         creditFeedbackError
-        ?? errorMessages[errorCode]
+        ?? ADMIN_USER_DETAIL_ERROR_MESSAGES[errorCode]
         ?? "The requested admin action failed."
       )
     : null;
@@ -1076,6 +1000,12 @@ export default async function AdminUserDetailPage({
   const recentCreditHistory = creditState?.history.slice(0, 12) ?? [];
   const latestCreditMutation = recentCreditHistory[0] ?? null;
   const creditControlsDisabled = isCurrentUser || !creditState;
+  const nextAssessmentAccess = creditsAccount?.assessmentAccess === "enabled" ? "disabled" : "enabled";
+  const nextPromptEntitlement = creditsAccount?.assessmentPromptEntitlement === "enabled"
+    ? "disabled"
+    : "enabled";
+  const nextRole = isAdmin ? "user" : "admin";
+  const nextStatus = isActive ? "suspended" : "active";
   const creditControlsDisabledReason = !creditState
     ? "Credit state is temporarily unavailable for this user. Retry after the credit summary reloads."
     : isCurrentUser
@@ -1272,6 +1202,399 @@ export default async function AdminUserDetailPage({
     return buildWorkspaceFeedbackState("success", {
       action: mutation.action,
       message: getAdminCreditMutationSuccessMessage(mutation.action),
+    });
+  }
+
+  async function runInlineCreditAccessMutation(
+    _previousState: AdminUserDetailInlineActionState,
+    formData: FormData,
+  ): Promise<AdminUserDetailInlineActionState> {
+    "use server";
+
+    const targetUidFromForm = String(formData.get("targetUid") || "").trim();
+    const nextAccessFromForm = String(formData.get("nextAccess") || "").trim();
+
+    if (!targetUidFromForm || targetUidFromForm !== targetUid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "credits_invalid_request",
+        message: getAdminCreditMutationErrorMessage("credits_invalid_request"),
+      });
+    }
+
+    if (targetUidFromForm === adminUser.uid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "credits_self_mutation_forbidden",
+        message: getAdminCreditMutationErrorMessage("credits_self_mutation_forbidden"),
+      });
+    }
+
+    if (nextAccessFromForm !== "enabled" && nextAccessFromForm !== "disabled") {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "credits_invalid_request",
+        message: getAdminCreditMutationErrorMessage("credits_invalid_request"),
+      });
+    }
+
+    try {
+      await commitAdminCreditMutationFromDetailPage({
+        targetUid: targetUidFromForm,
+        mutation: {
+          action: "set_access",
+          access: nextAccessFromForm,
+          reason: `Admin set assessment access to ${nextAccessFromForm}.`,
+        },
+      });
+    } catch (error) {
+      const code = mapCreditMutationErrorToQueryCode(error);
+      return buildAdminUserDetailInlineActionState("error", {
+        code,
+        message: getAdminCreditMutationErrorMessage(code),
+      });
+    }
+
+    return buildAdminUserDetailInlineActionState("success", {
+      code: "set_access",
+      message: getAdminCreditMutationSuccessMessage("set_access"),
+    });
+  }
+
+  async function runInlinePromptEntitlementMutation(
+    _previousState: AdminUserDetailInlineActionState,
+    formData: FormData,
+  ): Promise<AdminUserDetailInlineActionState> {
+    "use server";
+
+    const {
+      appendAdminLog,
+      getUserByUid,
+      setAssessmentPromptEntitlementForUser,
+    } = await import("@/lib/server/repository");
+    const { requireAdminUser } = await import("@/lib/server/session");
+
+    const targetUidFromForm = String(formData.get("targetUid") || "").trim();
+    const nextEntitlementFromForm = String(formData.get("nextEntitlement") || "").trim();
+
+    if (!targetUidFromForm || targetUidFromForm !== targetUid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "prompt_invalid_request",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.prompt_invalid_request,
+      });
+    }
+
+    const admin = await requireAdminUser();
+    if (targetUidFromForm === admin.uid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "prompt_self_mutation_forbidden",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.prompt_self_mutation_forbidden,
+      });
+    }
+
+    if (nextEntitlementFromForm !== "enabled" && nextEntitlementFromForm !== "disabled") {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "prompt_invalid_request",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.prompt_invalid_request,
+      });
+    }
+
+    let targetUser: Awaited<ReturnType<typeof getUserByUid>>;
+    try {
+      targetUser = await getUserByUid(targetUidFromForm);
+    } catch {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "prompt_update_failed",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.prompt_update_failed,
+      });
+    }
+
+    if (!targetUser) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "prompt_user_not_found",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.prompt_user_not_found,
+      });
+    }
+
+    let account: Awaited<ReturnType<typeof setAssessmentPromptEntitlementForUser>>;
+    try {
+      account = await setAssessmentPromptEntitlementForUser({
+        ownerUid: targetUidFromForm,
+        entitlement: nextEntitlementFromForm,
+      });
+    } catch (error) {
+      const code = mapPromptEntitlementMutationErrorToQueryCode(error);
+      return buildAdminUserDetailInlineActionState("error", {
+        code,
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES[code] ?? ADMIN_USER_DETAIL_ERROR_MESSAGES.prompt_update_failed,
+      });
+    }
+
+    /* Prompt entitlement persistence is authoritative; audit logging stays best-effort so
+       operators never receive a false mutation failure after a committed entitlement change. */
+    try {
+      await appendAdminLog({
+        actorUid: admin.uid,
+        actorRole: admin.role,
+        targetUid: targetUidFromForm,
+        ownerUid: targetUidFromForm,
+        ownerRole: targetUser.role,
+        action: `assessment-prompt-entitlement:${account.assessmentPromptEntitlement}`,
+        resourceType: "assessment-prompt-entitlement",
+        resourceId: targetUidFromForm,
+        route: "/admin/users/[uid]",
+        metadata: {
+          entitlement: account.assessmentPromptEntitlement,
+        },
+      });
+    } catch (error) {
+      console.warn("[admin-user-detail] prompt entitlement admin audit log failed", {
+        targetUid: targetUidFromForm,
+        actingAdminUid: admin.uid,
+        errorCode: readPlatformErrorCode(error),
+      });
+    }
+
+    return buildAdminUserDetailInlineActionState("success", {
+      code: nextEntitlementFromForm,
+      message:
+        ADMIN_USER_DETAIL_PROMPT_MUTATION_SUCCESS_MESSAGES[nextEntitlementFromForm]
+        ?? "Assessment prompt entitlement updated successfully.",
+    });
+  }
+
+  async function runInlineRevokeCreditGrantMutation(
+    _previousState: AdminUserDetailInlineActionState,
+    formData: FormData,
+  ): Promise<AdminUserDetailInlineActionState> {
+    "use server";
+
+    const targetUidFromForm = String(formData.get("targetUid") || "").trim();
+    const grantIdFromForm = String(formData.get("grantId") || "").trim();
+
+    if (!targetUidFromForm || targetUidFromForm !== targetUid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "credits_invalid_request",
+        message: getAdminCreditMutationErrorMessage("credits_invalid_request"),
+      });
+    }
+
+    if (targetUidFromForm === adminUser.uid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "credits_self_mutation_forbidden",
+        message: getAdminCreditMutationErrorMessage("credits_self_mutation_forbidden"),
+      });
+    }
+
+    if (!grantIdFromForm) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "credits_grant_id_required",
+        message: getAdminCreditMutationErrorMessage("credits_grant_id_required"),
+      });
+    }
+
+    try {
+      await commitAdminCreditMutationFromDetailPage({
+        targetUid: targetUidFromForm,
+        mutation: {
+          action: "revoke_grant",
+          grantId: grantIdFromForm,
+          reason: parseOptionalMutationText(formData.get("reason")),
+        },
+      });
+    } catch (error) {
+      const code = mapCreditMutationErrorToQueryCode(error);
+      return buildAdminUserDetailInlineActionState("error", {
+        code,
+        message: getAdminCreditMutationErrorMessage(code),
+      });
+    }
+
+    return buildAdminUserDetailInlineActionState("success", {
+      code: "revoke_grant",
+      message: getAdminCreditMutationSuccessMessage("revoke_grant"),
+    });
+  }
+
+  async function runInlineRoleMutation(
+    _previousState: AdminUserDetailInlineActionState,
+    formData: FormData,
+  ): Promise<AdminUserDetailInlineActionState> {
+    "use server";
+
+    const { setUserRole } = await import("@/lib/server/repository");
+    const { requireAdminUser } = await import("@/lib/server/session");
+
+    const targetUidFromForm = String(formData.get("targetUid") || "").trim();
+    const nextRoleFromForm = String(formData.get("nextRole") || "").trim();
+
+    if (!targetUidFromForm || targetUidFromForm !== targetUid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "role_update_failed",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.role_update_failed,
+      });
+    }
+
+    if (nextRoleFromForm !== "admin" && nextRoleFromForm !== "user") {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "role_update_failed",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.role_update_failed,
+      });
+    }
+
+    const admin = await requireAdminUser();
+    if (targetUidFromForm === admin.uid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "role_update_failed",
+        message: "Admins cannot update their own role from this page.",
+      });
+    }
+
+    try {
+      await setUserRole(targetUidFromForm, nextRoleFromForm);
+    } catch (error) {
+      if (readPlatformErrorCode(error) === "USER_NOT_FOUND") {
+        return buildAdminUserDetailInlineActionState("error", {
+          code: "role_update_failed",
+          message: "The selected user no longer exists.",
+        });
+      }
+
+      const allowlistMessage =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : ADMIN_USER_DETAIL_ERROR_MESSAGES.role_update_failed;
+
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "role_update_failed",
+        message: allowlistMessage,
+      });
+    }
+
+    return buildAdminUserDetailInlineActionState("success", {
+      code: nextRoleFromForm,
+      message:
+        ADMIN_USER_DETAIL_ROLE_MUTATION_SUCCESS_MESSAGES[nextRoleFromForm]
+        ?? "User role updated successfully.",
+    });
+  }
+
+  async function runInlineStatusMutation(
+    _previousState: AdminUserDetailInlineActionState,
+    formData: FormData,
+  ): Promise<AdminUserDetailInlineActionState> {
+    "use server";
+
+    const { setUserStatus } = await import("@/lib/server/repository");
+    const { requireAdminUser } = await import("@/lib/server/session");
+
+    const targetUidFromForm = String(formData.get("targetUid") || "").trim();
+    const nextStatusFromForm = String(formData.get("nextStatus") || "").trim();
+
+    if (!targetUidFromForm || targetUidFromForm !== targetUid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "status_update_failed",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.status_update_failed,
+      });
+    }
+
+    if (nextStatusFromForm !== "active" && nextStatusFromForm !== "suspended") {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "status_update_failed",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.status_update_failed,
+      });
+    }
+
+    const admin = await requireAdminUser();
+    if (targetUidFromForm === admin.uid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "status_update_failed",
+        message: "Admins cannot update their own status from this page.",
+      });
+    }
+
+    try {
+      await setUserStatus(targetUidFromForm, nextStatusFromForm);
+    } catch (error) {
+      if (readPlatformErrorCode(error) === "USER_NOT_FOUND") {
+        return buildAdminUserDetailInlineActionState("error", {
+          code: "status_update_failed",
+          message: "The selected user no longer exists.",
+        });
+      }
+
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "status_update_failed",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.status_update_failed,
+      });
+    }
+
+    return buildAdminUserDetailInlineActionState("success", {
+      code: nextStatusFromForm,
+      message:
+        ADMIN_USER_DETAIL_STATUS_MUTATION_SUCCESS_MESSAGES[nextStatusFromForm]
+        ?? "User status updated successfully.",
+    });
+  }
+
+  async function runInlineStorageCleanupMutation(
+    _previousState: AdminUserDetailInlineActionState,
+    formData: FormData,
+  ): Promise<AdminUserDetailInlineActionState> {
+    "use server";
+
+    const { requireAdminUser } = await import("@/lib/server/session");
+
+    const targetUidFromForm = String(formData.get("targetUid") || "").trim();
+    const confirmation = String(formData.get("confirmation") || "").trim();
+
+    if (!targetUidFromForm || targetUidFromForm !== targetUid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "storage_cleanup_failed",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.storage_cleanup_failed,
+      });
+    }
+
+    const admin = await requireAdminUser();
+    if (targetUidFromForm === admin.uid) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "storage_cleanup_failed",
+        message: "Admins cannot run destructive storage cleanup on their own account from this page.",
+      });
+    }
+
+    if (confirmation !== targetUidFromForm) {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "storage_confirmation_mismatch",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.storage_confirmation_mismatch,
+      });
+    }
+
+    try {
+      const adminApiBaseUrl = getServerRuntimeBaseUrl();
+      const response = await fetch(`${adminApiBaseUrl}/api/admin/storage/cleanup`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "user",
+          targetUid: targetUidFromForm,
+          confirmation,
+        }),
+      });
+
+      if (!response.ok) {
+        return buildAdminUserDetailInlineActionState("error", {
+          code: "storage_cleanup_failed",
+          message: ADMIN_USER_DETAIL_ERROR_MESSAGES.storage_cleanup_failed,
+        });
+      }
+    } catch {
+      return buildAdminUserDetailInlineActionState("error", {
+        code: "storage_cleanup_failed",
+        message: ADMIN_USER_DETAIL_ERROR_MESSAGES.storage_cleanup_failed,
+      });
+    }
+
+    return buildAdminUserDetailInlineActionState("success", {
+      code: "storage_cleaned",
+      message: "Per-user storage cleanup completed successfully.",
     });
   }
 
@@ -1527,9 +1850,8 @@ export default async function AdminUserDetailPage({
           Credits & Usage
         </h2>
 
-        {/* Credit feedback stays inside this section even though the controls use different
-            server-action delivery paths. The workspace returns section-local action state,
-            while the smaller toggle/revoke forms still use redirect query params. */}
+        {/* Credit feedback stays inside this section for both legacy query-param redirects and
+          the new inline action-state controls, so operators correlate mutations in-place. */}
         {creditMutationSuccess ? (
           <div className="mb-3 flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
             <ShieldCheck className="h-5 w-5 shrink-0" />
@@ -1657,15 +1979,36 @@ export default async function AdminUserDetailPage({
               numeric credit mutations. They remain available as secondary governance toggles.
             */}
             <div className="mt-3 grid gap-2 md:grid-cols-2 md:gap-3">
-              <CreditAccessToggleForm
-                targetUid={targetUser.uid}
-                currentAccess={creditsAccount?.assessmentAccess ?? "enabled"}
+              <AdminUserDetailInlineActionForm
+                action={runInlineCreditAccessMutation}
+                hiddenFields={[
+                  { name: "targetUid", value: targetUser.uid },
+                  { name: "nextAccess", value: nextAssessmentAccess },
+                ]}
                 disabled={creditControlsDisabled}
+                buttonVariant={nextAssessmentAccess === "enabled" ? "default" : "outline"}
+                buttonClassName={`w-full min-h-10 h-auto justify-center gap-2 px-3 py-2 text-center leading-tight whitespace-normal ${
+                  nextAssessmentAccess === "enabled"
+                    ? ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
+                    : ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS
+                }`}
+                buttonLabel={nextAssessmentAccess === "enabled" ? "Enable Assessment Access" : "Disable Assessment Access"}
               />
-              <PromptEntitlementToggleForm
-                targetUid={targetUser.uid}
-                currentEntitlement={creditsAccount?.assessmentPromptEntitlement ?? "disabled"}
+              <AdminUserDetailInlineActionForm
+                action={runInlinePromptEntitlementMutation}
+                hiddenFields={[
+                  { name: "targetUid", value: targetUser.uid },
+                  { name: "nextEntitlement", value: nextPromptEntitlement },
+                ]}
                 disabled={creditControlsDisabled}
+                buttonVariant={nextPromptEntitlement === "enabled" ? "default" : "outline"}
+                buttonClassName={`w-full min-h-10 h-auto justify-center gap-2 px-3 py-2 text-center leading-tight whitespace-normal ${
+                  nextPromptEntitlement === "enabled"
+                    ? ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
+                    : ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS
+                }`}
+                buttonIcon={nextPromptEntitlement === "enabled" ? <ShieldCheck className="h-4 w-4" /> : <ShieldX className="h-4 w-4" />}
+                buttonLabel={nextPromptEntitlement === "enabled" ? "Enable Prompt Entitlement" : "Disable Prompt Entitlement"}
               />
             </div>
 
@@ -1725,10 +2068,22 @@ export default async function AdminUserDetailPage({
                       ) : null}
 
                       <div className="mt-2">
-                        <RevokeCreditGrantForm
-                          targetUid={targetUser.uid}
-                          grantId={grant.id}
+                        <AdminUserDetailInlineActionForm
+                          action={runInlineRevokeCreditGrantMutation}
+                          hiddenFields={[
+                            { name: "targetUid", value: targetUser.uid },
+                            { name: "grantId", value: grant.id },
+                          ]}
                           disabled={isCurrentUser || !canRevoke}
+                          textField={{
+                            name: "reason",
+                            placeholder: "Revocation reason (optional)",
+                            maxLength: 320,
+                            className: `${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-9 w-full text-xs`,
+                          }}
+                          buttonVariant="outline"
+                          buttonClassName={`h-8 w-full ${ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS}`}
+                          buttonLabel="Revoke Grant"
                         />
                       </div>
                     </div>
@@ -1839,17 +2194,35 @@ export default async function AdminUserDetailPage({
 
         <div className="grid gap-3 sm:grid-cols-2">
           {/* Role toggle */}
-          <RoleToggleForm
-            targetUid={targetUser.uid}
-            currentRole={targetUser.role}
+          <AdminUserDetailInlineActionForm
+            action={runInlineRoleMutation}
+            hiddenFields={[
+              { name: "targetUid", value: targetUser.uid },
+              { name: "nextRole", value: nextRole },
+            ]}
             disabled={isCurrentUser}
+            buttonVariant="outline"
+            buttonClassName={`w-full h-10 justify-center gap-2 ${ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS}`}
+            buttonIcon={isAdmin ? <ShieldX className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+            buttonLabel={isAdmin ? "Demote to User" : "Promote to Admin"}
           />
 
           {/* Status toggle */}
-          <StatusToggleForm
-            targetUid={targetUser.uid}
-            currentStatus={targetUser.status}
+          <AdminUserDetailInlineActionForm
+            action={runInlineStatusMutation}
+            hiddenFields={[
+              { name: "targetUid", value: targetUser.uid },
+              { name: "nextStatus", value: nextStatus },
+            ]}
             disabled={isCurrentUser}
+            buttonVariant={isActive ? "outline" : "default"}
+            buttonClassName={`w-full h-10 justify-center gap-2 ${
+              isActive
+                ? ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS
+                : ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
+            }`}
+            buttonIcon={isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+            buttonLabel={isActive ? "Suspend User" : "Activate User"}
           />
         </div>
 
@@ -1872,9 +2245,22 @@ export default async function AdminUserDetailPage({
             />
 
             {/* Delete all files for this user */}
-            <DeleteUserStorageForm
-              targetUid={targetUser.uid}
+            <AdminUserDetailInlineActionForm
+              action={runInlineStorageCleanupMutation}
+              hiddenFields={[{ name: "targetUid", value: targetUser.uid }]}
               disabled={isCurrentUser}
+              textField={{
+                name: "confirmation",
+                label: "Type the target UID exactly",
+                hint: "Storage cleanup is irreversible for this owner scope.",
+                placeholder: `Type \"${targetUser.uid}\" to confirm`,
+                required: true,
+                className: `${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-xs`,
+              }}
+              buttonVariant="destructive"
+              buttonClassName={`w-full h-10 justify-center gap-2 ${ADMIN_USER_DETAIL_DANGER_BUTTON_CLASS}`}
+              buttonIcon={<HardDrive className="h-4 w-4" />}
+              buttonLabel="Delete All Files"
             />
           </div>
         </div>
@@ -2151,258 +2537,6 @@ function DetailCard({
 }
 
 /**
- * Client-side role toggle form.
- */
-function RoleToggleForm({
-  targetUid,
-  currentRole,
-  disabled,
-}: {
-  targetUid: string;
-  currentRole: string;
-  disabled: boolean;
-}) {
-  const isAdmin = currentRole === "admin";
-  const actionLabel = isAdmin ? "Demote to User" : "Promote to Admin";
-
-  return (
-    <form
-      action={async () => {
-        "use server";
-        const { setUserRole } = await import("@/lib/server/repository");
-        const { requireAdminUser } = await import("@/lib/server/session");
-        await requireAdminUser();
-        try {
-          await setUserRole(targetUid, isAdmin ? "user" : "admin");
-        } catch {
-          redirect(
-            buildAdminUserDetailPath(targetUid, {
-              error: "role_update_failed",
-            }, "admin-controls"),
-          );
-        }
-
-        redirect(
-          buildAdminUserDetailPath(targetUid, {
-            role_updated: isAdmin ? "user" : "admin",
-          }, "admin-controls"),
-        );
-      }}
-    >
-      <Button
-        type="submit"
-        variant="outline"
-        size="sm"
-        disabled={disabled}
-        className={`w-full h-10 justify-center gap-2 ${ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS}`}
-      >
-        {isAdmin ? <ShieldX className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-        {actionLabel}
-      </Button>
-    </form>
-  );
-}
-
-/**
- * Client-side status toggle form.
- */
-function StatusToggleForm({
-  targetUid,
-  currentStatus,
-  disabled,
-}: {
-  targetUid: string;
-  currentStatus: string;
-  disabled: boolean;
-}) {
-  const isActive = currentStatus === "active";
-  const actionLabel = isActive ? "Suspend User" : "Activate User";
-
-  return (
-    <form
-      action={async () => {
-        "use server";
-        const { setUserStatus } = await import("@/lib/server/repository");
-        const { requireAdminUser } = await import("@/lib/server/session");
-        await requireAdminUser();
-        try {
-          await setUserStatus(targetUid, isActive ? "suspended" : "active");
-        } catch {
-          redirect(
-            buildAdminUserDetailPath(targetUid, {
-              error: "status_update_failed",
-            }, "admin-controls"),
-          );
-        }
-
-        redirect(
-          buildAdminUserDetailPath(targetUid, {
-            status_updated: isActive ? "suspended" : "active",
-          }, "admin-controls"),
-        );
-      }}
-    >
-      <Button
-        type="submit"
-        variant={isActive ? "outline" : "default"}
-        size="sm"
-        disabled={disabled}
-        className={`w-full h-10 justify-center gap-2 ${
-          isActive
-            ? ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS
-            : ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
-        }`}
-      >
-        {isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-        {actionLabel}
-      </Button>
-    </form>
-  );
-}
-
-/**
- * Prompt entitlement toggle controls persistent assessment-prompt eligibility per user.
- * This admin-owned toggle is intentionally separate from password/account flows.
- */
-function PromptEntitlementToggleForm({
-  targetUid,
-  currentEntitlement,
-  disabled,
-}: {
-  targetUid: string;
-  currentEntitlement: AssessmentPromptEntitlement;
-  disabled: boolean;
-}) {
-  const nextEntitlement = currentEntitlement === "enabled" ? "disabled" : "enabled";
-  const actionLabel = nextEntitlement === "enabled"
-    ? "Enable Prompt Entitlement"
-    : "Disable Prompt Entitlement";
-
-  return (
-    <form
-      action={async () => {
-        "use server";
-        await runAdminPromptEntitlementMutationFromDetailPage({
-          targetUid,
-          entitlement: nextEntitlement,
-        });
-      }}
-    >
-      <Button
-        type="submit"
-        variant={nextEntitlement === "enabled" ? "default" : "outline"}
-        size="sm"
-        disabled={disabled}
-        className={`w-full min-h-10 h-auto justify-center gap-2 px-3 py-2 text-center leading-tight whitespace-normal ${
-          nextEntitlement === "enabled"
-            ? ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
-            : ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS
-        }`}
-      >
-        {nextEntitlement === "enabled" ? (
-          <ShieldCheck className="h-4 w-4" />
-        ) : (
-          <ShieldX className="h-4 w-4" />
-        )}
-        {actionLabel}
-      </Button>
-    </form>
-  );
-}
-
-/**
- * Credit access toggle stays backend-owned through repository mutations.
- */
-function CreditAccessToggleForm({
-  targetUid,
-  currentAccess,
-  disabled,
-}: {
-  targetUid: string;
-  currentAccess: "enabled" | "disabled";
-  disabled: boolean;
-}) {
-  const nextAccess = currentAccess === "enabled" ? "disabled" : "enabled";
-  const actionLabel = nextAccess === "enabled" ? "Enable Assessment Access" : "Disable Assessment Access";
-
-  return (
-    <form
-      action={async () => {
-        "use server";
-        await runAdminCreditMutationFromDetailPage({
-          targetUid,
-          mutation: {
-            action: "set_access",
-            access: nextAccess,
-            reason: `Admin set assessment access to ${nextAccess}.`,
-          },
-        });
-      }}
-    >
-      <Button
-        type="submit"
-        variant={nextAccess === "enabled" ? "default" : "outline"}
-        size="sm"
-        disabled={disabled}
-        className={`w-full min-h-10 h-auto justify-center gap-2 px-3 py-2 text-center leading-tight whitespace-normal ${
-          nextAccess === "enabled"
-            ? ADMIN_USER_DETAIL_PRIMARY_BUTTON_CLASS
-            : ADMIN_USER_DETAIL_OUTLINE_BUTTON_CLASS
-        }`}
-      >
-        {actionLabel}
-      </Button>
-    </form>
-  );
-}
-
-function RevokeCreditGrantForm({
-  targetUid,
-  grantId,
-  disabled,
-}: {
-  targetUid: string;
-  grantId: string;
-  disabled: boolean;
-}) {
-  return (
-    <form
-      action={async (formData: FormData) => {
-        "use server";
-        await runAdminCreditMutationFromDetailPage({
-          targetUid,
-          mutation: {
-            action: "revoke_grant",
-            grantId,
-            reason: parseOptionalMutationText(formData.get("reason")),
-          },
-        });
-      }}
-    >
-      <div className="space-y-2">
-        <input
-          type="text"
-          name="reason"
-          placeholder="Revocation reason (optional)"
-          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-9 w-full text-xs`}
-          disabled={disabled}
-          maxLength={320}
-        />
-        <Button
-          type="submit"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          className={`h-8 w-full ${ADMIN_USER_DETAIL_DANGER_OUTLINE_BUTTON_CLASS}`}
-        >
-          Revoke Grant
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-/**
  * Delete user account form with confirmation.
  */
 function DeleteUserForm({
@@ -2469,76 +2603,3 @@ function DeleteUserForm({
   );
 }
 
-/**
- * Delete all storage files for this user form with confirmation.
- */
-function DeleteUserStorageForm({
-  targetUid,
-  disabled,
-}: {
-  targetUid: string;
-  disabled: boolean;
-}) {
-  const confirmationTarget = targetUid;
-
-  return (
-    <form
-      action={async (formData: FormData) => {
-        "use server";
-        const { requireAdminUser } = await import("@/lib/server/session");
-        await requireAdminUser();
-        const confirmation = String(formData.get("confirmation") || "").trim();
-
-        if (confirmation !== targetUid) {
-          redirect(buildAdminUserDetailPath(targetUid, { error: "storage_confirmation_mismatch" }, "admin-controls"));
-        }
-
-        try {
-          const adminApiBaseUrl = getServerRuntimeBaseUrl();
-          const response = await fetch(`${adminApiBaseUrl}/api/admin/storage/cleanup`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              mode: "user",
-              targetUid,
-              confirmation,
-            }),
-          });
-
-          if (!response.ok) {
-            redirect(buildAdminUserDetailPath(targetUid, { error: "storage_cleanup_failed" }, "admin-controls"));
-          }
-
-          redirect(buildAdminUserDetailPath(targetUid, { storage_cleaned: "true" }, "admin-controls"));
-        } catch {
-          redirect(buildAdminUserDetailPath(targetUid, { error: "storage_cleanup_failed" }, "admin-controls"));
-        }
-      }}
-    >
-      <input type="hidden" name="uid" value={targetUid} />
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">
-          Type the target UID exactly
-        </p>
-        <input
-          type="text"
-          name="confirmation"
-          placeholder={`Type "${confirmationTarget}" to confirm`}
-          className={`${ADMIN_USER_DETAIL_FIELD_CONTROL_CLASS} h-10 w-full text-xs`}
-          disabled={disabled}
-          required
-        />
-        <Button
-          type="submit"
-          variant="destructive"
-          size="sm"
-          disabled={disabled}
-          className={`w-full h-10 justify-center gap-2 ${ADMIN_USER_DETAIL_DANGER_BUTTON_CLASS}`}
-        >
-          <HardDrive className="h-4 w-4" />
-          Delete All Files
-        </Button>
-      </div>
-    </form>
-  );
-}

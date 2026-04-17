@@ -3,7 +3,7 @@
 import { LockKeyhole, Sparkles } from "lucide-react";
 import { useState } from "react";
 
-import { AssessmentCreditDetailsPanel } from "@/components/assessment/assessment-credit-details-panel";
+import { GlobalCreditDetailsPanel } from "@/components/assessment/global-credit-details-panel";
 import type { AppMessages } from "@/lib/messages";
 import type { Locale } from "@zootopia/shared-types";
 
@@ -85,7 +85,7 @@ export function GlobalCreditsUnlockGate({
 
   if (!access.lockEnabled || access.unlocked || access.isAdmin) {
     return (
-      <AssessmentCreditDetailsPanel
+      <GlobalCreditDetailsPanel
         locale={locale}
         messages={messages}
       />

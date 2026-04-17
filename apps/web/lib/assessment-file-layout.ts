@@ -1,5 +1,6 @@
 export const ASSESSMENT_FILE_FIRST_PAGE_QUESTION_TARGET = 2;
 export const ASSESSMENT_FILE_FOLLOWING_PAGE_QUESTION_TARGET = 3;
+export type AssessmentFilePaginationMode = "adaptive" | "deterministic";
 /* The first file page has to share vertical space with the premium cover block. Keep a separate
    complexity budget here so extreme long-form cards can safely fallback to one card without
    sacrificing the normal/common two-card opening rhythm. */
@@ -22,7 +23,19 @@ function chunkItems<T>(items: readonly T[], size: number) {
   return chunks;
 }
 
-export function partitionAssessmentFileQuestions<T extends AssessmentFileQuestionLike>(questions: readonly T[]) {
+function resolveAssessmentFilePaginationMode(
+  value: AssessmentFilePaginationMode | undefined,
+) {
+  return value ?? "adaptive";
+}
+
+export function partitionAssessmentFileQuestions<T extends AssessmentFileQuestionLike>(
+  questions: readonly T[],
+  options: {
+    paginationMode?: AssessmentFilePaginationMode;
+  } = {},
+) {
+  const paginationMode = resolveAssessmentFilePaginationMode(options.paginationMode);
   /* Detached preview/result pages and the shared print renderer must follow the same page-slot
      contract: page one targets two questions, and later question pages target three. Keep that
      chunking rule centralized here so future layout refinements do not desynchronize the React
@@ -33,6 +46,7 @@ export function partitionAssessmentFileQuestions<T extends AssessmentFileQuestio
     0,
   );
   const firstPageUsesOverflowFallback =
+    paginationMode === "adaptive" &&
     firstPageCandidateQuestions.length === ASSESSMENT_FILE_FIRST_PAGE_QUESTION_TARGET &&
     firstPageComplexity > ASSESSMENT_FILE_FIRST_PAGE_COMPLEXITY_BUDGET;
   const firstPageQuestions = firstPageUsesOverflowFallback
@@ -219,7 +233,11 @@ function estimateQuestionComplexity(question: AssessmentFileQuestionLike) {
 function buildQuestionPageChunks<T extends AssessmentFileQuestionLike>(
   questions: readonly T[],
   targetCount: number,
+  options: {
+    paginationMode?: AssessmentFilePaginationMode;
+  } = {},
 ) {
+  const paginationMode = resolveAssessmentFilePaginationMode(options.paginationMode);
   const chunks: Array<{
     questions: T[];
     usesOverflowFallback: boolean;
@@ -234,7 +252,11 @@ function buildQuestionPageChunks<T extends AssessmentFileQuestionLike>(
       0,
     );
 
-    if (targetSlice.length === targetCount && targetComplexity > ASSESSMENT_FILE_PAGE_COMPLEXITY_BUDGET) {
+    if (
+      paginationMode === "adaptive" &&
+      targetSlice.length === targetCount &&
+      targetComplexity > ASSESSMENT_FILE_PAGE_COMPLEXITY_BUDGET
+    ) {
       const fallbackSlice = questions.slice(index, index + targetCount - 1);
       chunks.push({
         questions: [...fallbackSlice],
@@ -256,12 +278,15 @@ function buildQuestionPageChunks<T extends AssessmentFileQuestionLike>(
 
 export function buildAssessmentFileQuestionPages<T extends AssessmentFileQuestionLike>(
   questions: readonly T[],
+  options: {
+    paginationMode?: AssessmentFilePaginationMode;
+  } = {},
 ) {
   const {
     firstPageQuestions,
     firstPageUsesOverflowFallback,
     followingQuestionPages,
-  } = partitionAssessmentFileQuestions(questions);
+  } = partitionAssessmentFileQuestions(questions, options);
 
   return [
     {
@@ -271,6 +296,7 @@ export function buildAssessmentFileQuestionPages<T extends AssessmentFileQuestio
     ...buildQuestionPageChunks(
       followingQuestionPages.flat(),
       ASSESSMENT_FILE_FOLLOWING_PAGE_QUESTION_TARGET,
+      options,
     ),
   ].filter((page) => page.questions.length > 0);
 }

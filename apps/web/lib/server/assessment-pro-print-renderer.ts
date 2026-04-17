@@ -29,7 +29,12 @@ import {
 /* Pro PDF artifacts must invalidate when the Pro capture surface changes materially. Keep this
    version lane-specific so renderer-content migration and later premium design work can rev
    without forcing Fast browser-print artifact churn. */
-export const ASSESSMENT_PRO_PRINT_RENDERER_VERSION = "pro-2026-04-15-footer-containment-v3";
+export const ASSESSMENT_PRO_PRINT_RENDERER_VERSION =
+  "pro-2026-04-17-deterministic-pagination-v5";
+/* The premium Puppeteer lane now opts out of the shared overflow-fallback pagination heuristic.
+   Keep this lane-specific contract explicit so Pro can guarantee a stable 2-then-3 page rhythm
+   without silently changing preview/result or the lighter Fast export path. */
+const ASSESSMENT_PRO_PRINT_PAGINATION_MODE = "deterministic" as const;
 
 export type AssessmentProPrintRenderDiagnostics = {
   bodyLoaded: boolean;
@@ -67,7 +72,9 @@ export function buildAssessmentProPrintRenderDiagnostics(input: {
   preview: NormalizedAssessmentPreview;
   html?: string | null;
 }): AssessmentProPrintRenderDiagnostics {
-  const questionPages = buildAssessmentFileQuestionPages(input.preview.questions);
+  const questionPages = buildAssessmentFileQuestionPages(input.preview.questions, {
+    paginationMode: ASSESSMENT_PRO_PRINT_PAGINATION_MODE,
+  });
   const renderedQuestionPageCount = Math.max(questionPages.length, 1);
   const htmlQuestionCardCount =
     typeof input.html === "string"
@@ -456,6 +463,11 @@ function renderQuestionStackCards(input: {
     .join("\n");
 }
 
+function getQuestionStackCountClassName(questionCount: number) {
+  const normalizedCount = questionCount >= 3 ? 3 : questionCount <= 1 ? 1 : 2;
+  return `question-stack--${normalizedCount}`;
+}
+
 function renderSupportPill(text: string, className = "support-chip") {
   return `<span class="${className}">${escapeHtml(text)}</span>`;
 }
@@ -605,10 +617,10 @@ export function buildAssessmentProPrintHtml(input: {
   const followingPageQuestionCardPrintMinHeight = "27.6mm";
   /* The final support-page composition must stay on one page with its own footer attached.
      Keep these print guards centralized so future tweaks do not reintroduce footer-only overflow. */
-  const staticSectionMinHeight = "calc(100vh - 2.4mm)";
+  const staticSectionMinHeight = `calc(297mm - ${pageMarginTop} - ${pageMarginBottom})`;
   /* Footer containment is non-negotiable for Pro export. Keep this reserved row explicit so
      dense page bodies cannot consume the footer slot and push it into the next printed page. */
-  const staticSectionFooterReservedHeight = "90px";
+  const staticSectionFooterReservedHeight = "24mm";
   const staticSectionBodyMaxHeight = `calc(${staticSectionMinHeight} - ${staticSectionFooterReservedHeight})`;
   /* This gutter reserves breathing room between the page body and the shared footer row in
      static-section mode. Preserve it when tuning page chrome so footer containment survives. */
@@ -629,12 +641,17 @@ export function buildAssessmentProPrintHtml(input: {
   const coverPaddingSide = "padding-right";
   const coverHeaderAsidePadding = "132px";
   const pageFoldSide = preview.direction === "rtl" ? "left" : "right";
-  const questionPages = buildAssessmentFileQuestionPages(preview.questions);
+  const questionPages = buildAssessmentFileQuestionPages(preview.questions, {
+    paginationMode: ASSESSMENT_PRO_PRINT_PAGINATION_MODE,
+  });
   const firstQuestionPage = questionPages[0] ?? {
     questions: [] as AssessmentPreviewQuestionItem[],
     usesOverflowFallback: false,
   };
   const followingQuestionPages = questionPages.slice(1);
+  const firstPageQuestionStackClassName = getQuestionStackCountClassName(
+    firstQuestionPage.questions.length,
+  );
   const firstPageQuestionCards = renderQuestionStackCards({
     questions: firstQuestionPage.questions,
     answerLabel,
@@ -651,7 +668,7 @@ export function buildAssessmentProPrintHtml(input: {
       return `
         <section class="page-section page-section--question">
           <div class="page-section-body page-section-body--question">
-            <section class="question-page-stack">
+            <section class="question-page-stack ${getQuestionStackCountClassName(page.questions.length)}">
               ${renderQuestionStackCards({
                 questions: page.questions,
                 answerLabel,
@@ -1141,23 +1158,46 @@ export function buildAssessmentProPrintHtml(input: {
       }
 
       .first-page-shell {
-        display: grid;
+        display: flex;
+        flex-direction: column;
         gap: 4px;
+        min-height: 0;
       }
 
       .first-page-questions {
         display: grid;
         gap: 3px;
+        min-height: 0;
+        flex: 1 1 auto;
       }
 
       .question-page-stack {
         display: grid;
         gap: 5px;
+        min-height: 0;
+        flex: 1 1 auto;
+      }
+
+      /* The Pro lane now assigns a fixed slot count to each page shell before Chromium prints.
+         Preserve these explicit rows so page one always stretches exactly two question slots and
+         later pages stretch exactly three instead of leaving random slack above the footer. */
+      .question-stack--1 {
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      .question-stack--2 {
+        grid-template-rows: repeat(2, minmax(0, 1fr));
+      }
+
+      .question-stack--3 {
+        grid-template-rows: repeat(3, minmax(0, 1fr));
       }
 
       .question-section-block {
-        display: grid;
+        display: flex;
+        flex-direction: column;
         gap: 5px;
+        min-height: 0;
         break-inside: avoid;
         page-break-inside: avoid;
       }
@@ -1180,6 +1220,10 @@ export function buildAssessmentProPrintHtml(input: {
          Do not turn these back into opaque slabs or the detached export mood will drift away again. */
       .question-card {
         position: relative;
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
         border: 1px solid var(--line);
         border-radius: 14px;
         padding: 11px 12px;
@@ -2353,17 +2397,26 @@ export function buildAssessmentProPrintHtml(input: {
         .page-number-mode-static-sections .page-section-body,
         .page-number-mode-static-sections .support-page-composition {
           min-height: 0;
+          height: ${staticSectionBodyMaxHeight};
           max-height: ${staticSectionBodyMaxHeight};
           padding-bottom: ${staticSectionFooterGap};
         }
 
         .page-number-mode-static-sections .page-section-body--cover {
+          display: flex;
+          flex-direction: column;
           gap: 5px;
         }
 
         .page-number-mode-static-sections .page-section-body--question,
         .page-number-mode-static-sections .support-page-composition {
+          display: flex;
+          flex-direction: column;
           gap: 6px;
+        }
+
+        .page-number-mode-static-sections .cover-shell {
+          flex: 0 0 auto;
         }
 
         .page-number-mode-static-sections .assessment-file-footer,
@@ -2385,6 +2438,38 @@ export function buildAssessmentProPrintHtml(input: {
 
         .page-number-mode-static-sections .support-page-inner {
           min-height: 0;
+        }
+
+        /* The Pro PDF cover page uses a fixed-height body wrapper above the reserved footer row.
+           This handoff gives the first-page shell the remaining body height so page one can keep
+           its header block plus exactly two stretching cards without leaving dead space above the
+           footer. Future agents should preserve this page-1 flex contract for the Pro export lane. */
+        .page-number-mode-static-sections .page-section-body--cover > .first-page-shell {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+
+        .page-number-mode-static-sections .first-page-shell,
+        .page-number-mode-static-sections .first-page-questions,
+        .page-number-mode-static-sections .question-page-stack {
+          min-height: 0;
+        }
+
+        .page-number-mode-static-sections .first-page-questions,
+        .page-number-mode-static-sections .question-page-stack {
+          flex: 1 1 auto;
+        }
+
+        .page-number-mode-static-sections .question-section-block {
+          gap: 3px;
+        }
+
+        /* Section headings remain attached to their owning card, but they need a tighter print
+           footprint so mixed-type pages can keep the exact 2/3 card contract without footer drift. */
+        .page-number-mode-static-sections .question-section-heading {
+          padding: 5px 8px;
+          border-radius: 10px;
+          font-size: 10.4px;
         }
 
         /* Final support-page footer stays attached to the physical page bottom in static-section
@@ -2630,7 +2715,7 @@ export function buildAssessmentProPrintHtml(input: {
             ${
               firstPageQuestionCards
                 ? `
-                  <section class="first-page-questions">
+                  <section class="first-page-questions ${firstPageQuestionStackClassName}">
                     ${firstPageQuestionCards}
                   </section>
                 `
