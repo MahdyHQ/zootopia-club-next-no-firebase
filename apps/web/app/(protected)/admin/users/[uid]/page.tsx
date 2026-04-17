@@ -318,6 +318,7 @@ function getErrorCode(error: unknown) {
 function buildAdminUserDetailPath(
   targetUid: string,
   params: Record<string, string | null | undefined>,
+  hash: string | null = null,
 ) {
   const searchParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -328,9 +329,17 @@ function buildAdminUserDetailPath(
   }
 
   const encodedUid = encodeURIComponent(targetUid);
-  return searchParams.size > 0
+  const basePath = searchParams.size > 0
     ? `/admin/users/${encodedUid}?${searchParams.toString()}`
     : `/admin/users/${encodedUid}`;
+  /* Keep redirected server-action flows anchored to their owning section so operators are returned
+     to Credits or Admin Controls context instead of being thrown to the top of this long page. */
+  const normalizedHash = hash?.trim().replace(/^#/, "");
+  if (!normalizedHash) {
+    return basePath;
+  }
+
+  return `${basePath}#${normalizedHash}`;
 }
 
 function mapCreditMutationErrorToQueryCode(error: unknown) {
@@ -685,14 +694,14 @@ async function runAdminCreditMutationFromDetailPage(input: {
     redirect(
       buildAdminUserDetailPath(input.targetUid, {
         error: mapCreditMutationErrorToQueryCode(error),
-      }),
+      }, "credits-usage"),
     );
   }
 
   redirect(
     buildAdminUserDetailPath(input.targetUid, {
       credits_updated: input.mutation.action,
-    }),
+    }, "credits-usage"),
   );
 }
 
@@ -713,7 +722,7 @@ async function runAdminPromptEntitlementMutationFromDetailPage(input: {
     redirect(
       buildAdminUserDetailPath(input.targetUid, {
         error: "prompt_self_mutation_forbidden",
-      }),
+      }, "credits-usage"),
     );
   }
 
@@ -722,7 +731,7 @@ async function runAdminPromptEntitlementMutationFromDetailPage(input: {
     redirect(
       buildAdminUserDetailPath(input.targetUid, {
         error: "prompt_user_not_found",
-      }),
+      }, "credits-usage"),
     );
   }
 
@@ -730,7 +739,7 @@ async function runAdminPromptEntitlementMutationFromDetailPage(input: {
     redirect(
       buildAdminUserDetailPath(input.targetUid, {
         error: "prompt_invalid_request",
-      }),
+      }, "credits-usage"),
     );
   }
 
@@ -758,14 +767,14 @@ async function runAdminPromptEntitlementMutationFromDetailPage(input: {
     redirect(
       buildAdminUserDetailPath(input.targetUid, {
         error: mapPromptEntitlementMutationErrorToQueryCode(error),
-      }),
+      }, "credits-usage"),
     );
   }
 
   redirect(
     buildAdminUserDetailPath(input.targetUid, {
       prompt_access_updated: input.entitlement,
-    }),
+    }, "credits-usage"),
   );
 }
 
@@ -967,6 +976,8 @@ export default async function AdminUserDetailPage({
   const errorCode = getFirstSearchParamValue(resolvedSearchParams.error).trim();
   const creditsUpdatedAction = getFirstSearchParamValue(resolvedSearchParams.credits_updated).trim();
   const promptAccessUpdated = getFirstSearchParamValue(resolvedSearchParams.prompt_access_updated).trim();
+  const roleUpdated = getFirstSearchParamValue(resolvedSearchParams.role_updated).trim();
+  const statusUpdated = getFirstSearchParamValue(resolvedSearchParams.status_updated).trim();
   const storageCleaned = getFirstSearchParamValue(resolvedSearchParams.storage_cleaned) === "true";
   const promptMutationSuccessMessages: Record<string, string> = {
     enabled: "Assessment prompt entitlement is now enabled for this user.",
@@ -993,12 +1004,28 @@ export default async function AdminUserDetailPage({
     prompt_self_mutation_forbidden: "Admins cannot mutate their own prompt entitlement from this page.",
     prompt_invalid_request: "Prompt entitlement request is invalid.",
     prompt_update_failed: "Unable to update prompt entitlement right now. Try again shortly.",
+    role_update_failed: "Unable to update user role right now. Try again shortly.",
+    status_update_failed: "Unable to update user status right now. Try again shortly.",
+  };
+  const roleMutationSuccessMessages: Record<string, string> = {
+    admin: "User role was promoted to admin.",
+    user: "User role was demoted to user.",
+  };
+  const statusMutationSuccessMessages: Record<string, string> = {
+    active: "User account is now active.",
+    suspended: "User account is now suspended.",
   };
   const creditMutationSuccess = creditsUpdatedAction
     ? getAdminCreditMutationSuccessMessage(creditsUpdatedAction)
     : null;
   const promptMutationSuccess = promptAccessUpdated
     ? promptMutationSuccessMessages[promptAccessUpdated] ?? "Assessment prompt entitlement updated successfully."
+    : null;
+  const roleMutationSuccess = roleUpdated
+    ? roleMutationSuccessMessages[roleUpdated] ?? "User role updated successfully."
+    : null;
+  const statusMutationSuccess = statusUpdated
+    ? statusMutationSuccessMessages[statusUpdated] ?? "User status updated successfully."
     : null;
   const creditFeedbackError = getAdminCreditMutationErrorMessage(errorCode);
   const feedbackError = errorCode
@@ -1023,6 +1050,8 @@ export default async function AdminUserDetailPage({
     "delete_failed",
     "storage_confirmation_mismatch",
     "storage_cleanup_failed",
+    "role_update_failed",
+    "status_update_failed",
   ]);
   const creditSectionFeedbackError =
     creditFeedbackError
@@ -1322,7 +1351,7 @@ export default async function AdminUserDetailPage({
       )}
 
       {/* Identity / Account Section */}
-      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
+      <section id="credits-usage" className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <User className="h-5 w-5" />
           Identity & Account Summary
@@ -1496,7 +1525,7 @@ export default async function AdminUserDetailPage({
       </section>
 
       {/* Credits / Usage Section */}
-      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
+      <section id="admin-controls" className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <Gauge className="h-5 w-5" />
           Credits & Usage
@@ -1788,6 +1817,20 @@ export default async function AdminUserDetailPage({
               namespaces and legacy uploads/temp, documents, assessment-results,
               and assessment-exports paths.
             </p>
+          </div>
+        ) : null}
+
+        {roleMutationSuccess ? (
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
+            <ShieldCheck className="h-5 w-5 shrink-0" />
+            <p className="text-sm font-medium">{roleMutationSuccess}</p>
+          </div>
+        ) : null}
+
+        {statusMutationSuccess ? (
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-emerald-800 dark:text-emerald-200 shadow-sm">
+            <UserCheck className="h-5 w-5 shrink-0" />
+            <p className="text-sm font-medium">{statusMutationSuccess}</p>
           </div>
         ) : null}
 
@@ -2133,8 +2176,21 @@ function RoleToggleForm({
         const { setUserRole } = await import("@/lib/server/repository");
         const { requireAdminUser } = await import("@/lib/server/session");
         await requireAdminUser();
-        await setUserRole(targetUid, isAdmin ? "user" : "admin");
-        redirect(`/admin/users/${targetUid}`);
+        try {
+          await setUserRole(targetUid, isAdmin ? "user" : "admin");
+        } catch {
+          redirect(
+            buildAdminUserDetailPath(targetUid, {
+              error: "role_update_failed",
+            }, "admin-controls"),
+          );
+        }
+
+        redirect(
+          buildAdminUserDetailPath(targetUid, {
+            role_updated: isAdmin ? "user" : "admin",
+          }, "admin-controls"),
+        );
       }}
     >
       <Button
@@ -2173,8 +2229,21 @@ function StatusToggleForm({
         const { setUserStatus } = await import("@/lib/server/repository");
         const { requireAdminUser } = await import("@/lib/server/session");
         await requireAdminUser();
-        await setUserStatus(targetUid, isActive ? "suspended" : "active");
-        redirect(`/admin/users/${targetUid}`);
+        try {
+          await setUserStatus(targetUid, isActive ? "suspended" : "active");
+        } catch {
+          redirect(
+            buildAdminUserDetailPath(targetUid, {
+              error: "status_update_failed",
+            }, "admin-controls"),
+          );
+        }
+
+        redirect(
+          buildAdminUserDetailPath(targetUid, {
+            status_updated: isActive ? "suspended" : "active",
+          }, "admin-controls"),
+        );
       }}
     >
       <Button
@@ -2357,11 +2426,11 @@ function DeleteUserForm({
         const confirmation = String(formData.get("confirmation") || "").trim();
 
         if (!confirmation) {
-          redirect(`/admin/users/${targetUid}?error=confirmation_required`);
+          redirect(buildAdminUserDetailPath(targetUid, { error: "confirmation_required" }, "admin-controls"));
         }
 
         if (confirmation !== DELETE_USER_CONFIRMATION_PHRASE) {
-          redirect(`/admin/users/${targetUid}?error=confirmation_mismatch`);
+          redirect(buildAdminUserDetailPath(targetUid, { error: "confirmation_mismatch" }, "admin-controls"));
         }
 
         try {
@@ -2372,7 +2441,7 @@ function DeleteUserForm({
           });
           redirect("/admin/users?deleted=true");
         } catch {
-          redirect(`/admin/users/${targetUid}?error=delete_failed`);
+          redirect(buildAdminUserDetailPath(targetUid, { error: "delete_failed" }, "admin-controls"));
         }
       }}
     >
@@ -2425,7 +2494,7 @@ function DeleteUserStorageForm({
         const confirmation = String(formData.get("confirmation") || "").trim();
 
         if (confirmation !== targetUid) {
-          redirect(`/admin/users/${targetUid}?error=storage_confirmation_mismatch`);
+          redirect(buildAdminUserDetailPath(targetUid, { error: "storage_confirmation_mismatch" }, "admin-controls"));
         }
 
         try {
@@ -2441,12 +2510,12 @@ function DeleteUserStorageForm({
           });
 
           if (!response.ok) {
-            redirect(`/admin/users/${targetUid}?error=storage_cleanup_failed`);
+            redirect(buildAdminUserDetailPath(targetUid, { error: "storage_cleanup_failed" }, "admin-controls"));
           }
 
-          redirect(`/admin/users/${targetUid}?storage_cleaned=true`);
+          redirect(buildAdminUserDetailPath(targetUid, { storage_cleaned: "true" }, "admin-controls"));
         } catch {
-          redirect(`/admin/users/${targetUid}?error=storage_cleanup_failed`);
+          redirect(buildAdminUserDetailPath(targetUid, { error: "storage_cleanup_failed" }, "admin-controls"));
         }
       }}
     >

@@ -14,6 +14,7 @@ export const APP_ROUTES = {
   hallOfHonor: "/hall-of-honor",
   upload: "/upload",
   history: "/history",
+  globalCredits: "/credits",
   assessment: "/assessment",
   assessmentCredits: "/assessment/credits",
   infographic: "/infographic",
