@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Hybrid credit persistence bridge + canonical owner credit details route)
+Last Updated: 2026-04-17 (Global credits route alias + admin detail no-jump section anchors)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: c2bad35d88b3150a694d4fd49de8765b511cf67c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -159,15 +159,16 @@ Key verified facts:
   for `/api/assessment/credits`, and the Assessment page/studio no longer seed
   or patch that shared balance cache from page props, mutation responses, or
   client-calculated deltas
-- Protected workspace navigation now includes `/assessment/credits`, a
-  dedicated owner-facing credit-details route that reads the canonical shared
+- Protected workspace navigation now includes `/credits` as the primary
+  dedicated owner-facing global-credit details route (with `/assessment/credits`
+  preserved as a compatibility redirect), and it reads the canonical shared
   `/api/assessment/credits` query path and keeps refresh behavior on shared
   invalidation/refetch instead of local balance patching
 - `/api/assessment/credits/details` now provides the owner-scoped canonical
   credit detail read model (account + summary + grants + mutation history +
   computedAt) for the protected credit details page, while the visible total
   balance remains owned by the shared `/api/assessment/credits` TanStack query
-- The protected header balance badge now links directly to `/assessment/credits`
+- The protected header balance badge now links directly to `/credits`
   without changing balance ownership; the page itself uses the shared summary
   query for totals and a separate owner-scoped details query only for source
   breakdown and mutation history
@@ -632,7 +633,8 @@ Root:
 Protected Routes (requires auth):
   /upload                     → Document upload workspace
   /assessment                 → AI assessment generation studio
-  /assessment/credits         → Assessment credit details page
+  /credits                    → Global credit details page (primary)
+  /assessment/credits         → Compatibility redirect to `/credits`
   /infographic                → Infographic generation (admin-only)
   /history                    → Upload & assessment history viewer
   /settings                   → User profile settings
@@ -690,7 +692,8 @@ Frontend-Owned (Client Pages):
 - apps/web/app/(protected)/(completed)/page.tsx — Home dashboard
 - apps/web/app/(protected)/(completed)/upload/page.tsx — Upload workspace
 - apps/web/app/(protected)/(completed)/assessment/page.tsx — Assessment studio
-- apps/web/app/(protected)/(completed)/assessment/credits/page.tsx — Assessment credit details
+- apps/web/app/(protected)/(completed)/credits/page.tsx — Global credit details
+- apps/web/app/(protected)/(completed)/assessment/credits/page.tsx — Compatibility redirect to `/credits`
 - apps/web/app/(protected)/(completed)/infographic/page.tsx — Infographic page
 - apps/web/app/(protected)/(completed)/history/page.tsx — History viewer
 - apps/web/app/(protected)/settings/page.tsx — Settings page
@@ -1443,7 +1446,7 @@ Implemented & Active:
 - [x] Document upload with retention policies
 - [x] AI assessment generation with credit limits
 - [x] Near-real-time server-authoritative assessment credit synchronization
-- [x] Dedicated protected `/assessment/credits` summary/details page
+- [x] Dedicated protected global credits page at `/credits` with `/assessment/credits` compatibility redirect
 - [x] Assessment history viewer
 - [x] Assessment export (PDF, JSON)
 - [x] User settings page
@@ -1546,6 +1549,72 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-17 — Admin detail no-jump hardening + global credits surface rename/alias
+
+Reason:
+- Finish the requested surgical hardening without redesigning the working credit architecture.
+- Stop admin operators from being thrown to top-of-page context after same-page control submits on `/admin/users/[uid]`.
+- Promote user-facing credit naming from assessment-scoped wording to truthful global/platform balance wording while preserving backend contract names and canonical summary ownership.
+
+Root cause(s) confirmed before editing:
+- The heavy admin credit workspace already used local action-state + `router.refresh()` and was scroll-safe.
+- Several other admin controls on the same page (role/status/prompt/access/revoke/storage cleanup errors) still used redirect-based same-page round trips that returned to the route top.
+- User-facing route and labels still centered around `/assessment/credits` and “assessment credits” wording even though visible balance truth is a shared platform balance.
+
+Files changed:
+- `packages/shared-config/src/routes.ts`
+- `apps/web/app/(protected)/(completed)/credits/page.tsx` (new)
+- `apps/web/app/(protected)/(completed)/assessment/credits/page.tsx`
+- `apps/web/components/layout/shell-nav.tsx`
+- `apps/web/components/layout/protected-shell.tsx`
+- `apps/web/components/assessment/assessment-studio.tsx`
+- `apps/web/messages/en.json`
+- `apps/web/messages/ar.json`
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- `zootopia-club-next-ledger.txt`
+
+Technical details:
+- Added `APP_ROUTES.globalCredits = "/credits"` and kept `APP_ROUTES.assessmentCredits = "/assessment/credits"` for compatibility.
+- Added new protected `/credits` page that renders the same server-owned global credit details panel.
+- Converted `/assessment/credits` into a compatibility server redirect to `/credits`, preserving old entry-point links safely.
+- Updated protected sidebar, header balance badge, and Assessment Studio “open details” link to use `/credits`.
+- Updated EN/AR user-facing labels to global credit wording while preserving existing backend/API/type contracts (`/api/assessment/credits`, `/api/assessment/credits/details`, shared query keys, repository ownership).
+- Kept canonical visible total ownership unchanged: shared summary query backed by `/api/assessment/credits`.
+- Hardened admin user-detail redirects by adding section-anchor returns:
+  - credit/prompt redirect flows now return to `#credits-usage`
+  - role/status/storage/error redirects now return to `#admin-controls`
+- Added section IDs (`credits-usage`, `admin-controls`) and added local success feedback for role/status query-param outcomes inside Admin Controls.
+- Kept mutation authority server-side (server actions + repository) and did not move secure writes to client code.
+
+Environment-specific notes:
+- Local integrated development:
+  - `npm run lint:web` passed.
+  - `npm run typecheck:web` passed.
+  - `npm run build:web` failed due blocked Google Fonts fetch in this environment (`next/font` network reachability issue), not due touched code paths.
+  - `npm run build:vercel` failed for the same environment font-fetch/network reason.
+- Vercel production:
+  - No architecture changes were made that alter server authority or canonical credit ownership; changes are route aliasing, UI wording, and admin redirect anchoring.
+  - Build outcomes should continue to depend on Google Fonts reachability at build time unless fonts are self-hosted/locally cached.
+- Supabase provider-managed behavior:
+  - No schema or RLS changes.
+  - No changes to private realtime channel policy/topic ownership.
+  - No change to repository transactional credit writes or canonical summary reads.
+
+Verification:
+- `npm run lint:web` ✅
+- `npm run typecheck:web` ✅
+- `npm run build:web` ❌ (environmental Google Fonts fetch failure in `apps/web/app/layout.tsx`)
+- `npm run build:vercel` ❌ (same environmental Google Fonts fetch failure)
+- Code-path verification confirmed:
+  - header/studio/details still reconcile visible balance through canonical `/api/assessment/credits`
+  - `/assessment/credits` remains available as compatibility entry and redirects to `/credits`
+  - admin role/status/prompt/access/revoke/storage error redirects now return operators to their owning section anchors instead of top-of-page
+
+Risks / constraints:
+- Some admin controls still intentionally use server redirects for backend-owned feedback transport; anchor hardening removes top-jump surprise but does not convert all controls to client action-state.
+- Global naming now reflects product meaning at surface level, while internal “assessment credit” contract names remain intentionally unchanged to avoid risky backend churn.
+- Build verification remains constrained by environment network access to Google Fonts during Next.js build.
 
 2026-04-17 — Hybrid credit persistence bridge, canonical owner credit details route, and structured mutation history alignment
 

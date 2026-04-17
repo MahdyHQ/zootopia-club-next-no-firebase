@@ -318,7 +318,7 @@ function getErrorCode(error: unknown) {
 function buildAdminUserDetailPath(
   targetUid: string,
   params: Record<string, string | null | undefined>,
-  hash: string | null = null,
+  sectionAnchor: string | null = null,
 ) {
   const searchParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -334,12 +334,8 @@ function buildAdminUserDetailPath(
     : `/admin/users/${encodedUid}`;
   /* Keep redirected server-action flows anchored to their owning section so operators are returned
      to Credits or Admin Controls context instead of being thrown to the top of this long page. */
-  const normalizedHash = hash?.trim().replace(/^#/, "");
-  if (!normalizedHash) {
-    return basePath;
-  }
-
-  return `${basePath}#${normalizedHash}`;
+  const normalizedAnchor = sectionAnchor?.trim() ?? "";
+  return normalizedAnchor ? `${basePath}#${normalizedAnchor}` : basePath;
 }
 
 function mapCreditMutationErrorToQueryCode(error: unknown) {
@@ -1351,7 +1347,7 @@ export default async function AdminUserDetailPage({
       )}
 
       {/* Identity / Account Section */}
-      <section id="credits-usage" className={ADMIN_USER_DETAIL_PANEL_CLASS}>
+      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <User className="h-5 w-5" />
           Identity & Account Summary
@@ -1525,7 +1521,7 @@ export default async function AdminUserDetailPage({
       </section>
 
       {/* Credits / Usage Section */}
-      <section id="admin-controls" className={ADMIN_USER_DETAIL_PANEL_CLASS}>
+      <section id="credits-usage" className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <Gauge className="h-5 w-5" />
           Credits & Usage
@@ -1793,7 +1789,7 @@ export default async function AdminUserDetailPage({
       </section>
 
       {/* Admin Controls Section */}
-      <section className={ADMIN_USER_DETAIL_PANEL_CLASS}>
+      <section id="admin-controls" className={ADMIN_USER_DETAIL_PANEL_CLASS}>
         <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
           <Shield className="h-5 w-5" />
           Admin Controls

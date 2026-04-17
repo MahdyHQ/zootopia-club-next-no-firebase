@@ -5,7 +5,7 @@ import { AssessmentCreditDetailsPanel } from "@/components/assessment/assessment
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { requireCompletedUser } from "@/lib/server/session";
 
-export default async function GlobalCreditsPage() {
+export default async function CreditsPage() {
   await requireCompletedUser(APP_ROUTES.globalCredits);
   const uiContext = await getRequestUiContext();
 
@@ -19,12 +19,12 @@ export default async function GlobalCreditsPage() {
           <div className="mb-4 flex items-center gap-3">
             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-200">
               <WalletCards className="h-3.5 w-3.5" />
-              {uiContext.messages.assessmentCreditsPageTitle}
+              {uiContext.messages.globalCreditsPageTitle}
             </span>
           </div>
 
           <h1 className="page-title max-w-3xl text-balance text-zinc-900 dark:text-white">
-            {uiContext.messages.assessmentCreditsPageSubtitle}
+            {uiContext.messages.globalCreditsPageSubtitle}
           </h1>
         </div>
       </section>
