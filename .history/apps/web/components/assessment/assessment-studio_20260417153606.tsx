@@ -1595,7 +1595,7 @@ export function AssessmentStudio({
                     <div className="min-w-0 w-full space-y-1">
                       {/* Keep this legal-rights sentence on a single line whenever physically possible.
                           Clamp-based sizing and tighter tracking preserve readability while reducing wrap pressure. */}
-                      <p className="max-w-full whitespace-nowrap text-[clamp(0.45rem,0.95vw,0.6rem)] font-semibold leading-tight tracking-[-0.02em] text-foreground">
+                      <p className="max-w-full whitespace-nowrap text-[clamp(0.5rem,1.08vw,0.68rem)] font-semibold leading-tight tracking-[-0.02em] text-foreground">
                         {ASSESSMENT_MODEL_VISIBILITY_COPY.rightsLine}
                       </p>
                       <p className="flex max-w-full items-center gap-1 text-[clamp(0.55rem,0.9vw,0.64rem)] leading-tight text-foreground-muted/82">

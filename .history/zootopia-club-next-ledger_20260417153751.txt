@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Assessment Studio layout adjustments + copyright font reduction)
+Last Updated: 2026-04-17 (sidebar/global-credits and canonical credit-truth audit)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
