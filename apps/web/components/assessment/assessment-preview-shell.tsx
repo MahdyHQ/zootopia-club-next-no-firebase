@@ -181,8 +181,9 @@ export function AssessmentPreviewShell({
               ? messages.assessmentPreviewTitle
               : messages.assessmentResultViewerTitle}
           </span>
-          <div>
-            <h1 className="max-w-4xl text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+          <div className="min-w-0">
+            {/* Detached preview/result titles come from generated output and can be very long; wrapping here prevents header bleed beyond the page frame. */}
+            <h1 className="max-w-4xl break-words text-balance text-3xl font-bold tracking-tight [overflow-wrap:anywhere] sm:text-4xl">
               {preview.title}
             </h1>
             {/* This is the shared file-surface summary block for both detached preview and result
@@ -197,14 +198,14 @@ export function AssessmentPreviewShell({
               {preview.compositionBadges.map((badge) => (
                 <span
                   key={badge.key}
-                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+                  className={`inline-flex max-w-full items-center rounded-full border px-3 py-1 text-center text-xs font-semibold whitespace-normal break-words [overflow-wrap:anywhere] ${
                     badge.tone === "type"
                       ? dark
                         ? "border-cyan-200/22 bg-cyan-300/12 text-cyan-50"
-                        : "border-cyan-200 bg-cyan-50 text-cyan-700"
+                        : "border-cyan-200 bg-cyan-50 text-cyan-800"
                       : dark
                         ? "border-emerald-200/20 bg-emerald-300/12 text-emerald-50"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-800"
                   }`}
                 >
                   {badge.label}

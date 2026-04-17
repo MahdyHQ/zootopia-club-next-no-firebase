@@ -710,7 +710,10 @@ export function UploadWorkspace({
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground dark:text-white">{latestDocument.fileName}</p>
+                  {/* Recent uploads can include long source filenames; force soft wrapping so the file row never pushes beyond its card width. */}
+                  <p className="break-words text-sm font-medium text-foreground [overflow-wrap:anywhere] dark:text-white">
+                    {latestDocument.fileName}
+                  </p>
                   <p className="text-xs text-foreground-muted dark:text-white/55">{formatDocumentSize(latestDocument.sizeBytes)}</p>
                 </div>
               </div>
@@ -735,7 +738,8 @@ export function UploadWorkspace({
                         {messages.documentStatusReady}
                       </span>
                     </div>
-                    <p className="mt-3 text-base font-semibold text-foreground dark:text-white">
+                    {/* Active document labels are shared with assessment navigation actions, so long names must wrap before the action rail. */}
+                    <p className="mt-3 break-words text-base font-semibold text-foreground [overflow-wrap:anywhere] dark:text-white">
                       {activeDocument.fileName}
                     </p>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted dark:text-white/62">

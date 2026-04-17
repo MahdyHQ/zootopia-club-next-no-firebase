@@ -251,12 +251,15 @@ export default async function HomePage() {
                   key={document.id}
                   className="flex flex-col justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 sm:flex-row sm:items-center dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
                     <div className="mt-0.5 rounded-lg bg-blue-100 p-1.5 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
                       <FileText className="h-4 w-4" />
                     </div>
-                    <div>
-                      <p className="font-bold text-zinc-900 dark:text-white">{document.fileName}</p>
+                    <div className="min-w-0">
+                      {/* Home document cards are reused across viewport sizes; long filenames must wrap within this lane to avoid screen-edge overflow. */}
+                      <p className="break-words font-bold text-zinc-900 [overflow-wrap:anywhere] dark:text-white">
+                        {document.fileName}
+                      </p>
                       <p className="mt-0.5 font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
                         {document.id.slice(0, 8)}…
                       </p>
@@ -301,9 +304,10 @@ export default async function HomePage() {
               assessments.slice(0, 4).map((generation) => (
                 <div
                   key={generation.id}
-                  className="flex items-center justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
+                  className="flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
                 >
-                  <p className="truncate pr-3 font-bold text-zinc-900 dark:text-white">
+                  {/* Generated titles should remain fully readable in-card; wrapping is preferred over truncation for this activity surface. */}
+                  <p className="min-w-0 flex-1 break-words pr-3 font-bold text-zinc-900 [overflow-wrap:anywhere] dark:text-white">
                     {generation.title}
                   </p>
                   <span className="shrink-0 rounded-full border border-purple-200 bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700 dark:border-purple-800/50 dark:bg-purple-900/30 dark:text-purple-400">

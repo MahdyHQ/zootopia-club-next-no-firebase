@@ -141,14 +141,17 @@ export default async function HistoryPage() {
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-foreground">{document.fileName}</p>
+                        {/* Keep owner file names inside the history card on narrow screens instead of forcing horizontal overflow. */}
+                        <p className="break-words font-semibold text-foreground [overflow-wrap:anywhere]">
+                          {document.fileName}
+                        </p>
                         {document.isActive ? (
                           <span className="inline-flex items-center rounded-full border border-emerald-500/15 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
                             {uiContext.messages.assessmentActiveLinkedDocument}
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-foreground-muted">
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-foreground-muted [&>span]:break-words [&>span]:[overflow-wrap:anywhere]">
                         <span>{uiContext.messages.historyCreatedOn}: {formatHistoryDate(document.createdAt, uiContext.locale)}</span>
                         <span>{uiContext.messages.historyExpiresOn}: {formatHistoryDate(document.expiresAt ?? document.createdAt, uiContext.locale)}</span>
                         <span>{uiContext.messages.historyStatusLabel}: {getDocumentStatusLabel(document.status, uiContext.messages)}</span>
@@ -193,15 +196,18 @@ export default async function HistoryPage() {
                   <div className="flex flex-col gap-5">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-foreground">{preview.title}</p>
+                        {/* Assessment titles can be arbitrarily long, so this row must wrap within the card rather than clipping or escaping. */}
+                        <p className="break-words font-semibold text-foreground [overflow-wrap:anywhere]">
+                          {preview.title}
+                        </p>
                         <span className="inline-flex items-center rounded-full border border-border-strong bg-background-strong px-2.5 py-0.5 text-[11px] font-semibold text-foreground-muted">
                           {preview.statusLabel}
                         </span>
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-foreground-muted">
+                      <p className="mt-2 break-words text-sm leading-6 text-foreground-muted [overflow-wrap:anywhere]">
                         {preview.summary}
                       </p>
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-foreground-muted">
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-foreground-muted [&>span]:break-words [&>span]:[overflow-wrap:anywhere]">
                         <span>{uiContext.messages.historyCreatedOn}: {preview.generatedAtLabel}</span>
                         <span>{uiContext.messages.historyExpiresOn}: {preview.expiresAtLabel}</span>
                         <span>{uiContext.messages.historyStatusLabel}: {preview.statusLabel}</span>

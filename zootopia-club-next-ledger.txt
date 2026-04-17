@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Assessment page narrow-screen clipping hardening for setup/studio/history surfaces)
+Last Updated: 2026-04-17 (Shared generated-card overflow hardening + preview title wrap + light-mode question-count badge contrast)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -2263,3 +2263,107 @@ Responsive verification notes:
   small mobile / mobile / tablet / laptop / desktop ownership paths.
 ~ Live browser runtime visual verification in this sandbox remains blocked by
   build-time external-font fetch failures unrelated to this change.
+
+2026-04-17: SHARED GENERATED-CARD WRAP HARDENING + PREVIEW TITLE FIX + LIGHT-MODE BADGE CONTRAST
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Multiple generated artifact surfaces still rendered long titles, filenames,
+   summaries, and metadata without consistent wrap-safe guards (`break-words`,
+   overflow-wrap) even when parent cards were responsive.
+2. Some card lanes previously relied on truncation or unconstrained inline text,
+   which could push content beyond card edges or viewport width on narrow screens.
+3. The Assessment Studio question-count badge used `text-accent`, and in light
+   mode `--accent` resolves to a very light cream tone that reduced text contrast.
+4. Detached preview/result header title and summary blocks needed stronger
+   wrap-safe behavior for long generated result names and summaries.
+
+CHANGES:
+1. Hardened History generated cards in
+   `apps/web/app/(protected)/(completed)/history/page.tsx`
+   - Added wrap-safe classes for document filenames, assessment titles, summaries,
+     and metadata spans (`break-words` + `[overflow-wrap:anywhere]`).
+   - Preserved existing card hierarchy, actions, and theme language.
+
+2. Hardened Home generated cards in
+   `apps/web/app/(protected)/(completed)/page.tsx`
+   - Added `min-w-0` guards to recent document content lane.
+   - Switched long generated assessment title from truncation to wrap-safe text
+     within the existing card layout.
+
+3. Hardened Upload generated-document rows in
+   `apps/web/components/upload/upload-workspace.tsx`
+   - Replaced truncation on latest-document filename with wrap-safe rendering.
+   - Added wrap-safe handling for active-document filename above action rows.
+
+4. Hardened detached Preview/Result header wrapping in
+   `apps/web/components/assessment/assessment-preview-shell.tsx` and
+   `apps/web/app/globals.css`
+   - Added `min-w-0` + wrap-safe title classes on preview/result `<h1>`.
+   - Added wrap-safe behavior to summary body via shared CSS rule
+     (`overflow-wrap: anywhere`).
+   - Added wrap-safe handling for composition badges.
+   - Increased light-mode composition badge text contrast (`text-cyan-800` /
+     `text-emerald-800`) while preserving dark-mode classes.
+
+5. Hardened detached result metadata and badge wrapping in
+   `apps/web/components/assessment/assessment-result-viewer.tsx`
+   - Added wrap-safe classes for metadata values and first-page info badges
+     (`questionCountLabel`, source document label).
+
+6. Fixed light-mode question-count badge contrast in
+   `apps/web/components/assessment/assessment-studio.tsx`
+   - Updated history-card question-count badge text from `text-accent` to
+     `text-accent-strong dark:text-accent` so light mode stays readable while
+     dark mode behavior remains unchanged.
+   - Added wrap-safe classes for assessment title/summary and metadata chips in
+     the same generated-history card lane.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/history/page.tsx
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- apps/web/components/assessment/assessment-preview-shell.tsx
+- apps/web/components/assessment/assessment-result-viewer.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+REASON:
+- Complete a shared-card hardening pass so long generated artifact text remains
+  readable inside card boundaries across Assessment, History, Upload, Home, and
+  detached Preview/Result surfaces.
+- Resolve the remaining light-mode question-count badge contrast issue without
+  disturbing existing dark-mode styling.
+
+TECHNICAL DETAILS:
+- Focused on minimal, backward-compatible class/CSS adjustments only.
+- No backend/API/auth/session/repository/permission logic was changed.
+- No feature removal, architecture redesign, or dependency changes were made.
+- Action controls and existing visual hierarchy were preserved.
+
+RISKS / FOLLOW-UP:
+- Low UI risk: wrapping behavior now prioritizes full text readability over
+  single-line truncation in generated-card lanes.
+- Recommend visual QA sweep across small mobile/mobile/tablet/laptop/desktop/
+  ultra-wide once full browser runtime is available.
+
+VERIFICATION:
+Baseline (before edits):
+✓ `npm install` — PASS
+✓ `npm run lint` — PASS
+✓ `npm run typecheck` — PASS
+✗ `npm run build` — FAIL (network-restricted Google Fonts fetch from `fonts.googleapis.com`)
+✗ `npm run build:vercel` — FAIL (same Google Fonts network restriction)
+
+Post-edit:
+✓ `npm run lint` — PASS
+✓ `npm run typecheck` — PASS
+✗ `npm run build` — FAIL (same external Google Fonts fetch restriction in sandbox)
+✗ `npm run build:vercel` — FAIL (same external Google Fonts fetch restriction in sandbox)
+
+Responsive verification notes:
+~ Code-level wrap/overflow verification completed for shared generated-card lanes
+  and detached preview/result title+summary+badge lanes.
+~ Live browser viewport matrix verification remains blocked here by build-time
+  external-font fetch failures unrelated to this UI patch.
