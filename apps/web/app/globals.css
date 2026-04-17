@@ -1791,15 +1791,16 @@ html[dir="rtl"] .field-control {
   .assessment-setup-top-row {
     display: grid;
     /* Give the rights/support rail slightly more horizontal budget so the Arabic
-       legal sentence can stay on a single line at tablet/desktop sizes. */
-    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22.5rem);
+       legal sentence can stay on a single line at tablet/desktop sizes without
+       forcing narrow-tablet clipping in the assessment setup rail. */
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 21rem);
     align-items: start;
     gap: 1rem 1.5rem;
   }
 
   .assessment-model-control {
     justify-self: end;
-    width: min(100%, 22.5rem);
+    width: min(100%, 21rem);
     padding: 0.64rem;
   }
 
@@ -1831,7 +1832,7 @@ html[dir="rtl"] .field-control {
 
 @media (min-width: 1280px) {
   .assessment-setup-top-row {
-    grid-template-columns: minmax(0, 1fr) minmax(18.5rem, 25.5rem);
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 25.5rem);
   }
 
   .assessment-model-control {
@@ -1942,7 +1943,7 @@ html[dir="rtl"] .field-control {
   top: calc(100% + 0.35rem);
   left: 0;
   right: 0;
-  max-width: min(100vw - 2rem, 100%);
+  max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   border-radius: 1.4rem;
@@ -1954,6 +1955,22 @@ html[dir="rtl"] .field-control {
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+}
+
+@media (max-width: 640px) {
+  /* Assessment setup select triggers are shown inside premium cards on the Assessment page.
+     Allow wrapped trigger copy on narrow/mobile screens so labels and card edges stay fully
+     readable instead of appearing visually cut by single-line ellipsis pressure. */
+  .assessment-select-trigger {
+    gap: 0.72rem;
+    padding: 0.82rem 0.88rem 0.82rem 0.82rem;
+  }
+
+  .assessment-select-trigger__label,
+  .assessment-select-trigger__description {
+    white-space: normal;
+    text-overflow: clip;
+  }
 }
 
 .assessment-select-panel__list {

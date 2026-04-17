@@ -1707,12 +1707,12 @@ export function AssessmentStudio({
   return (
     <div className="space-y-8">
       <div className="grid gap-6">
-        <section className="assessment-premium-panel relative isolate overflow-visible rounded-[2rem] p-5 shadow-sm sm:p-6 lg:p-8">
+        <section className="assessment-premium-panel relative isolate overflow-visible rounded-[1.5rem] p-4 shadow-sm sm:rounded-[2rem] sm:p-6 lg:p-8">
           <div className="relative z-10 space-y-6">
             {/* Keep model control isolated in the setup header so desktop/tablet layouts stay
                 compact while small screens can stack naturally without squeezing the title lane. */}
             <div className="assessment-setup-top-row">
-              <div className="flex items-start gap-3">
+              <div className="flex min-w-0 items-start gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] dark:text-emerald-200">
                   <BrainCircuit className="h-5 w-5" />
                 </div>
@@ -1758,7 +1758,7 @@ export function AssessmentStudio({
               ) : (
                 <div
                   dir="rtl"
-                  className="assessment-model-control overflow-hidden border-amber-500/28 bg-[linear-gradient(145deg,rgba(251,191,36,0.14),rgba(245,158,11,0.06))] text-right"
+                  className="assessment-model-control border-amber-500/28 bg-[linear-gradient(145deg,rgba(251,191,36,0.14),rgba(245,158,11,0.06))] text-right"
                 >
                   {/* Non-admin model lane intentionally remains compact to align with the title rail.
                       Keep this rights/support block short and horizontally efficient across breakpoints. */}
@@ -1860,7 +1860,7 @@ export function AssessmentStudio({
                   <p className="field-label mb-0">{messages.assessmentModeLabel}</p>
                 </div>
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <div className="mt-4 grid gap-2 md:grid-cols-2">
                   {ASSESSMENT_MODE_OPTIONS.map((mode) => {
                     const selected = request.options.mode === mode;
 
@@ -1894,7 +1894,7 @@ export function AssessmentStudio({
                 ) : null}
               </div>
 
-              <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
+               <div className="grid gap-3 sm:gap-4 lg:grid-cols-2 xl:grid-cols-3">
                 <AssessmentFieldSelect
                   id="assessment-count"
                   label={messages.assessmentQuestionCount}
@@ -2359,7 +2359,7 @@ export function AssessmentStudio({
         latestDocument={latestDocument}
       />
 
-      <section className="surface-strong rounded-[2rem] p-5 sm:p-6 lg:p-8">
+      <section className="surface-strong rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 lg:p-8">
         <div className="border-b border-border pb-4">
           <div>
             <p className="section-label">{messages.assessmentHistoryTitle}</p>
