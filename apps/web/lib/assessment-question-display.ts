@@ -136,7 +136,7 @@ function getChoiceLayout(choices: AssessmentQuestionChoiceDisplay[]) {
 function isChoiceBasedQuestionType(
   questionType: AssessmentQuestionType | null | undefined,
 ) {
-  return questionType === "mcq" || questionType === "multiple_response" || questionType == null;
+  return questionType === "mcq" || questionType === "multiple_response";
 }
 
 function buildSequentialChoiceMarker(index: number) {
@@ -782,13 +782,13 @@ export function formatAssessmentAnswerDisplay(input: {
   }
 
   if (
-    (input.questionType === "mcq" || input.questionType == null) &&
+    input.questionType === "mcq" &&
     resolvedChoices.length === 1
   ) {
     return resolvedChoices[0]!.displayText;
   }
 
-  if (input.questionType === "mcq" || input.questionType == null) {
+  if (input.questionType === "mcq") {
     const resolvedChoiceByText = resolvedChoices[0];
 
     if (resolvedChoiceByText) {

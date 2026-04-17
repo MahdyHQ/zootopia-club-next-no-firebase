@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Assessment + preview shared Arabic platform-note insertion and header-safe layout integration)
+Last Updated: 2026-04-17 (Assessment question-type identity hardening for prompt + preview + shared choice parsing)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -1600,6 +1600,60 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-17: ASSESSMENT TYPE IDENTITY HARDENING (Prompt Contract + Preview Resolution + Choice Parsing)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSES:
+1. Prompt guidance still carried MCQ-leaning defaults for unknown branches and did
+   not state anti-collapse/type-identity rules strongly enough across the broader
+   supported taxonomy.
+2. Preview type recovery could relabel explicitly typed non-MCQ items as MCQ when
+   recovered choices looked valid, which risked incorrect badge/card identity.
+3. Shared choice/answer display helpers treated `null` question type as choice-based,
+   creating an MCQ-oriented fallback path for type-missing records.
+
+CHANGES:
+1. Hardened prompt orchestration:
+   `apps/web/lib/server/ai/prompt-orchestrator.ts`
+   - Added explicit type-identity and anti-ambiguity contracts to the generated prompt.
+   - Expanded canonical type labeling/rules across active + legacy-normalized types
+     (instead of falling back to MCQ-centric wording).
+   - Kept backend-renderer authority unchanged (no UI metadata accepted from model).
+
+2. Hardened preview type resolution:
+   `apps/web/lib/server/assessment-preview.ts`
+   - Explicit declared type now remains authoritative.
+   - MCQ inference now only runs when type is missing, and still requires strong
+     choice/answer evidence.
+   - Prevents non-MCQ typed questions from being relabeled as MCQ by weak heuristics.
+
+3. Hardened shared question-display parsing:
+   `apps/web/lib/assessment-question-display.ts`
+   - Choice-source parsing now treats only explicit choice-based types as choice-based
+     (`mcq`, `multiple_response`), removing null-type MCQ bias.
+   - MCQ marker-to-choice answer display rewriting now applies only to explicit MCQ
+     type (not null type).
+
+FILES CHANGED:
+- apps/web/lib/server/ai/prompt-orchestrator.ts
+- apps/web/lib/server/assessment-preview.ts
+- apps/web/lib/assessment-question-display.ts
+- zootopia-club-next-ledger.txt
+
+VERIFICATION:
+✗ `npm run check:web` — FAILED early in this environment (`eslint: not found`)
+✗ `npm run typecheck:web` — FAILED in this environment (`next: not found`)
+✗ `npm run build:web` — FAILED in this environment (`Cannot find module 'next/dist/bin/next'`)
+✗ `npm run build:vercel` — FAILED in this environment (`next: not found`)
+
+RISK / SAFETY NOTES:
+- Low-to-moderate risk; changes are surgical and limited to type identity and
+  fallback interpretation paths.
+- Backend authority, owner-scoped persistence, admin/user boundaries, and export
+  lane architecture were intentionally preserved.
+- Follow-up verification is required in a fully provisioned workspace where `next`
+  and `eslint` binaries are available.
 
 2026-04-17: ASSESSMENT/PREVIEW SHARED ARABIC PLATFORM NOTE (Header-Safe UI Addition)
 ────────────────────────────────────────────────────────────────────────────
