@@ -1,13 +1,20 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import { WalletCards } from "lucide-react";
 
-import { AssessmentCreditDetailsPanel } from "@/components/assessment/assessment-credit-details-panel";
+import { GlobalCreditsUnlockGate } from "@/components/assessment/global-credits-unlock-gate";
 import { getRequestUiContext } from "@/lib/server/request-context";
+import { getGlobalCreditPageAccessStateForUser } from "@/lib/server/global-credit-page-lock";
 import { requireCompletedUser } from "@/lib/server/session";
 
 export default async function CreditsPage() {
-  await requireCompletedUser(APP_ROUTES.globalCredits);
-  const uiContext = await getRequestUiContext();
+  const [user, uiContext] = await Promise.all([
+    requireCompletedUser(APP_ROUTES.globalCredits),
+    getRequestUiContext(),
+  ]);
+  const initialAccess = await getGlobalCreditPageAccessStateForUser({
+    uid: user.uid,
+    role: user.role,
+  });
 
   return (
     <div className="space-y-6">
@@ -29,7 +36,8 @@ export default async function CreditsPage() {
         </div>
       </section>
 
-      <AssessmentCreditDetailsPanel
+      <GlobalCreditsUnlockGate
+        initialAccess={initialAccess}
         locale={uiContext.locale}
         messages={uiContext.messages}
       />

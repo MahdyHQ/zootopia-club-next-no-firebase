@@ -2232,3 +2232,75 @@ Risks / constraints:
   credit channels instead of full private-channel Supabase-authenticated Realtime
   authorization. This pass intentionally did not redesign auth/runtime coupling
   because that would be broader than a surgical hardening change.
+
+2026-04-17 — Env-driven global credits page password gate hardening
+
+Reason:
+- Continue the auth/session/private-realtime hardening pass with a surgical addition:
+  keep existing Auth.js and private Realtime architecture intact while adding a
+  developer-controlled env-password gate for the protected user-facing global
+  credits page.
+- Preserve canonical credit truth ownership (`/api/assessment/credits`) and avoid
+  creating a second balance authority.
+
+Files changed:
+- `.env.example`
+- `apps/web/lib/server/global-credit-page-lock.ts` (new)
+- `apps/web/app/api/assessment/credits/page-unlock/route.ts` (new)
+- `apps/web/app/api/assessment/credits/details/route.ts`
+- `apps/web/app/(protected)/(completed)/credits/page.tsx`
+- `apps/web/components/assessment/global-credits-unlock-gate.tsx` (new)
+
+Technical details:
+- Added a dedicated server-only global credits gate config:
+  - `ZOOTOPIA_GLOBAL_CREDIT_PAGE_PASSWORD`
+  - `ZOOTOPIA_GLOBAL_CREDIT_PAGE_LOCK_ENABLED`
+- Implemented signed, HttpOnly, session-scoped unlock cookie flow for `/credits`
+  using `AUTH_SECRET` HMAC signing, uid binding, expiry checks, and password
+  fingerprint invalidation semantics.
+- Added unlock endpoint:
+  - `POST /api/assessment/credits/page-unlock`
+  - Authenticated + profile-complete required
+  - Admin exempt
+  - Fail-closed on misconfiguration
+- Enforced gate on owner-details API:
+  - `GET /api/assessment/credits/details` now returns `GLOBAL_CREDIT_PAGE_LOCKED`
+    until gate is unlocked for that owner session.
+- Updated `/credits` page to render a password gate client surface first, then
+  mount the existing `AssessmentCreditDetailsPanel` only after successful unlock.
+- Kept header/studio canonical summary path unchanged:
+  - `/api/assessment/credits` remains the shared visible balance owner.
+- Added low-noise gate diagnostics through existing assessment credit diagnostic
+  channel (no secret/password values logged).
+
+Security posture:
+- Auth.js session remains the only route/API trust boundary.
+- No client-provided uid trust introduced.
+- Password remains server-only env config; no password value in client bundle.
+- Unlock token is signed, uid-bound, expiry-bound, and fingerprint-bound.
+- Private Realtime channel architecture remains private/authenticated and
+  invalidation-only.
+
+Local vs Vercel notes:
+- Change is runtime-neutral: cookie signing and lock checks are server-side and
+  environment-driven in both local and Vercel deployments.
+- Gate behavior depends only on configured env values; disabling the lock via env
+  immediately bypasses password checks for normal users while preserving Auth.js
+  session requirements.
+
+Free-tier practicality:
+- No new paid Supabase features added.
+- No new schema or RLS migrations required for this pass.
+
+Verification:
+- `npm run lint:web` ❌ failed (`eslint: not found` in this environment)
+- `npm run typecheck:web` ❌ failed (`next: not found`)
+- `npm run build:web` ❌ failed (`Cannot find module 'next/dist/bin/next'`)
+- `npm run build:vercel` ❌ failed (`next: not found`)
+- These failures are environment/dependency availability issues in this runner,
+  not code-path-specific compile diagnostics from the touched logic.
+
+Risks / follow-up:
+- A live authenticated browser verification (admin + normal user + multi-tab) is
+  still recommended after dependencies are available, to capture end-to-end gate
+  UX proof and private-channel/session alignment evidence in runtime.
