@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Assessment + preview shared Arabic platform-note insertion and header-safe layout integration)
+Last Updated: 2026-04-17 (Auth/session boundary audit, logout hardening, and admin dashboard page-level guard)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -144,9 +144,22 @@ Key verified facts:
   same-user multi-tab reconciliation without turning realtime into a balance
   truth source
 - User/admin/confirm-email auth completion flows now preserve the Supabase
-  browser session after successful Auth.js bootstrap so private Realtime
-  channel authorization can remain healthy in protected pages; Auth.js session
-  checks remain the sole authority for route/API access
+  browser session after successful Auth.js session establishment so private
+  Realtime channel authorization can remain healthy in protected pages; the
+  live server trust boundary is `Auth.js cookie -> auth() ->
+  apps/web/lib/server/session.ts persisted-user rehydration -> role/status/
+  profile gating`, not the browser Supabase session
+- `/api/auth/bootstrap` and `/api/auth/admin/bootstrap` are intentionally
+  deprecated compatibility bridges that now return `410` and are not part of
+  the active login/auth-completion runtime
+- Protected sign-out now treats `/api/auth/logout` workspace cleanup and
+  browser-side Supabase sign-out as best-effort support steps so Auth.js cookie
+  invalidation and protected-shell teardown still complete when helper cleanup
+  degrades
+- `/admin` dashboard now performs its own page-level `requireAdminUser()`
+  assertion in addition to the admin layout/proxy guard so the primary admin
+  landing page matches the redundant server-side protection already used by
+  sibling admin pages
 - Assessment credit persistence now uses a hybrid bridge: the live repository
   transaction paths still maintain legacy compatibility documents, but now
   mirror committed account, daily-ledger, grant, prompt-entitlement, and
@@ -700,29 +713,40 @@ Site Routes (public marketing):
 
 API Routes:
   /api/auth/[...nextauth]     → Auth.js handler
+  /api/auth/bootstrap         → Deprecated compatibility bridge (returns 410)
+  /api/auth/admin/bootstrap   → Deprecated compatibility bridge (returns 410)
+  /api/auth/admin/resolve-identifier → Admin identifier lookup / rate-limited
   /api/auth/confirm-email/resend  → Email verification resend
+  /api/auth/logout            → Workspace cleanup + logout audit trail
+  /api/auth/me                → Authoritative server session snapshot
   /api/auth/password/forgot   → Request password reset email (regular users)
   /api/auth/password/recovery → Validate/complete recovery token flow
   /api/auth/password/change   → In-account password change (regular users)
   /api/assessment             → POST: Create assessment
   /api/assessment/[id]        → GET: Get single assessment
   /api/assessment/credits     → GET: Daily credit status
+  /api/assessment/credits/details → GET: Owner-scoped credit detail view
+  /api/assessment/credits/page-unlock → POST: Credit page unlock
+  /api/assessment/results/[id] → GET: Owner-scoped assessment result
   /api/assessment/prompt-unlock → POST: Verify unlock password for assessment prompt
   /api/assessment/export/*    → GET: Export as PDF/JSON
   /api/assessment/linked-document → GET: Resolve linked document
-  /api/assessments            → GET: List user assessments
-  /api/documents              → GET: List user documents
-  /api/documents/[id]         → GET/DELETE: Document operations
   /api/uploads                → POST: File upload
   /api/uploads/[id]           → GET/DELETE: Upload operations
   /api/infographic            → POST: Generate infographic
+  /api/infographic/[id]       → GET: Infographic detail
+  /api/admin/overview         → GET: Admin dashboard summary
+  /api/admin/internal/verification-resend-governance → GET: Verification resend governance diagnostics
   /api/admin/users            → GET: List users (admin)
-  /api/admin/users/[uid]      → GET/PATCH: User management (admin)
-  /api/admin/storage          → GET: Storage stats (admin)
+  /api/admin/users/export     → GET: User export (admin)
+  /api/admin/users/[uid]      → GET/DELETE: User management (admin)
+  /api/admin/users/[uid]/credits → GET/PATCH: Credit state + mutation lane (admin)
+  /api/admin/users/[uid]/role → PATCH: Role mutation (admin)
+  /api/admin/users/[uid]/status → PATCH: Status mutation (admin)
   /api/admin/storage/cleanup  → POST: Storage cleanup (admin)
-  /api/admin/governance       → GET/PATCH: Governance controls (admin)
-  /api/admin/logs             → GET: Admin audit logs
   /api/contact                → POST: Contact form (SMTP relay)
+  /api/health                 → GET: Runtime health snapshot
+  /api/users/me/profile       → PATCH: Owner-scoped profile updates
   /api/internal/maintenance/expired-uploads → POST: Secret-gated upload cleanup sweep
 
 ================================================================================
@@ -869,7 +893,29 @@ Session Configuration:
 - Cookie: httpOnly, secure, sameSite: lax
 - Supabase browser auth session now intentionally persists and auto-refreshes
   only to keep private Realtime channel authorization healthy in protected UI;
-  it does not grant route/API authority outside Auth.js server session checks
+  it does not grant route/API authority outside the server-owned
+  `auth() -> persisted user lookup -> role/status/profile` trust chain
+
+Authoritative Trust Boundary:
+- `auth()` validates the Auth.js cookie first
+- `apps/web/lib/server/session.ts` rehydrates the live persisted user by `uid`
+- Active status, role, and profile-completion checks run from that live user
+  record before protected routes, APIs, and admin pages continue
+- `apps/web/proxy.ts` is early route shaping only and is not the sole
+  authorization boundary
+
+Logout / Session Invalidation:
+- `/api/auth/logout` performs best-effort workspace cleanup and audit logging
+- `next-auth/react signOut({ redirect: false })` is the decisive client-side
+  Auth.js cookie invalidation step
+- Browser `supabase.auth.signOut()` is best-effort follow-up cleanup for
+  browser-side provider continuity and private Realtime auth only
+- `ProtectedShell` removes private channels when Supabase auth clears or the
+  protected subtree unmounts
+
+Compatibility Bridges:
+- `/api/auth/bootstrap` and `/api/auth/admin/bootstrap` now return `410` and
+  are preserved only as safe inactive compatibility endpoints
 
 Key Files:
 - apps/web/auth.ts — Auth.js configuration
@@ -909,6 +955,8 @@ Admin Server-Side Guards:
 - Email allowlist check in auth.ts
 - Separate admin credential provider
 - Admin-specific redirect after login
+- `/admin` dashboard now also performs its own page-level `requireAdminUser()`
+  assertion so the landing page does not rely on layout/proxy coverage alone
 
 ================================================================================
 14. PROFILE COMPLETION & USER GATING MODEL
@@ -1600,6 +1648,129 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-17: AUTH/SESSION BOUNDARY AUDIT + LOGOUT HARDENING + ADMIN PAGE GUARD
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSES:
+1. The live runtime was already largely correct, but the repo/ledger language
+   had drifted into describing Auth.js alone as the full route/API authority.
+   In practice, the active trust boundary is broader:
+   `Auth.js cookie -> auth() -> apps/web/lib/server/session.ts live persisted
+   user lookup -> role/status/profile gating`.
+2. The protected sign-out button treated `/api/auth/logout`, Auth.js sign-out,
+   and browser Supabase sign-out as one all-or-nothing try/catch. If the
+   cleanup route failed first, the decisive Auth.js cookie teardown never ran.
+   If Supabase sign-out failed after Auth.js logout, redirect/navigation could
+   be skipped even though the server session was already gone.
+3. The `/admin` dashboard page relied on the admin layout and proxy layers for
+   its guard, while sibling admin pages already performed their own explicit
+   page-level `requireAdminUser()` check. That was not an active bypass, but it
+   was the weakest admin page boundary in the subtree.
+
+AUDIT FINDINGS (VERIFIED ALREADY-CORRECT BEHAVIOR):
+- Active app/runtime remains `apps/web` in the Next.js 16.2.2 monorepo.
+- Auth.js JWT sessions remain the authoritative server-side session layer.
+- Supabase browser auth remains a supporting helper only for password/confirm-
+  email continuity and private Realtime authorization; it is not the trust
+  boundary for routes, APIs, storage, or owner-scoped persistence.
+- Owner-scoped upload/document/result/export persistence remains bound to the
+  authenticated `user.uid`, with storage paths under `users/{ownerUid}/...`
+  and server-side owner checks before reads/writes/deletes.
+- Admin APIs remain server-authoritative and separated from user flows through
+  `requireAdminUser()` / `getAdminSessionUser()` plus repository/admin route
+  checks.
+- Private Supabase Realtime currently has one active lane:
+  `assessment-credit:owner:{uid}` invalidation, backed by the private-channel
+  RLS migration and `ProtectedShell` token sync via `supabase.realtime.setAuth`.
+- Deprecated `/api/auth/bootstrap` and `/api/auth/admin/bootstrap` endpoints are
+  intentionally inactive compatibility bridges that return `410`.
+- No active `apps/web/app/api/documents/**` route directory is present in the
+  current repo; document ownership/runtime work is handled through the upload,
+  assessment, repository, and storage paths instead.
+
+CHANGES:
+1. Hardened protected sign-out sequencing in
+   `apps/web/components/auth/sign-out-button.tsx`
+   - `/api/auth/logout` workspace cleanup is now explicitly best-effort.
+   - Auth.js `signOut({ redirect: false })` now runs even if cleanup fails.
+   - Browser Supabase `auth.signOut()` now runs as best-effort follow-up
+     cleanup so Realtime/auth helper state can detach without blocking the
+     primary Auth.js boundary teardown.
+   - Redirect/refresh now proceed whenever Auth.js logout succeeds, preventing
+     helper cleanup failures from leaving the protected shell mounted after the
+     server-authoritative session is already gone.
+
+2. Added a redundant page-level admin guard in
+   `apps/web/app/(protected)/admin/page.tsx`
+   - The `/admin` dashboard now calls `requireAdminUser()` directly.
+   - This aligns the main admin landing page with sibling admin pages that
+     already perform their own server-side admin assertion.
+   - The change preserves the existing admin layout/proxy protection and adds
+     a safer defense-in-depth guard against future route/layout refactors.
+
+FILES CHANGED:
+- apps/web/components/auth/sign-out-button.tsx
+- apps/web/app/(protected)/admin/page.tsx
+- zootopia-club-next-ledger.txt
+
+REASON:
+- Keep Auth.js as the decisive server trust boundary.
+- Keep Supabase browser auth aligned professionally as a helper only.
+- Eliminate logout drift where helper cleanup could block real session
+  invalidation.
+- Tighten the weakest page-level admin boundary without redesigning the auth
+  architecture or changing working owner-scoped persistence paths.
+
+TECHNICAL DETAILS:
+- Sign-out sequencing now matches the hardened forced-reauth pattern already
+  used after password changes: helper cleanup may fail, but Auth.js logout must
+  still proceed.
+- The admin page guard is intentionally redundant with the admin layout because
+  Next.js proxy/layout coverage should not be the only protection for the main
+  dashboard route.
+- Existing centralized error architecture was audited:
+  `apps/web/lib/auth-failure.ts` already owns auth-flow normalization, and
+  `apps/web/lib/server/assessment-platform-errors.ts` already centralizes the
+  touched assessment/admin credit error domain. Additional repo-wide auth/admin/
+  upload error unification is still follow-up work, not required for this
+  surgical hardening pass.
+
+RUNTIME / ENVIRONMENT NOTES:
+- Local integrated development: Auth.js cookie + server rehydration remain the
+  access authority; browser Supabase session is same-browser local state for
+  Realtime/private auth continuity only.
+- Vercel runtime assumptions: canonical origin still resolves through
+  `NEXT_PUBLIC_BASE_URL -> NEXTAUTH_URL -> VERCEL_URL`; browser Supabase config
+  remains build-time sensitive to `NEXT_PUBLIC_SUPABASE_*`.
+- Supabase provider-managed behavior: private Realtime auth still depends on
+  the deployed private-channel authorization migration and valid browser access
+  token refresh; database/storage ownership remains server-enforced and RLS-
+  aligned.
+
+RISKS / FOLLOW-UP:
+- Low risk: both code changes are narrow and backward-compatible.
+- Remaining follow-up not completed in this pass:
+  1. Broader centralized error-registry unification for non-assessment admin/
+     auth/upload routes.
+  2. Optional deeper runtime/browser proof for authenticated sign-in/out flows
+     with real credentials in a controlled QA environment.
+  3. Potential future hardening around helper modules that rely on callers for
+     owner-scope enforcement (`supabase-blob-storage.ts`, some raw repository
+     getters), although no live cross-owner leak was found in current callers.
+
+VERIFICATION:
+✓ `npm run lint:web` — PASS
+✓ `npm run typecheck:web` — PASS
+✓ `npm run build:web` — PASS
+✓ `npm run build:vercel` — PASS
+✓ Code-path audit confirmed:
+  - Auth.js remains the active server trust boundary
+  - Supabase browser auth remains helper-only
+  - owner-scoped upload/result/export retrieval remains bound to `user.uid`
+  - admin APIs remain server-authoritative
+  - private Realtime topic remains owner-scoped (`assessment-credit:owner:{uid}`)
+  - deprecated auth bootstrap routes remain inactive (`410`)
 
 2026-04-17: ASSESSMENT/PREVIEW SHARED ARABIC PLATFORM NOTE (Header-Safe UI Addition)
 ────────────────────────────────────────────────────────────────────────────

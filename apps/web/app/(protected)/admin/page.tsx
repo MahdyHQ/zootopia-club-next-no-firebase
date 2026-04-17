@@ -8,9 +8,15 @@ import {
   listUsers,
 } from "@/lib/server/repository";
 import { getRuntimeFlags } from "@/lib/server/runtime";
+import { requireAdminUser } from "@/lib/server/session";
 import { Button } from "@/components/ui/button";
 
 export default async function AdminPage() {
+  /* Admin dashboard data already lives under the protected admin subtree, but this page keeps its
+     own server-side admin assertion so direct page execution cannot drift behind layout/proxy
+     protection during future refactors. Future agents: preserve this page-level guard anywhere
+     dashboard data or admin operations are introduced on this route. */
+  await requireAdminUser();
   const uiContext = await getRequestUiContext();
   let users = [] as Awaited<ReturnType<typeof listUsers>>;
   let overview: Awaited<ReturnType<typeof getAdminOverviewData>> = {

@@ -31,27 +31,44 @@ export function SignOutButton({
   async function handleSignOut() {
     setError(null);
 
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      });
+    let authSessionCleared = false;
 
+    /* Protected-shell sign-out must preserve Auth.js as the primary trust boundary while still
+       attempting browser-side Supabase cleanup for private Realtime auth. Keep this flow
+       fail-open for the auxiliary cleanup route and Supabase token teardown so logout continues
+       even when those supporting steps are degraded. Future agents: do not make Supabase or
+       workspace cleanup a prerequisite for clearing the Auth.js session cookie on this button. */
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    }).catch(() => {
+      // Workspace cleanup is best-effort; Auth.js logout must still proceed.
+    });
+
+    try {
       await signOut({
         redirect: false,
       });
+      authSessionCleared = true;
+    } catch {
+      authSessionCleared = false;
+    }
 
-      if (isSupabaseWebConfigured()) {
-        await getSupabaseClient().auth.signOut();
-      }
+    if (isSupabaseWebConfigured()) {
+      await getSupabaseClient().auth.signOut().catch(() => {
+        // Supabase browser-session cleanup supports Realtime continuity only and must not block logout.
+      });
+    }
 
+    if (authSessionCleared) {
       startTransition(() => {
         router.replace(redirectTo);
         router.refresh();
       });
-    } catch {
-      setError("Unable to complete sign-out in this runtime.");
+      return;
     }
+
+    setError("Unable to complete sign-out in this runtime.");
   }
 
   return (
