@@ -1,6 +1,7 @@
 import { APP_ROUTES, getModelsForTool } from "@zootopia/shared-config";
 import { BrainCircuit } from "lucide-react";
 
+import { AssessmentPlatformInfoNote } from "@/components/assessment/assessment-platform-info-note";
 import { AssessmentStudio } from "@/components/assessment/assessment-studio";   
 import { resolveDefaultModelIdForTool } from "@/lib/server/ai/default-models";
 import { getAssessmentPromptAccessStateForUser } from "@/lib/server/assessment-prompt-lock";
@@ -64,7 +65,9 @@ export default async function AssessmentPage() {
           <h1 className="page-title max-w-3xl text-balance text-zinc-900 dark:text-white">
             {uiContext.messages.assessmentTitle}
           </h1>
-          
+          {/* Keep this reassurance note in the hero body so it uses existing empty space
+              and does not crowd the studio controls below. */}
+          <AssessmentPlatformInfoNote className="mt-4 max-w-3xl" />
         </div>
       </section>
 

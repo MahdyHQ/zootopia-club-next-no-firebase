@@ -12,6 +12,7 @@ import type { AppMessages } from "@/lib/messages";
 
 import { AssessmentExportActions } from "@/components/assessment/assessment-export-actions";
 import { AssessmentPreviewThemeToggle } from "@/components/assessment/assessment-preview-theme-toggle";
+import { AssessmentPlatformInfoNote } from "@/components/assessment/assessment-platform-info-note";
 import { AssessmentResultViewer } from "@/components/assessment/assessment-result-viewer";
 
 interface AssessmentPreviewShellProps {
@@ -79,83 +80,92 @@ export function AssessmentPreviewShell({
         {/* This top rail is the shared first-page-only brand composition for detached preview/result surfaces.
             Keep the logo on the upper-left and the compact QR on the upper-right so the PDF/print lane can mirror it
             without inventing a second branding system. */}
-        <header className="flex flex-col gap-4 rounded-[1.7rem] border px-4 py-4 sm:px-5 sm:py-5 lg:flex-row lg:items-start lg:justify-between">
-          <div
-            className={`flex items-center gap-3 ${
-              dark ? "border-white/10 text-white" : "border-slate-200 text-slate-950"
-            }`}
-          >
-            <Image
-              src={preview.fileSurface.logoAssetUrl}
-              alt={preview.fileSurface.platformName}
-              width={56}
-              height={56}
-              className="h-12 w-12 rounded-[1rem] shadow-sm sm:h-14 sm:w-14"
-            />
-            <div className="min-w-0">
-              <p className={`text-[0.68rem] font-semibold uppercase tracking-[0.24em] ${dark ? "text-white/55" : "text-slate-500"}`}>
-                {preview.fileSurface.platformTagline}
-              </p>
-              <h2 className="mt-1 text-lg font-bold tracking-tight sm:text-xl">
-                {preview.fileSurface.platformName}
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex w-full justify-start lg:w-auto lg:justify-end">
-            {/* This shared top-right cluster intentionally keeps badge + QR in one compact pocket
-                for both preview and saved-result pages. Keep the QR target unchanged while hiding
-                raw URL text so branding remains premium without losing scan/click behavior. */}
+        <header className="rounded-[1.7rem] border px-4 py-4 sm:px-5 sm:py-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div
-              className={`inline-flex items-center gap-2.5 rounded-[1.3rem] border px-2.5 py-2 shadow-sm ${
-                dark
-                  ? "border-white/12 bg-white/[0.05]"
-                  : "border-slate-200/90 bg-white/86"
+              className={`flex items-center gap-3 ${
+                dark ? "border-white/10 text-white" : "border-slate-200 text-slate-950"
               }`}
             >
-              <span
-                aria-hidden="true"
-                className={`inline-flex rounded-[1rem] border px-2 py-1 ${
-                  dark ? "border-white/12 bg-white/[0.04]" : "border-slate-200/90 bg-white/90"
-                }`}
-              >
-                <Image
-                  src={facultyBadgeAssetUrl}
-                  alt=""
-                  width={120}
-                  height={68}
-                  className="h-9 w-auto max-w-[6.65rem] object-contain opacity-90 sm:h-10"
-                />
-              </span>
+              <Image
+                src={preview.fileSurface.logoAssetUrl}
+                alt={preview.fileSurface.platformName}
+                width={56}
+                height={56}
+                className="h-12 w-12 rounded-[1rem] shadow-sm sm:h-14 sm:w-14"
+              />
+              <div className="min-w-0">
+                <p className={`text-[0.68rem] font-semibold uppercase tracking-[0.24em] ${dark ? "text-white/55" : "text-slate-500"}`}>
+                  {preview.fileSurface.platformTagline}
+                </p>
+                <h2 className="mt-1 text-lg font-bold tracking-tight sm:text-xl">
+                  {preview.fileSurface.platformName}
+                </h2>
+              </div>
+            </div>
 
-              <a
-                href={preview.fileSurface.qrTargetUrl}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`${preview.fileSurface.platformName} QR - ${preview.fileSurface.qrTargetUrl}`}
-                title={preview.fileSurface.qrTargetUrl}
-                className={`inline-flex h-[4.35rem] w-[4.35rem] items-center justify-center rounded-[1rem] border shadow-sm ${
+            <div className="flex w-full justify-start lg:w-auto lg:justify-end">
+              {/* This shared top-right cluster intentionally keeps badge + QR in one compact pocket
+                  for both preview and saved-result pages. Keep the QR target unchanged while hiding
+                  raw URL text so branding remains premium without losing scan/click behavior. */}
+              <div
+                className={`inline-flex items-center gap-2.5 rounded-[1.3rem] border px-2.5 py-2 shadow-sm ${
                   dark
-                    ? "border-white/10 bg-white/[0.07] text-white"
-                    : "border-slate-200 bg-white/92 text-slate-950"
+                    ? "border-white/12 bg-white/[0.05]"
+                    : "border-slate-200/90 bg-white/86"
                 }`}
               >
-                <Image
-                  src={qrCodeDataUrl}
-                  alt={
-                    preview.locale === "ar"
-                      ? "رمز QR لمنصة زوتوبيا"
-                      : "QR code for Zootopia Club"
-                  }
-                  width={70}
-                  height={70}
-                  unoptimized
-                  className="h-[3.55rem] w-[3.55rem] rounded-[0.85rem] bg-white p-1.5"
-                />
-                <span className="sr-only">{preview.fileSurface.qrTargetUrl}</span>
-              </a>
+                <span
+                  aria-hidden="true"
+                  className={`inline-flex rounded-[1rem] border px-2 py-1 ${
+                    dark ? "border-white/12 bg-white/[0.04]" : "border-slate-200/90 bg-white/90"
+                  }`}
+                >
+                  <Image
+                    src={facultyBadgeAssetUrl}
+                    alt=""
+                    width={120}
+                    height={68}
+                    className="h-9 w-auto max-w-[6.65rem] object-contain opacity-90 sm:h-10"
+                  />
+                </span>
+
+                <a
+                  href={preview.fileSurface.qrTargetUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`${preview.fileSurface.platformName} QR - ${preview.fileSurface.qrTargetUrl}`}
+                  title={preview.fileSurface.qrTargetUrl}
+                  className={`inline-flex h-[4.35rem] w-[4.35rem] items-center justify-center rounded-[1rem] border shadow-sm ${
+                    dark
+                      ? "border-white/10 bg-white/[0.07] text-white"
+                      : "border-slate-200 bg-white/92 text-slate-950"
+                  }`}
+                >
+                  <Image
+                    src={qrCodeDataUrl}
+                    alt={
+                      preview.locale === "ar"
+                        ? "رمز QR لمنصة زوتوبيا"
+                        : "QR code for Zootopia Club"
+                    }
+                    width={70}
+                    height={70}
+                    unoptimized
+                    className="h-[3.55rem] w-[3.55rem] rounded-[0.85rem] bg-white p-1.5"
+                  />
+                  <span className="sr-only">{preview.fileSurface.qrTargetUrl}</span>
+                </a>
+              </div>
             </div>
           </div>
+
+          {/* Keep this gentle note under the logo/QR rail so preview headers gain context
+              without changing the established two-pocket brand composition above. */}
+          <AssessmentPlatformInfoNote
+            tone={dark ? "detached-dark" : "detached-light"}
+            className="mt-3"
+          />
         </header>
 
         <div className="space-y-4">

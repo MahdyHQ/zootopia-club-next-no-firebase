@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Assessment Pro PDF artifact version bump for hardened renderer output)
+Last Updated: 2026-04-17 (Assessment + preview shared Arabic platform-note insertion and header-safe layout integration)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -212,6 +212,11 @@ Key verified facts:
   rights rendering through responsive clamp sizing, tighter tracking, and a
   slightly wider desktop/tablet control rail while keeping text inside the
   existing panel surface
+- Assessment page hero and detached preview header now share a compact Arabic
+  reassurance note component with a subtle `😊` accent, rendered in the
+  existing header whitespace (assessment top block + preview logo/QR rail
+  under-row) with tone-specific styling and wrap-safe small typography so
+  layout balance remains stable across light/dark themes and narrow viewports
 - Admin user detail page now prioritizes scanability with a concise identity
   summary, dedicated access/status flag group, and collapsible observability
   disclosures (server metadata, client metadata, device capability, and raw
@@ -1595,6 +1600,75 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-17: ASSESSMENT/PREVIEW SHARED ARABIC PLATFORM NOTE (Header-Safe UI Addition)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Assessment Studio hero and detached preview header each had visually empty
+   upper-header whitespace that could host a concise platform reassurance note,
+   but no shared component existed to keep wording, typography, and theme tone
+   aligned across both surfaces.
+2. The requirement asked for one identical Arabic message in both locations
+   with subtle, professional styling that remains readable without shifting the
+   established header geometry (especially preview logo/QR composition).
+
+CHANGES:
+1. Added shared notice component:
+   `apps/web/components/assessment/assessment-platform-info-note.tsx`
+   - Encapsulates the required Arabic copy verbatim:
+     "هذه المنصة مميزة وليس لها منافس على الإنترنت، وقد تحدث أخطاء خارجة عن إرادة المطور، ونعمل بجد لإصلاحها"
+   - Includes a subtle `😊` accent emoji (friendly, modest, non-distracting).
+   - Uses compact responsive text sizing and wrap-safe behavior
+     (`break-words` + `overflow-wrap:anywhere`) to prevent overflow on narrow
+     screens.
+   - Supports three tone modes (`adaptive`, `detached-light`, `detached-dark`)
+     so the same component can respect both app-theme surfaces and detached
+     preview light/dark mode toggles.
+
+2. Inserted note in Assessment page hero top block:
+   `apps/web/app/(protected)/(completed)/assessment/page.tsx`
+   - Imported `AssessmentPlatformInfoNote`.
+   - Rendered it directly below the assessment title in the hero card
+     (`className="mt-4 max-w-3xl"`) so it naturally fills existing empty
+     header space without affecting studio control density.
+
+3. Inserted note in detached preview header under logo/QR cluster:
+   `apps/web/components/assessment/assessment-preview-shell.tsx`
+   - Imported `AssessmentPlatformInfoNote`.
+   - Refactored header layout into:
+     a) top flex row (logo + badge/QR cluster, unchanged ownership)
+     b) note row below (`mt-3`) in the same header container.
+   - Bound tone to preview theme state:
+     `detached-dark` when `themeMode === "dark"`, otherwise `detached-light`.
+   - Preserved existing QR target/link behavior and top-pocket composition.
+
+FILES CHANGED:
+- apps/web/components/assessment/assessment-platform-info-note.tsx
+- apps/web/app/(protected)/(completed)/assessment/page.tsx
+- apps/web/components/assessment/assessment-preview-shell.tsx
+- zootopia-club-next-ledger.txt
+
+VERIFICATION:
+✓ `npm run lint --workspace @zootopia/web` (task: `web-lint-post-polish`) — PASS
+✓ `npm run typecheck --workspace @zootopia/web` (task: `web-typecheck-post-polish`) — PASS
+✓ `npm run build --workspace @zootopia/web` (task: `web-build-post-polish`) — PASS
+
+ADDITIONAL QA NOTES (PRE-EXISTING / UNRELATED):
+- Task `web-start-3025` fails before this change due argument forwarding in the
+  existing start script/task wiring (`next start 127.0.0.1 3025` treated as an
+  invalid project directory path).
+- Script `.tmp/assessment-actions-auth-qa.mjs` currently fails in this repo
+  with `ERR_MODULE_NOT_FOUND: firebase-admin` (legacy dependency gap), so this
+  run could not be used for automated visual/auth QA.
+- Task `kill-port-3020` emits a PowerShell `$PID` variable overwrite warning;
+  listener termination still occurs. This is task-script behavior, not from
+  the UI changes above.
+
+RISK:
+- Low: presentation-only change in existing header surfaces.
+- No backend contracts, auth/session paths, storage, or credit authority logic
+  were modified.
 
 2026-04-17: PRO PDF ARTIFACT VERSION BUMP (Lane-Specific Cache Invalidation)
 ────────────────────────────────────────────────────────────────────────────
