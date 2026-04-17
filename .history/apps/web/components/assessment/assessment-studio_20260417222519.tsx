@@ -2399,10 +2399,7 @@ export function AssessmentStudio({
                           </span>
                         ) : null}
                       </div>
-                      <p
-                        className="mt-2 break-words text-sm leading-6 text-foreground-muted [overflow-wrap:anywhere]"
-                        title={generation.meta.summary}
-                      >
+                      <p className="mt-2 break-words text-sm leading-6 text-foreground-muted [overflow-wrap:anywhere]">
                         {buildCardTextPreview(generation.meta.summary, 220)}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2 [&>span]:break-words [&>span]:[overflow-wrap:anywhere]">

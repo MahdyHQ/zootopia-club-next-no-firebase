@@ -307,7 +307,7 @@ export default async function HomePage() {
                   className="flex min-w-0 flex-col gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 sm:flex-row sm:items-start sm:justify-between dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
                 >
                   {/* Generated titles should remain fully readable in-card; wrapping is preferred over truncation for this activity surface. */}
-                  <p className="min-w-0 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] sm:flex-1 sm:pr-3 dark:text-white">
+                  <p className="min-w-0 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] sm:flex-1 sm:pe-3 dark:text-white">
                     {generation.title}
                   </p>
                   <span className="self-start rounded-full border border-purple-200 bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700 sm:shrink-0 dark:border-purple-800/50 dark:bg-purple-900/30 dark:text-purple-400">
