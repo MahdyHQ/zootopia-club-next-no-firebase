@@ -258,7 +258,7 @@ export default async function HomePage() {
                     <div className="min-w-0">
                       {/* Home document names use wrap-first + clamp so long values stay inside cards while still showing a clean ellipsis boundary. */}
                       <p
-                        className="line-clamp-2 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] dark:text-white"
+                        className="max-w-full line-clamp-2 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] dark:text-white"
                         title={document.fileName}
                       >
                         {document.fileName}
@@ -311,7 +311,7 @@ export default async function HomePage() {
                 >
                   {/* Recent-result names wrap first, then clamp with ellipsis only when needed so cards stay stable across breakpoints. */}
                   <p
-                    className="min-w-0 line-clamp-2 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] sm:flex-1 sm:pr-3 dark:text-white"
+                    className="min-w-0 w-full max-w-full line-clamp-2 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:pr-3 dark:text-white"
                     title={generation.title}
                   >
                     {generation.title}

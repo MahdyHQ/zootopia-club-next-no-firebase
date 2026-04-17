@@ -184,7 +184,7 @@ export function AssessmentPreviewShell({
           <div className="min-w-0">
             {/* Detached preview/result names must stay inside the shared header shell: wrap first, then clamp with ellipsis for extreme lengths. */}
             <h1
-              className="max-w-4xl line-clamp-3 break-words text-balance text-3xl font-bold tracking-tight [overflow-wrap:anywhere] sm:text-4xl"
+              className="min-w-0 w-full max-w-full line-clamp-3 break-words text-balance text-3xl font-bold tracking-tight [overflow-wrap:anywhere] sm:max-w-4xl sm:text-4xl"
               title={preview.title}
             >
               {preview.title}

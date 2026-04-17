@@ -144,7 +144,7 @@ export default async function HistoryPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         {/* History file names must wrap first, then clamp with ellipsis to keep card rhythm and avoid narrow-screen overflow. */}
                         <p
-                          className="line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere]"
+                          className="min-w-0 w-full max-w-full line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1"
                           title={document.fileName}
                         >
                           {document.fileName}
@@ -202,7 +202,7 @@ export default async function HistoryPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         {/* Generated result names stay in-card by wrapping first and clamping with ellipsis only when they exceed the visual budget. */}
                         <p
-                          className="line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere]"
+                          className="min-w-0 w-full max-w-full line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1"
                           title={preview.title}
                         >
                           {preview.title}

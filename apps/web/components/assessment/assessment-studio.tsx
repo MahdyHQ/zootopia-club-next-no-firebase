@@ -2252,7 +2252,7 @@ export function AssessmentStudio({
                     <div className="flex flex-wrap items-center gap-2">
                       {/* Linked document names can be long; clamp after wrapping so this setup card does not grow unpredictably on mobile. */}
                       <p
-                        className="line-clamp-2 break-words font-medium text-foreground [overflow-wrap:anywhere]"
+                        className="min-w-0 w-full max-w-full line-clamp-2 break-words font-medium text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1"
                         title={selectedDocument.fileName}
                       >
                         {selectedDocument.fileName}
@@ -2395,7 +2395,7 @@ export function AssessmentStudio({
                       <div className="flex flex-wrap items-center gap-2">
                         {/* Generated result names in this shared history card lane must wrap first and clamp to keep the action rail aligned. */}
                         <p
-                          className="line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere]"
+                          className="min-w-0 w-full max-w-full line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1"
                           title={generation.title}
                         >
                           {generation.title}

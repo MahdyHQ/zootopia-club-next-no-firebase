@@ -712,7 +712,7 @@ export function UploadWorkspace({
                 <div className="min-w-0">
                   {/* Recent-upload names must first wrap and then clamp with ellipsis so list cards keep a stable height on every viewport. */}
                   <p
-                    className="line-clamp-2 break-words text-sm font-medium text-foreground [overflow-wrap:anywhere] dark:text-white"
+                    className="max-w-full line-clamp-2 break-words text-sm font-medium text-foreground [overflow-wrap:anywhere] dark:text-white"
                     title={latestDocument.fileName}
                   >
                     {latestDocument.fileName}
@@ -743,7 +743,7 @@ export function UploadWorkspace({
                     </div>
                     {/* Active document names must stay inside this shared CTA surface; clamp after wrapping to avoid overgrowing the action rail block. */}
                     <p
-                      className="mt-3 line-clamp-2 break-words text-base font-semibold text-foreground [overflow-wrap:anywhere] dark:text-white"
+                      className="mt-3 max-w-full line-clamp-2 break-words text-base font-semibold text-foreground [overflow-wrap:anywhere] dark:text-white"
                       title={activeDocument.fileName}
                     >
                       {activeDocument.fileName}

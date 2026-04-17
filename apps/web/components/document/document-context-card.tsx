@@ -106,7 +106,7 @@ export function DocumentContextCard({
           <div className="min-w-0">
             {/* This shared file-name row appears across Assessment/Infographic context cards, so clamp overflow after wrapping to keep the card shell intact. */}
             <p
-              className="line-clamp-2 break-words text-sm font-semibold text-foreground [overflow-wrap:anywhere]"
+              className="max-w-full line-clamp-2 break-words text-sm font-semibold text-foreground [overflow-wrap:anywhere]"
               title={highlightedDocument.fileName}
             >
               {highlightedDocument.fileName}
