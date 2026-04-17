@@ -111,6 +111,8 @@ type AdminLogEntry = {
   createdAt: string;
 };
 
+type AssessmentCreditSqlExecutor = ReturnType<typeof getZootopiaDatabase>["sql"];
+
 type AssessmentGenerationIdempotencyStatus = "in_progress" | "completed";
 type AssessmentGenerationIdempotencyRecord = {
   ownerUid: string;
@@ -3197,6 +3199,686 @@ function buildAssessmentCreditMutationBalanceSnapshot(input: {
   };
 }
 
+type StructuredAssessmentCreditAccountRow = {
+  owner_uid: string;
+  assessment_access: string;
+  assessment_prompt_entitlement: string | null;
+  daily_limit_override: number | null;
+  manual_credits: number | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type StructuredAssessmentCreditGrantRow = {
+  id: string;
+  owner_uid: string;
+  credits: number | null;
+  consumed: number | null;
+  status: string;
+  expires_at: string | Date | null;
+  reason: string | null;
+  note: string | null;
+  created_by_uid: string | null;
+  created_by_role: UserRole | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+  revoked_at: string | Date | null;
+  revoked_by_uid: string | null;
+  revoke_reason: string | null;
+};
+
+type StructuredAssessmentDailyCreditRow = {
+  id: string;
+  owner_uid: string;
+  day_key: string;
+  daily_limit: number | null;
+  successful_generation_ids: string[] | null;
+  pending_reservations: AssessmentDailyCreditReservation[] | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type StructuredAssessmentCreditMutationRow = {
+  id: string;
+  owner_uid: string;
+  actor_uid: string | null;
+  actor_email: string | null;
+  actor_role: UserRole | null;
+  mutation_type: AdminAssessmentCreditMutationInput["action"];
+  amount: number | null;
+  access: AssessmentCreditAccountRecord["assessmentAccess"] | null;
+  daily_limit_override: number | null;
+  grant_id: string | null;
+  expires_at: string | Date | null;
+  reason: string | null;
+  note: string | null;
+  before_snapshot: Partial<AdminAssessmentCreditMutationBalanceSnapshot> | null;
+  after_snapshot: Partial<AdminAssessmentCreditMutationBalanceSnapshot> | null;
+  correlation_id: string | null;
+  route_source: string | null;
+  commit_status: string | null;
+  created_at: string | Date;
+};
+
+function normalizeAssessmentCreditSqlTimestamp(
+  value: string | Date | null | undefined,
+  fallbackIso: string,
+) {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.toISOString() : fallbackIso;
+  }
+
+  if (typeof value === "string" && Number.isFinite(Date.parse(value))) {
+    return new Date(value).toISOString();
+  }
+
+  return fallbackIso;
+}
+
+function resolveAssessmentCreditRecordVersionTimestamp(
+  record: {
+    updatedAt?: string | null;
+    createdAt?: string | null;
+  } | null | undefined,
+  fallbackIso: string,
+) {
+  const candidate =
+    parseOptionalIsoTimestamp(record?.updatedAt)
+    ?? parseOptionalIsoTimestamp(record?.createdAt)
+    ?? fallbackIso;
+  const parsed = Date.parse(candidate);
+  return Number.isFinite(parsed) ? parsed : Date.parse(fallbackIso);
+}
+
+function pickPreferredAssessmentCreditRecord<
+  T extends {
+    updatedAt?: string | null;
+    createdAt?: string | null;
+  },
+>(input: {
+  structured: T | null;
+  legacy: T | null;
+  fallbackIso: string;
+}) {
+  if (!input.structured) {
+    return input.legacy;
+  }
+
+  if (!input.legacy) {
+    return input.structured;
+  }
+
+  return resolveAssessmentCreditRecordVersionTimestamp(input.structured, input.fallbackIso)
+    >= resolveAssessmentCreditRecordVersionTimestamp(input.legacy, input.fallbackIso)
+    ? input.structured
+    : input.legacy;
+}
+
+function mapStructuredAssessmentCreditAccountRow(
+  row: StructuredAssessmentCreditAccountRow,
+  fallbackIso: string,
+): Partial<AssessmentCreditAccountRecord> {
+  return {
+    ownerUid: row.owner_uid,
+    assessmentAccess: row.assessment_access === "disabled" ? "disabled" : "enabled",
+    assessmentPromptEntitlement: normalizeAssessmentPromptEntitlement(
+      row.assessment_prompt_entitlement,
+    ),
+    dailyLimitOverride: row.daily_limit_override,
+    manualCredits:
+      typeof row.manual_credits === "number" && Number.isFinite(row.manual_credits)
+        ? row.manual_credits
+        : 0,
+    createdAt: normalizeAssessmentCreditSqlTimestamp(row.created_at, fallbackIso),
+    updatedAt: normalizeAssessmentCreditSqlTimestamp(row.updated_at, fallbackIso),
+  };
+}
+
+function mapStructuredAssessmentCreditGrantRow(
+  row: StructuredAssessmentCreditGrantRow,
+  fallbackIso: string,
+): Partial<AssessmentCreditGrantRecord> {
+  return {
+    id: row.id,
+    ownerUid: row.owner_uid,
+    credits:
+      typeof row.credits === "number" && Number.isFinite(row.credits)
+        ? row.credits
+        : undefined,
+    consumed:
+      typeof row.consumed === "number" && Number.isFinite(row.consumed)
+        ? row.consumed
+        : undefined,
+    status: row.status === "revoked" ? "revoked" : "active",
+    expiresAt: row.expires_at
+      ? normalizeAssessmentCreditSqlTimestamp(row.expires_at, fallbackIso)
+      : null,
+    reason: row.reason,
+    note: row.note,
+    createdByUid: row.created_by_uid ?? "system",
+    createdByRole: row.created_by_role ?? undefined,
+    createdAt: normalizeAssessmentCreditSqlTimestamp(row.created_at, fallbackIso),
+    updatedAt: normalizeAssessmentCreditSqlTimestamp(row.updated_at, fallbackIso),
+    revokedAt: row.revoked_at
+      ? normalizeAssessmentCreditSqlTimestamp(row.revoked_at, fallbackIso)
+      : null,
+    revokedByUid: row.revoked_by_uid,
+    revokeReason: row.revoke_reason,
+  };
+}
+
+function mapStructuredAssessmentDailyCreditRow(
+  row: StructuredAssessmentDailyCreditRow,
+  fallbackIso: string,
+): Partial<AssessmentDailyCreditLedgerDocument> {
+  return {
+    id: row.id,
+    ownerUid: row.owner_uid,
+    dayKey: row.day_key,
+    dailyLimit:
+      typeof row.daily_limit === "number" && Number.isFinite(row.daily_limit)
+        ? row.daily_limit
+        : getDefaultDailyAssessmentCreditsLimit(),
+    successfulGenerationIds: Array.isArray(row.successful_generation_ids)
+      ? row.successful_generation_ids.filter(
+          (value): value is string => typeof value === "string" && value.trim().length > 0,
+        )
+      : [],
+    pendingReservations: Array.isArray(row.pending_reservations)
+      ? row.pending_reservations
+      : [],
+    createdAt: normalizeAssessmentCreditSqlTimestamp(row.created_at, fallbackIso),
+    updatedAt: normalizeAssessmentCreditSqlTimestamp(row.updated_at, fallbackIso),
+  };
+}
+
+function mapStructuredAssessmentCreditMutationRow(
+  row: StructuredAssessmentCreditMutationRow,
+  fallbackIso: string,
+): Partial<AdminAssessmentCreditMutationRecord> {
+  return {
+    id: row.id,
+    ownerUid: row.owner_uid,
+    action: row.mutation_type,
+    amount: row.amount,
+    access: row.access,
+    dailyLimitOverride: row.daily_limit_override,
+    grantId: row.grant_id,
+    expiresAt: row.expires_at
+      ? normalizeAssessmentCreditSqlTimestamp(row.expires_at, fallbackIso)
+      : null,
+    reason: row.reason,
+    note: row.note,
+    adminUid: row.actor_uid ?? "system",
+    adminEmail: row.actor_email,
+    adminRole: row.actor_role ?? "admin",
+    before: row.before_snapshot
+      ? normalizeAssessmentCreditMutationBalanceSnapshot(row.before_snapshot)
+      : undefined,
+    after: row.after_snapshot
+      ? normalizeAssessmentCreditMutationBalanceSnapshot(row.after_snapshot)
+      : undefined,
+    correlationId: row.correlation_id,
+    routeSource: row.route_source,
+    commitStatus: row.commit_status,
+    createdAt: normalizeAssessmentCreditSqlTimestamp(row.created_at, fallbackIso),
+  };
+}
+
+async function readLegacyAssessmentCreditAccountRecord(input: {
+  ownerUid: string;
+}) {
+  const snapshot = await getZootopiaDatabase()
+    .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
+    .doc(input.ownerUid)
+    .get();
+
+  return snapshot.exists
+    ? (snapshot.data() as Partial<AssessmentCreditAccountRecord>)
+    : null;
+}
+
+async function readStructuredAssessmentCreditAccountRecord(input: {
+  ownerUid: string;
+  nowIso: string;
+  sql?: AssessmentCreditSqlExecutor;
+  forUpdate?: boolean;
+}) {
+  const sql = input.sql ?? getZootopiaDatabase().sql;
+  const rows = input.forUpdate
+    ? (await sql<StructuredAssessmentCreditAccountRow[]>`
+        SELECT
+          owner_uid,
+          assessment_access,
+          assessment_prompt_entitlement,
+          daily_limit_override,
+          manual_credits,
+          created_at,
+          updated_at
+        FROM public.assessment_credit_accounts
+        WHERE owner_uid = ${input.ownerUid}
+        FOR UPDATE
+      `)
+    : (await sql<StructuredAssessmentCreditAccountRow[]>`
+        SELECT
+          owner_uid,
+          assessment_access,
+          assessment_prompt_entitlement,
+          daily_limit_override,
+          manual_credits,
+          created_at,
+          updated_at
+        FROM public.assessment_credit_accounts
+        WHERE owner_uid = ${input.ownerUid}
+      `);
+
+  const row = rows[0];
+  return row ? mapStructuredAssessmentCreditAccountRow(row, input.nowIso) : null;
+}
+
+async function listLegacyAssessmentCreditGrantsForOwnerRecords(input: {
+  ownerUid: string;
+}) {
+  const snapshot = await getZootopiaDatabase()
+    .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
+    .where("ownerUid", "==", input.ownerUid)
+    .limit(400)
+    .get();
+
+  return snapshot.docs.map((documentSnapshot) => ({
+    grantId: documentSnapshot.id,
+    record: documentSnapshot.data() as Partial<AssessmentCreditGrantRecord>,
+  }));
+}
+
+async function listStructuredAssessmentCreditGrantRows(input: {
+  ownerUid: string;
+  sql?: AssessmentCreditSqlExecutor;
+  forUpdate?: boolean;
+}) {
+  const sql = input.sql ?? getZootopiaDatabase().sql;
+  return input.forUpdate
+    ? sql<StructuredAssessmentCreditGrantRow[]>`
+        SELECT
+          id,
+          owner_uid,
+          credits,
+          consumed,
+          status,
+          expires_at,
+          reason,
+          note,
+          created_by_uid,
+          created_by_role,
+          created_at,
+          updated_at,
+          revoked_at,
+          revoked_by_uid,
+          revoke_reason
+        FROM public.assessment_credit_grants
+        WHERE owner_uid = ${input.ownerUid}
+        ORDER BY created_at DESC
+        FOR UPDATE
+      `
+    : sql<StructuredAssessmentCreditGrantRow[]>`
+        SELECT
+          id,
+          owner_uid,
+          credits,
+          consumed,
+          status,
+          expires_at,
+          reason,
+          note,
+          created_by_uid,
+          created_by_role,
+          created_at,
+          updated_at,
+          revoked_at,
+          revoked_by_uid,
+          revoke_reason
+        FROM public.assessment_credit_grants
+        WHERE owner_uid = ${input.ownerUid}
+        ORDER BY created_at DESC
+      `;
+}
+
+async function readLegacyAssessmentDailyCreditLedgerRecord(input: {
+  ownerUid: string;
+  dayKey: string;
+}) {
+  const documentId = buildAssessmentDailyCreditDocumentId(input.ownerUid, input.dayKey);
+  const snapshot = await getZootopiaDatabase()
+    .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
+    .doc(documentId)
+    .get();
+
+  return snapshot.exists
+    ? (snapshot.data() as Partial<AssessmentDailyCreditLedgerDocument>)
+    : null;
+}
+
+async function readStructuredAssessmentDailyCreditLedgerRecord(input: {
+  ownerUid: string;
+  dayKey: string;
+  nowIso: string;
+  sql?: AssessmentCreditSqlExecutor;
+  forUpdate?: boolean;
+}) {
+  const sql = input.sql ?? getZootopiaDatabase().sql;
+  const documentId = buildAssessmentDailyCreditDocumentId(input.ownerUid, input.dayKey);
+  const rows = input.forUpdate
+    ? (await sql<StructuredAssessmentDailyCreditRow[]>`
+        SELECT
+          id,
+          owner_uid,
+          day_key,
+          daily_limit,
+          successful_generation_ids,
+          pending_reservations,
+          created_at,
+          updated_at
+        FROM public.assessment_daily_credits
+        WHERE id = ${documentId}
+        FOR UPDATE
+      `)
+    : (await sql<StructuredAssessmentDailyCreditRow[]>`
+        SELECT
+          id,
+          owner_uid,
+          day_key,
+          daily_limit,
+          successful_generation_ids,
+          pending_reservations,
+          created_at,
+          updated_at
+        FROM public.assessment_daily_credits
+        WHERE id = ${documentId}
+      `);
+
+  const row = rows[0];
+  return row ? mapStructuredAssessmentDailyCreditRow(row, input.nowIso) : null;
+}
+
+async function listLegacyAssessmentCreditMutationHistoryRecords(input: {
+  ownerUid: string;
+  limit: number;
+}) {
+  const snapshot = await getZootopiaDatabase()
+    .collection(ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION)
+    .where("ownerUid", "==", input.ownerUid)
+    .orderBy("createdAt", "desc")
+    .limit(input.limit)
+    .get();
+
+  return snapshot.docs.map((documentSnapshot) => ({
+    recordId: documentSnapshot.id,
+    record: documentSnapshot.data() as Partial<AdminAssessmentCreditMutationRecord>,
+  }));
+}
+
+async function listStructuredAssessmentCreditMutationRows(input: {
+  ownerUid: string;
+  limit: number;
+  sql?: AssessmentCreditSqlExecutor;
+}) {
+  const sql = input.sql ?? getZootopiaDatabase().sql;
+  return sql<StructuredAssessmentCreditMutationRow[]>`
+    SELECT
+      id,
+      owner_uid,
+      actor_uid,
+      actor_email,
+      actor_role,
+      mutation_type,
+      amount,
+      access,
+      daily_limit_override,
+      grant_id,
+      expires_at,
+      reason,
+      note,
+      before_snapshot,
+      after_snapshot,
+      correlation_id,
+      route_source,
+      commit_status,
+      created_at
+    FROM public.assessment_credit_mutations
+    WHERE owner_uid = ${input.ownerUid}
+    ORDER BY created_at DESC
+    LIMIT ${input.limit}
+  `;
+}
+
+async function upsertStructuredAssessmentCreditAccount(input: {
+  sql: AssessmentCreditSqlExecutor;
+  account: AssessmentCreditAccountRecord;
+}) {
+  await input.sql`
+    INSERT INTO public.assessment_credit_accounts (
+      owner_uid,
+      assessment_access,
+      assessment_prompt_entitlement,
+      daily_limit_override,
+      manual_credits,
+      created_at,
+      updated_at
+    ) VALUES (
+      ${input.account.ownerUid},
+      ${input.account.assessmentAccess},
+      ${input.account.assessmentPromptEntitlement},
+      ${input.account.dailyLimitOverride},
+      ${input.account.manualCredits},
+      ${input.account.createdAt},
+      ${input.account.updatedAt}
+    )
+    ON CONFLICT (owner_uid)
+    DO UPDATE SET
+      assessment_access = EXCLUDED.assessment_access,
+      assessment_prompt_entitlement = EXCLUDED.assessment_prompt_entitlement,
+      daily_limit_override = EXCLUDED.daily_limit_override,
+      manual_credits = EXCLUDED.manual_credits,
+      updated_at = EXCLUDED.updated_at
+  `;
+}
+
+async function upsertStructuredAssessmentCreditGrant(input: {
+  sql: AssessmentCreditSqlExecutor;
+  grant: AssessmentCreditGrantRecord;
+}) {
+  await input.sql`
+    INSERT INTO public.assessment_credit_grants (
+      id,
+      owner_uid,
+      credits,
+      consumed,
+      status,
+      expires_at,
+      reason,
+      note,
+      created_by_uid,
+      created_by_role,
+      created_at,
+      updated_at,
+      revoked_at,
+      revoked_by_uid,
+      revoke_reason
+    ) VALUES (
+      ${input.grant.id},
+      ${input.grant.ownerUid},
+      ${input.grant.credits},
+      ${input.grant.consumed},
+      ${input.grant.status},
+      ${input.grant.expiresAt},
+      ${input.grant.reason},
+      ${input.grant.note},
+      ${input.grant.createdByUid},
+      ${input.grant.createdByRole ?? null},
+      ${input.grant.createdAt},
+      ${input.grant.updatedAt},
+      ${input.grant.revokedAt ?? null},
+      ${input.grant.revokedByUid ?? null},
+      ${input.grant.revokeReason ?? null}
+    )
+    ON CONFLICT (id)
+    DO UPDATE SET
+      owner_uid = EXCLUDED.owner_uid,
+      credits = EXCLUDED.credits,
+      consumed = EXCLUDED.consumed,
+      status = EXCLUDED.status,
+      expires_at = EXCLUDED.expires_at,
+      reason = EXCLUDED.reason,
+      note = EXCLUDED.note,
+      created_by_uid = EXCLUDED.created_by_uid,
+      created_by_role = EXCLUDED.created_by_role,
+      updated_at = EXCLUDED.updated_at,
+      revoked_at = EXCLUDED.revoked_at,
+      revoked_by_uid = EXCLUDED.revoked_by_uid,
+      revoke_reason = EXCLUDED.revoke_reason
+  `;
+}
+
+async function upsertStructuredAssessmentDailyCreditLedger(input: {
+  sql: AssessmentCreditSqlExecutor;
+  ledger: AssessmentDailyCreditLedgerDocument;
+}) {
+  await input.sql`
+    INSERT INTO public.assessment_daily_credits (
+      id,
+      owner_uid,
+      day_key,
+      daily_limit,
+      successful_generation_ids,
+      pending_reservations,
+      created_at,
+      updated_at
+    ) VALUES (
+      ${input.ledger.id},
+      ${input.ledger.ownerUid},
+      ${input.ledger.dayKey},
+      ${input.ledger.dailyLimit},
+      ${input.ledger.successfulGenerationIds},
+      ${input.sql.json(input.ledger.pendingReservations as never)},
+      ${input.ledger.createdAt},
+      ${input.ledger.updatedAt}
+    )
+    ON CONFLICT (id)
+    DO UPDATE SET
+      owner_uid = EXCLUDED.owner_uid,
+      day_key = EXCLUDED.day_key,
+      daily_limit = EXCLUDED.daily_limit,
+      successful_generation_ids = EXCLUDED.successful_generation_ids,
+      pending_reservations = EXCLUDED.pending_reservations,
+      updated_at = EXCLUDED.updated_at
+  `;
+}
+
+async function insertStructuredAssessmentCreditMutation(input: {
+  sql: AssessmentCreditSqlExecutor;
+  record: AdminAssessmentCreditMutationRecord;
+}) {
+  await input.sql`
+    INSERT INTO public.assessment_credit_mutations (
+      id,
+      owner_uid,
+      actor_uid,
+      actor_email,
+      actor_role,
+      mutation_type,
+      amount,
+      access,
+      daily_limit_override,
+      grant_id,
+      expires_at,
+      reason,
+      note,
+      before_snapshot,
+      after_snapshot,
+      before_manual_credits,
+      after_manual_credits,
+      before_remaining_count,
+      after_remaining_count,
+      before_daily_remaining_count,
+      after_daily_remaining_count,
+      before_grant_credits_available,
+      after_grant_credits_available,
+      correlation_id,
+      route_source,
+      commit_status,
+      created_at
+    ) VALUES (
+      ${input.record.id},
+      ${input.record.ownerUid},
+      ${input.record.adminUid},
+      ${input.record.adminEmail ?? null},
+      ${input.record.adminRole},
+      ${input.record.action},
+      ${input.record.amount},
+      ${input.record.access},
+      ${input.record.dailyLimitOverride},
+      ${input.record.grantId},
+      ${input.record.expiresAt},
+      ${input.record.reason},
+      ${input.record.note},
+      ${input.sql.json(input.record.before as never)},
+      ${input.sql.json(input.record.after as never)},
+      ${input.record.before.manualCredits},
+      ${input.record.after.manualCredits},
+      ${input.record.before.remainingCount},
+      ${input.record.after.remainingCount},
+      ${input.record.before.dailyLimit - input.record.before.usedCount},
+      ${input.record.after.dailyLimit - input.record.after.usedCount},
+      ${input.record.before.grantCreditsAvailable},
+      ${input.record.after.grantCreditsAvailable},
+      ${input.record.correlationId ?? null},
+      ${input.record.routeSource ?? null},
+      ${input.record.commitStatus ?? "committed"},
+      ${input.record.createdAt}
+    )
+  `;
+}
+
+/* The hybrid credit migration keeps legacy collection documents writable for compatibility, but
+   every live credit transaction must mirror the same committed state into the structured credit
+   tables inside the same ACID boundary. Future agents: keep this helper on the transaction path
+   so canonical table reads and legacy mirrors cannot silently drift again. */
+async function syncStructuredAssessmentCreditState(input: {
+  sql: AssessmentCreditSqlExecutor;
+  account?: AssessmentCreditAccountRecord | null;
+  grants?: AssessmentCreditGrantRecord[] | null;
+  ledger?: AssessmentDailyCreditLedgerDocument | null;
+  history?: AdminAssessmentCreditMutationRecord | null;
+}) {
+  if (input.account) {
+    await upsertStructuredAssessmentCreditAccount({
+      sql: input.sql,
+      account: input.account,
+    });
+  }
+
+  for (const grant of input.grants ?? []) {
+    await upsertStructuredAssessmentCreditGrant({
+      sql: input.sql,
+      grant,
+    });
+  }
+
+  if (input.ledger) {
+    await upsertStructuredAssessmentDailyCreditLedger({
+      sql: input.sql,
+      ledger: input.ledger,
+    });
+  }
+
+  if (input.history) {
+    await insertStructuredAssessmentCreditMutation({
+      sql: input.sql,
+      record: input.history,
+    });
+  }
+}
+
 function normalizeAssessmentCreditMutationRecord(input: {
   ownerUid: string;
   recordId: string;
@@ -3227,9 +3909,25 @@ function normalizeAssessmentCreditMutationRecord(input: {
       typeof input.record?.adminUid === "string" && input.record.adminUid.trim()
         ? input.record.adminUid.trim()
         : "system",
+    adminEmail:
+      typeof input.record?.adminEmail === "string" && input.record.adminEmail.trim()
+        ? input.record.adminEmail.trim()
+        : null,
     adminRole: input.record?.adminRole === "user" ? "user" : "admin",
     before: normalizeAssessmentCreditMutationBalanceSnapshot(input.record?.before),
     after: normalizeAssessmentCreditMutationBalanceSnapshot(input.record?.after),
+    correlationId:
+      typeof input.record?.correlationId === "string" && input.record.correlationId.trim()
+        ? input.record.correlationId.trim()
+        : null,
+    routeSource:
+      typeof input.record?.routeSource === "string" && input.record.routeSource.trim()
+        ? input.record.routeSource.trim()
+        : null,
+    commitStatus:
+      typeof input.record?.commitStatus === "string" && input.record.commitStatus.trim()
+        ? input.record.commitStatus.trim()
+        : null,
     createdAt:
       typeof input.record?.createdAt === "string" && Number.isFinite(Date.parse(input.record.createdAt))
         ? input.record.createdAt
@@ -3248,22 +3946,50 @@ async function listAssessmentCreditMutationHistoryForOwner(input: {
   );
 
   if (shouldUseDatabase()) {
-    const snapshot = await getZootopiaDatabase()
-      .collection(ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION)
-      .where("ownerUid", "==", input.ownerUid)
-      .orderBy("createdAt", "desc")
-      .limit(resolvedLimit)
-      .get();
+    const [legacyRecords, structuredRows] = await Promise.all([
+      listLegacyAssessmentCreditMutationHistoryRecords({
+        ownerUid: input.ownerUid,
+        limit: resolvedLimit,
+      }),
+      listStructuredAssessmentCreditMutationRows({
+        ownerUid: input.ownerUid,
+        limit: resolvedLimit,
+      }),
+    ]);
+    const preferredRecordsById = new Map<string, AdminAssessmentCreditMutationRecord>();
 
-    return snapshot.docs
-      .map((documentSnapshot) =>
+    for (const legacyRecord of legacyRecords) {
+      preferredRecordsById.set(
+        legacyRecord.recordId,
         normalizeAssessmentCreditMutationRecord({
           ownerUid: input.ownerUid,
-          recordId: documentSnapshot.id,
-          record: documentSnapshot.data() as Partial<AdminAssessmentCreditMutationRecord>,
+          recordId: legacyRecord.recordId,
+          record: legacyRecord.record,
           nowIso: input.nowIso,
         }),
-      )
+      );
+    }
+
+    for (const structuredRow of structuredRows) {
+      const structuredRecord = normalizeAssessmentCreditMutationRecord({
+        ownerUid: input.ownerUid,
+        recordId: structuredRow.id,
+        record: mapStructuredAssessmentCreditMutationRow(structuredRow, input.nowIso),
+        nowIso: input.nowIso,
+      });
+      const currentRecord = preferredRecordsById.get(structuredRecord.id) ?? null;
+      const preferredRecord = pickPreferredAssessmentCreditRecord({
+        structured: structuredRecord,
+        legacy: currentRecord,
+        fallbackIso: input.nowIso,
+      });
+
+      if (preferredRecord) {
+        preferredRecordsById.set(structuredRecord.id, preferredRecord);
+      }
+    }
+
+    return [...preferredRecordsById.values()]
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, resolvedLimit);
   }
@@ -3505,18 +4231,42 @@ function applyAssessmentCreditMutationToState(input: {
 
 async function readAssessmentCreditAccount(input: { ownerUid: string; nowIso: string }) {
   if (shouldUseDatabase()) {
-    const snapshot = await getZootopiaDatabase()
-      .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
-      .doc(input.ownerUid)
-      .get();
+    const [legacyRecord, structuredRecord] = await Promise.all([
+      readLegacyAssessmentCreditAccountRecord({
+        ownerUid: input.ownerUid,
+      }),
+      readStructuredAssessmentCreditAccountRecord({
+        ownerUid: input.ownerUid,
+        nowIso: input.nowIso,
+      }),
+    ]);
+    const legacyAccount = legacyRecord
+      ? normalizeAssessmentCreditAccountRecord({
+          ownerUid: input.ownerUid,
+          record: legacyRecord,
+          nowIso: input.nowIso,
+        })
+      : null;
+    const structuredAccount = structuredRecord
+      ? normalizeAssessmentCreditAccountRecord({
+          ownerUid: input.ownerUid,
+          record: structuredRecord,
+          nowIso: input.nowIso,
+        })
+      : null;
 
-    return normalizeAssessmentCreditAccountRecord({
-      ownerUid: input.ownerUid,
-      record: snapshot.exists
-        ? (snapshot.data() as Partial<AssessmentCreditAccountRecord>)
-        : null,
-      nowIso: input.nowIso,
-    });
+    return (
+      pickPreferredAssessmentCreditRecord({
+        structured: structuredAccount,
+        legacy: legacyAccount,
+        fallbackIso: input.nowIso,
+      })
+      ?? normalizeAssessmentCreditAccountRecord({
+        ownerUid: input.ownerUid,
+        record: null,
+        nowIso: input.nowIso,
+      })
+    );
   }
 
   return normalizeAssessmentCreditAccountRecord({
@@ -3567,6 +4317,10 @@ export async function setAssessmentPromptEntitlementForUser(input: {
       } satisfies AssessmentCreditAccountRecord;
 
       await transaction.set(accountRef, nextAccount, { merge: true });
+      await syncStructuredAssessmentCreditState({
+        sql: transaction.sql,
+        account: nextAccount,
+      });
     });
   } else {
     const store = getMemoryStore();
@@ -3594,11 +4348,25 @@ export async function listUserUidsWithAssessmentPromptEntitlementEnabled() {
   const nowIso = toIsoTimestamp(new Date());
 
   if (shouldUseDatabase()) {
-    const snapshot = await getZootopiaDatabase()
-      .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
-      .where("assessmentPromptEntitlement", "==", "enabled")
-      .limit(5000)
-      .get();
+    const [snapshot, structuredRows] = await Promise.all([
+      getZootopiaDatabase()
+        .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
+        .where("assessmentPromptEntitlement", "==", "enabled")
+        .limit(5000)
+        .get(),
+      getZootopiaDatabase().sql<{ owner_uid: string }[]>`
+        SELECT owner_uid
+        FROM public.assessment_credit_accounts
+        WHERE assessment_prompt_entitlement = 'enabled'
+        LIMIT 5000
+      `,
+    ]);
+
+    for (const structuredRow of structuredRows) {
+      if (typeof structuredRow.owner_uid === "string" && structuredRow.owner_uid.trim()) {
+        enabledOwnerUids.add(structuredRow.owner_uid.trim());
+      }
+    }
 
     for (const accountSnapshot of snapshot.docs) {
       const account = normalizeAssessmentCreditAccountRecord({
@@ -3632,19 +4400,49 @@ export async function listUserUidsWithAssessmentPromptEntitlementEnabled() {
 
 async function listAssessmentCreditGrantsForOwner(input: { ownerUid: string; nowIso: string }) {
   if (shouldUseDatabase()) {
-    const snapshot = await getZootopiaDatabase()
-      .collection(ASSESSMENT_CREDIT_GRANTS_COLLECTION)
-      .where("ownerUid", "==", input.ownerUid)
-      .limit(400)
-      .get();
-
-    return snapshot.docs.map((documentSnapshot) =>
-      normalizeAssessmentCreditGrantRecord({
+    const [legacyRecords, structuredRows] = await Promise.all([
+      listLegacyAssessmentCreditGrantsForOwnerRecords({
         ownerUid: input.ownerUid,
-        grantId: documentSnapshot.id,
-        record: documentSnapshot.data() as Partial<AssessmentCreditGrantRecord>,
-        nowIso: input.nowIso,
       }),
+      listStructuredAssessmentCreditGrantRows({
+        ownerUid: input.ownerUid,
+      }),
+    ]);
+    const preferredRecordsById = new Map<string, AssessmentCreditGrantRecord>();
+
+    for (const legacyRecord of legacyRecords) {
+      preferredRecordsById.set(
+        legacyRecord.grantId,
+        normalizeAssessmentCreditGrantRecord({
+          ownerUid: input.ownerUid,
+          grantId: legacyRecord.grantId,
+          record: legacyRecord.record,
+          nowIso: input.nowIso,
+        }),
+      );
+    }
+
+    for (const structuredRow of structuredRows) {
+      const structuredGrant = normalizeAssessmentCreditGrantRecord({
+        ownerUid: input.ownerUid,
+        grantId: structuredRow.id,
+        record: mapStructuredAssessmentCreditGrantRow(structuredRow, input.nowIso),
+        nowIso: input.nowIso,
+      });
+      const currentGrant = preferredRecordsById.get(structuredGrant.id) ?? null;
+      const preferredGrant = pickPreferredAssessmentCreditRecord({
+        structured: structuredGrant,
+        legacy: currentGrant,
+        fallbackIso: input.nowIso,
+      });
+
+      if (preferredGrant) {
+        preferredRecordsById.set(structuredGrant.id, preferredGrant);
+      }
+    }
+
+    return [...preferredRecordsById.values()].sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
     );
   }
 
@@ -3668,19 +4466,47 @@ async function readAssessmentDailyCreditLedger(input: {
   const documentId = buildAssessmentDailyCreditDocumentId(input.ownerUid, input.dayKey);
 
   if (shouldUseDatabase()) {
-    const snapshot = await getZootopiaDatabase()
-      .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
-      .doc(documentId)
-      .get();
+    const [legacyRecord, structuredRecord] = await Promise.all([
+      readLegacyAssessmentDailyCreditLedgerRecord({
+        ownerUid: input.ownerUid,
+        dayKey: input.dayKey,
+      }),
+      readStructuredAssessmentDailyCreditLedgerRecord({
+        ownerUid: input.ownerUid,
+        dayKey: input.dayKey,
+        nowIso: input.nowIso,
+      }),
+    ]);
+    const legacyLedger = legacyRecord
+      ? normalizeAssessmentDailyCreditLedger({
+          ownerUid: input.ownerUid,
+          dayKey: input.dayKey,
+          record: legacyRecord,
+          nowIso: input.nowIso,
+        })
+      : null;
+    const structuredLedger = structuredRecord
+      ? normalizeAssessmentDailyCreditLedger({
+          ownerUid: input.ownerUid,
+          dayKey: input.dayKey,
+          record: structuredRecord,
+          nowIso: input.nowIso,
+        })
+      : null;
 
-    return normalizeAssessmentDailyCreditLedger({
-      ownerUid: input.ownerUid,
-      dayKey: input.dayKey,
-      record: snapshot.exists
-        ? (snapshot.data() as Partial<AssessmentDailyCreditLedgerDocument>)
-        : null,
-      nowIso: input.nowIso,
-    });
+    return (
+      pickPreferredAssessmentCreditRecord({
+        structured: structuredLedger,
+        legacy: legacyLedger,
+        fallbackIso: input.nowIso,
+      })
+      ?? normalizeAssessmentDailyCreditLedger({
+        ownerUid: input.ownerUid,
+        dayKey: input.dayKey,
+        record: null,
+        nowIso: input.nowIso,
+      })
+    );
   }
 
   return normalizeAssessmentDailyCreditLedger({
@@ -3766,6 +4592,34 @@ export async function getAssessmentDailyCreditsSummaryForUser(
 ) {
   const state = await resolveAssessmentCreditStateForUser(user);
   return state.summary;
+}
+
+/* The owner-facing credits page uses the same canonical summary as the protected header, then
+   adds server-owned grant and mutation detail from the repository. Future agents: keep the
+   total balance sourced from `state.summary` so detail UI never becomes a competing truth path. */
+export async function getAssessmentCreditDetailsForUser(
+  user: Pick<SessionUser, "uid" | "role">,
+) {
+  const computedAt = toIsoTimestamp(new Date());
+  const [state, history] = await Promise.all([
+    resolveAssessmentCreditStateForUser(user),
+    listAssessmentCreditMutationHistoryForOwner({
+      ownerUid: user.uid,
+      nowIso: computedAt,
+      limit: ASSESSMENT_CREDIT_MUTATION_HISTORY_LIMIT,
+    }),
+  ]);
+  const nowMs = Date.now();
+
+  return {
+    account: state.account,
+    credits: state.summary,
+    grants: state.grants
+      .map((grant) => buildAssessmentCreditGrantAdminView(grant, nowMs))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+    history,
+    computedAt,
+  };
 }
 
 export async function getAdminAssessmentCreditStateForUser(
@@ -4184,7 +5038,7 @@ export async function clearAssessmentGenerationIdempotencyLock(input: {
 
 export async function applyAdminAssessmentCreditMutation(input: {
   ownerUid: string;
-  admin: Pick<SessionUser, "uid" | "role">;
+  admin: Pick<SessionUser, "uid" | "role" | "email">;
   mutation: AdminAssessmentCreditMutationInput;
   diagnostics?: {
     traceId?: string | null;
@@ -4394,6 +5248,12 @@ export async function applyAdminAssessmentCreditMutation(input: {
           });
         }
 
+        const structuredLedger = {
+          ...ledger,
+          dailyLimit: afterComputation.dailyLimit,
+          pendingReservations: activeReservations,
+          updatedAt: nowIso,
+        } satisfies AssessmentDailyCreditLedgerDocument;
         const historyRecord: AdminAssessmentCreditMutationRecord = {
           id: historyRecordId,
           ownerUid: input.ownerUid,
@@ -4406,6 +5266,7 @@ export async function applyAdminAssessmentCreditMutation(input: {
           reason: mutationReason,
           note: mutationNote,
           adminUid: input.admin.uid,
+          adminEmail: input.admin.email ?? null,
           adminRole: input.admin.role,
           before: buildAssessmentCreditMutationBalanceSnapshot({
             account,
@@ -4415,6 +5276,9 @@ export async function applyAdminAssessmentCreditMutation(input: {
             account: mutationResult.nextAccount,
             summary: afterComputation.summary,
           }),
+          correlationId: creditTraceId,
+          routeSource: input.diagnostics?.source ?? null,
+          commitStatus: "committed",
           createdAt: nowIso,
         };
 
@@ -4425,6 +5289,13 @@ export async function applyAdminAssessmentCreditMutation(input: {
           historyRecord,
           { merge: true },
         );
+        await syncStructuredAssessmentCreditState({
+          sql: transaction.sql,
+          account: mutationResult.nextAccount,
+          grants: mutationResult.nextGrants,
+          ledger: structuredLedger,
+          history: historyRecord,
+        });
       });
     } else {
       const store = getMemoryStore();
@@ -4569,6 +5440,7 @@ export async function applyAdminAssessmentCreditMutation(input: {
         reason: mutationReason,
         note: mutationNote,
         adminUid: input.admin.uid,
+        adminEmail: input.admin.email ?? null,
         adminRole: input.admin.role,
         before: buildAssessmentCreditMutationBalanceSnapshot({
           account,
@@ -4578,6 +5450,9 @@ export async function applyAdminAssessmentCreditMutation(input: {
           account: mutationResult.nextAccount,
           summary: afterComputation.summary,
         }),
+        correlationId: creditTraceId,
+        routeSource: input.diagnostics?.source ?? null,
+        commitStatus: "committed",
         createdAt: nowIso,
       });
     }
@@ -4718,8 +5593,28 @@ export async function reserveAssessmentDailyCreditAttempt(
         dailyReservationCount,
         extraReservationCount,
       });
+      const persistStructuredCreditState = async (
+        nextLedger: AssessmentDailyCreditLedgerDocument,
+      ) => {
+        await syncStructuredAssessmentCreditState({
+          sql: transaction.sql,
+          account,
+          grants,
+          ledger: nextLedger,
+        });
+      };
 
       if (account.assessmentAccess === "disabled") {
+        const nextLedger = {
+          ...ledger,
+          dailyLimit: computation.dailyLimit,
+          pendingReservations: activeReservations,
+          updatedAt:
+            activeReservations.length !== ledger.pendingReservations.length
+            || ledger.dailyLimit !== computation.dailyLimit
+              ? nowIso
+              : ledger.updatedAt,
+        } satisfies AssessmentDailyCreditLedgerDocument;
         failure = {
           ok: false,
           code: "ASSESSMENT_ACCESS_DISABLED",
@@ -4734,16 +5629,12 @@ export async function reserveAssessmentDailyCreditAttempt(
         ) {
           await transaction.set(
             creditsRef,
-            {
-              ...ledger,
-              dailyLimit: computation.dailyLimit,
-              pendingReservations: activeReservations,
-              updatedAt: nowIso,
-            } satisfies AssessmentDailyCreditLedgerDocument,
+            nextLedger,
             { merge: true },
           );
         }
 
+        await persistStructuredCreditState(nextLedger);
         return;
       }
 
@@ -4751,6 +5642,16 @@ export async function reserveAssessmentDailyCreditAttempt(
       const hasExtraAvailability = computation.summary.extraCreditsAvailable > 0;
 
       if (!hasDailyAvailability && !hasExtraAvailability) {
+        const nextLedger = {
+          ...ledger,
+          dailyLimit: computation.dailyLimit,
+          pendingReservations: activeReservations,
+          updatedAt:
+            activeReservations.length !== ledger.pendingReservations.length
+            || ledger.dailyLimit !== computation.dailyLimit
+              ? nowIso
+              : ledger.updatedAt,
+        } satisfies AssessmentDailyCreditLedgerDocument;
         failure = {
           ok: false,
           code: "ASSESSMENT_DAILY_CREDITS_EXHAUSTED",
@@ -4765,16 +5666,12 @@ export async function reserveAssessmentDailyCreditAttempt(
         ) {
           await transaction.set(
             creditsRef,
-            {
-              ...ledger,
-              dailyLimit: computation.dailyLimit,
-              pendingReservations: activeReservations,
-              updatedAt: nowIso,
-            } satisfies AssessmentDailyCreditLedgerDocument,
+            nextLedger,
             { merge: true },
           );
         }
 
+        await persistStructuredCreditState(nextLedger);
         return;
       }
 
@@ -4792,27 +5689,25 @@ export async function reserveAssessmentDailyCreditAttempt(
       const nextExtraReservationCount = nextReservations.filter(
         (entry) => entry.source === "extra",
       ).length;
+      const nextLedger = {
+        ...ledger,
+        dailyLimit: computation.dailyLimit,
+        pendingReservations: nextReservations,
+        updatedAt: nowIso,
+      } satisfies AssessmentDailyCreditLedgerDocument;
 
       await transaction.set(
         creditsRef,
-        {
-          ...ledger,
-          dailyLimit: computation.dailyLimit,
-          pendingReservations: nextReservations,
-          updatedAt: nowIso,
-        } satisfies AssessmentDailyCreditLedgerDocument,
+        nextLedger,
         { merge: true },
       );
+      await persistStructuredCreditState(nextLedger);
 
       summary = buildAssessmentCreditComputation({
         role: user.role,
         dayKey: creditWindow.dayKey,
         resetsAt: creditWindow.resetsAt,
-        ledger: {
-          ...ledger,
-          dailyLimit: computation.dailyLimit,
-          pendingReservations: nextReservations,
-        },
+        ledger: nextLedger,
         account,
         grants,
         dailyReservationCount: nextDailyReservationCount,
@@ -4984,6 +5879,11 @@ export async function releaseAssessmentDailyCreditReservation(input: {
         ledger.pendingReservations,
         now.getTime(),
       ).filter((entry) => entry.id !== reservation.id);
+      const nextLedger = {
+        ...ledger,
+        pendingReservations: nextReservations,
+        updatedAt: nowIso,
+      } satisfies AssessmentDailyCreditLedgerDocument;
 
       if (nextReservations.length === ledger.pendingReservations.length) {
         return;
@@ -4991,13 +5891,13 @@ export async function releaseAssessmentDailyCreditReservation(input: {
 
       await transaction.set(
         documentRef,
-        {
-          ...ledger,
-          pendingReservations: nextReservations,
-          updatedAt: nowIso,
-        } satisfies AssessmentDailyCreditLedgerDocument,
+        nextLedger,
         { merge: true },
       );
+      await syncStructuredAssessmentCreditState({
+        sql: transaction.sql,
+        ledger: nextLedger,
+      });
     });
     return;
   }
@@ -5317,6 +6217,15 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
           { merge: true },
         );
       }
+      await syncStructuredAssessmentCreditState({
+        sql: transaction.sql,
+        account: {
+          ...nextAccount,
+          updatedAt: nowIso,
+        },
+        grants: nextGrants,
+        ledger: nextLedger,
+      });
 
       credits = buildAssessmentCreditComputation({
         role: input.user.role,

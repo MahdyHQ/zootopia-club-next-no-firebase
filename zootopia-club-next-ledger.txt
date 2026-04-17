@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-16 (Assessment credit private-channel auth hardening + protected credit details route)
+Last Updated: 2026-04-17 (Hybrid credit persistence bridge + canonical owner credit details route)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: c2bad35d88b3150a694d4fd49de8765b511cf67c
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -144,6 +144,17 @@ Key verified facts:
   browser session after successful Auth.js bootstrap so private Realtime
   channel authorization can remain healthy in protected pages; Auth.js session
   checks remain the sole authority for route/API access
+- Assessment credit persistence now uses a hybrid bridge: the live repository
+  transaction paths still maintain legacy compatibility documents, but now
+  mirror committed account, daily-ledger, grant, prompt-entitlement, and
+  mutation-history state into structured relational credit tables inside the
+  same ACID boundary (`assessment_credit_accounts`,
+  `assessment_daily_credits`, `assessment_credit_grants`,
+  `assessment_credit_mutations`)
+- Canonical credit reads now reconcile structured credit tables against the
+  legacy compatibility mirror by timestamp instead of trusting only one store,
+  which closes the old “log says success but persisted balance stays stale”
+  drift risk during the migration bridge
 - Protected shell and Assessment Studio now share one TanStack Query cache key
   for `/api/assessment/credits`, and the Assessment page/studio no longer seed
   or patch that shared balance cache from page props, mutation responses, or
@@ -152,6 +163,18 @@ Key verified facts:
   dedicated owner-facing credit-details route that reads the canonical shared
   `/api/assessment/credits` query path and keeps refresh behavior on shared
   invalidation/refetch instead of local balance patching
+- `/api/assessment/credits/details` now provides the owner-scoped canonical
+  credit detail read model (account + summary + grants + mutation history +
+  computedAt) for the protected credit details page, while the visible total
+  balance remains owned by the shared `/api/assessment/credits` TanStack query
+- The protected header balance badge now links directly to `/assessment/credits`
+  without changing balance ownership; the page itself uses the shared summary
+  query for totals and a separate owner-scoped details query only for source
+  breakdown and mutation history
+- Admin credit mutation history now records admin email, correlation ID, route
+  source, and commit status in the shared contract and in the structured
+  mutation table, and the admin PATCH route now returns the credit trace header
+  even on early authorization/self-mutation failures
 - Assessment credit summary shape already distinguishes the user-facing balance
   sources needed for truthful UX (`dailyRemainingCount`,
   `manualCreditsAvailable`, `grantCreditsAvailable`, `extraCreditsAvailable`,
@@ -301,7 +324,10 @@ Key verified facts:
 - Admin panel includes user management, storage management, governance dashboard
 - Database uses Supabase Postgres with RLS policies
 - Migration management via scripts/supabase/apply-migrations.mjs
-- 12 migration files tracked in supabase/migrations (latest hardens private assessment-credit Realtime channel authorization on `realtime.messages`)
+- 14 migration files tracked in supabase/migrations (latest add canonical
+  `assessment_credit_mutations` table and
+  `assessment_prompt_entitlement` column on
+  `assessment_credit_accounts`)
 
 ================================================================================
 3. PROJECT PURPOSE & PLATFORM DIRECTION
@@ -1520,6 +1546,157 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-17 — Hybrid credit persistence bridge, canonical owner credit details route, and structured mutation history alignment
+
+Reason:
+- Implement the target direction from `Guide-Files/Zootopia_Hybrid_Credit_Persistence_Guide_2026.md` without rebuilding the existing production-style credit architecture.
+- Preserve the current server-owned summary path (`/api/assessment/credits` + shared TanStack Query) while closing the real drift gap discovered in the repo audit: structured credit tables existed, but the live repository reads/writes were still primarily using the legacy compatibility collections.
+- Add a professional owner-scoped credit details surface that shows source separation and mutation history without introducing a second browser-side credit authority.
+
+Root cause(s) confirmed before editing:
+- The browser summary path was already correct: protected header and Assessment Studio were both reading the canonical shared TanStack query backed by `/api/assessment/credits`.
+- The admin mutation authority was already correct: admin page/API route -> repository mutation -> best-effort audit/log/live publish.
+- The persistence gap was in the repository/storage layer: the active database transaction branches were still reading/writing the legacy compatibility collections while the newer structured credit tables were only partially scaffolded and not actually driving the live credit truth.
+- Because of that mismatch, logs and UI invalidation could report a “successful” mutation while the structured tables still lagged or stayed empty, which is exactly the hybrid-drift failure the guide warned about.
+
+Files changed:
+- `apps/web/lib/server/repository.ts`
+- `apps/web/lib/assessment-credit-query.ts`
+- `apps/web/app/api/assessment/credits/details/route.ts` (new)
+- `apps/web/components/assessment/assessment-credit-details-panel.tsx`
+- `apps/web/components/layout/protected-shell.tsx`
+- `apps/web/app/api/admin/users/[uid]/credits/route.ts`
+- `apps/web/app/(protected)/admin/users/[uid]/page.tsx`
+- `apps/web/lib/server/zootopia-postgres-adapter.ts`
+- `packages/shared-types/src/admin.ts`
+- `supabase/migrations/20260416210000_assessment_credit_mutations.sql` (new)
+- `supabase/migrations/20260417103000_assessment_credit_prompt_entitlement.sql` (new)
+- `zootopia-club-next-ledger.txt`
+
+Technical details:
+- Added the structured canonical mutation-history table migration
+  (`assessment_credit_mutations`) and the follow-up migration that adds
+  `assessment_prompt_entitlement` to `assessment_credit_accounts`.
+- Extended the repository’s structured credit helpers so account rows now carry
+  `assessmentPromptEntitlement`, and mutation rows now normalize
+  `adminEmail`, `correlationId`, `routeSource`, and `commitStatus`.
+- Added a small hybrid reconciliation rule for database reads:
+  `readAssessmentCreditAccount()`, `readAssessmentDailyCreditLedger()`,
+  `listAssessmentCreditGrantsForOwner()`, and
+  `listAssessmentCreditMutationHistoryForOwner()` now reconcile structured rows
+  against the legacy compatibility mirror by timestamp instead of reading only
+  one side.
+- Added `syncStructuredAssessmentCreditState()` in the repository so live
+  transaction paths now mirror the committed state into the structured tables in
+  the same transaction boundary:
+  - `applyAdminAssessmentCreditMutation()`
+  - `reserveAssessmentDailyCreditAttempt()`
+  - `releaseAssessmentDailyCreditReservation()`
+  - `saveAssessmentGenerationWithCreditCommit()`
+  - `setAssessmentPromptEntitlementForUser()`
+- Preserved backend authority:
+  - admin mutations still originate from the admin page/API route
+  - balance truth still stays on the server
+  - realtime remains invalidation-only
+  - TanStack Query remains the shared client cache layer
+- Added `getAssessmentCreditDetailsForUser()` plus the new owner-scoped route
+  `GET /api/assessment/credits/details`.
+- Extended `apps/web/lib/assessment-credit-query.ts` with a dedicated owner
+  details query key while keeping the total balance owned by the shared summary
+  query key. Protected-shell invalidation now reconciles both active credit
+  queries together.
+- Redesigned `apps/web/components/assessment/assessment-credit-details-panel.tsx`
+  so `/assessment/credits` now shows:
+  - truthful summary cards
+  - access status
+  - prompt entitlement status
+  - a source breakdown for daily/manual/grant lanes
+  - mutation history with actor attribution, before/after snapshots, expiry,
+    and correlation IDs
+  - responsive mobile-card and wider-screen table layouts
+- Tightened admin observability:
+  - admin email now flows into repository mutation history
+  - the admin PATCH route now attaches the trace header even on early failures
+  - the admin detail-page server action now includes the mutation note in the
+    appended admin-log metadata
+
+Guide interpretation:
+- “Hybrid” was implemented as structured relational credit tables becoming the
+  live canonical bridge target, while legacy collection documents remain
+  compatibility mirrors during the migration window.
+- `/api/assessment/credits` remained the canonical user-visible summary path.
+- The new details route/page was implemented as a richer owner-scoped read
+  model, not as a competing balance calculator.
+- Auth.js/NextAuth v5 session authority was kept unchanged for route/API
+  authorization, while the existing Supabase browser session continues to serve
+  private Realtime channel auth only. No secure mutation ownership moved into
+  the client.
+
+Local vs Vercel notes:
+- Local integrated development:
+  - `lint:web`, `typecheck:web`, `build:web`, and `build:vercel` all completed
+    successfully after the implementation.
+  - A built local runtime probe against `http://127.0.0.1:3123/api/assessment/credits/details`
+    returned `401`, `Cache-Control: no-store, must-revalidate, max-age=0`, and
+    an `X-Zootopia-Assessment-Credit-Request-Id` header as expected for an
+    unauthenticated request.
+- Vercel production:
+  - `build:vercel` succeeded with the new dynamic route present.
+  - The implementation stays compatible with the existing App Router +
+    Auth.js + Supabase Realtime architecture because the new details path is a
+    server route, the summary route remains `force-dynamic`/`no-store`, and the
+    browser still uses invalidation/refetch instead of balance payloads.
+
+Free-tier practicality:
+- This pass did not introduce any new paid Supabase dependency beyond the
+  project’s existing Postgres/Auth/Realtime usage.
+- The owner-facing details page does not require client-side direct table reads
+  or private Realtime payload data; it works through server-owned route handlers
+  and is therefore compatible with the current free-tier-friendly operational
+  model already used by the repo.
+
+Verification:
+- `npm run lint:web` ✅
+- `npm run typecheck:web` ✅
+- `npm run build:web` ✅
+- `npm run build:vercel` ✅
+- Focused ESLint pass on touched files ✅
+- Built-runtime unauthenticated route verification ✅
+  - `GET /api/assessment/credits/details` -> `401`
+  - `X-Zootopia-Assessment-Credit-Request-Id` header present
+  - `Cache-Control: no-store, must-revalidate, max-age=0`
+- Code-path verification confirmed:
+  - header balance still reads the shared canonical summary query
+  - Assessment Studio still reads the same canonical summary query
+  - `/assessment/credits` now reads the same summary query for totals plus the
+    owner-scoped details query for breakdown/history only
+  - admin mutations still persist through the repository authority before
+    follow-up publish/log work
+  - structured tables now receive committed account/grant/daily/history state
+    inside the live transaction boundaries
+
+Authenticated verification gap:
+- No live admin credentials or target-user credentials were available in this
+  task turn, so I could not document a real signed-in mutation walkthrough with
+  actor UID/email, target UID, before/after balances, and UI screenshots.
+- Auth.js/NextAuth session alignment with the Supabase browser session was
+  therefore re-verified by code-path tracing against the current repo truth:
+  Auth.js remains the server trust boundary, while the browser Supabase session
+  remains necessary only for private Realtime channel authentication.
+
+Risks / constraints:
+- The repository now uses timestamp-based reconciliation while the legacy
+  compatibility mirror still exists. This is the intended migration bridge, but
+  future agents should finish any remaining cleanup carefully instead of
+  reintroducing mixed canonical ownership.
+- The new owner-facing details page depends on server-returned grant/history
+  data. If future agents change the credit contracts, they must keep
+  `/api/assessment/credits` as the owner of the visible total remaining balance.
+- The task did not include a live signed-in admin/user browser walkthrough, so
+  wrong-user non-delivery and realtime/private-channel behavior remain verified
+  by code tracing plus runtime boundary checks rather than by end-user clicks in
+  this turn.
 
 2026-04-16 — Assessment credit private-channel authorization hardening and protected credit details route
 

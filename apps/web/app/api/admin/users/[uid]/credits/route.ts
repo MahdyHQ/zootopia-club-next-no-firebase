@@ -110,10 +110,16 @@ export async function PATCH(
 ) {
   /* Admin mutations remain repository-owned and transaction-backed to keep access toggles,
      manual credits, overrides, and grants authoritative in one backend path. */
+  const creditTraceId = createAssessmentCreditTraceId();
   const admin = await getAdminSessionUser();
   if (!admin) {
     const error = getAdminAccessRequiredError();
-    return applyNoStore(apiError(error.code, error.message, error.status));
+    return applyNoStore(
+      applyAssessmentCreditTraceIdHeader(
+        apiError(error.code, error.message, error.status),
+        creditTraceId,
+      ),
+    );
   }
 
   const { uid } = await context.params;
@@ -121,11 +127,15 @@ export async function PATCH(
     const mapped = mapAdminAssessmentCreditMutationError(
       new Error("ASSESSMENT_CREDIT_SELF_MUTATION_FORBIDDEN"),
     );
-    return applyNoStore(apiError(mapped.code, mapped.message, mapped.status));
+    return applyNoStore(
+      applyAssessmentCreditTraceIdHeader(
+        apiError(mapped.code, mapped.message, mapped.status),
+        creditTraceId,
+      ),
+    );
   }
 
   let body: AdminAssessmentCreditMutationInput;
-  const creditTraceId = createAssessmentCreditTraceId();
   try {
     body = (await request.json()) as AdminAssessmentCreditMutationInput;
   } catch {
@@ -212,6 +222,7 @@ export async function PATCH(
       admin: {
         uid: admin.uid,
         role: admin.role,
+        email: admin.email ?? null,
       },
       mutation: body,
       diagnostics: {

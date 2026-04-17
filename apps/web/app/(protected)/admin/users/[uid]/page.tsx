@@ -506,6 +506,7 @@ async function commitAdminCreditMutationFromDetailPage(input: {
       admin: {
         uid: admin.uid,
         role: admin.role,
+        email: admin.email ?? null,
       },
       mutation: input.mutation,
       diagnostics: {
@@ -558,6 +559,7 @@ async function commitAdminCreditMutationFromDetailPage(input: {
         grantId: input.mutation.grantId ?? null,
         expiresAt: input.mutation.expiresAt ?? null,
         reason: input.mutation.reason ?? null,
+        note: input.mutation.note ?? null,
         remainingCount:
           typeof state.credits.remainingCount === "number"
             ? state.credits.remainingCount

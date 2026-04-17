@@ -20,7 +20,7 @@ import {
 } from "@/lib/assessment-credit-display";
 import {
   ASSESSMENT_CREDIT_SUMMARY_STALE_TIME_MS,
-  reconcileAssessmentCreditSummaryQuery,
+  reconcileAssessmentCreditQueries,
   useAssessmentCreditSummaryQuery,
 } from "@/lib/assessment-credit-query";
 import {
@@ -176,8 +176,8 @@ export function ProtectedShell({
   });
 
   /* ProtectedShell no longer keeps a private credit state copy. All refresh triggers reconcile
-     the shared query key so the header and Assessment Studio consume the same cached server
-     truth object regardless of which surface initiated the refresh. */
+     the shared summary query plus the richer owner-details query so protected chrome, Assessment
+     Studio, and the credit details page stay aligned to the same server-owned truth refreshes. */
   const requestCreditSummaryRefetch = useEffectEvent(
     async (
       reason: string,
@@ -185,7 +185,7 @@ export function ProtectedShell({
       strategy: "invalidate-active" | "reset-active" = "invalidate-active",
     ) => {
       try {
-        await reconcileAssessmentCreditSummaryQuery(queryClient, {
+        await reconcileAssessmentCreditQueries(queryClient, {
           source: "protected-shell",
           reason,
           strategy,
@@ -737,12 +737,13 @@ export function ProtectedShell({
 
              {/* The shell badge mirrors server-authoritative assessment credits for the signed-in
                  owner. Keep this read-only so quota authority remains in backend reserve/commit routes. */}
-             <div className="relative flex items-center gap-1.5">
-               <div
-                 aria-label={`${siteContent.navigation.balanceLabel}: ${resolvedBalanceLabel}`}
-                 title={resolvedBalanceHint}
-                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/58 px-2.5 text-foreground-muted shadow-sm"
-               >
+            <div className="relative flex items-center gap-1.5">
+              <Link
+                href={APP_ROUTES.assessmentCredits}
+                aria-label={`${siteContent.navigation.balanceLabel}: ${resolvedBalanceLabel}`}
+                title={resolvedBalanceHint}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/58 px-2.5 text-foreground-muted shadow-sm transition hover:border-emerald-500/30 hover:text-foreground"
+              >
                  <WalletCards className="h-4.5 w-4.5 shrink-0 text-gold" />
                  <span className="hidden text-[10px] font-black uppercase tracking-[0.16em] md:inline">
                    {siteContent.navigation.balanceLabel}
@@ -750,7 +751,7 @@ export function ProtectedShell({
                  <span className="max-w-[4.75rem] truncate text-sm font-semibold leading-none text-foreground tabular-nums">
                    {resolvedBalanceLabel}
                  </span>
-               </div>
+              </Link>
 
                {/* This adjacent plus action opens support guidance only; it never mutates
                    credits client-side and keeps quota authority strictly server-owned. */}

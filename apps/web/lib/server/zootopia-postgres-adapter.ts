@@ -1346,6 +1346,15 @@ export class PgWriteBatch {
 export class PgTransaction {
   constructor(private readonly txSql: SqlExecutor) {}
 
+  /**
+   * Exposes the raw `postgres` SQL client bound to this transaction.
+   * Use this for the small number of flows that now write both legacy
+   * document rows and canonical relational tables in one ACID boundary.
+   */
+  get sql(): SqlExecutor {
+    return this.txSql;
+  }
+
   async get(ref: PgDocumentRef): Promise<PgDocSnapshot>;
   async get(query: PgQuery): Promise<PgQuerySnapshot>;
   async get(

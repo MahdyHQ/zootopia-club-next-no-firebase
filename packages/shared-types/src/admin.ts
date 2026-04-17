@@ -80,15 +80,27 @@ export interface AdminAssessmentCreditMutationRecord {
   reason: string | null;
   note: string | null;
   adminUid: string;
+  adminEmail?: string | null;
   adminRole: UserRole;
   before: AdminAssessmentCreditMutationBalanceSnapshot;
   after: AdminAssessmentCreditMutationBalanceSnapshot;
+  correlationId?: string | null;
+  routeSource?: string | null;
+  commitStatus?: string | null;
   createdAt: string;
 }
 
 export interface AdminUserAssessmentCreditsResponse {
   user: UserDocument;
   state: AdminAssessmentCreditState;
+}
+
+export interface AssessmentCreditDetailsResponse {
+  account: AssessmentCreditAccountRecord;
+  credits: AssessmentDailyCreditsSummary;
+  grants: AssessmentCreditGrantAdminView[];
+  history: AdminAssessmentCreditMutationRecord[];
+  computedAt: string;
 }
 
 export interface AdminUserDeletionStorageSummary {
