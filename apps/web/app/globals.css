@@ -1699,6 +1699,8 @@ html[dir="rtl"] .field-control {
   color: rgba(15, 23, 42, 0.8);
   font-size: 0.95rem;
   line-height: 1.8;
+  /* This summary is shared by detached preview/result headers and must wrap long AI-generated copy within the card frame. */
+  overflow-wrap: anywhere;
 }
 
 .assessment-file-summary--dark .assessment-file-summary__body {

@@ -60,7 +60,9 @@ export function AssessmentResultViewer({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-inherit/60">
               {item.label}
             </p>
-            <p className="mt-2 text-sm font-semibold text-inherit">{item.value}</p>
+            <p className="mt-2 break-words text-sm font-semibold text-inherit [overflow-wrap:anywhere]">
+              {item.value}
+            </p>
           </article>
         ))}
       </section>
@@ -73,9 +75,9 @@ export function AssessmentResultViewer({
               dark,
             )}`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
               <span
-                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                className={`inline-flex max-w-full break-words rounded-full px-3 py-1 text-xs font-semibold [overflow-wrap:anywhere] ${
                   dark ? "bg-white/10 text-white/80" : "bg-slate-900/5 text-slate-700"
                 }`}
               >
@@ -83,7 +85,7 @@ export function AssessmentResultViewer({
               </span>
               {pageIndex === 0 && preview.sourceDocumentLabel ? (
                 <span
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                  className={`inline-flex max-w-full break-words rounded-full px-3 py-1 text-xs font-semibold [overflow-wrap:anywhere] ${
                     dark ? "bg-blue-500/15 text-blue-100" : "bg-blue-50 text-blue-700"
                   }`}
                 >

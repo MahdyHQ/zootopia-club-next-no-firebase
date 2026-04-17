@@ -2388,7 +2388,8 @@ export function AssessmentStudio({
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-foreground">
+                        {/* History cards can contain provider-generated titles/summaries, so force wrapping to keep all copy inside the reusable card shell. */}
+                        <p className="break-words font-semibold text-foreground [overflow-wrap:anywhere]">
                           {generation.title}
                         </p>
                         {index === 0 ? (
@@ -2397,11 +2398,12 @@ export function AssessmentStudio({
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-foreground-muted">
+                      <p className="mt-2 break-words text-sm leading-6 text-foreground-muted [overflow-wrap:anywhere]">
                         {generation.meta.summary}
                       </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="inline-flex items-center rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent">
+                      <div className="mt-3 flex flex-wrap gap-2 [&>span]:break-words [&>span]:[overflow-wrap:anywhere]">
+                        {/* Light mode keeps the question-count text on accent-strong for contrast; dark mode preserves existing accent behavior. */}
+                        <span className="inline-flex items-center rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent-strong dark:text-accent">
                           {`${generation.meta.questionCount} ${messages.assessmentQuestionsLabel}`}
                         </span>
                         <span className="inline-flex items-center rounded-full bg-gold/10 px-2.5 py-0.5 text-xs font-semibold text-gold">
