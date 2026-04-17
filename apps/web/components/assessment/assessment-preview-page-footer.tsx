@@ -5,6 +5,8 @@ import Image from "next/image";
 import { ASSESSMENT_FILE_FOOTER_LAYOUT } from "@/lib/assessment-file-branding";
 import { cn } from "@/lib/utils";
 
+import { AssessmentFooterEmoji } from "@/components/assessment/assessment-footer-emoji";
+
 type AssessmentPreviewPageFooterProps = {
   footerLine: {
     leadingEmoji: string;
@@ -80,16 +82,15 @@ export function AssessmentPreviewPageFooter({
         </span>
       </div>
 
-      {/* 2. Heart Lane */}
+      {/* 2. Laptop Lane */}
       <div className="flex shrink-0 items-center justify-center">
-        <span
+        <AssessmentFooterEmoji
+          emoji={footerLine.leadingEmoji}
           className={cn(
-            "text-[0.6rem] leading-none sm:text-[0.7rem] lg:text-[0.8rem]",
-            dark ? "drop-shadow-[0_0_8px_rgba(248,113,113,0.2)]" : "",
+            "h-[0.9rem] w-[0.9rem] sm:h-[1rem] sm:w-[1rem] lg:h-[1.1rem] lg:w-[1.1rem]",
+            dark ? "drop-shadow-[0_0_10px_rgba(125,211,252,0.18)]" : "",
           )}
-        >
-          {footerLine.trailingEmoji}
-        </span>
+        />
       </div>
 
       {/* 3. Dominant Arabic Text Lane */}
@@ -108,16 +109,15 @@ export function AssessmentPreviewPageFooter({
         </span>
       </div>
 
-      {/* 4. Laptop Lane */}
+      {/* 4. Heart Lane */}
       <div className="flex shrink-0 items-center justify-center">
-        <span
+        <AssessmentFooterEmoji
+          emoji={footerLine.trailingEmoji}
           className={cn(
-            "text-[0.6rem] leading-none sm:text-[0.7rem] lg:text-[0.8rem]",
-            dark ? "drop-shadow-[0_0_10px_rgba(125,211,252,0.18)]" : "",
+            "h-[0.9rem] w-[0.9rem] sm:h-[1rem] sm:w-[1rem] lg:h-[1.1rem] lg:w-[1.1rem]",
+            dark ? "drop-shadow-[0_0_8px_rgba(248,113,113,0.22)]" : "",
           )}
-        >
-          {footerLine.leadingEmoji}
-        </span>
+        />
       </div>
 
       {/* 5. Page Badge Lane (Far Right) */}

@@ -8,6 +8,7 @@ import type {
 } from "@/lib/assessment-preview-model";
 import {
   ASSESSMENT_FILE_FOOTER_LAYOUT,
+  resolveAssessmentFooterEmojiIconDataUrl,
 } from "@/lib/assessment-file-branding";
 import { buildAssessmentFileQuestionPages } from "@/lib/assessment-file-layout";
 import {
@@ -113,6 +114,19 @@ function escapeHtml(value: string) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function renderFooterEmoji(emoji: string) {
+  const emojiIconUrl = resolveAssessmentFooterEmojiIconDataUrl(emoji);
+  if (!emojiIconUrl) {
+    return `<span class="footer-emoji" aria-hidden="true">${escapeHtml(emoji)}</span>`;
+  }
+
+  return `
+    <span class="footer-emoji" aria-hidden="true">
+      <img src="${escapeHtml(emojiIconUrl)}" alt="" />
+    </span>
+  `.trim();
 }
 
 function renderChoiceItem(input: {
@@ -475,9 +489,9 @@ function renderSupportContactCard(input: {
 function renderFooterLine(input: AssessmentPreviewFileSurface["footerLine"]) {
   return `
     <p class="footer-line" dir="rtl">
-      <span class="footer-emoji">${escapeHtml(input.leadingEmoji)}</span>
+      ${renderFooterEmoji(input.leadingEmoji)}
       <span class="footer-line-text">${escapeHtml(input.text)}</span>
-      <span class="footer-emoji">${escapeHtml(input.trailingEmoji)}</span>
+      ${renderFooterEmoji(input.trailingEmoji)}
     </p>
   `.trim();
 }
@@ -2073,8 +2087,20 @@ export function buildAssessmentFastPrintHtml(input: {
       }
 
       .footer-emoji {
+        display: inline-flex;
         flex: none;
+        width: 1.02em;
+        height: 1.02em;
+        align-items: center;
+        justify-content: center;
         line-height: 1;
+      }
+
+      .footer-emoji img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
       }
 
       /* The page badge needs a dedicated full-height lane so it can visually land in the lower

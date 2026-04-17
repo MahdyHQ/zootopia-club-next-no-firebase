@@ -89,7 +89,7 @@ function describeAssessmentQuestionTypeRule(type: AssessmentQuestionType) {
     case "comparison":
       return "Comparison: ask learners to compare two related concepts or entities using at least two criteria; the answer should clearly separate similarities and differences.";
     default:
-      return "MCQ: include four answer options labeled A-D inside the question text and identify the correct option in the answer.";
+      return "MCQ: question must contain the stem only or the stem plus matching inline options, choices must contain exactly four ordered options labeled A-D, no option may be omitted, and the answer must identify the correct option plus its text.";
   }
 }
 
@@ -172,13 +172,16 @@ export function buildAssessmentPrompt(input: {
     `Model lane: ${input.modelLabel}`,
     `Output contract: Return exactly ${input.questionCount} assessment items.`,
     `JSON contract version: ${ASSESSMENT_PROMPT_CONTRACT_VERSION}.`,
-    'JSON contract: Return valid JSON only with the exact top-level shape {"contractVersion": string, "summary": string, "selectedQuestionTypes": string[], "requestedDistribution": [{"type": string, "percentage": number}], "questions": [{"type": string, "difficulty": string, "displayOrder": number, "sectionKey": string, "sectionTitle": string, "question": string, "answer": string, "rationale": string, "tags": string[], "structuredData": object, "answerMetadata": object}]}',
+    'JSON contract: Return valid JSON only with the exact top-level shape {"contractVersion": string, "summary": string, "selectedQuestionTypes": string[], "requestedDistribution": [{"type": string, "percentage": number}], "questions": [{"type": string, "difficulty": string, "displayOrder": number, "sectionKey": string, "sectionTitle": string, "question": string, "choices": [{"marker": string, "text": string, "isCorrect": boolean}], "answer": string, "rationale": string, "tags": string[], "structuredData": object, "answerMetadata": object}]}',
     `ContractVersion rule: set contractVersion to ${ASSESSMENT_PROMPT_CONTRACT_VERSION}.`,
     "Summary contract: summary must be a meaningful lecture/document brief grounded in the provided prompt/context, not a generic placeholder.",
     "Summary length contract: write 3 to 5 full sentences with concrete learning focus (target roughly 220 to 420 characters) so compact cards render about 5 to 8 lines.",
     `Type enum contract: type must be one of ${supportedTypeList}.`,
     `Difficulty enum contract: difficulty must be one of ${supportedDifficultyList}.`,
     "Strict metadata contract: every question object must include both type and difficulty; never omit either field.",
+    "Completeness contract: every question object must include question, choices, answer, rationale, and tags. Never return partial question objects, never drop a requested question, and never leave required arrays undefined.",
+    "Choice-array contract: for MCQ or any other choice-based item, choices must contain the full ordered option list and must preserve every option exactly once. For non-choice question types, set choices to an empty array [].",
+    "Choice-accuracy contract: if a question is choice-based, the answer must match the returned choices and the correct choice must be identifiable from both answer text and choices[].",
     "Ordering contract: displayOrder must start at 1 and increase by 1 for each question.",
     "Grouping contract: sectionKey must equal the canonical type id and sectionTitle must be the human-readable label for that same type.",
     "Echo contract: selectedQuestionTypes and requestedDistribution must mirror the requested canonical ids/distribution exactly.",
@@ -207,7 +210,7 @@ export function buildAssessmentPrompt(input: {
      /* Rendering and export surfaces branch by question type and difficulty metadata.
        Keep this rule explicit so provider output stays structurally aligned with UI/PDF/DOCX
        contracts instead of degrading into MCQ-shaped generic text. */
-     "Structure instructions: format each question according to its selected type (for example MCQ options, explicit True/False statements, short-answer prompts, blank sentences, scientific-term prompts, terminology prompts, definition prompts, and comparison prompts) and keep answer/rationale aligned with that canonical type id.",
+     "Structure instructions: format each question according to its selected type (for example MCQ options, explicit True/False statements, short-answer prompts, blank sentences, scientific-term prompts, terminology prompts, definition prompts, and comparison prompts) and keep answer/rationale aligned with that canonical type id. Choice-based questions must return both a clean question stem and a complete choices[] array in the same order.",
     /* Assessment preview, result, and export surfaces now preserve Unicode content end-to-end.
        Keep this orchestration rule explicit so tasteful emojis remain intentional output instead
        of being treated as accidental noise by future prompt or normalization changes. */

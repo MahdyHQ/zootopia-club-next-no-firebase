@@ -19,6 +19,51 @@ export const ASSESSMENT_FILE_FOOTER_LINE = {
 export const ASSESSMENT_FILE_FOOTER_TEXT =
   `${ASSESSMENT_FILE_FOOTER_LINE.leadingEmoji} ${ASSESSMENT_FILE_FOOTER_LINE.text} ${ASSESSMENT_FILE_FOOTER_LINE.trailingEmoji}`;
 export const ASSESSMENT_FILE_SIGNATURE_IMAGE_ASSET_URL = "/signature.png";
+/* Footer emojis must survive browser preview, print-to-PDF, and Puppeteer capture even when the
+   host runtime lacks a reliable color-emoji font. Keep these inline SVG fallbacks centralized so
+   every visual footer lane can render the intended 💻 / ❤️ ornaments without font dependence. */
+function buildAssessmentFooterEmojiSvgDataUrl(svgMarkup: string) {
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgMarkup)}`;
+}
+
+const ASSESSMENT_FILE_FOOTER_EMOJI_ICON_DATA_URLS = {
+  "💻": buildAssessmentFooterEmojiSvgDataUrl(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-hidden="true">
+      <defs>
+        <linearGradient id="screen-shell" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#2563eb" />
+          <stop offset="100%" stop-color="#0f172a" />
+        </linearGradient>
+        <linearGradient id="screen-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#93c5fd" />
+          <stop offset="100%" stop-color="#38bdf8" />
+        </linearGradient>
+        <linearGradient id="base-shell" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#e2e8f0" />
+          <stop offset="100%" stop-color="#94a3b8" />
+        </linearGradient>
+      </defs>
+      <rect x="13" y="9" width="38" height="29" rx="5" fill="url(#screen-shell)" />
+      <rect x="17" y="13" width="30" height="21" rx="3" fill="url(#screen-glow)" />
+      <path d="M6 41h52l-3.9 9.4a4 4 0 0 1-3.7 2.5H13.7A4 4 0 0 1 10 50.4z" fill="url(#base-shell)" />
+      <rect x="23" y="45" width="18" height="2.5" rx="1.25" fill="#64748b" />
+      <path d="M26 22.5h12" stroke="#e0f2fe" stroke-width="2.2" stroke-linecap="round" />
+      <path d="M26 27.5h8.5" stroke="#e0f2fe" stroke-width="2.2" stroke-linecap="round" opacity=".9" />
+    </svg>
+  `),
+  "❤️": buildAssessmentFooterEmojiSvgDataUrl(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-hidden="true">
+      <defs>
+        <linearGradient id="heart-shell" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#fb7185" />
+          <stop offset="100%" stop-color="#e11d48" />
+        </linearGradient>
+      </defs>
+      <path d="M32 55c-1.1 0-2.2-.4-3.1-1.2C15.2 41.2 8 34.5 8 23.8 8 15 14.7 8.5 22.8 8.5c4.6 0 9 2.2 12.2 5.8 3.2-3.6 7.6-5.8 12.2-5.8C55.3 8.5 62 15 62 23.8c0 10.7-7.2 17.4-20.9 30-.9.8-2 1.2-3.1 1.2Z" fill="url(#heart-shell)" />
+      <path d="M21 18.5c1.9-2.3 4.8-3.7 8-3.7 2.1 0 4 .5 5.8 1.5-3.8.6-6.8 2.8-8.8 6.2-.6.9-1.1 1.9-1.5 3.1-1.7-1.7-3-4-3.5-7.1Z" fill="#fecdd3" opacity=".72" />
+    </svg>
+  `),
+} as const;
 /* Keep the footer side anchors and page-arc geometry in one shared place so detached React file
    pages and the shared print/PDF HTML can stay visually aligned without each renderer drifting
    into its own seal size or page-badge proportions. */
@@ -42,6 +87,12 @@ export const ASSESSMENT_FILE_FOOTER_LAYOUT = {
   pageArcDashArray: "170 56",
   pageArcRotation: -128,
 } as const;
+
+export function resolveAssessmentFooterEmojiIconDataUrl(value: string) {
+  return ASSESSMENT_FILE_FOOTER_EMOJI_ICON_DATA_URLS[
+    value as keyof typeof ASSESSMENT_FILE_FOOTER_EMOJI_ICON_DATA_URLS
+  ] ?? null;
+}
 
 const ASSESSMENT_FILE_SUPPORT_PAGE = {
   eyebrow: "رسالة أخيرة",

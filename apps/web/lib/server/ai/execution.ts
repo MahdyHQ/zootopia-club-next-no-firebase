@@ -33,6 +33,7 @@ import {
 import { resolveDefaultModelForTool } from "@/lib/server/ai/default-models";
 import {
   buildAssessmentQuestionRenderMetadata,
+  normalizeAssessmentChoiceQuestionContent,
   resolveAssessmentQuestionStructuredData,
 } from "@/lib/assessment-question-display";
 import {
@@ -128,6 +129,13 @@ type ProviderAssessmentQuestion = {
   answer?: string;
   rationale?: string;
   tags?: string[] | string;
+  choices?: unknown;
+  options?: unknown;
+  answerOptions?: unknown;
+  answer_options?: unknown;
+  answerChoices?: unknown;
+  answer_choices?: unknown;
+  alternatives?: unknown;
   structuredData?: unknown;
   answerMetadata?: unknown;
   expectedTerm?: unknown;
@@ -196,7 +204,7 @@ type GoogleProviderResponse = {
    Keep emoji guidance here so provider-specific execution stays aligned with preview/export
    surfaces and does not silently "sanitize away" deliberate expressive characters. */
 const QWEN_ASSESSMENT_SYSTEM_PROMPT =
-  "You generate scientifically reliable assessment questions, include a meaningful lecture/document summary in 3 to 5 compact sentences, may use tasteful educationally appropriate emojis when they genuinely help clarity or recall, and must respond with valid JSON only while preserving any emoji characters directly in the JSON strings.";
+  "You generate scientifically reliable assessment questions, include a meaningful lecture/document summary in 3 to 5 compact sentences, may use tasteful educationally appropriate emojis when they genuinely help clarity or recall, and must respond with valid JSON only while preserving any emoji characters directly in the JSON strings. Every returned question object must be complete: include question, choices, answer, rationale, and tags; choice-based questions must include a full ordered choices array with no missing options.";
 
 const QWEN_BASE_URL_ENV_HINT = QWEN_BASE_URL_ENV_KEYS.join(", ");
 
@@ -1064,23 +1072,42 @@ function normalizeProviderQuestion(input: {
     normalizeMultilineWhitespace(String(input.question.question || "")) ||
     input.fallback.question;
   const normalizedAnswer =
-    normalizeMultilineWhitespace(String(input.question.answer || "")) ||
-    input.fallback.answer;
+    normalizeMultilineWhitespace(String(input.question.answer || ""));
   const normalizedRationale =
     normalizeMultilineWhitespace(String(input.question.rationale || "")) ||
     input.fallback.rationale;
+  /* Provider models do not always inline MCQ options into the question text. Canonicalize
+     alternate choice arrays here before persistence so every later preview/export surface sees
+     one stable question+answer shape instead of silently dropping choices for some providers. */
+  const choiceContent = normalizeAssessmentChoiceQuestionContent({
+    questionType: resolvedType,
+    questionText: normalizedQuestion,
+    answerText: normalizedAnswer,
+    choiceSources: [
+      input.question.choices,
+      input.question.options,
+      input.question.answerOptions,
+      input.question.answer_options,
+      input.question.answerChoices,
+      input.question.answer_choices,
+      input.question.alternatives,
+      input.question.answerMetadata,
+    ],
+  });
+  const resolvedAnswer =
+    choiceContent.answerText || input.fallback.answer;
   const structuredData = resolveAssessmentQuestionStructuredData({
     questionType: resolvedType,
     structuredData: buildProviderStructuredDataPayload(input.question),
-    questionText: normalizedQuestion,
-    answerText: normalizedAnswer,
+    questionText: choiceContent.questionText,
+    answerText: resolvedAnswer,
     rationaleText: normalizedRationale,
   });
   const rendering = buildAssessmentQuestionRenderMetadata({
     questionType: resolvedType,
     structuredData,
-    questionText: normalizedQuestion,
-    answerText: normalizedAnswer,
+    questionText: choiceContent.questionText,
+    answerText: resolvedAnswer,
     rationaleText: normalizedRationale,
   });
 
@@ -1093,8 +1120,8 @@ function normalizeProviderQuestion(input: {
           input.question.difficulty_level ??
           input.question.level,
       ) ?? input.fallback.difficulty,
-    question: normalizedQuestion,
-    answer: normalizedAnswer,
+    question: choiceContent.questionText,
+    answer: resolvedAnswer,
     rationale: normalizedRationale,
     tags: normalizeProviderTags(input.question.tags, input.language),
     structuredData,

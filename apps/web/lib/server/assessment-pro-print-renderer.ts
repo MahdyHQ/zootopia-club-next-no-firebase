@@ -8,6 +8,7 @@ import type {
 } from "@/lib/assessment-preview-model";
 import {
   ASSESSMENT_FILE_FOOTER_LAYOUT,
+  resolveAssessmentFooterEmojiIconDataUrl,
 } from "@/lib/assessment-file-branding";
 import { buildAssessmentFileQuestionPages } from "@/lib/assessment-file-layout";
 import {
@@ -30,7 +31,7 @@ import {
    version lane-specific so renderer-content migration and later premium design work can rev
    without forcing Fast browser-print artifact churn. */
 export const ASSESSMENT_PRO_PRINT_RENDERER_VERSION =
-  "pro-2026-04-17-deterministic-pagination-v5";
+  "pro-2026-04-17-deterministic-pagination-v6";
 /* The premium Puppeteer lane now opts out of the shared overflow-fallback pagination heuristic.
    Keep this lane-specific contract explicit so Pro can guarantee a stable 2-then-3 page rhythm
    without silently changing preview/result or the lighter Fast export path. */
@@ -121,6 +122,19 @@ function escapeHtml(value: string) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function renderFooterEmoji(emoji: string) {
+  const emojiIconUrl = resolveAssessmentFooterEmojiIconDataUrl(emoji);
+  if (!emojiIconUrl) {
+    return `<span class="footer-emoji" aria-hidden="true">${escapeHtml(emoji)}</span>`;
+  }
+
+  return `
+    <span class="footer-emoji" aria-hidden="true">
+      <img src="${escapeHtml(emojiIconUrl)}" alt="" />
+    </span>
+  `.trim();
 }
 
 function renderChoiceItem(input: {
@@ -488,9 +502,9 @@ function renderSupportContactCard(input: {
 function renderFooterLine(input: AssessmentPreviewFileSurface["footerLine"]) {
   return `
     <p class="footer-line" dir="rtl">
-      <span class="footer-emoji">${escapeHtml(input.leadingEmoji)}</span>
+      ${renderFooterEmoji(input.leadingEmoji)}
       <span class="footer-line-text">${escapeHtml(input.text)}</span>
-      <span class="footer-emoji">${escapeHtml(input.trailingEmoji)}</span>
+      ${renderFooterEmoji(input.trailingEmoji)}
     </p>
   `.trim();
 }
@@ -2127,8 +2141,20 @@ export function buildAssessmentProPrintHtml(input: {
       }
 
       .footer-emoji {
+        display: inline-flex;
         flex: none;
+        width: 1.02em;
+        height: 1.02em;
+        align-items: center;
+        justify-content: center;
         line-height: 1;
+      }
+
+      .footer-emoji img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
       }
 
       /* The page badge needs a dedicated full-height lane so it can visually land in the lower

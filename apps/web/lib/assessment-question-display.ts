@@ -33,6 +33,12 @@ export interface AssessmentQuestionDisplay {
   supplementalLines: string[];
 }
 
+export interface AssessmentNormalizedChoiceQuestionContent {
+  questionText: string;
+  answerText: string;
+  choices: AssessmentQuestionChoiceDisplayState[];
+}
+
 const CHOICE_MARKER_SCAN_PATTERN =
   /(?:[A-Za-z]|[0-9\u0660-\u0669\u06F0-\u06F9]{1,2}|[\u0621-\u064A])/gu;
 const CHOICE_LINE_PATTERN =
@@ -125,6 +131,304 @@ function getChoiceLayout(choices: AssessmentQuestionChoiceDisplay[]) {
     choices.every((choice) => choice.displayText.length <= 96)
     ? "grid-2x2"
     : "stack";
+}
+
+function isChoiceBasedQuestionType(
+  questionType: AssessmentQuestionType | null | undefined,
+) {
+  return questionType === "mcq" || questionType === "multiple_response" || questionType == null;
+}
+
+function buildSequentialChoiceMarker(index: number) {
+  return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
+}
+
+function normalizeBooleanLike(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  const normalized = normalizeWhitespace(String(value || "")).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "correct" ||
+    normalized === "right" ||
+    normalized === "1"
+  );
+}
+
+function looksLikeChoiceMarkerText(value: string) {
+  const normalized = normalizeChoiceMarker(value);
+  return typeof normalized === "string" && normalized.length <= 2;
+}
+
+function createChoiceState(
+  marker: string | null,
+  text: string,
+  isCorrect: boolean,
+): AssessmentQuestionChoiceDisplayState {
+  return {
+    ...createChoice(marker, text),
+    isCorrect,
+  };
+}
+
+function extractChoiceTextFromRecord(record: Record<string, unknown>) {
+  const label = normalizeWhitespace(String(record.label ?? ""));
+  const key = normalizeWhitespace(String(record.key ?? ""));
+  const candidates = [
+    record.text,
+    record.content,
+    record.value,
+    record.choice,
+    record.option,
+    record.body,
+    record.statement,
+    record.title,
+    record.name,
+    record.answerText,
+    record.answer,
+    !looksLikeChoiceMarkerText(label) ? label : undefined,
+    !looksLikeChoiceMarkerText(key) ? key : undefined,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeWhitespace(String(candidate || ""));
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return "";
+}
+
+function extractChoiceStateFromItem(
+  value: unknown,
+  index: number,
+): AssessmentQuestionChoiceDisplayState | null {
+  if (typeof value === "string") {
+    const parsedLine = parseChoiceLine(value);
+    if (parsedLine) {
+      return {
+        ...parsedLine,
+        isCorrect: false,
+      };
+    }
+
+    const normalizedText = normalizeWhitespace(value);
+    if (!normalizedText) {
+      return null;
+    }
+
+    return createChoiceState(buildSequentialChoiceMarker(index), normalizedText, false);
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const markerCandidates = [
+    record.marker,
+    record.letter,
+    record.optionLabel,
+    record.choiceLabel,
+    record.id,
+    record.key,
+    record.label,
+  ];
+  const marker = markerCandidates
+    .map((candidate) => normalizeWhitespace(String(candidate || "")))
+    .find((candidate) => candidate && looksLikeChoiceMarkerText(candidate))
+    ?? null;
+  const textCandidate = extractChoiceTextFromRecord(record);
+  const parsedTextLine = textCandidate ? parseChoiceLine(textCandidate) : null;
+  const resolvedText = parsedTextLine?.text ?? textCandidate;
+
+  if (!resolvedText) {
+    return null;
+  }
+
+  const isCorrect = [
+    record.isCorrect,
+    record.correct,
+    record.isAnswer,
+    record.is_answer,
+    record.isRight,
+    record.is_right,
+  ].some((candidate) => normalizeBooleanLike(candidate));
+
+  return createChoiceState(
+    marker ?? parsedTextLine?.marker ?? buildSequentialChoiceMarker(index),
+    resolvedText,
+    isCorrect,
+  );
+}
+
+function extractChoiceStatesFromSource(
+  value: unknown,
+): AssessmentQuestionChoiceDisplayState[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => extractChoiceStateFromItem(item, index))
+      .filter(
+        (
+          item,
+        ): item is AssessmentQuestionChoiceDisplayState => Boolean(item),
+      );
+  }
+
+  if (typeof value !== "object") {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  const keyedChoices = Object.entries(record).filter(([key, item]) => {
+    if (!looksLikeChoiceMarkerText(key)) {
+      return false;
+    }
+
+    return typeof item === "string" || (item && typeof item === "object");
+  });
+
+  if (keyedChoices.length >= 2) {
+    return keyedChoices
+      .map(([key, item], index) =>
+        extractChoiceStateFromItem(
+          typeof item === "object" && item !== null && !Array.isArray(item)
+            ? {
+                marker: key,
+                ...item,
+              }
+            : {
+                marker: key,
+                text: item,
+              },
+          index,
+        ),
+      )
+      .filter(
+        (
+          item,
+        ): item is AssessmentQuestionChoiceDisplayState => Boolean(item),
+      );
+  }
+
+  for (const key of [
+    "choices",
+    "options",
+    "answerOptions",
+    "answer_options",
+    "answerChoices",
+    "answer_choices",
+    "alternatives",
+  ] as const) {
+    const nestedChoices = extractChoiceStatesFromSource(record[key]);
+    if (nestedChoices.length >= 2) {
+      return nestedChoices;
+    }
+  }
+
+  return [];
+}
+
+function normalizeChoiceStateSequence(
+  choices: AssessmentQuestionChoiceDisplayState[],
+) {
+  const normalizedChoices: AssessmentQuestionChoiceDisplayState[] = [];
+  const usedMarkers = new Set<string>();
+  const seenChoiceKeys = new Set<string>();
+
+  for (const choice of choices) {
+    const normalizedText = normalizeWhitespace(choice.text);
+    if (!normalizedText) {
+      continue;
+    }
+
+    let resolvedMarker = choice.marker;
+    let normalizedMarker = normalizeChoiceMarker(resolvedMarker);
+
+    if (!normalizedMarker || usedMarkers.has(normalizedMarker)) {
+      let fallbackIndex = normalizedChoices.length;
+
+      do {
+        resolvedMarker = buildSequentialChoiceMarker(fallbackIndex);
+        normalizedMarker = normalizeChoiceMarker(resolvedMarker);
+        fallbackIndex += 1;
+      } while (!normalizedMarker || usedMarkers.has(normalizedMarker));
+    }
+
+    const normalizedChoice = createChoiceState(
+      resolvedMarker,
+      normalizedText,
+      choice.isCorrect,
+    );
+    const choiceKey = createChoiceComparisonKey(normalizedChoice);
+    if (seenChoiceKeys.has(choiceKey)) {
+      continue;
+    }
+
+    usedMarkers.add(normalizedMarker!);
+    seenChoiceKeys.add(choiceKey);
+    normalizedChoices.push(normalizedChoice);
+  }
+
+  return normalizedChoices;
+}
+
+function areChoiceListsEquivalent(
+  left: AssessmentQuestionChoiceDisplay[],
+  right: AssessmentQuestionChoiceDisplayState[],
+) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((choice, index) => {
+    const counterpart = right[index];
+    if (!counterpart) {
+      return false;
+    }
+
+    return createChoiceComparisonKey(choice) === createChoiceComparisonKey(counterpart);
+  });
+}
+
+function buildChoiceLines(choices: AssessmentQuestionChoiceDisplayState[]) {
+  return choices.map((choice) =>
+    `${choice.marker ? `${choice.marker})` : "-"} ${choice.text}`,
+  );
+}
+
+function buildAnswerFromCorrectChoices(input: {
+  choices: AssessmentQuestionChoiceDisplayState[];
+  questionType?: AssessmentQuestionType | null;
+}) {
+  const correctChoices = input.choices.filter((choice) => choice.isCorrect);
+  if (correctChoices.length === 0) {
+    return "";
+  }
+
+  if (input.questionType === "multiple_response") {
+    return correctChoices
+      .map((choice) => choice.marker ?? choice.text)
+      .join(", ");
+  }
+
+  return correctChoices[0]?.marker ?? correctChoices[0]?.text ?? "";
 }
 
 function parseChoiceLine(value: string) {
@@ -371,6 +675,71 @@ export function deriveAssessmentQuestionDisplay(
       supplementalLines: [],
     }
   );
+}
+
+/* Choice-based questions can arrive with dedicated option arrays instead of inline option text.
+   Normalize those alternative provider/legacy shapes here so preview, result, DOCX, and both
+   PDF lanes all recover the same ordered choice list without widening the saved question contract. */
+export function normalizeAssessmentChoiceQuestionContent(input: {
+  questionType?: AssessmentQuestionType | null;
+  questionText: string;
+  answerText?: string | null;
+  choiceSources?: unknown[];
+}): AssessmentNormalizedChoiceQuestionContent {
+  const normalizedQuestionText = normalizeMultilineWhitespace(input.questionText);
+  const normalizedAnswerText = normalizeMultilineWhitespace(
+    String(input.answerText || ""),
+  );
+  const externalChoices = isChoiceBasedQuestionType(input.questionType)
+    ? normalizeChoiceStateSequence(
+        (input.choiceSources ?? []).flatMap((source) =>
+          extractChoiceStatesFromSource(source),
+        ),
+      )
+    : [];
+  const questionDisplay = deriveAssessmentQuestionDisplay(normalizedQuestionText);
+  const shouldAppendExternalChoices =
+    externalChoices.length >= 2 &&
+    !areChoiceListsEquivalent(questionDisplay.choices, externalChoices);
+  const normalizedQuestionWithChoices = shouldAppendExternalChoices
+    ? normalizeMultilineWhitespace(
+        [
+          questionDisplay.stem || normalizedQuestionText,
+          ...buildChoiceLines(externalChoices),
+          ...questionDisplay.supplementalLines,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      )
+    : normalizedQuestionText;
+  const finalDisplay = shouldAppendExternalChoices
+    ? deriveAssessmentQuestionDisplay(normalizedQuestionWithChoices)
+    : questionDisplay;
+  const fallbackAnswerText =
+    normalizedAnswerText ||
+    buildAnswerFromCorrectChoices({
+      choices: externalChoices,
+      questionType: input.questionType,
+    });
+  const explicitCorrectChoiceKeys = new Set(
+    externalChoices
+      .filter((choice) => choice.isCorrect)
+      .map((choice) => createChoiceComparisonKey(choice)),
+  );
+  const annotatedChoices = annotateAssessmentCorrectChoices({
+    answerText: fallbackAnswerText,
+    choices: finalDisplay.choices,
+  }).map((choice) => ({
+    ...choice,
+    isCorrect:
+      choice.isCorrect || explicitCorrectChoiceKeys.has(createChoiceComparisonKey(choice)),
+  }));
+
+  return {
+    questionText: normalizedQuestionWithChoices,
+    answerText: fallbackAnswerText,
+    choices: annotatedChoices,
+  };
 }
 
 export function annotateAssessmentCorrectChoices(input: {

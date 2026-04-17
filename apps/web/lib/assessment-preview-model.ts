@@ -150,7 +150,6 @@ export interface NormalizedAssessmentPreview {
   status: AssessmentGenerationStatus;
   statusLabel: string;
   modeLabel: string;
-  modelLabel: string;
   providerLabel: string;
   difficultyLabel: string;
   languageLabel: string;

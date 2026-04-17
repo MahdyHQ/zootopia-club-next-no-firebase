@@ -21,6 +21,7 @@ import {
   deriveAssessmentQuestionDisplay,
   extractMatchingPairs,
   formatAssessmentAnswerDisplay,
+  normalizeAssessmentChoiceQuestionContent,
   resolveTrueFalseAnswerValue,
   splitMultipleResponseAnswers,
 } from "@/lib/assessment-question-display";
@@ -159,6 +160,34 @@ function getQuestionTypeLabel(
     default:
       return messages.assessmentTypeOther;
   }
+}
+
+function resolvePreviewQuestionType(input: {
+  declaredType: AssessmentQuestionType | null | undefined;
+  choices: AssessmentPreviewQuestionItem["choices"];
+  rawAnswer: string;
+  answerDisplay: string;
+}) {
+  if (!input.declaredType) {
+    return input.choices.length > 0 ? "mcq" : null;
+  }
+
+  if (input.declaredType === "mcq" || input.declaredType === "multiple_response") {
+    return input.declaredType;
+  }
+
+  /* Some legacy/provider responses declare a generic text type while still returning a real
+     choice list plus a marker-based answer. Prefer the MCQ renderer only when the recovered
+     choices actually resolve against the answer, so bullet-style prose does not get miscast. */
+  const hasRecoveredChoiceAnswer =
+    input.choices.some((choice) => choice.isCorrect) ||
+    input.answerDisplay !== input.rawAnswer;
+
+  if (input.choices.length >= 2 && hasRecoveredChoiceAnswer) {
+    return "mcq";
+  }
+
+  return input.declaredType;
 }
 
 const ASSESSMENT_COMPOSITION_VISIBLE_TYPE_BADGES = 4;
@@ -365,30 +394,76 @@ function buildPreviewQuestionItem(input: {
   messages: AppMessages;
 }): AssessmentPreviewQuestionItem {
   const { question, index, defaultDifficulty, contentLanguage, messages } = input;
+  const questionRecord = question as AssessmentGeneration["questions"][number] & {
+    choices?: unknown;
+    options?: unknown;
+    answerOptions?: unknown;
+    answer_options?: unknown;
+    answerChoices?: unknown;
+    answer_choices?: unknown;
+    alternatives?: unknown;
+    answerMetadata?: unknown;
+    source?: {
+      answerMetadata?: unknown;
+    } | null;
+  };
+  const choiceContent = normalizeAssessmentChoiceQuestionContent({
+    questionType: question.type,
+    questionText: question.question,
+    answerText: question.answer,
+    choiceSources: [
+      questionRecord.choices,
+      questionRecord.options,
+      questionRecord.answerOptions,
+      questionRecord.answer_options,
+      questionRecord.answerChoices,
+      questionRecord.answer_choices,
+      questionRecord.alternatives,
+      questionRecord.answerMetadata,
+      questionRecord.source?.answerMetadata,
+    ],
+  });
 
   // Preview, result, Markdown, DOCX, and PDF surfaces must all consume the same interpreted
   // question hierarchy so inline provider-formatted MCQ choices never drift back into the stem.
-  const display = deriveAssessmentQuestionDisplay(question.question);
-  const choices = annotateAssessmentCorrectChoices({
-    answerText: question.answer,
+  const display = deriveAssessmentQuestionDisplay(choiceContent.questionText);
+  const choices =
+    choiceContent.choices.length > 0
+      ? choiceContent.choices
+      : annotateAssessmentCorrectChoices({
+          answerText: choiceContent.answerText,
+          choices: display.choices,
+        });
+  const preliminaryAnswerDisplay = formatAssessmentAnswerDisplay({
+    answerText: choiceContent.answerText,
+    questionType: question.type,
     choices: display.choices,
   });
-  const resolvedQuestionType =
-    question.type ?? (choices.length > 0 ? "mcq" : null);
+  const resolvedQuestionType = resolvePreviewQuestionType({
+    declaredType: question.type,
+    choices,
+    rawAnswer: choiceContent.answerText,
+    answerDisplay: preliminaryAnswerDisplay,
+  });
+  const answerDisplay = formatAssessmentAnswerDisplay({
+    answerText: choiceContent.answerText,
+    questionType: resolvedQuestionType,
+    choices: display.choices,
+  });
   const questionDifficulty = question.difficulty ?? defaultDifficulty;
   const scienceBlocks = buildAssessmentScienceRenderBlocks({
     locale: contentLanguage,
     questionType: resolvedQuestionType,
     structuredData: question.structuredData,
-    questionText: question.question,
-    answerText: question.answer,
+    questionText: choiceContent.questionText,
+    answerText: choiceContent.answerText,
     rationaleText: question.rationale,
   });
   const derivedRendering = buildAssessmentQuestionRenderMetadata({
     questionType: resolvedQuestionType,
     structuredData: question.structuredData,
-    questionText: question.question,
-    answerText: question.answer,
+    questionText: choiceContent.questionText,
+    answerText: choiceContent.answerText,
     rationaleText: question.rationale,
   });
   let rendering = question.rendering ?? null;
@@ -420,7 +495,7 @@ function buildPreviewQuestionItem(input: {
     structuredData: question.structuredData ?? null,
     rendering,
     scienceBlocks,
-    question: question.question,
+    question: choiceContent.questionText,
     stem: display.stem,
     /* Preview/result/PDF question cards now share one server-authored correct-choice flag.
        Preserve this normalized field so the premium highlight stays consistent across every
@@ -428,12 +503,8 @@ function buildPreviewQuestionItem(input: {
     choices,
     choiceLayout: display.choiceLayout,
     supplementalLines: display.supplementalLines,
-    answer: question.answer,
-    answerDisplay: formatAssessmentAnswerDisplay({
-      answerText: question.answer,
-      questionType: question.type,
-      choices: display.choices,
-    }),
+    answer: choiceContent.answerText,
+    answerDisplay,
     rationale: question.rationale ?? null,
     tags: question.tags ?? [],
   };
@@ -586,7 +657,6 @@ function buildPlainTextExport(input: {
     `${messages.assessmentModeLabel}: ${getModeLabel(generation.meta.mode, messages)}`,
     `${messages.assessmentDifficulty}: ${getDifficultyLabel(generation.meta.difficulty, messages)}`,
     `${messages.assessmentLanguage}: ${getLanguageLabel(generation.meta.language, messages)}`,
-    `${messages.assessmentModelLabel}: ${generation.meta.modelLabel}`,
     `${messages.assessmentInputModeLabel}: ${getInputModeLabel(generation.meta.inputMode, messages)}`,
   ];
 
@@ -660,7 +730,6 @@ function buildMarkdownExport(input: {
     `- ${messages.assessmentModeLabel}: ${getModeLabel(generation.meta.mode, messages)}`,
     `- ${messages.assessmentDifficulty}: ${getDifficultyLabel(generation.meta.difficulty, messages)}`,
     `- ${messages.assessmentLanguage}: ${getLanguageLabel(generation.meta.language, messages)}`,
-    `- ${messages.assessmentModelLabel}: ${generation.meta.modelLabel}`,
     `- ${messages.assessmentInputModeLabel}: ${getInputModeLabel(generation.meta.inputMode, messages)}`,
   ];
 
@@ -771,7 +840,6 @@ export function buildAssessmentPreview(input: {
     status: generation.status,
     statusLabel: getStatusLabel(generation.status, messages),
     modeLabel: getModeLabel(generation.meta.mode, messages),
-    modelLabel: generation.meta.modelLabel,
     providerLabel: getProviderLabel(generation.meta.provider, messages),
     difficultyLabel: getDifficultyLabel(generation.meta.difficulty, messages),
     languageLabel: getLanguageLabel(generation.meta.language, messages),
@@ -792,10 +860,6 @@ export function buildAssessmentPreview(input: {
       {
         label: messages.assessmentLanguage,
         value: getLanguageLabel(generation.meta.language, messages),
-      },
-      {
-        label: messages.assessmentModelLabel,
-        value: generation.meta.modelLabel,
       },
       {
         label: messages.assessmentInputModeLabel,

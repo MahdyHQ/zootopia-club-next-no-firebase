@@ -36,6 +36,7 @@ import {
 import { getModelById } from "@/lib/ai/models";
 import {
   buildAssessmentQuestionRenderMetadata,
+  normalizeAssessmentChoiceQuestionContent,
   resolveAssessmentQuestionStructuredData,
 } from "@/lib/assessment-question-display";
 import {
@@ -58,6 +59,14 @@ type AssessmentQuestionLike = Partial<AssessmentQuestion> & {
   explanation?: string;
   type?: AssessmentQuestionType;
   difficulty?: unknown;
+  choices?: unknown;
+  options?: unknown;
+  answerOptions?: unknown;
+  answer_options?: unknown;
+  answerChoices?: unknown;
+  answer_choices?: unknown;
+  alternatives?: unknown;
+  answerMetadata?: unknown;
 };
 
 type AssessmentNormalizedQuestionLike = AssessmentQuestionLike &
@@ -546,6 +555,7 @@ function normalizeAssessmentQuestion(
   difficulty: AssessmentDifficulty,
   prompt: string,
   fallbackType?: AssessmentQuestionType,
+  providerQuestionSource?: unknown,
 ): AssessmentQuestion {
   const fallback = buildQuestionFallback({
     index,
@@ -565,28 +575,55 @@ function normalizeAssessmentQuestion(
     typeof question === "string"
       ? fallback.answer
       : normalizeMultilineWhitespace(
-          question.answer || question.correctAnswer || question.explanation || fallback.answer,
+          question.answer || question.correctAnswer || "",
+        );
+  const legacyAnswerFallback =
+    typeof question === "string"
+      ? fallback.answer
+      : normalizeMultilineWhitespace(
+          question.correctAnswer || question.explanation || fallback.answer,
         );
   const normalizedRationaleText =
     typeof question === "string"
       ? fallback.rationale
       : normalizeOptionalMultilineString(question.rationale || question.explanation) ??
         fallback.rationale;
+  const choiceContent = normalizeAssessmentChoiceQuestionContent({
+    questionType: questionType ?? null,
+    questionText: normalizedQuestionText,
+    answerText: normalizedAnswerText,
+    choiceSources:
+      typeof question === "string"
+        ? [providerQuestionSource]
+        : [
+            question.choices,
+            question.options,
+            question.answerOptions,
+            question.answer_options,
+            question.answerChoices,
+            question.answer_choices,
+            question.alternatives,
+            question.answerMetadata,
+            providerQuestionSource,
+          ],
+  });
+  const resolvedAnswerText =
+    choiceContent.answerText || legacyAnswerFallback;
   /* Legacy records may not include structuredData. Resolve from explicit payload first, then
      derive conservative science-type structure from question/answer text when possible so
      render/export surfaces stay stable without inventing unverifiable metadata. */
   const structuredData = resolveAssessmentQuestionStructuredData({
     questionType: questionType ?? null,
     structuredData: typeof question === "string" ? undefined : question.structuredData,
-    questionText: normalizedQuestionText,
-    answerText: normalizedAnswerText,
+    questionText: choiceContent.questionText,
+    answerText: resolvedAnswerText,
     rationaleText: normalizedRationaleText,
   });
   const rendering = buildAssessmentQuestionRenderMetadata({
     questionType: questionType ?? null,
     structuredData,
-    questionText: normalizedQuestionText,
-    answerText: normalizedAnswerText,
+    questionText: choiceContent.questionText,
+    answerText: resolvedAnswerText,
     rationaleText: normalizedRationaleText,
   });
 
@@ -594,8 +631,8 @@ function normalizeAssessmentQuestion(
     const normalizedQuestion: AssessmentQuestion = {
       id: `q-${index + 1}`,
       difficulty,
-      question: normalizedQuestionText,
-      answer: normalizedAnswerText,
+      question: choiceContent.questionText,
+      answer: resolvedAnswerText,
       rationale: normalizedRationaleText,
       tags: [],
     };
@@ -625,8 +662,8 @@ function normalizeAssessmentQuestion(
   const normalizedQuestion: AssessmentQuestion = {
     id: normalizeOptionalString(question.id) ?? `q-${index + 1}`,
     difficulty: normalizeQuestionDifficulty(question.difficulty) ?? difficulty,
-    question: normalizedQuestionText,
-    answer: normalizedAnswerText,
+    question: choiceContent.questionText,
+    answer: resolvedAnswerText,
     rationale: normalizedRationaleText,
     tags: normalizedTags,
   };
@@ -1199,6 +1236,17 @@ export function normalizeAssessmentGenerationRecord(
   )
     ? normalizedResultSeed.normalizedQuestions
     : [];
+  const rawModelQuestionSources =
+    record.rawModelResult &&
+    typeof record.rawModelResult === "object" &&
+    record.rawModelResult.responseJson &&
+    typeof record.rawModelResult.responseJson === "object" &&
+    !Array.isArray(record.rawModelResult.responseJson) &&
+    Array.isArray(
+      (record.rawModelResult.responseJson as { questions?: unknown }).questions,
+    )
+      ? ((record.rawModelResult.responseJson as { questions: unknown[] }).questions ?? [])
+      : [];
   const rawQuestions = rawNormalizedQuestions.length > 0
     ? rawNormalizedQuestions
     : (Array.isArray(record.questions) ? record.questions : []);
@@ -1266,16 +1314,27 @@ export function normalizeAssessmentGenerationRecord(
   const questionTypeSequence = hasQuestionTypeMetadata
     ? buildQuestionTypeSequence(questionCount, questionTypeDistribution)
     : [];
-  const questions = rawQuestions.map((question, index) =>
-    normalizeAssessmentQuestion(
+  const questions = rawQuestions.map((question, index) => {
+    const normalizedSeed = rawNormalizedQuestions[index];
+    const sourceDisplayOrder =
+      normalizedSeed && typeof normalizedSeed === "object"
+        ? normalizeInteger(normalizedSeed.source?.sourceDisplayOrder)
+        : null;
+    const providerQuestionSource =
+      typeof sourceDisplayOrder === "number" && sourceDisplayOrder >= 1
+        ? rawModelQuestionSources[sourceDisplayOrder - 1]
+        : rawModelQuestionSources[index];
+
+    return normalizeAssessmentQuestion(
       question,
       index,
       language,
       difficulty,
       requestPrompt,
       questionTypeSequence[index],
-    ),
-  );
+      providerQuestionSource,
+    );
+  });
   const sourceDocument = normalizeSourceDocument(record.meta?.sourceDocument);
   const inputMode = normalizeInputMode(record.meta?.inputMode);
   const normalizedDocumentId = normalizeOptionalString(

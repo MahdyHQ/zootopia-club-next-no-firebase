@@ -5,6 +5,8 @@ import Image from "next/image";
 import { ASSESSMENT_FILE_FOOTER_LAYOUT } from "@/lib/assessment-file-branding";
 import { cn } from "@/lib/utils";
 
+import { AssessmentFooterEmoji } from "@/components/assessment/assessment-footer-emoji";
+
 type AssessmentFileFooterProps = {
   footerLine: {
     leadingEmoji: string;
@@ -95,7 +97,10 @@ export function AssessmentFileFooter({
             dark ? "text-white/88" : "text-slate-800/90",
           )}
         >
-          <span className="shrink-0 text-[0.95em] leading-none">{footerLine.leadingEmoji}</span>
+          <AssessmentFooterEmoji
+            emoji={footerLine.leadingEmoji}
+            className="h-[0.95em] w-[0.95em] leading-none"
+          />
           {/* Footer attribution text stays shared across preview/result/export surfaces.
               Keep the center lane structurally dominant and typographically compact so the Arabic
               sentence stays between the ornaments as one premium strip on normal widths. */}
@@ -105,7 +110,10 @@ export function AssessmentFileFooter({
           >
             {footerLine.text}
           </span>
-          <span className="shrink-0 text-[0.95em] leading-none">{footerLine.trailingEmoji}</span>
+          <AssessmentFooterEmoji
+            emoji={footerLine.trailingEmoji}
+            className="h-[0.95em] w-[0.95em] leading-none"
+          />
         </p>
       </div>
 

@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Assessment Studio layout adjustments + copyright font reduction)
+Last Updated: 2026-04-17 (Assessment Pro PDF artifact version bump for hardened renderer output)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -255,6 +255,25 @@ Key verified facts:
   and now preserve the old shared renderer content inside lane-owned files
   without hidden final-renderer coupling; Pro keeps the absolute-base-url /
   non-interactive capture contract while Fast stays browser-print-first
+- Assessment preview/result/export normalization now recovers choice-based
+  question options from alternative provider/legacy shapes (`choices`,
+  `options`, `answerOptions`, `answerChoices`, `alternatives`, and keyed
+  `A/B/C/D`-style objects) before grouped rendering, so mixed AI payloads no
+  longer silently drop options in preview, Markdown, DOCX, Fast PDF, or Pro PDF
+- Choice recovery now resolves MCQ answers from explicitly-correct recovered
+  choices before falling back to generic placeholder answers, while leaving
+  rationale, numbering, tags, and non-choice question behavior intact
+- Assessment generation prompt instructions now require every question object to
+  be complete, with ordered `choices[]` for choice-based questions and `choices:
+  []` for non-choice questions, reducing provider-side omissions and partial MCQ
+  payloads
+- Detached assessment preview/result/export metadata no longer render the model
+  label/value, but backend generation metadata still stores model/provider data
+  for internal tracking and repository truth
+- Assessment footer attribution now renders a leading `💻` and trailing `❤️`
+  across preview/result/export surfaces, and the visual footer lanes use shared
+  inline SVG emoji fallbacks so browser print and Puppeteer PDF capture no
+  longer depend on host color-emoji font availability
 - Web workspace `typecheck` and `build` now clear stale `.next/dev` cache state
   before invoking Next typegen/build so malformed dev-only route helper files do
   not poison later TypeScript or production build runs
@@ -280,7 +299,7 @@ Key verified facts:
   page-1 shell so the two opening cards consume the reserved body space above
   the compact footer instead of leaving a detached blank gap
 - The active Pro renderer/export lane version is now
-  `pro-2026-04-17-deterministic-pagination-v5`, so Pro artifact reuse only
+  `pro-2026-04-17-deterministic-pagination-v6`, so Pro artifact reuse only
   occurs for artifacts stamped with that exact version tag; older cached Pro
   artifacts are forced to regenerate through the current hardened renderer path
 - Local workspace verification is currently healthy again for the web app:
@@ -1046,6 +1065,12 @@ Detached Preview/Footer Ownership:
   `questionSections` from `apps/web/lib/server/assessment-preview.ts`; extra
   provider-returned question types are tolerated in raw generation output but
   filtered out of final grouped display/export surfaces.
+- Legacy assessment records now recover omitted choice arrays from
+  `rawModelResult.responseJson.questions[*]` during normalization, and the
+  preview/export layer also tolerates alternate per-question choice field names
+  before rendering grouped cards.
+- Preview/result/export metadata rows intentionally omit the model label/value
+  even though `generation.meta.modelLabel` remains persisted for internal use.
 - Type-specific preview/result card ownership now lives in
   `apps/web/components/assessment/renderers/*` with the grouped page shell in
   `apps/web/components/assessment/assessment-grouped-view.tsx` and the switch
@@ -1200,6 +1225,10 @@ Prompt Templates:
 - Stored in apps/web/messages/ directory
 - Organized by task type
 - May include i18n variants
+- Assessment prompt orchestration now explicitly requires complete per-question
+  payloads, full ordered choice arrays for choice-based questions, empty
+  `choices` arrays for non-choice questions, explicit answers, and rationale
+  when available so normalization/rendering contracts stay aligned
 
 PDF Generation:
 - Uses Puppeteer (puppeteer-core)
@@ -1567,6 +1596,149 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
+2026-04-17: PRO PDF ARTIFACT VERSION BUMP (Lane-Specific Cache Invalidation)
+────────────────────────────────────────────────────────────────────────────
+
+CHANGES:
+1. Bumped the Pro PDF renderer/export lane version in
+   `apps/web/lib/server/assessment-pro-print-renderer.ts`
+   - Changed `ASSESSMENT_PRO_PRINT_RENDERER_VERSION` from
+     `pro-2026-04-17-deterministic-pagination-v5`
+     to `pro-2026-04-17-deterministic-pagination-v6`
+   - Kept `ASSESSMENT_PRO_PRINT_PAGINATION_MODE = "deterministic"` unchanged
+
+RATIONALE:
+- The Pro capture surface changed materially during the recent preview/export
+  hardening work (choice recovery, footer rendering, and visible export output),
+  so premium cached PDF artifacts need a clean lane-specific invalidation.
+- This keeps Pro artifact reuse honest without forcing Fast browser-print lane
+  churn or changing the established deterministic 2-then-3 pagination rhythm.
+
+FILES CHANGED:
+- apps/web/lib/server/assessment-pro-print-renderer.ts
+- zootopia-club-next-ledger.txt
+
+VERIFICATION:
+✓ `npm run lint:web` — PASS
+✓ `npm run typecheck:web` — PASS
+✓ `npm run build:web` — PASS
+
+2026-04-17: ASSESSMENT PREVIEW / EXPORT CHOICE RECOVERY + EMOJI FOOTER HARDENING
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSES:
+1. Some provider/legacy assessment payloads returned options under alternative
+   fields (`choices`, `options`, `answerOptions`, `answerChoices`,
+   `alternatives`, keyed `A/B/C/D` maps), but the persisted/preview path only
+   trusted inline option text inside `question.question`, so those options were
+   silently lost on preview/export/result surfaces.
+2. Missing-answer choice-based questions could receive a generic fallback answer
+   too early during normalization, which blocked later recovery of the actual
+   correct option from explicitly marked choices.
+3. Preview/export metadata still rendered the visible model label even though
+   the requirement was to keep model tracking internal only.
+4. Footer emojis depended on host font availability in print/PDF paths, and the
+   preview-only footer had the ornament order reversed relative to the desired
+   `💻 [Arabic text] ❤️` output.
+
+CHANGES:
+1. Added shared choice-shape normalization in
+   `apps/web/lib/assessment-question-display.ts`
+   - New `normalizeAssessmentChoiceQuestionContent(...)` extracts ordered choice
+     lists from alternative array/object shapes, normalizes markers/text, keeps
+     recovered choices in canonical display order, and synthesizes answer text
+     from explicitly correct options when needed.
+   - This shared helper is now the cross-surface source of truth for preview,
+     result, export, and persistence-safe choice recovery.
+
+2. Hardened provider/runtime normalization in
+   `apps/web/lib/server/ai/execution.ts`
+   - Provider question typing now tolerates alternative option fields.
+   - New-generation persistence now canonicalizes recovered choices before save.
+   - Missing-answer MCQs now try recovered correct choices first and only fall
+     back to generic answer scaffolding when no real answer can be recovered.
+   - The Qwen assessment system prompt now explicitly demands complete question
+     objects with full ordered choices for choice-based types.
+
+3. Hardened legacy-record normalization in
+   `apps/web/lib/server/assessment-records.ts`
+   - Legacy reads now inspect `rawModelResult.responseJson.questions[*]` to
+     recover omitted choice arrays even when normalized question text never
+     inlined them.
+   - Alternative choice field names and answer metadata are now tolerated in the
+     read model.
+   - Missing-answer recovery now prefers recovered correct choices before any
+     fallback explanatory placeholder answer.
+
+4. Strengthened prompt orchestration in
+   `apps/web/lib/server/ai/prompt-orchestrator.ts`
+   - Choice-based questions must return complete ordered `choices[]`.
+   - Non-choice questions must return `choices: []`.
+   - The contract now explicitly forbids partial question objects, dropped
+     questions, and incomplete MCQ payloads.
+
+5. Strengthened preview/export rendering in
+   `apps/web/lib/server/assessment-preview.ts` and
+   `apps/web/lib/assessment-preview-model.ts`
+   - Preview question building now re-runs defensive choice normalization so
+     preview/result/Markdown/DOCX/PDF surfaces share the same recovered choice
+     interpretation.
+   - Choice-aware type resolution now upgrades ambiguous items to MCQ only when
+     recovered choices and answer resolution actually support it.
+   - Visible preview/export metadata, plain-text export, Markdown export, and
+     JSON export no longer expose `modelLabel`.
+
+6. Hardened footer rendering across preview/export surfaces
+   - `apps/web/lib/assessment-file-branding.ts` now owns shared SVG data-URI
+     emoji fallbacks for `💻` and `❤️`.
+   - New shared preview/result component:
+     `apps/web/components/assessment/assessment-footer-emoji.tsx`
+   - Updated:
+     `apps/web/components/assessment/assessment-preview-page-footer.tsx`
+     `apps/web/components/assessment/assessment-file-footer.tsx`
+     `apps/web/lib/server/assessment-fast-print-renderer.ts`
+     `apps/web/lib/server/assessment-pro-print-renderer.ts`
+   - Preview-only footer order now matches the required leading-laptop /
+     trailing-heart attribution, and both HTML export lanes embed SVG fallback
+     icons so Puppeteer/browser-print output remains reliable without emoji fonts.
+
+FILES CHANGED:
+- apps/web/components/assessment/assessment-file-footer.tsx
+- apps/web/components/assessment/assessment-footer-emoji.tsx
+- apps/web/components/assessment/assessment-preview-page-footer.tsx
+- apps/web/lib/assessment-file-branding.ts
+- apps/web/lib/assessment-preview-model.ts
+- apps/web/lib/assessment-question-display.ts
+- apps/web/lib/server/ai/execution.ts
+- apps/web/lib/server/ai/prompt-orchestrator.ts
+- apps/web/lib/server/assessment-fast-print-renderer.ts
+- apps/web/lib/server/assessment-preview.ts
+- apps/web/lib/server/assessment-pro-print-renderer.ts
+- apps/web/lib/server/assessment-records.ts
+
+VERIFICATION:
+✓ `npm run lint:web` — PASS
+✓ `npm run typecheck:web` — PASS
+✓ `npm run build:web` — PASS
+✓ Targeted runtime fixture via `tsx` (with a temporary local `server-only`
+  verification shim removed immediately after use) verified:
+  - legacy/provider `answerOptions` payload recovered 4 choices in preview
+  - recovered correct choice rendered as the visible answer display
+  - rationale remained present
+  - inline-MCQ rendering still worked
+  - non-choice short-answer rendering stayed choice-free
+  - preview/export metadata omitted model name/value
+  - Fast and Pro HTML export lanes emitted inline SVG emoji fallbacks and kept
+    the Arabic footer attribution text
+
+SCOPE / SAFETY:
+- No architecture redesign
+- No backend-authority changes
+- No export-lane removal
+- No dependency changes
+- Existing grouped preview/result/export layout preserved while making the
+  question/choice interpretation layer more defensive
+
 2026-04-17: ASSESSMENT STUDIO LAYOUT ADJUSTMENTS (Surgical UI Refinement)
 ────────────────────────────────────────────────────────────────────────────
 
@@ -1606,4 +1778,3 @@ SCOPE:
 - No logic, text, or functionality changes
 - Responsive behavior preserved across all breakpoints
 - Dark mode and light mode both maintained
-
