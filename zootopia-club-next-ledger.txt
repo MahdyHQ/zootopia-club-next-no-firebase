@@ -2562,3 +2562,124 @@ Responsive verification notes:
   and detached preview/result title+summary+badge lanes.
 ~ Live browser viewport matrix verification remains blocked here by build-time
   external-font fetch failures unrelated to this UI patch.
+
+2026-04-17: ADMIN CREDIT CONTROL HARDENING - POST-COMMIT FALLBACK STATE
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Admin credit mutations on `/admin/users/[uid]` and `/api/admin/users/[uid]/credits`
+   already committed durably inside `applyAdminAssessmentCreditMutation(...)`, but the
+   repository helper performed a second read afterward through
+   `getAdminAssessmentCreditStateForUser(...)`.
+2. If that post-commit reread degraded or returned null after the write had already landed,
+   the helper threw `ASSESSMENT_CREDIT_STATE_UNAVAILABLE` and surfaced a false failure to the
+   admin UI/API.
+3. Because the live admin page uses the server-action lane and only refreshes on success,
+   a false failure could hide an already-committed mutation and encourage a duplicate retry,
+   which is unsafe because the admin credit mutation path has no idempotency token.
+
+CURRENT VERIFIED STATE:
+1. Confirmed `apps/web/lib/server/repository.ts` already contains the repository-layer hardening
+   for this risk in the current codebase.
+   - `buildAdminAssessmentCreditCommittedFallbackState(...)` is present.
+   - `applyAdminAssessmentCreditMutation(...)` already captures a committed fallback snapshot.
+   - A degraded post-commit reread already returns the committed fallback state instead of
+     surfacing a false mutation failure.
+   - The repository already emits the focused diagnostic event
+     `assessment_credit_post_commit_read_degraded`.
+
+FILES CHANGED:
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+- Verified current migration inventory is 16 files, including:
+  `20260416193000_assessment_credit_private_realtime_authorization.sql`,
+  `20260416210000_assessment_credit_mutations.sql`, and
+  `20260417103000_assessment_credit_prompt_entitlement.sql`.
+
+REASON:
+- Refresh the ledger to the current truth after a full credit-control audit.
+- Document that the current codebase already mitigates the narrow false-failure risk where a
+  durable admin credit commit could appear failed after the fact.
+- Keep Auth.js/server authority, repository-owned mutation logic, canonical `/api/assessment/credits`
+  reads, and private Supabase invalidation behavior unchanged.
+
+TECHNICAL DETAILS:
+- The active admin credit UI path is the server-action lane on `/admin/users/[uid]`; the API
+  route remains a compatible backend lane but is not the in-repo caller today.
+- Admin credit persistence remains transaction-backed in `applyAdminAssessmentCreditMutation(...)`.
+  Legacy mirrors and structured tables still update together through
+  `syncStructuredAssessmentCreditState(...)`.
+- Persisted mutation history remains authoritative and still records actor identity, target owner,
+  action, before/after snapshots, correlation ID, route source, and commit status.
+- Realtime remains owner-scoped and invalidation-only on topic
+  `assessment-credit:owner:{uid}`. No balance truth moved into browser payloads.
+- Assessment credit subtraction/consumption logic was re-verified by code path:
+  reservation in `reserveAssessmentDailyCreditAttempt(...)`, release in
+  `releaseAssessmentDailyCreditReservation(...)`, and durable one-credit commit in
+  `saveAssessmentGenerationWithCreditCommit(...)`.
+
+RUNTIME / DEPLOYMENT NOTES:
+1. Local integrated development
+   - Frontend: Next.js App Router in `apps/web`, protected shell uses React Query and browser
+     Supabase helper for private realtime auth only.
+   - Backend: Auth.js/session checks, repository transactions, admin mutation server actions,
+     and API routes all execute in the same local app runtime.
+   - Same-origin: app pages + API routes are same-origin; Supabase Auth/Realtime remain
+     provider-managed cross-origin services.
+  - Shared verified behavior: the repository fallback hardening applies here directly.
+
+2. Vercel + Supabase (current active path)
+   - Frontend: Vercel-served `apps/web` pages and protected shell subscribe to the private
+     Supabase broadcast topic after browser session auth is applied.
+   - Backend: Auth.js/JWT remains the server trust boundary; admin credit mutations still commit
+     on the server before any live update is published.
+   - Same-origin vs provider-managed: app pages/routes are same-origin on Vercel, while Supabase
+     Auth/Database/Realtime are provider-managed.
+  - Shared verified behavior: the same repository fallback avoids false failure across
+    multi-instance production reads after commit.
+
+3. Legacy/reference paths still present in code/docs
+   - `/api/admin/users/[uid]/credits` remains a supported backend lane.
+   - `/assessment/credits` remains a compatibility redirect to `/credits`.
+   - `apps/web/lib/middleware.ts` still appears unused/stale and was not activated or edited.
+
+PRESERVED INTENTIONALLY:
+- Auth.js as the server trust boundary.
+- Admin authority on the backend only.
+- Canonical user-visible credit totals from server-owned read paths.
+- Private Supabase channel delivery as owner-scoped invalidation only.
+- Hybrid legacy + structured credit persistence architecture.
+- Existing assessment reservation/commit/release semantics.
+
+RISKS / FOLLOW-UP:
+- The hybrid legacy/structured credit read model is still timestamp-reconciled, so mirror drift
+  remains a longer-term follow-up risk outside this surgical fix.
+- `assessment_credit_mutations` still has no explicit owner-read RLS policy; that is acceptable
+  for the current server-only access pattern but would matter for future direct client reads.
+- Authenticated browser proof for admin mutation, targeted realtime delivery, and end-user credit
+  refresh is still recommended once dedicated QA credentials are available.
+
+VERIFICATION:
+Code-traced and architecture-traced in this pass:
+✓ Admin UI -> server action -> repository -> transaction -> mutation history -> live publish ->
+  canonical read model path traced and reconciled.
+✓ Owner-scoped enforcement verified for normal-user reads, admin-only mutation routes, and private
+  realtime topic authorization.
+✓ Assessment consumption path re-verified logically for reservation, release, and durable commit.
+
+Command verification:
+✓ `npm run lint:web` — PASS
+✓ `npm run typecheck:web` — PASS
+✓ `npm run supabase:migrations:validate` — PASS (`Validated 16 migration file(s).`)
+✓ `npm run build:web` — PASS
+✓ `npm run build:vercel` — PASS
+
+Runtime proof status:
+~ Fresh authenticated browser proof was not performed in this sandbox because no dedicated
+  admin/user QA credentials or live fixture accounts were provided for end-to-end mutation tests.
+~ Existing saved runtime artifacts still support owner-lane separation and admin self-mutation
+  rejection, but this pass's new fix was verified primarily by code path plus full build/lint/type
+  validation rather than live browser mutation playback.
