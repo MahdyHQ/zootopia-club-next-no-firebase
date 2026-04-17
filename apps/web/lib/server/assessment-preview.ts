@@ -168,17 +168,15 @@ function resolvePreviewQuestionType(input: {
   rawAnswer: string;
   answerDisplay: string;
 }) {
-  if (!input.declaredType) {
-    return input.choices.length > 0 ? "mcq" : null;
-  }
-
-  if (input.declaredType === "mcq" || input.declaredType === "multiple_response") {
+  /* Preserve explicit canonical type identity whenever the provider supplied one.
+     Recovery heuristics are only allowed when type is missing, so non-MCQ questions
+     cannot be relabeled to MCQ from weak choice-like fragments. */
+  if (input.declaredType) {
     return input.declaredType;
   }
 
-  /* Some legacy/provider responses declare a generic text type while still returning a real
-     choice list plus a marker-based answer. Prefer the MCQ renderer only when the recovered
-     choices actually resolve against the answer, so bullet-style prose does not get miscast. */
+  /* For type-missing legacy/provider payloads, infer MCQ only with strong evidence:
+     at least two recovered choices and answer reconciliation against those choices. */
   const hasRecoveredChoiceAnswer =
     input.choices.some((choice) => choice.isCorrect) ||
     input.answerDisplay !== input.rawAnswer;
@@ -187,7 +185,7 @@ function resolvePreviewQuestionType(input: {
     return "mcq";
   }
 
-  return input.declaredType;
+  return null;
 }
 
 const ASSESSMENT_COMPOSITION_VISIBLE_TYPE_BADGES = 4;

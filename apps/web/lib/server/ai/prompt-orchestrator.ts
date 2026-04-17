@@ -15,6 +15,13 @@ import { prepareAssessmentDocumentContext } from "@/lib/server/assessment-record
 
 type ToolKind = "assessment" | "infographic";
 
+function humanizeQuestionTypeId(type: AssessmentQuestionType) {
+  return type
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function describeAssessmentLanguage(language: Locale) {
   return language === "ar" ? "Arabic" : "English";
 }
@@ -53,12 +60,20 @@ function describeAssessmentInputMode(inputMode: AssessmentInputMode) {
 
 function describeAssessmentQuestionType(type: AssessmentQuestionType) {
   switch (type) {
+    case "mcq":
+      return "MCQ";
     case "true_false":
       return "True / False";
+    case "essay":
+      return "Essay";
     case "fill_blanks":
       return "Fill in the blanks";
     case "short_answer":
       return "Short answer";
+    case "matching":
+      return "Matching";
+    case "multiple_response":
+      return "Multiple response";
     case "terminology":
       return "Terminology";
     case "scientific_term":
@@ -67,29 +82,69 @@ function describeAssessmentQuestionType(type: AssessmentQuestionType) {
       return "Definition";
     case "comparison":
       return "Comparison";
+    case "labeling":
+      return "Labeling";
+    case "classification":
+      return "Classification";
+    case "sequencing":
+      return "Sequencing";
+    case "process_mechanism":
+      return "Process / mechanism";
+    case "cause_effect":
+      return "Cause and effect";
+    case "distinguish_between":
+      return "Distinguish between";
+    case "identify_structure":
+      return "Identify structure";
+    case "identify_compound":
+      return "Identify compound";
     default:
-      return "MCQ";
+      return humanizeQuestionTypeId(type);
   }
 }
 
 function describeAssessmentQuestionTypeRule(type: AssessmentQuestionType) {
   switch (type) {
+    case "mcq":
+      return "MCQ: choices must contain exactly four ordered options labeled A-D, question must keep a clean stem, and answer must identify the exact correct choice marker + text from those choices.";
     case "true_false":
-      return "True / False: present one clear statement; the answer must explicitly say True or False and explain why.";
+      return "True / False: present one clear statement and return a boolean-style answer contract (True or False), not an MCQ option list.";
+    case "essay":
+      return "Essay: return an open analytical prompt with a prose answer scaffold and no MCQ-style options.";
     case "fill_blanks":
-      return "Fill in the blanks: include one or more blanks inside the question text and provide the completed answer.";
+      return "Fill in the blanks: include one or more blanks in the stem and return the completed text answer; keep blanks-specific structure and avoid MCQ option conversion.";
     case "short_answer":
-      return "Short answer: ask for a concise direct response in one to three sentences.";
+      return "Short answer: ask for a concise direct response (one to three sentences) and keep a short-text answer contract, not MCQ.";
+    case "matching":
+      return "Matching: return matching-oriented content (pairs/associations) and a matching answer contract, not MCQ.";
+    case "multiple_response":
+      return "Multiple response: return a choice-based list where more than one option can be correct and mark each correct option explicitly.";
     case "terminology":
-      return "Terminology: ask for accurate scientific terminology use or recall in context; the answer should state the term and a concise scientific meaning.";
+      return "Terminology: preserve terminology identity and return the scientific term with concise meaning; do not relabel as MCQ.";
     case "scientific_term":
-      return "Scientific term: ask for the exact scientific term from a clue, context, or definition; the answer must provide the precise term first, then a brief confirmation note.";
+      return "Scientific term: ask for the exact term from clue/context and return the precise term first, then a brief confirmation note; do not relabel as MCQ.";
     case "definition":
-      return "Definition: ask for a precise scientific definition; the answer must be concise and technically accurate.";
+      return "Definition: ask for a precise scientific definition and return a concise technically accurate definition answer, not a choice-list answer.";
     case "comparison":
-      return "Comparison: ask learners to compare two related concepts or entities using at least two criteria; the answer should clearly separate similarities and differences.";
+      return "Comparison: ask learners to compare two related entities with at least two criteria and keep comparison-oriented answer structure (similarities/differences), not MCQ.";
+    case "labeling":
+      return "Labeling: return labeling-oriented content with labeled parts and expected labels, not MCQ.";
+    case "classification":
+      return "Classification: return category/item classification content and category-mapping answer structure, not MCQ.";
+    case "sequencing":
+      return "Sequencing: return ordered-step content and ordered answer structure, not MCQ.";
+    case "process_mechanism":
+      return "Process / mechanism: return mechanism-oriented multi-step reasoning and ordered explanation, not MCQ.";
+    case "cause_effect":
+      return "Cause and effect: return explicit cause/effect structure and a causal answer contract, not MCQ.";
+    case "distinguish_between":
+      return "Distinguish between: return distinction-focused content with clear differentiating points, not MCQ.";
+    case "identify_structure":
+      return "Identify structure: return structure-identification content with expected structure details, not MCQ.";
+    case "identify_compound":
+      return "Identify compound: return compound-identification content with expected compound details, not MCQ.";
     default:
-      return "MCQ: question must contain the stem only or the stem plus matching inline options, choices must contain exactly four ordered options labeled A-D, no option may be omitted, and the answer must identify the correct option plus its text.";
+      return `${humanizeQuestionTypeId(type)}: keep this canonical type id unchanged and return a complete type-faithful object.`;
   }
 }
 
@@ -180,8 +235,10 @@ export function buildAssessmentPrompt(input: {
     `Difficulty enum contract: difficulty must be one of ${supportedDifficultyList}.`,
     "Strict metadata contract: every question object must include both type and difficulty; never omit either field.",
     "Completeness contract: every question object must include question, choices, answer, rationale, and tags. Never return partial question objects, never drop a requested question, and never leave required arrays undefined.",
+    "Type identity contract: preserve each question's canonical type exactly as generated for that item; never relabel non-MCQ items as MCQ and never collapse mixed-type output into one generic type.",
     "Choice-array contract: for MCQ or any other choice-based item, choices must contain the full ordered option list and must preserve every option exactly once. For non-choice question types, set choices to an empty array [].",
     "Choice-accuracy contract: if a question is choice-based, the answer must match the returned choices and the correct choice must be identifiable from both answer text and choices[].",
+    "Anti-ambiguity contract: do not return ambiguous or partially typed objects; each question must be self-consistent for its own type-specific structure and answer format.",
     "Ordering contract: displayOrder must start at 1 and increase by 1 for each question.",
     "Grouping contract: sectionKey must equal the canonical type id and sectionTitle must be the human-readable label for that same type.",
     "Echo contract: selectedQuestionTypes and requestedDistribution must mirror the requested canonical ids/distribution exactly.",
