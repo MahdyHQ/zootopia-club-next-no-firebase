@@ -248,16 +248,15 @@ function applyAssessmentUiLockToRequest(input: {
   allowedQuestionTypesForCurrentUser: AssessmentQuestionType[];
   allowedOutputLanguagesForCurrentUser: Locale[];
 }) {
-  // Keep client form state aligned with env-driven UI locks so blocked values cannot remain
-  // selected after toggles/role changes; backend authorization is intentionally unchanged.
   if (!input.lockEnabledForCurrentUser) {
     return input.request;
   }
 
-  const nextQuestionCount = normalizeLockedQuestionCount({
-    questionCount: input.request.options.questionCount,
-    maxQuestionCountForCurrentUser: input.maxQuestionCountForCurrentUser,
-  });
+  const minimumQuestionCount = QUESTION_COUNT_OPTIONS[0] ?? 10;
+  const nextQuestionCount = Math.min(
+    input.request.options.questionCount,
+    Math.max(input.maxQuestionCountForCurrentUser, minimumQuestionCount),
+  );
 
   const allowedQuestionTypeSet = new Set(input.allowedQuestionTypesForCurrentUser);
   const filteredQuestionTypes = input.request.options.questionTypes.filter((type) =>
@@ -301,34 +300,6 @@ function applyAssessmentUiLockToRequest(input: {
   return hasSameQuestionCount && hasSameLanguage && hasSameQuestionTypes
     ? input.request
     : nextRequest;
-}
-
-function resolveQuestionCountCap(maxQuestionCountForCurrentUser: number) {
-  const allowed = QUESTION_COUNT_OPTIONS.filter(
-    (count) => count <= maxQuestionCountForCurrentUser,
-  );
-  return (
-    allowed[allowed.length - 1]
-    ?? QUESTION_COUNT_OPTIONS[0]
-    ?? 10
-  );
-}
-
-function normalizeLockedQuestionCount(input: {
-  questionCount: number;
-  maxQuestionCountForCurrentUser: number;
-}) {
-  const cappedQuestionCount = resolveQuestionCountCap(
-    input.maxQuestionCountForCurrentUser,
-  );
-  const upperBound = Math.min(input.questionCount, cappedQuestionCount);
-  const allowed = QUESTION_COUNT_OPTIONS.filter((count) => count <= upperBound);
-
-  return (
-    allowed[allowed.length - 1]
-    ?? QUESTION_COUNT_OPTIONS[0]
-    ?? 10
-  );
 }
 
 function hasSameQuestionTypeSelection(left: AssessmentRequest, right: AssessmentRequest) {
@@ -1073,6 +1044,32 @@ export function AssessmentStudio({
   }, [defaultModelId, promptAccess.isAdmin]);
 
   useEffect(() => {
+    setRequest((current) => {
+      const sanitized = sanitizeAssessmentRequestQuestionTypes(current);
+      const locked = applyAssessmentUiLockToRequest({
+        request: sanitized,
+        lockEnabledForCurrentUser: uiLockEnabledForCurrentUser,
+        maxQuestionCountForCurrentUser,
+        allowedQuestionTypesForCurrentUser,
+        allowedOutputLanguagesForCurrentUser,
+      });
+      const hasSameQuestionTypes = hasSameQuestionTypeSelection(current, locked);
+      const hasSameQuestionCount =
+        current.options.questionCount === locked.options.questionCount;
+      const hasSameLanguage = current.options.language === locked.options.language;
+
+      return hasSameQuestionTypes && hasSameQuestionCount && hasSameLanguage
+        ? current
+        : locked;
+    });
+  }, [
+    allowedOutputLanguagesForCurrentUser,
+    allowedQuestionTypesForCurrentUser,
+    maxQuestionCountForCurrentUser,
+    uiLockEnabledForCurrentUser,
+  ]);
+
+  useEffect(() => {
     if (!initialActiveDocumentId) {
       return;
     }
@@ -1185,15 +1182,10 @@ export function AssessmentStudio({
     promptAccess.entitlement === "enabled"
       ? ASSESSMENT_PROMPT_LOCK_COPY.lockedPlaceholder
       : ASSESSMENT_PROMPT_LOCK_COPY.entitlementPlaceholder;
-  /* This lock block is a product-access UI presentation layer for Assessment setup controls.
-     It must never be treated as backend authorization; admin keeps full UI access while
-     server routes remain the only authority for generation/credits/persistence permissions. */
   const uiLockEnabledForCurrentUser = uiLockConfig.enabled && !promptAccess.isAdmin;
-  const maxQuestionCountForCurrentUser = resolveQuestionCountCap(
-    uiLockEnabledForCurrentUser
+  const maxQuestionCountForCurrentUser = uiLockEnabledForCurrentUser
     ? Math.max(uiLockConfig.maxQuestionCountForUser, QUESTION_COUNT_OPTIONS[0] ?? 10)
-    : (QUESTION_COUNT_OPTIONS[QUESTION_COUNT_OPTIONS.length - 1] ?? 100),
-  );
+    : (QUESTION_COUNT_OPTIONS[QUESTION_COUNT_OPTIONS.length - 1] ?? 100);
   const allowedQuestionTypesForCurrentUser = uiLockEnabledForCurrentUser
     ? uiLockConfig.allowedQuestionTypesForUser
     : QUESTION_TYPE_OPTIONS;
@@ -1268,32 +1260,6 @@ export function AssessmentStudio({
       badge: document.isActive ? messages.assessmentActiveLinkedDocument : undefined,
     })),
   ];
-
-  useEffect(() => {
-    setRequest((current) => {
-      const sanitized = sanitizeAssessmentRequestQuestionTypes(current);
-      const locked = applyAssessmentUiLockToRequest({
-        request: sanitized,
-        lockEnabledForCurrentUser: uiLockEnabledForCurrentUser,
-        maxQuestionCountForCurrentUser,
-        allowedQuestionTypesForCurrentUser,
-        allowedOutputLanguagesForCurrentUser,
-      });
-      const hasSameQuestionTypes = hasSameQuestionTypeSelection(current, locked);
-      const hasSameQuestionCount =
-        current.options.questionCount === locked.options.questionCount;
-      const hasSameLanguage = current.options.language === locked.options.language;
-
-      return hasSameQuestionTypes && hasSameQuestionCount && hasSameLanguage
-        ? current
-        : locked;
-    });
-  }, [
-    allowedOutputLanguagesForCurrentUser,
-    allowedQuestionTypesForCurrentUser,
-    maxQuestionCountForCurrentUser,
-    uiLockEnabledForCurrentUser,
-  ]);
 
   useEffect(() => {
     logAssessmentCreditClientDiagnostic({
@@ -1520,23 +1486,9 @@ export function AssessmentStudio({
     setLastCreatedGeneration(null);
     setFieldErrors({});
     try {
-      const requestForSubmit = applyAssessmentUiLockToRequest({
-        request: sanitizeAssessmentRequestQuestionTypes(request),
-        lockEnabledForCurrentUser: uiLockEnabledForCurrentUser,
-        maxQuestionCountForCurrentUser,
-        allowedQuestionTypesForCurrentUser,
-        allowedOutputLanguagesForCurrentUser,
-      });
+      const requestForSubmit = sanitizeAssessmentRequestQuestionTypes(request);
 
-      const hasSameQuestionTypes = hasSameQuestionTypeSelection(
-        request,
-        requestForSubmit,
-      );
-      const hasSameQuestionCount =
-        request.options.questionCount === requestForSubmit.options.questionCount;
-      const hasSameLanguage =
-        request.options.language === requestForSubmit.options.language;
-      if (!hasSameQuestionTypes || !hasSameQuestionCount || !hasSameLanguage) {
+      if (!hasSameQuestionTypeSelection(request, requestForSubmit)) {
         setRequest(requestForSubmit);
       }
 
@@ -1769,7 +1721,7 @@ export function AssessmentStudio({
                     <div className="min-w-0 w-full space-y-1">
                       {/* Keep this legal-rights sentence on a single line whenever physically possible.
                           Clamp-based sizing and tighter tracking preserve readability while reducing wrap pressure. */}
-                      <p className="max-w-full whitespace-normal break-words text-[clamp(0.45rem,0.95vw,0.6rem)] font-semibold leading-tight tracking-[-0.02em] text-foreground sm:whitespace-nowrap">
+                      <p className="max-w-full whitespace-nowrap text-[clamp(0.45rem,0.95vw,0.6rem)] font-semibold leading-tight tracking-[-0.02em] text-foreground">
                         {ASSESSMENT_MODEL_VISIBILITY_COPY.rightsLine}
                       </p>
                       <p className="flex max-w-full items-center gap-1 text-[clamp(0.55rem,0.9vw,0.64rem)] leading-tight text-foreground-muted/82">
@@ -1894,7 +1846,7 @@ export function AssessmentStudio({
                 ) : null}
               </div>
 
-              <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <AssessmentFieldSelect
                   id="assessment-count"
                   label={messages.assessmentQuestionCount}
@@ -1903,10 +1855,6 @@ export function AssessmentStudio({
                   icon={Gauge}
                   error={fieldErrors.questionCount}
                   onChange={(nextValue) => {
-                    if (isQuestionCountLockedForCurrentUser(nextValue)) {
-                      return;
-                    }
-
                     setFieldErrors((current) => ({ ...current, questionCount: "" }));
                     setRequest((current) => ({
                       ...current,
@@ -1945,10 +1893,6 @@ export function AssessmentStudio({
                   icon={Languages}
                   error={fieldErrors.language}
                   onChange={(nextValue) => {
-                    if (isOutputLanguageLockedForCurrentUser(nextValue)) {
-                      return;
-                    }
-
                     setFieldErrors((current) => ({ ...current, language: "" }));
                     setRequest((current) => ({
                       ...current,
@@ -1976,37 +1920,21 @@ export function AssessmentStudio({
                   </span>
                 </div>
 
-                {showLockedQuestionTypesNote ? (
-                  <p
-                    dir="rtl"
-                    className="mt-3 rounded-xl border border-amber-500/18 bg-amber-500/8 px-3 py-2 text-right text-[0.73rem] leading-6 text-foreground-muted dark:border-amber-300/25 dark:bg-amber-300/10"
-                  >
-                    {ASSESSMENT_LOCKED_QUESTION_TYPES_NOTE_AR}
-                  </p>
-                ) : null}
-
                 <div className="mt-4 flex flex-wrap gap-2">
                   {QUESTION_TYPE_OPTIONS.map((type) => {
                     const selected = request.options.questionTypes.includes(type);
-                    const locked = isQuestionTypeLockedForCurrentUser(type);
 
                     return (
                       <button
                         key={type}
                         type="button"
-                        disabled={locked}
                         onClick={() => {
-                          if (locked) {
-                            return;
-                          }
-
                           handleToggleQuestionType(type);
                         }}
-                        className={`assessment-type-chip ${selected ? "assessment-type-chip--selected" : ""} ${locked ? "assessment-type-chip--locked" : ""}`}
+                        className={`assessment-type-chip ${selected ? "assessment-type-chip--selected" : ""}`}
                       >
-                        <span className="assessment-type-chip__state-icon flex h-5 w-5 items-center justify-center rounded-full border border-current/20 bg-white/10">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-current/20 bg-white/10">
                           {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                          {!selected && locked ? <LockKeyhole className="h-3.5 w-3.5" /> : null}
                         </span>
                         {getQuestionTypeLabel(type, messages)}
                       </button>

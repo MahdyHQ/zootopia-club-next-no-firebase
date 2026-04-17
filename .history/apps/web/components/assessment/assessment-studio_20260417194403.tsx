@@ -254,10 +254,11 @@ function applyAssessmentUiLockToRequest(input: {
     return input.request;
   }
 
-  const nextQuestionCount = normalizeLockedQuestionCount({
-    questionCount: input.request.options.questionCount,
-    maxQuestionCountForCurrentUser: input.maxQuestionCountForCurrentUser,
-  });
+  const minimumQuestionCount = QUESTION_COUNT_OPTIONS[0] ?? 10;
+  const nextQuestionCount = Math.min(
+    input.request.options.questionCount,
+    Math.max(input.maxQuestionCountForCurrentUser, minimumQuestionCount),
+  );
 
   const allowedQuestionTypeSet = new Set(input.allowedQuestionTypesForCurrentUser);
   const filteredQuestionTypes = input.request.options.questionTypes.filter((type) =>
@@ -1189,11 +1190,9 @@ export function AssessmentStudio({
      It must never be treated as backend authorization; admin keeps full UI access while
      server routes remain the only authority for generation/credits/persistence permissions. */
   const uiLockEnabledForCurrentUser = uiLockConfig.enabled && !promptAccess.isAdmin;
-  const maxQuestionCountForCurrentUser = resolveQuestionCountCap(
-    uiLockEnabledForCurrentUser
+  const maxQuestionCountForCurrentUser = uiLockEnabledForCurrentUser
     ? Math.max(uiLockConfig.maxQuestionCountForUser, QUESTION_COUNT_OPTIONS[0] ?? 10)
-    : (QUESTION_COUNT_OPTIONS[QUESTION_COUNT_OPTIONS.length - 1] ?? 100),
-  );
+    : (QUESTION_COUNT_OPTIONS[QUESTION_COUNT_OPTIONS.length - 1] ?? 100);
   const allowedQuestionTypesForCurrentUser = uiLockEnabledForCurrentUser
     ? uiLockConfig.allowedQuestionTypesForUser
     : QUESTION_TYPE_OPTIONS;

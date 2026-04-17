@@ -19,8 +19,6 @@ export default async function AssessmentPage() {
     requireCompletedUser(APP_ROUTES.assessment),
     getRequestUiContext(),
   ]);
-  // UI-only product access toggles are env-driven here and passed to the client studio.
-  // Backend authorization remains unchanged in API/session/repository layers.
   const assessmentUiLockConfig = getAssessmentUiLockConfig();
   const promptAccess = await getAssessmentPromptAccessStateForUser({
     uid: user.uid,

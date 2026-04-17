@@ -248,16 +248,15 @@ function applyAssessmentUiLockToRequest(input: {
   allowedQuestionTypesForCurrentUser: AssessmentQuestionType[];
   allowedOutputLanguagesForCurrentUser: Locale[];
 }) {
-  // Keep client form state aligned with env-driven UI locks so blocked values cannot remain
-  // selected after toggles/role changes; backend authorization is intentionally unchanged.
   if (!input.lockEnabledForCurrentUser) {
     return input.request;
   }
 
-  const nextQuestionCount = normalizeLockedQuestionCount({
-    questionCount: input.request.options.questionCount,
-    maxQuestionCountForCurrentUser: input.maxQuestionCountForCurrentUser,
-  });
+  const minimumQuestionCount = QUESTION_COUNT_OPTIONS[0] ?? 10;
+  const nextQuestionCount = Math.min(
+    input.request.options.questionCount,
+    Math.max(input.maxQuestionCountForCurrentUser, minimumQuestionCount),
+  );
 
   const allowedQuestionTypeSet = new Set(input.allowedQuestionTypesForCurrentUser);
   const filteredQuestionTypes = input.request.options.questionTypes.filter((type) =>
@@ -301,34 +300,6 @@ function applyAssessmentUiLockToRequest(input: {
   return hasSameQuestionCount && hasSameLanguage && hasSameQuestionTypes
     ? input.request
     : nextRequest;
-}
-
-function resolveQuestionCountCap(maxQuestionCountForCurrentUser: number) {
-  const allowed = QUESTION_COUNT_OPTIONS.filter(
-    (count) => count <= maxQuestionCountForCurrentUser,
-  );
-  return (
-    allowed[allowed.length - 1]
-    ?? QUESTION_COUNT_OPTIONS[0]
-    ?? 10
-  );
-}
-
-function normalizeLockedQuestionCount(input: {
-  questionCount: number;
-  maxQuestionCountForCurrentUser: number;
-}) {
-  const cappedQuestionCount = resolveQuestionCountCap(
-    input.maxQuestionCountForCurrentUser,
-  );
-  const upperBound = Math.min(input.questionCount, cappedQuestionCount);
-  const allowed = QUESTION_COUNT_OPTIONS.filter((count) => count <= upperBound);
-
-  return (
-    allowed[allowed.length - 1]
-    ?? QUESTION_COUNT_OPTIONS[0]
-    ?? 10
-  );
 }
 
 function hasSameQuestionTypeSelection(left: AssessmentRequest, right: AssessmentRequest) {
@@ -1073,6 +1044,32 @@ export function AssessmentStudio({
   }, [defaultModelId, promptAccess.isAdmin]);
 
   useEffect(() => {
+    setRequest((current) => {
+      const sanitized = sanitizeAssessmentRequestQuestionTypes(current);
+      const locked = applyAssessmentUiLockToRequest({
+        request: sanitized,
+        lockEnabledForCurrentUser: uiLockEnabledForCurrentUser,
+        maxQuestionCountForCurrentUser,
+        allowedQuestionTypesForCurrentUser,
+        allowedOutputLanguagesForCurrentUser,
+      });
+      const hasSameQuestionTypes = hasSameQuestionTypeSelection(current, locked);
+      const hasSameQuestionCount =
+        current.options.questionCount === locked.options.questionCount;
+      const hasSameLanguage = current.options.language === locked.options.language;
+
+      return hasSameQuestionTypes && hasSameQuestionCount && hasSameLanguage
+        ? current
+        : locked;
+    });
+  }, [
+    allowedOutputLanguagesForCurrentUser,
+    allowedQuestionTypesForCurrentUser,
+    maxQuestionCountForCurrentUser,
+    uiLockEnabledForCurrentUser,
+  ]);
+
+  useEffect(() => {
     if (!initialActiveDocumentId) {
       return;
     }
@@ -1185,15 +1182,10 @@ export function AssessmentStudio({
     promptAccess.entitlement === "enabled"
       ? ASSESSMENT_PROMPT_LOCK_COPY.lockedPlaceholder
       : ASSESSMENT_PROMPT_LOCK_COPY.entitlementPlaceholder;
-  /* This lock block is a product-access UI presentation layer for Assessment setup controls.
-     It must never be treated as backend authorization; admin keeps full UI access while
-     server routes remain the only authority for generation/credits/persistence permissions. */
   const uiLockEnabledForCurrentUser = uiLockConfig.enabled && !promptAccess.isAdmin;
-  const maxQuestionCountForCurrentUser = resolveQuestionCountCap(
-    uiLockEnabledForCurrentUser
+  const maxQuestionCountForCurrentUser = uiLockEnabledForCurrentUser
     ? Math.max(uiLockConfig.maxQuestionCountForUser, QUESTION_COUNT_OPTIONS[0] ?? 10)
-    : (QUESTION_COUNT_OPTIONS[QUESTION_COUNT_OPTIONS.length - 1] ?? 100),
-  );
+    : (QUESTION_COUNT_OPTIONS[QUESTION_COUNT_OPTIONS.length - 1] ?? 100);
   const allowedQuestionTypesForCurrentUser = uiLockEnabledForCurrentUser
     ? uiLockConfig.allowedQuestionTypesForUser
     : QUESTION_TYPE_OPTIONS;
@@ -1268,32 +1260,6 @@ export function AssessmentStudio({
       badge: document.isActive ? messages.assessmentActiveLinkedDocument : undefined,
     })),
   ];
-
-  useEffect(() => {
-    setRequest((current) => {
-      const sanitized = sanitizeAssessmentRequestQuestionTypes(current);
-      const locked = applyAssessmentUiLockToRequest({
-        request: sanitized,
-        lockEnabledForCurrentUser: uiLockEnabledForCurrentUser,
-        maxQuestionCountForCurrentUser,
-        allowedQuestionTypesForCurrentUser,
-        allowedOutputLanguagesForCurrentUser,
-      });
-      const hasSameQuestionTypes = hasSameQuestionTypeSelection(current, locked);
-      const hasSameQuestionCount =
-        current.options.questionCount === locked.options.questionCount;
-      const hasSameLanguage = current.options.language === locked.options.language;
-
-      return hasSameQuestionTypes && hasSameQuestionCount && hasSameLanguage
-        ? current
-        : locked;
-    });
-  }, [
-    allowedOutputLanguagesForCurrentUser,
-    allowedQuestionTypesForCurrentUser,
-    maxQuestionCountForCurrentUser,
-    uiLockEnabledForCurrentUser,
-  ]);
 
   useEffect(() => {
     logAssessmentCreditClientDiagnostic({
