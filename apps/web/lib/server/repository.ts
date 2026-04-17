@@ -4584,6 +4584,31 @@ async function resolveAssessmentCreditStateForUser(
   };
 }
 
+/* Admin credit mutations already compute the committed account/grant/summary snapshot inside the
+   write transaction. Keep this fallback builder in the repository layer so admin surfaces can
+   return the exact committed owner-scoped state if the post-commit reread degrades, instead of
+   surfacing a false failure that invites a duplicate retry against a mutation that already landed. */
+function buildAdminAssessmentCreditCommittedFallbackState(input: {
+  ownerUid: string;
+  account: AssessmentCreditAccountRecord;
+  credits: AssessmentDailyCreditsSummary;
+  grants: AssessmentCreditGrantRecord[];
+  historyRecord: AdminAssessmentCreditMutationRecord;
+  nowMs?: number;
+}) {
+  const nowMs = input.nowMs ?? Date.now();
+
+  return {
+    ownerUid: input.ownerUid,
+    account: input.account,
+    credits: input.credits,
+    grants: input.grants
+      .map((grant) => buildAssessmentCreditGrantAdminView(grant, nowMs))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+    history: [input.historyRecord],
+  } satisfies AdminAssessmentCreditState;
+}
+
 /* Assessment Studio and the protected header read this summary as server-owned truth. Keep this
    helper read-only so browser state stays informational and all consumption authority remains in
    reserve/commit transaction paths. */
@@ -5066,6 +5091,7 @@ export async function applyAdminAssessmentCreditMutation(input: {
     : null;
   let beforeCreditSummary: AssessmentDailyCreditsSummary | null = null;
   let afterCreditSummary: AssessmentDailyCreditsSummary | null = null;
+  let committedFallbackState: AdminAssessmentCreditState | null = null;
 
   if (creditTraceId) {
     logAssessmentCreditDiagnostic({
@@ -5096,6 +5122,8 @@ export async function applyAdminAssessmentCreditMutation(input: {
     }
 
     if (shouldUseDatabase()) {
+      let committedStateCandidate: AdminAssessmentCreditState | null = null;
+
       await getZootopiaDatabase().runTransaction(async (transaction) => {
         const accountRef = getZootopiaDatabase()
           .collection(ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION)
@@ -5296,7 +5324,16 @@ export async function applyAdminAssessmentCreditMutation(input: {
           ledger: structuredLedger,
           history: historyRecord,
         });
+        committedStateCandidate = buildAdminAssessmentCreditCommittedFallbackState({
+          ownerUid: input.ownerUid,
+          account: mutationResult.nextAccount,
+          credits: afterComputation.summary,
+          grants: mutationResult.nextGrants,
+          historyRecord,
+          nowMs,
+        });
       });
+      committedFallbackState = committedStateCandidate;
     } else {
       const store = getMemoryStore();
       const account = normalizeAssessmentCreditAccountRecord({
@@ -5455,13 +5492,89 @@ export async function applyAdminAssessmentCreditMutation(input: {
         commitStatus: "committed",
         createdAt: nowIso,
       });
+      committedFallbackState = buildAdminAssessmentCreditCommittedFallbackState({
+        ownerUid: input.ownerUid,
+        account: mutationResult.nextAccount,
+        credits: afterComputation.summary,
+        grants: mutationResult.nextGrants,
+        historyRecord: {
+          id: historyRecordId,
+          ownerUid: input.ownerUid,
+          action: input.mutation.action,
+          amount: mutationResult.history.amount,
+          access: mutationResult.history.access,
+          dailyLimitOverride: mutationResult.history.dailyLimitOverride,
+          grantId: mutationResult.history.grantId,
+          expiresAt: mutationResult.history.expiresAt,
+          reason: mutationReason,
+          note: mutationNote,
+          adminUid: input.admin.uid,
+          adminEmail: input.admin.email ?? null,
+          adminRole: input.admin.role,
+          before: buildAssessmentCreditMutationBalanceSnapshot({
+            account,
+            summary: beforeComputation.summary,
+          }),
+          after: buildAssessmentCreditMutationBalanceSnapshot({
+            account: mutationResult.nextAccount,
+            summary: afterComputation.summary,
+          }),
+          correlationId: creditTraceId,
+          routeSource: input.diagnostics?.source ?? null,
+          commitStatus: "committed",
+          createdAt: nowIso,
+        },
+        nowMs,
+      });
     }
 
-    const state = await getAdminAssessmentCreditStateForUser(input.ownerUid, {
-      ownerRole: owner.role,
-    });
+    let state: AdminAssessmentCreditState | null = null;
+    let postCommitReadError: unknown = null;
+
+    try {
+      state = await getAdminAssessmentCreditStateForUser(input.ownerUid, {
+        ownerRole: owner.role,
+      });
+    } catch (error) {
+      postCommitReadError = error;
+    }
+
+    if (!state && committedFallbackState) {
+      if (creditTraceId) {
+        logAssessmentCreditDiagnostic({
+          event: "assessment_credit_post_commit_read_degraded",
+          level: "warn",
+          traceId: creditTraceId,
+          details: {
+            source: input.diagnostics?.source ?? "unknown",
+            ownerUid: input.ownerUid,
+            actorUid: input.admin.uid,
+            action: input.mutation.action,
+            fallbackHistoryCount: committedFallbackState.history.length,
+          },
+          error: postCommitReadError ?? new Error("ASSESSMENT_CREDIT_STATE_UNAVAILABLE"),
+        });
+      }
+
+      console.warn("Assessment credit post-commit reread degraded; returning committed fallback state.", {
+        ownerUid: input.ownerUid,
+        actorUid: input.admin.uid,
+        action: input.mutation.action,
+        postCommitReadError:
+          postCommitReadError instanceof Error
+            ? postCommitReadError.message
+            : postCommitReadError
+              ? String(postCommitReadError)
+              : "ASSESSMENT_CREDIT_STATE_UNAVAILABLE",
+      });
+      state = committedFallbackState;
+    }
+
     if (!state) {
-      throw new Error("ASSESSMENT_CREDIT_STATE_UNAVAILABLE");
+      throw (
+        postCommitReadError
+        ?? new Error("ASSESSMENT_CREDIT_STATE_UNAVAILABLE")
+      );
     }
 
     if (creditTraceId) {
