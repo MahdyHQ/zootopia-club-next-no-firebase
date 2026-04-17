@@ -47,14 +47,14 @@ export default async function AssessmentPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5 px-0.5 sm:space-y-6 sm:px-0">
       {assessmentDataDegraded ? (
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-200">
           Assessment data is temporarily limited. You can still continue with available controls.
         </div>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-[2.5rem] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.64),rgba(241,249,247,0.46))] p-6 shadow-sm backdrop-blur-xl dark:border-white/6 dark:bg-[linear-gradient(145deg,rgba(4,12,21,0.58),rgba(3,10,18,0.42))] sm:p-8 lg:p-10">
+      <section className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.64),rgba(241,249,247,0.46))] p-4 shadow-sm backdrop-blur-xl dark:border-white/6 dark:bg-[linear-gradient(145deg,rgba(4,12,21,0.58),rgba(3,10,18,0.42))] sm:rounded-[2.5rem] sm:p-8 lg:p-10">
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-emerald-400/18 blur-3xl" />
         <div className="absolute -bottom-24 left-[-4rem] h-56 w-56 rounded-full bg-sky-400/12 blur-3xl" />
         

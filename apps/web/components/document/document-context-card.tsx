@@ -66,7 +66,7 @@ export function DocumentContextCard({
 
   return (
     <section
-      className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-sm sm:p-6 ${classes.shell}`}
+      className={`relative overflow-hidden rounded-[1.5rem] border p-4 shadow-sm sm:rounded-[1.75rem] sm:p-6 ${classes.shell}`}
     >
       <div
         className={`pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-60 blur-3xl ${classes.glow}`}
@@ -93,7 +93,7 @@ export function DocumentContextCard({
 
         <Link
           href={APP_ROUTES.upload}
-          className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${classes.action}`}
+          className={`inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors sm:w-auto ${classes.action}`}
         >
           <UploadCloud className="h-4 w-4" />
           {messages.documentContextOpenUpload}

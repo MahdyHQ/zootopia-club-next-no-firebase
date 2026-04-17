@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Assessment setup UI lock profile, responsive hardening, and env-governed normal-user option gating)
+Last Updated: 2026-04-17 (Assessment page narrow-screen clipping hardening for setup/studio/history surfaces)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -2149,3 +2149,117 @@ SCOPE:
 - No logic, text, or functionality changes
 - Responsive behavior preserved across all breakpoints
 - Dark mode and light mode both maintained
+
+2026-04-17: ASSESSMENT PAGE MOBILE CLIPPING / READABILITY HARDENING
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. The protected shell main content lane enforced `overflow-x-hidden` globally,
+   which could visually clip assessment card borders/shadows/radii on narrow
+   screens when inner surfaces needed extra horizontal breathing room.
+2. Assessment page/studio cards used strong mobile radius+padding combinations
+   (`rounded-[2rem+]`, `p-5+`) that increased narrow-screen visual crowding and
+   made card edges feel cut or cramped.
+3. Assessment setup header rail and select trigger behavior had narrow-width
+   pressure points (single-line trigger ellipsis and right-rail width budget at
+   tablet breakpoints), which could reduce readability and make setup surfaces
+   feel partially hidden.
+
+CHANGES:
+1. Added route-scoped shell overflow guard for assessment paths in
+   `apps/web/components/layout/protected-shell.tsx`
+   - Introduced `isAssessmentWorkspacePath = pathname.startsWith(APP_ROUTES.assessment)`.
+   - Main scroll container now uses `overflow-x-auto` only for assessment routes,
+     while non-assessment routes keep `overflow-x-hidden`.
+   - This preserves current shell behavior elsewhere and avoids clipping
+     assessment card edges on narrow screens.
+
+2. Hardened assessment page outer/hero mobile spacing in
+   `apps/web/app/(protected)/(completed)/assessment/page.tsx`
+   - Added `min-w-0` and tiny mobile gutter (`px-0.5`) on the page wrapper.
+   - Reduced hero mobile density (`rounded-[2rem] p-4`) and preserved existing
+     larger-radius premium look from `sm` upward.
+
+3. Hardened assessment studio card/layout pressure points in
+   `apps/web/components/assessment/assessment-studio.tsx`
+   - Main studio premium shell now uses softer mobile density:
+     `rounded-[1.5rem] p-4` on mobile, preserving original larger shape from `sm+`.
+   - Added `min-w-0` to the setup-title lane wrapper to prevent narrow-width
+     overflow pressure in the top row.
+   - Removed `overflow-hidden` from non-admin model rights panel so content and
+     decorative edges are not visually clipped in narrow layouts.
+   - Delayed desktop-like two-column mode chips from `sm` to `md`.
+   - Delayed 2-column select grid from `md` to `lg` to avoid tablet/narrow-width
+     squeeze that made setup controls feel cropped.
+   - History surface now mirrors the same mobile-safe card density
+     (`rounded-[1.5rem] p-4` on mobile, original premium sizing from `sm+`).
+
+4. Hardened document context surface mobile fit in
+   `apps/web/components/document/document-context-card.tsx`
+   - Reduced mobile shell density (`rounded-[1.5rem] p-4`, original from `sm+`).
+   - Upload CTA becomes full-width on small screens (`w-full sm:w-auto`) to
+     prevent narrow-screen crowding/cropping beside heading content.
+
+5. Hardened assessment setup CSS constraints in
+   `apps/web/app/globals.css`
+   - Reduced tablet setup right-rail budget:
+     - `grid-template-columns` from `minmax(16rem, 22.5rem)` to `minmax(14rem, 21rem)`.
+     - model control width from `22.5rem` to `21rem`.
+   - Reduced xl minimum rail from `18.5rem` to `17rem` (kept max `25.5rem`).
+   - `assessment-select-panel` max-width now tracks local container width (`100%`)
+     to avoid extra viewport-calc clipping behavior.
+   - Added narrow-screen (`max-width: 640px`) select-trigger hardening:
+     slightly tighter trigger spacing and wrapped label/description text
+     (`white-space: normal; text-overflow: clip`) to keep full readable copy.
+
+FILES CHANGED:
+- apps/web/components/layout/protected-shell.tsx
+- apps/web/app/(protected)/(completed)/assessment/page.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/components/document/document-context-card.tsx
+- apps/web/app/globals.css
+- zootopia-club-next-ledger.txt
+
+REASON:
+- Fix requested mobile/narrow-screen clipping and readability issues on
+  Assessment Studio/setup surfaces and downstream cards while preserving the
+  existing premium visual language, dark/light support, and interaction patterns.
+- Keep edits narrow, backward-compatible, and route-scoped where possible.
+
+TECHNICAL DETAILS:
+- No backend/API/auth/session/repository/permissions logic changed.
+- No feature removal and no architecture redesign performed.
+- No dependency/package manifest changes were introduced.
+- Assessment shell behavior change is scoped by route prefix
+  (`/assessment*`) instead of globally altering all protected pages.
+
+RISKS / FOLLOW-UP:
+- Low-to-medium UI risk: assessment route now allows horizontal overflow auto in
+  the shell lane; this is intentional to prevent clipping but should be watched
+  for accidental x-scroll regressions in detached assessment subroutes.
+- Build verification in this sandbox is limited by outbound Google Fonts access.
+  In CI/Vercel (with normal network), re-run full build verification and visual
+  QA across viewport matrix.
+
+VERIFICATION:
+Baseline before edits:
+✗ `npm run lint:web` — FAIL (`eslint: not found`, pre-install environment)
+✗ `npm run typecheck:web` — FAIL (`next: not found`, pre-install environment)
+✗ `npm run build:web` — FAIL (`Cannot find module 'next/dist/bin/next'`, pre-install environment)
+✗ `npm run build:vercel` — FAIL (`next: not found`, pre-install environment)
+
+Post-edit environment prep:
+✓ `npm install` — PASS
+
+Post-edit verification:
+✓ `npm run lint:web` — PASS
+✓ `npm run typecheck:web` — PASS
+✗ `npm run build:web` — FAIL (network-restricted Google Fonts fetch from `fonts.googleapis.com`)
+✗ `npm run build:vercel` — FAIL (same Google Fonts network restriction)
+
+Responsive verification notes:
+~ Code-level responsive verification completed across assessment page, studio,
+  document context card, shell, and assessment CSS breakpoints for
+  small mobile / mobile / tablet / laptop / desktop ownership paths.
+~ Live browser runtime visual verification in this sandbox remains blocked by
+  build-time external-font fetch failures unrelated to this change.

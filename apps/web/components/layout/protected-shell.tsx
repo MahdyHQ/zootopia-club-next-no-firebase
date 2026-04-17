@@ -167,6 +167,7 @@ export function ProtectedShell({
       ? "1rem"
       : `calc(${isDesktopCollapsed ? 88 : 300}px + 1.5rem)`,
   } as CSSProperties;
+  const isAssessmentWorkspacePath = pathname.startsWith(APP_ROUTES.assessment);
 
   const syncScrollTopButton = useEffectEvent(() => {
     const scrolledEnough = (mainScrollRef.current?.scrollTop ?? 0) > 280;
@@ -839,7 +840,12 @@ export function ProtectedShell({
         {/* Global App Scroll Area */}
         <main
           ref={mainScrollRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden global-scrollbar p-4 sm:p-6 lg:p-10 pb-12 sm:pb-14 lg:pb-16 relative"
+          className={`flex-1 overflow-y-auto global-scrollbar p-4 sm:p-6 lg:p-10 pb-12 sm:pb-14 lg:pb-16 relative ${
+            /* Assessment setup surfaces can contain richer controls/cards on narrow screens.
+               Keep horizontal clipping disabled on this route so users can inspect full card
+               borders/radii instead of losing edges to shell-level overflow clipping. */
+            isAssessmentWorkspacePath ? "overflow-x-auto" : "overflow-x-hidden"
+          }`}
         >
           <div className="mx-auto flex min-h-full w-full max-w-[1400px] animate-in fade-in duration-700 flex-col">
             <div className="flex-1">
