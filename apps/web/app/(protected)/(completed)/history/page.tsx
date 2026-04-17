@@ -140,7 +140,7 @@ export default async function HistoryPage() {
                   className="rounded-[1.4rem] border border-border bg-background-elevated/72 px-5 py-4 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
                 >
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="min-w-0">
+                    <div className="min-w-0 xl:flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         {/* History file names must wrap first, then clamp with ellipsis to keep card rhythm and avoid narrow-screen overflow. */}
                         <p

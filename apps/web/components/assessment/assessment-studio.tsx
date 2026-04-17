@@ -2391,7 +2391,7 @@ export function AssessmentStudio({
                   }`}
                 >
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="min-w-0">
+                    <div className="min-w-0 xl:flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         {/* Generated result names in this shared history card lane must wrap first and clamp to keep the action rail aligned. */}
                         <p

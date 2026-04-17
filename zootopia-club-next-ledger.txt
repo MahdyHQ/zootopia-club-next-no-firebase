@@ -2683,3 +2683,77 @@ Runtime proof status:
 ~ Existing saved runtime artifacts still support owner-lane separation and admin self-mutation
   rejection, but this pass's new fix was verified primarily by code path plus full build/lint/type
   validation rather than live browser mutation playback.
+
+2026-04-17: SHARED RESULT / FILE CARD TITLE CONSTRAINT HARDENING
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. The shared result/file card surfaces already used wrap-first + line-clamp title styling in
+   several places, but a few card rows still left the title column on an unconstrained flex basis
+   when badges or action rails sat beside it.
+2. In those mixed-content rows, the title text could keep too much intrinsic width before the clamp
+   budget applied, which made very long file/result names the remaining narrow-screen and side-rail
+   overflow risk.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/app/(protected)/(completed)/history/page.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/components/document/document-context-card.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Complete the UI-only shared-card follow-up without redesigning the card system.
+- Keep long file/result titles inside their cards by letting the existing wrap/clamp/ellipsis
+  styling receive a reliable width budget on the remaining shared surfaces.
+
+TECHNICAL DETAILS:
+- Home recent-upload cards now give the document text rail `sm:flex-1` and the title element
+  `min-w-0 w-full max-w-full` so the filename can shrink cleanly beside the status chips.
+- History linked-document cards now give the text column `xl:flex-1`, which preserves the premium
+  side-by-side desktop composition while ensuring long file names yield space to the action rail.
+- Assessment Studio recent-generation cards now give the left content rail `xl:flex-1`, allowing
+  long generated-result names to wrap and clamp before the right-side actions are crowded.
+- Upload workspace recent-upload and active-document cards now give the text rail a flex width and
+  the title itself `min-w-0 w-full max-w-full`, so long names stay inside both the compact recent
+  card and the larger continue-to-assessment CTA surface.
+- The shared `DocumentContextCard` now gives the text block `sm:flex-1` and the highlighted file
+  title `min-w-0 w-full max-w-full`, keeping the shared assessment/infographic context pattern
+  contained when a long filename sits next to the status badge.
+- No backend metadata, storage, auth/session, or permissions logic changed.
+
+PRESERVED INTENTIONALLY:
+- Existing premium card design language, gradients, spacing, and action hierarchy.
+- Existing wrap-first + line-clamp + ellipsis approach where it was already correct.
+- Existing responsive stacking behavior and dark/light mode presentation.
+- Existing backend/server authority and all non-UI behavior.
+
+RISKS / FOLLOW-UP:
+- This pass hardened the shared card title rails that still had width-budget drift; if any future
+  new card surface renders file/result names outside these shared patterns, it should copy the same
+  `min-w-0` + flex-basis rules rather than reintroducing plain intrinsic-width text.
+- Fresh browser screenshots were not generated in this pass, so runtime validation remains
+  code-traced plus lint/type/build proof rather than new visual snapshots.
+
+VERIFICATION:
+Code/UI verification:
+✓ Re-traced the shared file/result title surfaces on Home, History, Assessment Studio, Upload, and
+  Document Context cards to confirm the smallest safe edit surface.
+✓ Verified the updated title nodes now use constrained flex rails plus wrap/clamp-safe width rules
+  so long titles stay in-card and end with ellipsis when clamped.
+
+Command verification:
+✓ `npm run lint:web` — PASS
+✓ `npm run typecheck:web` — PASS
+✓ `npm run build:web` — PASS
+✓ `npm run build:vercel` — PASS
+
+Verification note:
+~ An initial parallel run of `build:web` and `build:vercel` caused `build:web` to hit Next's
+  existing "Another next build process is already running" lock. `build:web` was rerun alone and
+  passed cleanly, so the final verified state is green.

@@ -709,10 +709,10 @@ export function UploadWorkspace({
                     <path d="M14 2v6h6" />
                   </svg>
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   {/* Recent-upload names must first wrap and then clamp with ellipsis so list cards keep a stable height on every viewport. */}
                   <p
-                    className="max-w-full line-clamp-2 break-words text-sm font-medium text-foreground [overflow-wrap:anywhere] dark:text-white"
+                    className="min-w-0 w-full max-w-full line-clamp-2 break-words text-sm font-medium text-foreground [overflow-wrap:anywhere] dark:text-white"
                     title={latestDocument.fileName}
                   >
                     {latestDocument.fileName}
@@ -732,7 +732,7 @@ export function UploadWorkspace({
               <div className="relative overflow-hidden rounded-[1.6rem] border border-emerald-400/16 bg-white/[0.52] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] dark:bg-[rgba(6,22,34,0.48)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                 <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.08),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(125,211,252,0.08),transparent_36%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(34,211,238,0.09),transparent_36%)]" />
                 <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0">
+                  <div className="min-w-0 lg:flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">
                         {messages.uploadContinueLabel}
@@ -743,7 +743,7 @@ export function UploadWorkspace({
                     </div>
                     {/* Active document names must stay inside this shared CTA surface; clamp after wrapping to avoid overgrowing the action rail block. */}
                     <p
-                      className="mt-3 max-w-full line-clamp-2 break-words text-base font-semibold text-foreground [overflow-wrap:anywhere] dark:text-white"
+                      className="mt-3 min-w-0 w-full max-w-full line-clamp-2 break-words text-base font-semibold text-foreground [overflow-wrap:anywhere] dark:text-white"
                       title={activeDocument.fileName}
                     >
                       {activeDocument.fileName}

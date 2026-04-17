@@ -103,10 +103,10 @@ export function DocumentContextCard({
 
       {highlightedDocument ? (
         <div className="relative z-10 mt-4 flex flex-col gap-3 rounded-2xl border border-border bg-background/65 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
+          <div className="min-w-0 sm:flex-1">
             {/* This shared file-name row appears across Assessment/Infographic context cards, so clamp overflow after wrapping to keep the card shell intact. */}
             <p
-              className="max-w-full line-clamp-2 break-words text-sm font-semibold text-foreground [overflow-wrap:anywhere]"
+              className="min-w-0 w-full max-w-full line-clamp-2 break-words text-sm font-semibold text-foreground [overflow-wrap:anywhere]"
               title={highlightedDocument.fileName}
             >
               {highlightedDocument.fileName}

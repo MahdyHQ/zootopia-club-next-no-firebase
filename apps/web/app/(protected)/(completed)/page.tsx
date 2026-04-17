@@ -251,14 +251,14 @@ export default async function HomePage() {
                   key={document.id}
                   className="flex flex-col justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 sm:flex-row sm:items-center dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
                 >
-                  <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex min-w-0 items-start gap-3 sm:flex-1">
                     <div className="mt-0.5 rounded-lg bg-blue-100 p-1.5 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
                       <FileText className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       {/* Home document names use wrap-first + clamp so long values stay inside cards while still showing a clean ellipsis boundary. */}
                       <p
-                        className="max-w-full line-clamp-2 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] dark:text-white"
+                        className="min-w-0 w-full max-w-full line-clamp-2 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] dark:text-white"
                         title={document.fileName}
                       >
                         {document.fileName}
