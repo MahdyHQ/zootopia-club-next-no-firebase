@@ -10,6 +10,7 @@ import {
   getAssessmentAuthenticationRequiredError,
   getAssessmentCreditSummaryUnavailablePlatformError,
 } from "@/lib/server/assessment-platform-errors";
+import { getGlobalCreditPageAccessStateForUser } from "@/lib/server/global-credit-page-lock";
 import { getAssessmentCreditDetailsForUser } from "@/lib/server/repository";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
@@ -40,6 +41,32 @@ export async function GET() {
       role: user.role,
     },
   });
+
+  const pageAccess = await getGlobalCreditPageAccessStateForUser({
+    uid: user.uid,
+    role: user.role,
+  });
+  if (!pageAccess.unlocked) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_global_credits_page_gate_blocked",
+      level: "warn",
+      traceId: requestId,
+      details: {
+        ownerUid: user.uid,
+        route: "/api/assessment/credits/details",
+        lockEnabled: pageAccess.lockEnabled,
+      },
+    });
+    const response = applyNoStore(
+      apiError(
+        "GLOBAL_CREDIT_PAGE_LOCKED",
+        "Unlock the global credit page password first.",
+        403,
+      ),
+    );
+    response.headers.set(ASSESSMENT_CREDIT_REQUEST_ID_HEADER, requestId);
+    return response;
+  }
 
   try {
     const details = await getAssessmentCreditDetailsForUser({
