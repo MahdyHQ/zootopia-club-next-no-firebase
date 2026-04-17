@@ -1667,10 +1667,10 @@ export function AssessmentStudio({
 
                   <div className="mt-3 flex sm:justify-end">
                     <Link
-                      href={APP_ROUTES.assessmentCredits}
+                      href={APP_ROUTES.globalCredits}
                       className="inline-flex items-center rounded-xl border border-border bg-background-elevated/70 px-3 py-2 text-xs font-semibold text-foreground transition hover:border-emerald-500/30 hover:text-emerald-700 dark:hover:text-emerald-200"
                     >
-                      {messages.assessmentCreditsOpenDetailsAction}
+                      {messages.globalCreditsOpenDetailsAction ?? messages.assessmentCreditsOpenDetailsAction}
                     </Link>
                   </div>
                 </div>

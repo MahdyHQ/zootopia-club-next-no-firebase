@@ -739,7 +739,7 @@ export function ProtectedShell({
                  owner. Keep this read-only so quota authority remains in backend reserve/commit routes. */}
             <div className="relative flex items-center gap-1.5">
               <Link
-                href={APP_ROUTES.assessmentCredits}
+                href={APP_ROUTES.globalCredits}
                 aria-label={`${siteContent.navigation.balanceLabel}: ${resolvedBalanceLabel}`}
                 title={resolvedBalanceHint}
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/58 px-2.5 text-foreground-muted shadow-sm transition hover:border-emerald-500/30 hover:text-foreground"
