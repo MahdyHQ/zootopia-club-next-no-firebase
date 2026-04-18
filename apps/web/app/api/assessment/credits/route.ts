@@ -44,6 +44,7 @@ export async function GET() {
     const credits = await getAssessmentDailyCreditsSummaryForUser({
       uid: user.uid,
       role: user.role,
+      email: user.email,
     });
 
     logAssessmentCreditDiagnostic({

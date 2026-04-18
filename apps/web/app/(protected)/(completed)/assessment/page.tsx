@@ -9,6 +9,7 @@ import { getAssessmentPromptAccessStateForUser } from "@/lib/server/assessment-p
 import { getRequestUiContext } from "@/lib/server/request-context";
 import {
   getActiveDocumentForOwner,
+  getAssessmentDailyCreditsSummaryForUser,
   listAssessmentGenerationsForUser,
   listDocumentsForUser,
 } from "@/lib/server/repository";
@@ -31,12 +32,20 @@ export default async function AssessmentPage() {
   let generations = [] as Awaited<ReturnType<typeof listAssessmentGenerationsForUser>>;
   let activeDocument: Awaited<ReturnType<typeof listDocumentsForUser>>[number] | null = null;
   let assessmentDataDegraded = false;
+  let initialCreditSummary: Awaited<
+    ReturnType<typeof getAssessmentDailyCreditsSummaryForUser>
+  > | null = null;
 
   try {
-    [documents, generations, activeDocument] = await Promise.all([
+    [documents, generations, activeDocument, initialCreditSummary] = await Promise.all([
       listDocumentsForUser(user.uid),
       listAssessmentGenerationsForUser(user.uid),
       getActiveDocumentForOwner(user.uid),
+      getAssessmentDailyCreditsSummaryForUser({
+        uid: user.uid,
+        role: user.role,
+        email: user.email,
+      }),
     ]);
   } catch (error) {
     assessmentDataDegraded = true;
@@ -44,6 +53,18 @@ export default async function AssessmentPage() {
       uid: user.uid,
       error: error instanceof Error ? error.name : "UNKNOWN",
     });
+    try {
+      initialCreditSummary = await getAssessmentDailyCreditsSummaryForUser({
+        uid: user.uid,
+        role: user.role,
+        email: user.email,
+      });
+    } catch (creditError) {
+      console.warn("[assessment-page] failed to load initial credit summary", {
+        uid: user.uid,
+        error: creditError instanceof Error ? creditError.name : "UNKNOWN",
+      });
+    }
   }
 
   return (
@@ -85,6 +106,7 @@ export default async function AssessmentPage() {
         initialDocuments={documents}
         initialGenerations={generations}
         initialActiveDocumentId={activeDocument?.id ?? null}
+        initialCreditSummary={initialCreditSummary}
       />
     </div>
   );

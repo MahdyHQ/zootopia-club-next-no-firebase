@@ -83,6 +83,7 @@ type AssessmentStudioProps = {
   initialDocuments: DocumentRecord[];
   initialGenerations: AssessmentGeneration[];
   initialActiveDocumentId: string | null;
+  initialCreditSummary?: AssessmentDailyCreditsSummary | null;
 };
 
 type AssessmentPromptAccess = {
@@ -572,7 +573,17 @@ function areCreditSummariesEqual(
     left.manualCreditsAvailable === right.manualCreditsAvailable &&
     left.grantCreditsAvailable === right.grantCreditsAvailable &&
     left.usedCount === right.usedCount &&
-    left.resetsAt === right.resetsAt
+    left.resetsAt === right.resetsAt &&
+    left.platformDailyUsage.applies === right.platformDailyUsage.applies &&
+    left.platformDailyUsage.isAdminExempt === right.platformDailyUsage.isAdminExempt &&
+    left.platformDailyUsage.isEmailExempt === right.platformDailyUsage.isEmailExempt &&
+    left.platformDailyUsage.dayKey === right.platformDailyUsage.dayKey &&
+    left.platformDailyUsage.limit === right.platformDailyUsage.limit &&
+    left.platformDailyUsage.usedCount === right.platformDailyUsage.usedCount &&
+    left.platformDailyUsage.remainingCount === right.platformDailyUsage.remainingCount &&
+    left.platformDailyUsage.reached === right.platformDailyUsage.reached &&
+    left.platformDailyUsage.locked === right.platformDailyUsage.locked &&
+    left.platformDailyUsage.resetsAt === right.platformDailyUsage.resetsAt
   );
 }
 
@@ -955,16 +966,21 @@ export function AssessmentStudio({
   initialDocuments,
   initialGenerations,
   initialActiveDocumentId,
+  initialCreditSummary = null,
 }: AssessmentStudioProps) {
   const [generations, setGenerations] = useState(initialGenerations);
   const queryClient = useQueryClient();
   /* Assessment Studio must consume the exact same canonical credit query as the protected header.
-     Future agents: do not seed this hook from page props or mutation responses, or the studio can
-     momentarily outrun the shell before `/api/assessment/credits` finishes reconciling. */
+     The page-provided summary only covers the pre-hydration paint so the submit lane does not
+     flash unlocked before `/api/assessment/credits` reconciles the shared query cache. */
   const creditSummaryQuery = useAssessmentCreditSummaryQuery({
     source: "assessment-studio",
   });
-  const creditSummary = creditSummaryQuery.data ?? null;
+  const creditSummary = creditSummaryQuery.data ?? initialCreditSummary ?? null;
+  /* The shared summary carries the server-owned platform-wide daily usage snapshot too.
+     Assessment Studio only reflects that lock in the UI; admin and exempt-email bypass remain
+     encoded in the backend summary so this client never re-implements exemption policy. */
+  const platformDailyUsage = creditSummary?.platformDailyUsage ?? null;
   const creditDisplay = creditSummary
     ? resolveAssessmentCreditDisplayModel(creditSummary)
     : null;
@@ -1039,6 +1055,9 @@ export function AssessmentStudio({
         dailyAvailable: creditDisplay?.dailyAvailable ?? null,
         extraAvailable: creditDisplay?.extraAvailable ?? null,
         remainingCount: creditSummary.remainingCount,
+        platformLocked: creditSummary.platformDailyUsage.locked,
+        platformUsedCount: creditSummary.platformDailyUsage.usedCount,
+        platformLimit: creditSummary.platformDailyUsage.limit,
         manualCreditsAvailable: creditSummary.manualCreditsAvailable,
         grantCreditsAvailable: creditSummary.grantCreditsAvailable,
         assessmentAccess: creditSummary.assessmentAccess,
@@ -1123,6 +1142,7 @@ export function AssessmentStudio({
   const creditsExhausted = creditSummary
     ? isAssessmentDailyCreditsExhausted(creditSummary)
     : false;
+  const platformUsageLocked = platformDailyUsage?.locked === true;
   const creditSummaryHeading = !creditDisplay
     ? messages.loading
     : buildAssessmentCreditPanelHeading({
@@ -1558,6 +1578,16 @@ export function AssessmentStudio({
         return;
       }
 
+      if (platformUsageLocked) {
+        setError(
+          createOperationalUiError(
+            messages.assessmentPlatformDailyCapacityLockedBody,
+            false,
+          ),
+        );
+        return;
+      }
+
       if (selectedDocument && !linkedDocumentReady) {
         setFieldErrors({ documentId: messages.assessmentFieldDocumentNotReady });
         return;
@@ -1810,7 +1840,11 @@ export function AssessmentStudio({
               )}
             </div>
 
-            <form className="space-y-6" onSubmit={handleSubmit}>
+            <form
+              className={`space-y-6 ${platformUsageLocked ? "opacity-95" : ""}`}
+              aria-disabled={platformUsageLocked}
+              onSubmit={handleSubmit}
+            >
               {/* Daily credit UI mirrors the latest server summary for the signed-in owner.
                   Keep this read-only guidance inside Assessment Studio and preserve the backend
                   route as the only authority for quota enforcement and admin exemption. */}
@@ -1823,6 +1857,16 @@ export function AssessmentStudio({
                     <h3 className="mt-2 text-lg font-semibold text-foreground">
                       {creditSummaryHeading}
                     </h3>
+                    {platformUsageLocked ? (
+                      <div className="mt-3 rounded-[1rem] border border-amber-500/25 bg-amber-500/10 px-3.5 py-3 text-sm text-amber-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:text-amber-100">
+                        <p className="font-semibold">
+                          {messages.assessmentPlatformDailyCapacityLockedTitle}
+                        </p>
+                        <p className="mt-1 leading-6 text-amber-800/90 dark:text-amber-100/90">
+                          {messages.assessmentPlatformDailyCapacityLockedBody}
+                        </p>
+                      </div>
+                    ) : null}
                     <div className="mt-2 space-y-1 text-sm leading-6 text-foreground-muted">
                       <p>{creditSummaryBody}</p>
                       {!creditSummary || creditSummary.isAdminExempt || !creditsExhausted ? null : (
@@ -2372,6 +2416,7 @@ export function AssessmentStudio({
                 disabled={
                   pending ||
                   !creditSummary ||
+                  platformUsageLocked ||
                   creditsExhausted ||
                   (!request.prompt.trim() && !request.documentId) ||
                   !linkedDocumentReady ||

@@ -3,6 +3,7 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type {
   ApiResult,
+  AssessmentDailyCreditsSummary,
   DocumentRecord,
   RemoveDocumentResponse,
   UploadResponse,
@@ -20,6 +21,7 @@ import {
   getOperationalSupportNotes,
   type OperationalUiError,
 } from "@/lib/operational-support";
+import { useAssessmentCreditSummaryQuery } from "@/lib/assessment-credit-query";
 import { buildSmartTitleDisplay } from "@/lib/smart-title-display";
 import { getSupabaseClient, isSupabaseWebConfigured } from "@/lib/supabase/client";
 import { SUPPORTED_UPLOAD_FORMAT_BADGES } from "@/lib/upload";
@@ -32,6 +34,7 @@ type UploadWorkspaceProps = {
   title?: string;
   description?: string;
   canAccessInfographic?: boolean;
+  initialCreditSummary?: AssessmentDailyCreditsSummary | null;
 };
 
 type UploadPrepareResponse = {
@@ -241,23 +244,34 @@ export function UploadWorkspace({
   title,
   description,
   canAccessInfographic = false,
+  initialCreditSummary = null,
 }: UploadWorkspaceProps) {
   const fileInputId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
+  /* Upload intake reads the same canonical server-owned credit summary as Assessment Studio.
+     Keep this lock UI-only and scoped to the /upload entry surface so exempt-email/admin bypass
+     stays decided on the backend instead of drifting into client-side email heuristics. */
+  const creditSummaryQuery = useAssessmentCreditSummaryQuery({
+    source: "upload-workspace",
+  });
   const [documents, setDocuments] = useState(initialDocuments);
   const [pending, setPending] = useState(false);
   const [removingDocumentId, setRemovingDocumentId] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [error, setError] = useState<OperationalUiError | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const creditSummary = creditSummaryQuery.data ?? initialCreditSummary;
+  const platformDailyUsage = creditSummary?.platformDailyUsage ?? null;
   const customTitle = title?.trim() || null;
   const resolvedTitle = customTitle || messages.uploadDropzoneTitle;
   const resolvedDescription = description?.trim() || messages.uploadDropzoneFormats;
   const latestDocument = documents[0] ?? null;
   const activeDocument =
     documents.find((document) => document.isActive) ?? latestDocument;
+  const isPlatformUploadLocked = platformDailyUsage?.locked === true;
   const isBusy = pending || removingDocumentId !== null;
+  const isUploadEntryDisabled = isBusy || isPlatformUploadLocked;
 
   useEffect(() => {
     setDocuments(initialDocuments);
@@ -360,7 +374,7 @@ export function UploadWorkspace({
      route. Keep all file-entry paths funneled through this one request helper so validation,
      warning handling, retries, and future upload instrumentation never drift between input modes. */
   async function uploadSelectedFile(file: File) {
-    if (isBusy) {
+    if (isUploadEntryDisabled) {
       return;
     }
 
@@ -428,7 +442,7 @@ export function UploadWorkspace({
   }
 
   function handleDragEnter(event: DragEvent<HTMLDivElement>) {
-    if (isBusy || !isFileDrag(event)) {
+    if (isUploadEntryDisabled || !isFileDrag(event)) {
       return;
     }
 
@@ -438,7 +452,7 @@ export function UploadWorkspace({
   }
 
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
-    if (isBusy || !isFileDrag(event)) {
+    if (isUploadEntryDisabled || !isFileDrag(event)) {
       return;
     }
 
@@ -451,7 +465,7 @@ export function UploadWorkspace({
   }
 
   function handleDragLeave(event: DragEvent<HTMLDivElement>) {
-    if (isBusy || !isFileDrag(event)) {
+    if (isUploadEntryDisabled || !isFileDrag(event)) {
       return;
     }
 
@@ -464,7 +478,7 @@ export function UploadWorkspace({
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
-    if (isBusy || !isFileDrag(event)) {
+    if (isUploadEntryDisabled || !isFileDrag(event)) {
       return;
     }
 
@@ -483,7 +497,7 @@ export function UploadWorkspace({
   }
 
   function handleOverlayKeyDown(event: KeyboardEvent<HTMLLabelElement>) {
-    if (isBusy) {
+    if (isUploadEntryDisabled) {
       return;
     }
 
@@ -533,6 +547,10 @@ export function UploadWorkspace({
     <div
       className={cn(
         uploadShellClassName,
+        isPlatformUploadLocked && [
+          "border-amber-400/50 bg-white/[0.3]",
+          "dark:border-amber-300/20 dark:bg-[rgba(18,14,6,0.38)]",
+        ],
         isDragActive && [
           "border-sky-400/70 bg-white/[0.34]",
           "shadow-[inset_0_1.5px_0_rgba(255,255,255,0.95),inset_0_0_0_1px_rgba(56,189,248,0.18),0_12px_28px_rgba(56,189,248,0.1),0_28px_60px_rgba(148,163,184,0.14)]",
@@ -608,12 +626,12 @@ export function UploadWorkspace({
         <label
           htmlFor={fileInputId}
           role="button"
-          tabIndex={isBusy ? -1 : 0}
-          aria-disabled={isBusy}
+          tabIndex={isUploadEntryDisabled ? -1 : 0}
+          aria-disabled={isUploadEntryDisabled}
           onKeyDown={handleOverlayKeyDown}
           className={cn(
             "absolute inset-0 z-20 cursor-pointer rounded-[inherit] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-4 focus-visible:ring-offset-transparent dark:focus-visible:ring-cyan-300/40",
-            isBusy && "pointer-events-none",
+            isUploadEntryDisabled && "pointer-events-none",
           )}
           aria-label={messages.uploadDropzoneTitle}
         >
@@ -623,7 +641,7 @@ export function UploadWorkspace({
             type="file"
             name="file"
             accept={uploadAcceptValue}
-            disabled={isBusy}
+            disabled={isUploadEntryDisabled}
             className="hidden"
             onChange={handleFileInputChange}
           />
@@ -641,6 +659,21 @@ export function UploadWorkspace({
 
         {/* ── Status states — rendered below the dropzone content ── */}
         <div className="relative z-30 w-full space-y-5" onClick={(e) => e.stopPropagation()}>
+          {isPlatformUploadLocked ? (
+            <div
+              role="alert"
+              className="rounded-[1.25rem] border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-100"
+            >
+              <div className="space-y-1">
+                <p className="font-semibold">
+                  {messages.uploadPlatformDailyCapacityLockedTitle}
+                </p>
+                <p className="leading-6 text-amber-700/90 dark:text-amber-100/90">
+                  {messages.uploadPlatformDailyCapacityLockedBody}
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           {/* Error */}
           {error && (

@@ -74,7 +74,17 @@ function areCreditSummariesEqual(
     current.activeGrantCount === next.activeGrantCount &&
     current.totalRemainingCount === next.totalRemainingCount &&
     current.remainingCount === next.remainingCount &&
-    current.resetsAt === next.resetsAt
+    current.resetsAt === next.resetsAt &&
+    current.platformDailyUsage.applies === next.platformDailyUsage.applies &&
+    current.platformDailyUsage.isAdminExempt === next.platformDailyUsage.isAdminExempt &&
+    current.platformDailyUsage.isEmailExempt === next.platformDailyUsage.isEmailExempt &&
+    current.platformDailyUsage.dayKey === next.platformDailyUsage.dayKey &&
+    current.platformDailyUsage.limit === next.platformDailyUsage.limit &&
+    current.platformDailyUsage.usedCount === next.platformDailyUsage.usedCount &&
+    current.platformDailyUsage.remainingCount === next.platformDailyUsage.remainingCount &&
+    current.platformDailyUsage.reached === next.platformDailyUsage.reached &&
+    current.platformDailyUsage.locked === next.platformDailyUsage.locked &&
+    current.platformDailyUsage.resetsAt === next.platformDailyUsage.resetsAt
   );
 }
 
@@ -226,6 +236,9 @@ export function ProtectedShell({
         dailyAvailable: creditDisplay?.dailyAvailable ?? null,
         extraAvailable: creditDisplay?.extraAvailable ?? null,
         remainingCount: creditSummary.remainingCount,
+        platformLocked: creditSummary.platformDailyUsage.locked,
+        platformUsedCount: creditSummary.platformDailyUsage.usedCount,
+        platformLimit: creditSummary.platformDailyUsage.limit,
         manualCreditsAvailable: creditSummary.manualCreditsAvailable,
         grantCreditsAvailable: creditSummary.grantCreditsAvailable,
         assessmentAccess: creditSummary.assessmentAccess,

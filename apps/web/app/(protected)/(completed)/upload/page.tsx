@@ -4,7 +4,10 @@ import { FileText, BrainCircuit, PieChart, ArrowRight, Zap } from "lucide-react"
 
 import { UploadWorkspace } from "@/components/upload/upload-workspace";
 import { getRequestUiContext } from "@/lib/server/request-context";
-import { listDocumentsForUser } from "@/lib/server/repository";
+import {
+  getAssessmentDailyCreditsSummaryForUser,
+  listDocumentsForUser,
+} from "@/lib/server/repository";
 import { requireCompletedUser } from "@/lib/server/session";
 
 const uploadQuickActionCardClassName =
@@ -17,15 +20,37 @@ export default async function UploadPage() {
   ]);
   let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
   let documentsDataDegraded = false;
+  let initialCreditSummary: Awaited<
+    ReturnType<typeof getAssessmentDailyCreditsSummaryForUser>
+  > | null = null;
 
   try {
-    documents = await listDocumentsForUser(user.uid);
+    [documents, initialCreditSummary] = await Promise.all([
+      listDocumentsForUser(user.uid),
+      getAssessmentDailyCreditsSummaryForUser({
+        uid: user.uid,
+        role: user.role,
+        email: user.email,
+      }),
+    ]);
   } catch (error) {
     documentsDataDegraded = true;
     console.warn("[upload-page] failed to load documents; rendering fallback list", {
       uid: user.uid,
       error: error instanceof Error ? error.name : "UNKNOWN",
     });
+    try {
+      initialCreditSummary = await getAssessmentDailyCreditsSummaryForUser({
+        uid: user.uid,
+        role: user.role,
+        email: user.email,
+      });
+    } catch (creditError) {
+      console.warn("[upload-page] failed to load initial credit summary", {
+        uid: user.uid,
+        error: creditError instanceof Error ? creditError.name : "UNKNOWN",
+      });
+    }
   }
 
   const canAccessInfographic = user.role === "admin";
@@ -50,6 +75,7 @@ export default async function UploadPage() {
             messages={uiContext.messages}
             initialDocuments={documents}
             canAccessInfographic={canAccessInfographic}
+            initialCreditSummary={initialCreditSummary}
           />
         </div>
       </section>

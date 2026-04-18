@@ -363,6 +363,19 @@ export interface AssessmentCreditGrantAdminView extends AssessmentCreditGrantRec
   available: number;
 }
 
+export interface AssessmentPlatformDailyUsageSummary {
+  applies: boolean;
+  isAdminExempt: boolean;
+  isEmailExempt: boolean;
+  dayKey: string;
+  limit: number;
+  usedCount: number;
+  remainingCount: number;
+  reached: boolean;
+  locked: boolean;
+  resetsAt: string;
+}
+
 export interface AssessmentDailyCreditsSummary {
   applies: boolean;
   isAdminExempt: boolean;
@@ -380,6 +393,7 @@ export interface AssessmentDailyCreditsSummary {
   totalRemainingCount: number | null;
   remainingCount: number | null;
   resetsAt: string;
+  platformDailyUsage: AssessmentPlatformDailyUsageSummary;
 }
 
 export type AssessmentArtifactKind =

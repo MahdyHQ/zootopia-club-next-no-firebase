@@ -51,6 +51,18 @@ export function buildAssessmentCreditClientSummarySnapshot(
     totalRemainingCount: summary.totalRemainingCount,
     remainingCount: summary.remainingCount,
     resetsAt: summary.resetsAt,
+    platformDailyUsage: {
+      applies: summary.platformDailyUsage.applies,
+      isAdminExempt: summary.platformDailyUsage.isAdminExempt,
+      isEmailExempt: summary.platformDailyUsage.isEmailExempt,
+      dayKey: summary.platformDailyUsage.dayKey,
+      limit: summary.platformDailyUsage.limit,
+      usedCount: summary.platformDailyUsage.usedCount,
+      remainingCount: summary.platformDailyUsage.remainingCount,
+      reached: summary.platformDailyUsage.reached,
+      locked: summary.platformDailyUsage.locked,
+      resetsAt: summary.platformDailyUsage.resetsAt,
+    },
   };
 }
 

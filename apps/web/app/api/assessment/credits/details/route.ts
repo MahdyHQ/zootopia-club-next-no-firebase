@@ -72,6 +72,7 @@ export async function GET() {
     const details = await getAssessmentCreditDetailsForUser({
       uid: user.uid,
       role: user.role,
+      email: user.email,
     });
 
     logAssessmentCreditDiagnostic({

@@ -50,9 +50,11 @@ import {
 import {
   buildAssessmentDailyCreditDocumentId,
   buildAssessmentDailyCreditsSummary,
+  buildAssessmentPlatformDailyUsageSummary,
   filterActiveAssessmentDailyCreditReservations,
   getDefaultDailyAssessmentCreditsLimit,
   getAssessmentDailyCreditResetAt,
+  getPlatformGlobalDailyCreditLimit,
   isAssessmentDailyCreditsExempt,
   normalizeAssessmentDailyLimitOverride,
   normalizeAssessmentDailyCreditLedger,
@@ -61,6 +63,7 @@ import {
   type AssessmentDailyCreditLedgerDocument,
   type AssessmentDailyCreditReservation,
 } from "@/lib/server/assessment-daily-credits";
+import { isActiveNormalUserExemptEmail } from "@/lib/server/active-normal-user-session-governance";
 import { deleteAssessmentArtifact } from "@/lib/server/assessment-artifact-storage";
 import { normalizeAssessmentGenerationRecord } from "@/lib/server/assessment-records";
 import {
@@ -206,6 +209,7 @@ const ASSESSMENT_CREDIT_ACCOUNTS_COLLECTION = "assessmentCreditAccounts";
 const ASSESSMENT_CREDIT_GRANTS_COLLECTION = "assessmentCreditGrants";
 const ASSESSMENT_CREDIT_MUTATION_HISTORY_COLLECTION = "assessmentCreditMutationHistory";
 const ASSESSMENT_CREDIT_MUTATION_HISTORY_LIMIT = 40;
+const ASSESSMENT_PLATFORM_DAILY_USAGE_QUERY_LIMIT = 2_000;
 const ASSESSMENT_DAILY_CREDITS_EXHAUSTED_MESSAGE =
   "Assessment generation credits are currently exhausted. Daily and extra credits renew at the next reset window.";
 const ASSESSMENT_ACCESS_DISABLED_MESSAGE =
@@ -3080,6 +3084,7 @@ function buildAssessmentCreditComputation(input: {
   grants: AssessmentCreditGrantRecord[];
   dailyReservationCount?: number;
   extraReservationCount?: number;
+  platformDailyUsage?: ReturnType<typeof buildAssessmentPlatformDailyUsageSummary>;
 }) {
   const nowMs = Date.now();
   const dailyDefaultLimit = getDefaultDailyAssessmentCreditsLimit();
@@ -3110,6 +3115,17 @@ function buildAssessmentCreditComputation(input: {
     grantCreditsAvailable,
     extraReservationCount: input.extraReservationCount,
     activeGrantCount,
+    /* Most owner-facing paths provide the live platform aggregate snapshot before building the
+       summary. The fallback below keeps admin/internal repository flows compiling without
+       inventing a second authority when that aggregate is not part of the current operation. */
+    platformDailyUsage:
+      input.platformDailyUsage
+      ?? buildAssessmentPlatformDailyUsageSummary({
+        dayKey: input.dayKey,
+        usedCount: 0,
+        resetsAt: input.resetsAt,
+        isAdminExempt: input.role === "admin",
+      }),
   });
 
   return {
@@ -3236,6 +3252,11 @@ type StructuredAssessmentDailyCreditRow = {
   pending_reservations: AssessmentDailyCreditReservation[] | null;
   created_at: string | Date;
   updated_at: string | Date;
+};
+
+type AssessmentDailyCreditLedgerDayRecord = {
+  ownerUid: string;
+  record: Partial<AssessmentDailyCreditLedgerDocument>;
 };
 
 type StructuredAssessmentCreditMutationRow = {
@@ -3558,6 +3579,37 @@ async function readLegacyAssessmentDailyCreditLedgerRecord(input: {
     : null;
 }
 
+async function listLegacyAssessmentDailyCreditLedgerRecordsForDay(input: {
+  dayKey: string;
+  nowIso: string;
+}) {
+  const snapshot = await getZootopiaDatabase()
+    .collection(ASSESSMENT_DAILY_CREDITS_COLLECTION)
+    .where("dayKey", "==", input.dayKey)
+    .limit(ASSESSMENT_PLATFORM_DAILY_USAGE_QUERY_LIMIT)
+    .get();
+
+  return snapshot.docs
+    .map((documentSnapshot) => {
+      const record = normalizeAssessmentDailyCreditLedger({
+        ownerUid:
+          typeof documentSnapshot.data()?.ownerUid === "string"
+            ? documentSnapshot.data().ownerUid
+            : "",
+        dayKey: input.dayKey,
+        record: documentSnapshot.data() as Partial<AssessmentDailyCreditLedgerDocument>,
+        nowIso: input.nowIso,
+      });
+      return record.ownerUid
+        ? {
+            ownerUid: record.ownerUid,
+            record,
+          }
+        : null;
+    })
+    .filter((entry): entry is AssessmentDailyCreditLedgerDayRecord => Boolean(entry));
+}
+
 async function readStructuredAssessmentDailyCreditLedgerRecord(input: {
   ownerUid: string;
   dayKey: string;
@@ -3598,6 +3650,106 @@ async function readStructuredAssessmentDailyCreditLedgerRecord(input: {
 
   const row = rows[0];
   return row ? mapStructuredAssessmentDailyCreditRow(row, input.nowIso) : null;
+}
+
+async function listStructuredAssessmentDailyCreditLedgerRowsForDay(input: {
+  dayKey: string;
+  nowIso: string;
+  sql?: AssessmentCreditSqlExecutor;
+}) {
+  const sql = input.sql ?? getZootopiaDatabase().sql;
+  const rows = await sql<StructuredAssessmentDailyCreditRow[]>`
+    SELECT
+      id,
+      owner_uid,
+      day_key,
+      daily_limit,
+      successful_generation_ids,
+      pending_reservations,
+      created_at,
+      updated_at
+    FROM public.assessment_daily_credits
+    WHERE day_key = ${input.dayKey}
+    LIMIT ${ASSESSMENT_PLATFORM_DAILY_USAGE_QUERY_LIMIT}
+  `;
+
+  return rows.map((row) => ({
+    ownerUid: row.owner_uid,
+    record: mapStructuredAssessmentDailyCreditRow(row, input.nowIso),
+  })) satisfies AssessmentDailyCreditLedgerDayRecord[];
+}
+
+async function listAssessmentDailyCreditLedgersForDay(input: {
+  dayKey: string;
+  nowIso: string;
+}) {
+  if (!shouldUseDatabase()) {
+    return [...getMemoryStore().assessmentDailyCredits.values()]
+      .filter((ledger) => ledger.dayKey === input.dayKey)
+      .map((ledger) => ({
+        ownerUid: ledger.ownerUid,
+        record: normalizeAssessmentDailyCreditLedger({
+          ownerUid: ledger.ownerUid,
+          dayKey: input.dayKey,
+          record: ledger,
+          nowIso: input.nowIso,
+        }),
+      })) satisfies AssessmentDailyCreditLedgerDayRecord[];
+  }
+
+  const [legacyRecords, structuredRecords] = await Promise.all([
+    listLegacyAssessmentDailyCreditLedgerRecordsForDay(input),
+    listStructuredAssessmentDailyCreditLedgerRowsForDay(input),
+  ]);
+
+  const byOwnerUid = new Map<
+    string,
+    {
+      legacy: Partial<AssessmentDailyCreditLedgerDocument> | null;
+      structured: Partial<AssessmentDailyCreditLedgerDocument> | null;
+    }
+  >();
+
+  for (const record of legacyRecords) {
+    const current = byOwnerUid.get(record.ownerUid) ?? {
+      legacy: null,
+      structured: null,
+    };
+    current.legacy = record.record;
+    byOwnerUid.set(record.ownerUid, current);
+  }
+
+  for (const record of structuredRecords) {
+    const current = byOwnerUid.get(record.ownerUid) ?? {
+      legacy: null,
+      structured: null,
+    };
+    current.structured = record.record;
+    byOwnerUid.set(record.ownerUid, current);
+  }
+
+  return [...byOwnerUid.entries()]
+    .map(([ownerUid, recordPair]) => {
+      const preferredRecord = pickPreferredAssessmentCreditRecord({
+        structured: recordPair.structured,
+        legacy: recordPair.legacy,
+        fallbackIso: input.nowIso,
+      });
+      if (!preferredRecord) {
+        return null;
+      }
+
+      return {
+        ownerUid,
+        record: normalizeAssessmentDailyCreditLedger({
+          ownerUid,
+          dayKey: input.dayKey,
+          record: preferredRecord,
+          nowIso: input.nowIso,
+        }),
+      };
+    })
+    .filter((entry): entry is AssessmentDailyCreditLedgerDayRecord => Boolean(entry));
 }
 
 async function listLegacyAssessmentCreditMutationHistoryRecords(input: {
@@ -4517,6 +4669,109 @@ async function readAssessmentDailyCreditLedger(input: {
   });
 }
 
+function countSuccessfulAssessmentGenerationsForLedger(
+  ledger: Partial<AssessmentDailyCreditLedgerDocument> | null | undefined,
+) {
+  return Array.isArray(ledger?.successfulGenerationIds)
+    ? ledger.successfulGenerationIds.filter(
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
+      ).length
+    : 0;
+}
+
+function isAssessmentPlatformDailyUsageExemptIdentity(input: {
+  role: UserRole;
+  email: string | null;
+}) {
+  if (input.role === "admin") {
+    return true;
+  }
+
+  return isActiveNormalUserExemptEmail(input.email);
+}
+
+async function readPlatformDailyConsumedCreditCount(input: {
+  dayKey: string;
+  nowIso: string;
+}) {
+  const ledgers = await listAssessmentDailyCreditLedgersForDay({
+    dayKey: input.dayKey,
+    nowIso: input.nowIso,
+  });
+  const ownerCache = new Map<string, UserDocument | null>();
+  let usedCount = 0;
+
+  for (const ledgerEntry of ledgers) {
+    const ownerUid = ledgerEntry.ownerUid.trim();
+    if (!ownerUid) {
+      continue;
+    }
+
+    const ownerUsedCount = countSuccessfulAssessmentGenerationsForLedger(
+      ledgerEntry.record,
+    );
+    if (ownerUsedCount <= 0) {
+      continue;
+    }
+
+    let owner = ownerCache.get(ownerUid);
+    if (owner === undefined) {
+      owner = await getUserByUid(ownerUid);
+      ownerCache.set(ownerUid, owner ?? null);
+    }
+
+    /* The platform-wide UI lock must not silently undercount usage when a related owner lookup
+       degrades. Unknown owners therefore remain counted unless the server can positively prove
+       that the row belongs to an admin or configured exempt-email identity. */
+    if (
+      owner
+      && isAssessmentPlatformDailyUsageExemptIdentity({
+        role: owner.role,
+        email: owner.email,
+      })
+    ) {
+      continue;
+    }
+
+    usedCount += ownerUsedCount;
+  }
+
+  return usedCount;
+}
+
+async function buildAssessmentPlatformDailyUsageForUser(input: {
+  user: Pick<SessionUser, "uid" | "role"> & {
+    email?: string | null;
+  };
+  creditWindow: ReturnType<typeof resolveAssessmentDailyCreditWindow>;
+  nowIso: string;
+}) {
+  const [persistedUser, usedCount] = await Promise.all([
+    input.user.email !== undefined
+      ? Promise.resolve<Pick<UserDocument, "email" | "role"> | null>({
+          email: input.user.email ?? null,
+          role: input.user.role,
+        })
+      : getUserByUid(input.user.uid),
+    readPlatformDailyConsumedCreditCount({
+      dayKey: input.creditWindow.dayKey,
+      nowIso: input.nowIso,
+    }),
+  ]);
+  const resolvedRole = persistedUser?.role ?? input.user.role;
+  const resolvedEmail = persistedUser?.email ?? null;
+  const isAdminExempt = resolvedRole === "admin";
+
+  return buildAssessmentPlatformDailyUsageSummary({
+    dayKey: input.creditWindow.dayKey,
+    usedCount,
+    resetsAt: input.creditWindow.resetsAt,
+    limit: getPlatformGlobalDailyCreditLimit(),
+    isAdminExempt,
+    isEmailExempt: !isAdminExempt && isActiveNormalUserExemptEmail(resolvedEmail),
+  });
+}
+
 type AssessmentCreditStateSnapshot = {
   account: AssessmentCreditAccountRecord;
   grants: AssessmentCreditGrantRecord[];
@@ -4530,12 +4785,14 @@ type AssessmentCreditStateSnapshot = {
 };
 
 async function resolveAssessmentCreditStateForUser(
-  user: Pick<SessionUser, "uid" | "role">,
+  user: Pick<SessionUser, "uid" | "role"> & {
+    email?: string | null;
+  },
   now = new Date(),
 ): Promise<AssessmentCreditStateSnapshot> {
   const nowIso = toIsoTimestamp(now);
   const creditWindow = resolveAssessmentDailyCreditWindow(now);
-  const [account, grants, ledger] = await Promise.all([
+  const [account, grants, ledger, platformDailyUsage] = await Promise.all([
     readAssessmentCreditAccount({
       ownerUid: user.uid,
       nowIso,
@@ -4547,6 +4804,11 @@ async function resolveAssessmentCreditStateForUser(
     readAssessmentDailyCreditLedger({
       ownerUid: user.uid,
       dayKey: creditWindow.dayKey,
+      nowIso,
+    }),
+    buildAssessmentPlatformDailyUsageForUser({
+      user,
+      creditWindow,
       nowIso,
     }),
   ]);
@@ -4569,6 +4831,7 @@ async function resolveAssessmentCreditStateForUser(
     grants,
     dailyReservationCount,
     extraReservationCount,
+    platformDailyUsage,
   });
 
   return {
@@ -4613,7 +4876,9 @@ function buildAdminAssessmentCreditCommittedFallbackState(input: {
    helper read-only so browser state stays informational and all consumption authority remains in
    reserve/commit transaction paths. */
 export async function getAssessmentDailyCreditsSummaryForUser(
-  user: Pick<SessionUser, "uid" | "role">,
+  user: Pick<SessionUser, "uid" | "role"> & {
+    email?: string | null;
+  },
 ) {
   const state = await resolveAssessmentCreditStateForUser(user);
   return state.summary;
@@ -4623,7 +4888,9 @@ export async function getAssessmentDailyCreditsSummaryForUser(
    adds server-owned grant and mutation detail from the repository. Future agents: keep the
    total balance sourced from `state.summary` so detail UI never becomes a competing truth path. */
 export async function getAssessmentCreditDetailsForUser(
-  user: Pick<SessionUser, "uid" | "role">,
+  user: Pick<SessionUser, "uid" | "role"> & {
+    email?: string | null;
+  },
 ) {
   const computedAt = toIsoTimestamp(new Date());
   const [state, history] = await Promise.all([
@@ -5627,6 +5894,11 @@ export async function reserveAssessmentDailyCreditAttempt(
   const creditWindow = resolveAssessmentDailyCreditWindow(now);
 
   if (isAssessmentDailyCreditsExempt(user.role)) {
+    const platformDailyUsage = await buildAssessmentPlatformDailyUsageForUser({
+      user,
+      creditWindow,
+      nowIso,
+    });
     return {
       ok: true,
       reservation: null,
@@ -5635,6 +5907,7 @@ export async function reserveAssessmentDailyCreditAttempt(
         dayKey: creditWindow.dayKey,
         usedCount: 0,
         resetsAt: creditWindow.resetsAt,
+        platformDailyUsage,
       }),
     };
   }
@@ -6122,6 +6395,11 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
     }
 
     const creditWindow = resolveAssessmentDailyCreditWindow(new Date());
+    const platformDailyUsage = await buildAssessmentPlatformDailyUsageForUser({
+      user: input.user,
+      creditWindow,
+      nowIso: normalizedRecord.updatedAt,
+    });
     return {
       generation: normalizedRecord,
       credits: buildAssessmentDailyCreditsSummary({
@@ -6129,6 +6407,7 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
         dayKey: creditWindow.dayKey,
         usedCount: 0,
         resetsAt: creditWindow.resetsAt,
+        platformDailyUsage,
       }),
     };
   }

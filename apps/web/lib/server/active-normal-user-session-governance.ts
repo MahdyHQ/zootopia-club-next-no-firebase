@@ -2,7 +2,10 @@ import "server-only";
 
 import type { UserRole } from "@zootopia/shared-types";
 
-import { isAllowlistedAdminEmail } from "@/lib/server/admin-auth";
+import {
+  getAllowlistedAdminEmails,
+  isAllowlistedAdminEmail,
+} from "@/lib/server/admin-auth";
 import { getZootopiaSql } from "@/lib/server/zootopia-postgres-adapter";
 
 export type ActiveNormalUserAdmissionReason =
@@ -54,6 +57,10 @@ function normalizeEmail(value: string | null | undefined) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function isValidEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 function parseBoundedInteger(input: {
   raw: string | undefined;
   fallback: number;
@@ -84,12 +91,34 @@ function parseBoundedInteger(input: {
 }
 
 function readConfiguredExemptEmails(raw: string | undefined) {
-  const fromEnv = readEnv(raw)
+  const normalizedEnvValue = readEnv(raw);
+  const fromEnv = normalizedEnvValue
     .split(",")
-    .map((value) => normalizeEmail(value))
-    .filter((value): value is string => value !== null);
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .flatMap((value) => {
+      const normalized = normalizeEmail(value);
+      if (!normalized) {
+        return [];
+      }
+
+      if (!isValidEmailAddress(normalized)) {
+        console.warn(
+          `[active-normal-user-session-governance] Ignoring malformed ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS entry "${value}".`,
+        );
+        return [];
+      }
+
+      return [normalized];
+    });
 
   return Array.from(new Set([REQUIRED_EXEMPT_EMAIL, ...fromEnv]));
+}
+
+function getCapacityExcludedEmails(config: ActiveNormalUserAdmissionConfig) {
+  return Array.from(
+    new Set([...config.exemptEmails, ...getAllowlistedAdminEmails()]),
+  );
 }
 
 function buildSnapshot(input: {
@@ -181,12 +210,26 @@ async function purgeExpiredLeases(sql: ReturnType<typeof getZootopiaSql>) {
   `;
 }
 
-async function readActiveNormalUserCount(sql: ReturnType<typeof getZootopiaSql>) {
-  const rows = await sql`
-    SELECT COUNT(*)::int AS count
-    FROM public.active_normal_user_sessions
-    WHERE lease_expires_at > NOW()
-  `;
+async function readActiveNormalUserCount(
+  sql: ReturnType<typeof getZootopiaSql>,
+  config: ActiveNormalUserAdmissionConfig,
+) {
+  const excludedEmails = getCapacityExcludedEmails(config);
+  /* Live occupancy must exclude exempt/admin emails at read time as well as admission time.
+     This protects the /login capacity snapshot from stale exempt leases that would otherwise
+     crowd out real normal-user seats after a role change or env-based exemption update. */
+  const rows = excludedEmails.length > 0
+    ? await sql`
+        SELECT COUNT(*)::int AS count
+        FROM public.active_normal_user_sessions
+        WHERE lease_expires_at > NOW()
+          AND (email IS NULL OR email != ALL(${excludedEmails}))
+      `
+    : await sql`
+        SELECT COUNT(*)::int AS count
+        FROM public.active_normal_user_sessions
+        WHERE lease_expires_at > NOW()
+      `;
 
   const row = rows[0] as { count?: unknown } | undefined;
   return sanitizePositiveCount(row?.count ?? 0);
@@ -255,7 +298,7 @@ export async function readActiveNormalUserCapacitySnapshot() {
     await acquireCapacityLock(txSql);
     await purgeExpiredLeases(txSql);
 
-    const activeNormalUsers = await readActiveNormalUserCount(txSql);
+    const activeNormalUsers = await readActiveNormalUserCount(txSql, config);
     return buildSnapshot({
       activeNormalUsers,
       maxActiveNormalUsers: config.maxActiveNormalUsers,
@@ -296,7 +339,7 @@ export async function evaluateActiveNormalUserAdmissionByEmail(input: {
     await acquireCapacityLock(txSql);
     await purgeExpiredLeases(txSql);
 
-    const activeNormalUsers = await readActiveNormalUserCount(txSql);
+    const activeNormalUsers = await readActiveNormalUserCount(txSql, config);
     const snapshot = buildSnapshot({
       activeNormalUsers,
       maxActiveNormalUsers: config.maxActiveNormalUsers,
@@ -384,7 +427,7 @@ export async function reserveOrRenewActiveNormalUserSessionLease(input: {
         WHERE uid = ${uid}
       `;
 
-      const activeNormalUsers = await readActiveNormalUserCount(txSql);
+      const activeNormalUsers = await readActiveNormalUserCount(txSql, config);
       return {
         allowed: true,
         exempt: false,
@@ -397,7 +440,7 @@ export async function reserveOrRenewActiveNormalUserSessionLease(input: {
       } satisfies ActiveNormalUserAdmissionDecision;
     }
 
-    const activeNormalUsers = await readActiveNormalUserCount(txSql);
+    const activeNormalUsers = await readActiveNormalUserCount(txSql, config);
     if (activeNormalUsers >= config.maxActiveNormalUsers) {
       return {
         allowed: false,

@@ -3,6 +3,7 @@ import "server-only";
 import type {
   AssessmentCreditAccountAccess,
   AssessmentDailyCreditsSummary,
+  AssessmentPlatformDailyUsageSummary,
   UserRole,
 } from "@zootopia/shared-types";
 
@@ -14,11 +15,16 @@ export const ASSESSMENT_DAILY_SUCCESS_LIMIT_ENV_KEY =
   "ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS";
 export const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_ENV_KEY =
   "ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS";
+export const PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_ENV_KEY =
+  "ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT";
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MIN = 1;
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MAX = 1000;
 const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_FALLBACK = 24;
 const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MIN = 1;
 const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MAX = 168;
+const PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_FALLBACK = 33;
+const PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MIN = 1;
+const PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MAX = 10_000;
 const ASSESSMENT_RENEWAL_WINDOW_KEY_PREFIX = "utc";
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
@@ -35,6 +41,36 @@ function parsePositiveInteger(value: unknown) {
   }
 
   return parsed;
+}
+
+function parsePositiveIntegerEnv(input: {
+  raw: string | undefined;
+  fallback: number;
+  min: number;
+  max: number;
+  envKey: string;
+  logPrefix: string;
+}) {
+  const value = String(input.raw ?? "").trim();
+  if (!value) {
+    return input.fallback;
+  }
+
+  const parsed = parsePositiveInteger(value);
+  if (!parsed) {
+    console.warn(
+      `[${input.logPrefix}] Invalid ${input.envKey} value "${value}", using ${input.fallback}.`,
+    );
+    return input.fallback;
+  }
+
+  if (parsed < input.min || parsed > input.max) {
+    console.warn(
+      `[${input.logPrefix}] ${input.envKey}=${parsed} is outside ${input.min}-${input.max}, clamping.`,
+    );
+  }
+
+  return Math.min(input.max, Math.max(input.min, parsed));
 }
 
 export function getDefaultDailyAssessmentCreditsLimit() {
@@ -63,6 +99,17 @@ export function getAssessmentCreditRenewalWindowHours() {
     ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MAX,
     Math.max(ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MIN, parsed),
   );
+}
+
+export function getPlatformGlobalDailyCreditLimit() {
+  return parsePositiveIntegerEnv({
+    raw: process.env[PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_ENV_KEY],
+    fallback: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_FALLBACK,
+    min: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MIN,
+    max: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MAX,
+    envKey: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_ENV_KEY,
+    logPrefix: "assessment-daily-credits",
+  });
 }
 
 export function normalizeAssessmentDailyLimitOverride(value: unknown) {
@@ -307,6 +354,42 @@ export function filterActiveAssessmentDailyCreditReservations(
   });
 }
 
+export function buildAssessmentPlatformDailyUsageSummary(input: {
+  dayKey: string;
+  usedCount: number;
+  resetsAt: string;
+  limit?: number;
+  isAdminExempt?: boolean;
+  isEmailExempt?: boolean;
+}) {
+  const limit = Math.min(
+    PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MAX,
+    Math.max(
+      PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MIN,
+      Math.round(input.limit ?? getPlatformGlobalDailyCreditLimit()),
+    ),
+  );
+  const usedCount = Math.max(0, Math.round(input.usedCount));
+  const isAdminExempt = input.isAdminExempt === true;
+  const isEmailExempt = !isAdminExempt && input.isEmailExempt === true;
+  const applies = !isAdminExempt && !isEmailExempt;
+  const remainingCount = Math.max(limit - usedCount, 0);
+  const reached = usedCount >= limit;
+
+  return {
+    applies,
+    isAdminExempt,
+    isEmailExempt,
+    dayKey: input.dayKey,
+    limit,
+    usedCount,
+    remainingCount,
+    reached,
+    locked: applies && reached,
+    resetsAt: input.resetsAt,
+  } satisfies AssessmentPlatformDailyUsageSummary;
+}
+
 export function buildAssessmentDailyCreditsSummary(input: {
   role: UserRole;
   dayKey: string;
@@ -321,6 +404,7 @@ export function buildAssessmentDailyCreditsSummary(input: {
   grantCreditsAvailable?: number;
   extraReservationCount?: number;
   activeGrantCount?: number;
+  platformDailyUsage: AssessmentPlatformDailyUsageSummary;
 }) {
   const dailyDefaultLimit =
     normalizeAssessmentDailyLimitOverride(input.dailyDefaultLimit)
@@ -363,6 +447,7 @@ export function buildAssessmentDailyCreditsSummary(input: {
       totalRemainingCount: null,
       remainingCount: null,
       resetsAt: input.resetsAt,
+      platformDailyUsage: input.platformDailyUsage,
     } satisfies AssessmentDailyCreditsSummary;
   }
 
@@ -383,5 +468,6 @@ export function buildAssessmentDailyCreditsSummary(input: {
     totalRemainingCount,
     remainingCount: totalRemainingCount,
     resetsAt: input.resetsAt,
+    platformDailyUsage: input.platformDailyUsage,
   } satisfies AssessmentDailyCreditsSummary;
 }
