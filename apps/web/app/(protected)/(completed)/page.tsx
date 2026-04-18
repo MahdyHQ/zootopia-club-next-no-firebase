@@ -27,6 +27,7 @@ import {
 } from "@/lib/server/repository";
 import { requireCompletedUser } from "@/lib/server/session";
 import { PlatformStoryCta } from "@/components/home/platform-story-cta";
+import { LectureSummaryComingSoonTeaser } from "@/components/home/lecture-summary-coming-soon-teaser";
 import { Button } from "@/components/ui/button";
 
 export default async function HomePage() {
@@ -189,6 +190,8 @@ export default async function HomePage() {
         <div className="relative z-10 px-5 pt-4 md:px-10 md:pt-6">
           <PlatformStoryCta />
         </div>
+
+        <LectureSummaryComingSoonTeaser />
 
         {/* ── Runtime status pills + scroll hint ───────────────────── */}
         <div className="relative z-10 flex flex-col gap-3 px-5 pb-5 pt-5 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-4 md:px-10 md:pb-8 md:pt-8">

@@ -3781,3 +3781,91 @@ Command verification:
 Runtime proof:
 ~ No interactive browser QA pass executed in this environment for this patch.
 ~ Verification is code-traced plus lint/typecheck/build/build:vercel passes.
+
+2026-04-18: PROTECTED ARABIC-FIRST LECTURE-SUMMARY COMING-SOON TEASER + DEDICATED PAGE + REAL SAMPLE DOWNLOAD
+────────────────────────────────────────────────────────────────────────────
+
+ROOT REQUEST:
+- Add a minimal-risk protected teaser for a coming intelligent lecture-summary
+  tool, targeted as a first-visit/new-user discovery surface.
+- Add a dedicated protected coming-soon page with Arabic-first visible copy,
+  explicit premium donation rationale, official contact handoff, and a working
+  downloadable sample summary file.
+- Preserve backend/session/auth/admission authority boundaries and avoid
+  architecture redesign.
+
+FILES CHANGED:
+- packages/shared-config/src/routes.ts
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/components/home/lecture-summary-coming-soon-teaser.tsx (new)
+- apps/web/app/(protected)/(completed)/lecture-summary/page.tsx (new)
+- apps/web/public/samples/lecture-summary-sample-ar.txt (new)
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+TECHNICAL DETAILS:
+1. New protected route constant and page ownership
+   - Added `APP_ROUTES.lectureSummary = "/lecture-summary"`.
+   - Implemented `apps/web/app/(protected)/(completed)/lecture-summary/page.tsx`.
+   - Page remains fully inside protected/completed route ownership and calls
+     `requireCompletedUser(APP_ROUTES.lectureSummary)` to preserve existing
+     server-side access gate semantics.
+
+2. New-user teaser behavior on protected Home
+   - Added `LectureSummaryComingSoonTeaser` to
+     `apps/web/app/(protected)/(completed)/page.tsx` directly under existing
+     platform-story CTA section, keeping navigation/sidebar unchanged.
+   - Teaser is intentionally client-local and non-authoritative:
+     dismissal is persisted via localStorage key
+     `zootopia:lecture-summary:teaser:dismissed:v1`.
+   - This keeps UX contextual and low-noise without introducing new backend
+     state, auth/session mutation, or cross-device authority assumptions.
+
+3. Dedicated Arabic-first coming-soon experience
+   - New page copy is intentionally Arabic-first for both teaser and route
+     surface, centered on the upcoming intelligent lecture-summary capability.
+   - Added clear product-intent blocks (what the tool will do, expected output,
+     and readiness framing) without exposing fake runtime behavior.
+
+4. Donation/contact/download CTA integration (official paths only)
+   - Donation CTA links to `APP_ROUTES.donation`.
+   - Support/help CTA links to `APP_ROUTES.contact` (official existing path).
+   - Download CTA links to a real static file in public:
+     `/samples/lecture-summary-sample-ar.txt`.
+
+5. Real sample artifact added
+   - Created `apps/web/public/samples/lecture-summary-sample-ar.txt` with an
+     actual structured Arabic summary sample and review questions.
+   - Route-level download uses a direct anchor + `download` attribute to keep
+     delivery deterministic and avoid introducing temporary API handlers.
+
+ARCHITECTURE / SAFETY GUARANTEES:
+- No backend route logic changed.
+- No auth/session/admission/capacity code changed.
+- No role/permission authority changes.
+- No DB schema/RLS/migration changes.
+- No protected-shell/nav architecture replacement.
+
+RISKS / FOLLOW-UP:
+1. Teaser dismissal is browser-local by design.
+   - This is intentional for low-risk contextual UX and avoids new server state.
+   - If future product policy requires cross-device persistence, add a dedicated
+     server-owned preference field with explicit migration and authority review.
+
+VERIFICATION:
+Diagnostics verification:
+✓ `get_errors` on all touched code files — PASS.
+
+Command verification:
+✓ `npm run lint` — PASS.
+✓ `npm run typecheck` — PASS.
+✓ `npm run build` — PASS.
+✓ `npm run build:vercel` — PASS.
+
+Runtime notes:
+~ Build logs still include the pre-existing operational warning:
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
+~ Warning is unchanged by this feature and outside this UI-only scope.

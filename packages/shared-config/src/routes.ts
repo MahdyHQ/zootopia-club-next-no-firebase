@@ -17,6 +17,7 @@ export const APP_ROUTES = {
   globalCredits: "/credits",
   assessment: "/assessment",
   assessmentCredits: "/assessment/credits",
+  lectureSummary: "/lecture-summary",
   infographic: "/infographic",
   settings: "/settings",
   admin: "/admin",
