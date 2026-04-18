@@ -1,7 +1,7 @@
 "use client";
 
 import { APP_ROUTES } from "@zootopia/shared-config";
-import { ArrowUpLeft, Sparkles, X } from "lucide-react";
+import { ArrowUpLeft, Gift, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -50,7 +50,7 @@ export function LectureSummaryComingSoonTeaser() {
     <div className="relative z-10 px-5 pt-4 md:px-10 md:pt-6">
       <section
         dir="rtl"
-        className="relative overflow-hidden rounded-[1.8rem] border border-cyan-300/18 bg-[linear-gradient(135deg,rgba(22,78,99,0.92),rgba(15,23,42,0.94))] p-5 shadow-[0_22px_56px_rgba(3,7,18,0.36)]"
+        className="relative overflow-hidden rounded-[1.8rem] border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(12,74,110,0.94),rgba(15,23,42,0.95))] p-5 shadow-[0_24px_60px_rgba(3,7,18,0.38)]"
       >
         <div
           aria-hidden
@@ -58,7 +58,7 @@ export function LectureSummaryComingSoonTeaser() {
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-20 left-[-2.25rem] h-48 w-48 rounded-full bg-sky-300/12 blur-3xl"
+          className="pointer-events-none absolute -bottom-20 left-[-2.25rem] h-48 w-48 rounded-full bg-fuchsia-300/15 blur-3xl"
         />
 
         <button
@@ -72,10 +72,16 @@ export function LectureSummaryComingSoonTeaser() {
         </button>
 
         <div className="relative z-10 max-w-3xl space-y-4 pe-8">
-          <p className="inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/15 px-3 py-1 text-[10px] font-black tracking-[0.16em] text-cyan-50">
-            <Sparkles className="h-3.5 w-3.5" />
-            ميزة جديدة قادمة
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/15 px-3 py-1 text-[10px] font-black tracking-[0.16em] text-cyan-50">
+              <Sparkles className="h-3.5 w-3.5" />
+              ميزة جديدة قادمة
+            </p>
+            <p className="inline-flex items-center gap-2 rounded-full border border-fuchsia-200/35 bg-fuchsia-400/15 px-3 py-1 text-[10px] font-black tracking-[0.14em] text-fuchsia-100">
+              <Gift className="h-3.5 w-3.5" />
+              هدية تجربة قريباً
+            </p>
+          </div>
 
           <h2 className="font-[family-name:var(--font-display)] text-2xl font-black tracking-tight text-white sm:text-[1.8rem]">
             ملخص المحاضرات الذكي أصبح أقرب من أي وقت
@@ -90,8 +96,11 @@ export function LectureSummaryComingSoonTeaser() {
           <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
             <Link
               href={APP_ROUTES.lectureSummary}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-200/55 bg-white px-4 py-2.5 text-sm font-black text-sky-900 transition-all hover:-translate-y-0.5 hover:bg-cyan-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-200/55 bg-white px-4 py-2.5 text-sm font-black text-sky-900 shadow-[0_10px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-0.5 hover:bg-cyan-50"
             >
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-fuchsia-300/45 bg-fuchsia-100 text-fuchsia-700">
+                <Gift className="h-3.5 w-3.5" />
+              </span>
               افتح صفحة الميزة
               <ArrowUpLeft className="h-4 w-4" />
             </Link>

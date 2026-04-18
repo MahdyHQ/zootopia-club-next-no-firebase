@@ -1,8 +1,14 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import {
   ArrowDownToLine,
+  BadgeCheck,
+  BookOpen,
   ChevronRight,
+  Eye,
+  Gift,
   HandCoins,
+  Lightbulb,
+  ListChecks,
   Mail,
   Rocket,
   Sparkles,
@@ -13,13 +19,33 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { requireCompletedUser } from "@/lib/server/session";
 
-const SAMPLE_SUMMARY_DOWNLOAD_SRC = "/samples/lecture-summary-sample-ar.txt";
+const LECTURE_SUMMARY_PREVIEW_IMAGE_SRC = "/coming-soon.png";
+const LECTURE_SUMMARY_PREVIEW_IMAGE_DOWNLOAD_NAME =
+  "zootopia-lecture-summary-preview.png";
 
 const LECTURE_SUMMARY_FEATURE_ITEMS = [
-  "استخراج نقاط المحاضرة الأساسية بشكل واضح ومباشر.",
-  "تنظيم الملخص إلى أقسام: المفاهيم، القوانين، والخلاصة النهائية.",
-  "اقتراح أسئلة مراجعة سريعة مرتبطة بكل جزء داخل الملخص.",
-  "تهيئة المخرجات بصيغة جاهزة للمذاكرة والطباعة أو الحفظ.",
+  {
+    icon: Lightbulb,
+    text: "استخراج نقاط المحاضرة الأساسية بشكل واضح ومباشر.",
+  },
+  {
+    icon: ListChecks,
+    text: "تنظيم الملخص إلى أقسام: المفاهيم، القوانين، والخلاصة النهائية.",
+  },
+  {
+    icon: BookOpen,
+    text: "اقتراح أسئلة مراجعة سريعة مرتبطة بكل جزء داخل الملخص.",
+  },
+  {
+    icon: BadgeCheck,
+    text: "تهيئة المخرجات بصيغة جاهزة للمذاكرة والطباعة أو الحفظ.",
+  },
+] as const;
+
+const LECTURE_SUMMARY_SUPPORT_POINTS = [
+  "توسيع البنية الإنتاجية لتقديم أداء أسرع عند ضغط الاستخدام.",
+  "تجهيز موارد المعالجة المطلوبة لضمان جودة أعلى في المخرجات.",
+  "رفع جاهزية التكامل مع بقية أدوات زوتوبيا كلوب داخل المسار المحمي.",
 ] as const;
 
 export default async function LectureSummaryComingSoonPage() {
@@ -27,55 +53,132 @@ export default async function LectureSummaryComingSoonPage() {
 
   return (
     <div dir="rtl" className="min-w-0 space-y-5 pb-6 sm:space-y-6 sm:pb-8">
-      <section className="relative overflow-hidden rounded-[2rem] border border-cyan-300/18 bg-[linear-gradient(145deg,rgba(8,47,73,0.95),rgba(15,23,42,0.96))] p-5 shadow-[0_24px_64px_rgba(2,6,23,0.34)] sm:rounded-[2.3rem] sm:p-8 lg:p-10">
+      <section className="relative overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[linear-gradient(145deg,rgba(8,47,73,0.96),rgba(15,23,42,0.97))] p-4 shadow-[0_24px_64px_rgba(2,6,23,0.36)] sm:rounded-[2.35rem] sm:p-6 lg:p-8">
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-cyan-300/20 blur-3xl"
+          className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-300/20 blur-3xl"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-20 left-[-3rem] h-56 w-56 rounded-full bg-sky-300/12 blur-3xl"
+          className="pointer-events-none absolute -bottom-24 left-[-4rem] h-72 w-72 rounded-full bg-sky-300/12 blur-3xl"
         />
 
-        <div className="relative z-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(270px,0.78fr)] lg:items-center">
-          <div className="space-y-4">
+        <div className="relative z-10 space-y-4 sm:space-y-5">
+          <div className="flex flex-wrap items-center gap-2">
             <p className="inline-flex items-center gap-2 rounded-full border border-cyan-200/35 bg-cyan-300/15 px-3 py-1 text-[10px] font-black tracking-[0.16em] text-cyan-50">
               <Sparkles className="h-3.5 w-3.5" />
               قريباً داخل مساحة العمل
             </p>
+            <p className="inline-flex items-center gap-2 rounded-full border border-fuchsia-200/35 bg-fuchsia-300/15 px-3 py-1 text-[10px] font-black tracking-[0.14em] text-fuchsia-100">
+              <Gift className="h-3.5 w-3.5" />
+              معاينة هدية بصرية
+            </p>
+          </div>
 
-            <h1 className="max-w-2xl font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-white sm:text-4xl">
-              ملخص المحاضرات الذكي
-            </h1>
+          <h1 className="max-w-3xl font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-white sm:text-[2.5rem]">
+            ملخص المحاضرات الذكي
+          </h1>
 
-            <p className="max-w-2xl text-sm leading-7 text-cyan-50/90 sm:text-base sm:leading-8">
-              نعمل حالياً على إطلاق أداة ذكية تحول محتوى المحاضرة إلى ملخص دقيق
-              ومنظم يخدم المذاكرة السريعة. الهدف هو تقليل وقت الفرز اليدوي وتمكينك
-              من الوصول المباشر لأهم النقاط العلمية في دقائق.
+          <p className="max-w-3xl text-sm leading-7 text-cyan-50/90 sm:text-base sm:leading-8">
+            نعمل حالياً على إطلاق أداة ذكية تحول محتوى المحاضرة إلى ملخص دقيق
+            ومنظم يخدم المذاكرة السريعة. الهدف هو تقليل وقت الفرز اليدوي وتمكينك
+            من الوصول المباشر لأهم النقاط العلمية في دقائق.
+          </p>
+
+          {/* Keep the preview image as the visual hero so the page immediately communicates
+              the upcoming feature surface before users dive into the detailed explanatory cards. */}
+          <a
+            href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block"
+            aria-label="فتح معاينة الصورة بالحجم الكامل"
+          >
+            <div className="relative overflow-hidden rounded-[1.55rem] border border-white/28 bg-[linear-gradient(135deg,rgba(255,255,255,0.16),rgba(148,163,184,0.08))] p-2.5 shadow-[0_30px_70px_rgba(2,6,23,0.42)] sm:rounded-[1.8rem] sm:p-3.5">
+              <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-white/35 bg-slate-950/45 px-2.5 py-1 text-[10px] font-black tracking-[0.14em] text-cyan-100">
+                <Eye className="h-3.5 w-3.5" />
+                افتح المعاينة الكاملة
+              </span>
+              <Image
+                src={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
+                alt="واجهة انتظار ميزة ملخص المحاضرات الذكي"
+                width={1408}
+                height={768}
+                sizes="(max-width: 640px) 95vw, (max-width: 1024px) 92vw, 1100px"
+                className="h-auto w-full rounded-[1.2rem] object-cover object-center transition-transform duration-300 group-hover:scale-[1.01] sm:rounded-[1.35rem]"
+              />
+            </div>
+          </a>
+
+          <p className="inline-flex items-center gap-2 rounded-xl border border-cyan-200/20 bg-cyan-300/8 px-3 py-2 text-xs font-semibold text-cyan-50/95">
+            <Eye className="h-4 w-4" />
+            يمكنك فتح الصورة بالحجم الكامل أو تنزيلها مباشرة من أزرار المعاينة بالأسفل.
+          </p>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-white/15 bg-white/44 p-4 backdrop-blur-2xl dark:border-white/8 dark:bg-zinc-950/36 sm:p-6">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+          <article className="rounded-[1.4rem] border border-cyan-300/22 bg-white/70 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.08)] dark:border-cyan-300/20 dark:bg-slate-950/42 sm:p-5">
+            <h2 className="mb-2 inline-flex items-center gap-2 font-[family-name:var(--font-display)] text-xl font-black tracking-tight text-zinc-900 dark:text-white">
+              <BookOpen className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
+              تفاصيل الميزة عند الإطلاق
+            </h2>
+            <p className="text-sm leading-7 text-zinc-700 dark:text-zinc-300">
+              نحافظ على كثافة المحتوى حتى تكون الصفحة مفيدة فعلياً من الآن: ماذا ستقدم
+              الأداة، وكيف ستساعدك في المراجعة، وما نوع المخرجات التي تستهدفها هذه النسخة
+              قبل الإطلاق النهائي.
             </p>
 
-            <ul className="grid gap-2.5 text-sm text-cyan-50/95 sm:grid-cols-2">
+            <ul className="mt-4 grid gap-2.5 text-sm sm:grid-cols-2">
               {LECTURE_SUMMARY_FEATURE_ITEMS.map((item) => (
                 <li
-                  key={item}
-                  className="rounded-xl border border-white/16 bg-white/8 px-3.5 py-2.5 leading-6"
+                  key={item.text}
+                  className="rounded-xl border border-zinc-200/75 bg-white/78 p-3 leading-6 text-zinc-700 dark:border-white/10 dark:bg-slate-900/55 dark:text-zinc-200"
                 >
-                  {item}
+                  <span className="mb-1 inline-flex items-center gap-1.5 text-xs font-black tracking-[0.08em] text-cyan-700 dark:text-cyan-300">
+                    <item.icon className="h-3.5 w-3.5" />
+                    نقطة محورية
+                  </span>
+                  <p>{item.text}</p>
                 </li>
               ))}
             </ul>
-          </div>
+          </article>
 
-          <div className="relative mx-auto w-full max-w-[360px] overflow-hidden rounded-[1.5rem] border border-white/15 bg-white/10 p-3 shadow-[0_20px_52px_rgba(2,6,23,0.34)]">
-            <Image
-              src="/coming-soon.png"
-              alt="واجهة انتظار ميزة ملخص المحاضرات الذكي"
-              width={720}
-              height={720}
-              sizes="(max-width: 640px) 86vw, (max-width: 1024px) 62vw, 340px"
-              className="h-auto w-full rounded-[1.15rem] object-cover"
-            />
-          </div>
+          <article className="rounded-[1.4rem] border border-cyan-300/24 bg-[linear-gradient(145deg,rgba(236,254,255,0.86),rgba(224,242,254,0.62))] p-4 shadow-[0_16px_36px_rgba(14,116,144,0.12)] dark:border-cyan-300/20 dark:bg-[linear-gradient(145deg,rgba(8,47,73,0.6),rgba(15,23,42,0.62))] sm:p-5">
+            <h3 className="mb-2 inline-flex items-center gap-2 font-[family-name:var(--font-display)] text-xl font-black tracking-tight text-zinc-900 dark:text-white">
+              <ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
+              معاينة وتنزيل الصورة الرسمية
+            </h3>
+            <p className="text-sm leading-7 text-zinc-700 dark:text-zinc-300">
+              زر التحميل الآن يعمل مباشرة على صورة المعاينة الحقيقية الخاصة بالميزة،
+              بدون أي ملف نصي بديل. يمكنك إما فتحها في تبويب مستقل أو تنزيلها مباشرة.
+            </p>
+
+            <div className="mt-4 grid gap-2.5">
+              <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-cyan-300/45 bg-cyan-500/8 text-cyan-800 hover:bg-cyan-500/14 dark:text-cyan-200">
+                <a
+                  href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Eye className="h-4.5 w-4.5" />
+                  فتح الصورة في نافذة مستقلة
+                </a>
+              </Button>
+
+              <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-cyan-300/45 bg-cyan-500/10 text-cyan-800 hover:bg-cyan-500/16 dark:text-cyan-200">
+                <a
+                  href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
+                  download={LECTURE_SUMMARY_PREVIEW_IMAGE_DOWNLOAD_NAME}
+                >
+                  <ArrowDownToLine className="h-4.5 w-4.5" />
+                  تحميل صورة المعاينة
+                </a>
+              </Button>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -92,6 +195,18 @@ export default async function LectureSummaryComingSoonPage() {
           والموارد التقنية المطلوبة لإخراج الأداة في نسخة إنتاجية مستقرة وآمنة.
           كل مساهمة تساعدنا على تسريع الإطلاق وتحسين جودة النتائج.
         </p>
+
+        <ul className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+          {LECTURE_SUMMARY_SUPPORT_POINTS.map((point) => (
+            <li
+              key={point}
+              className="inline-flex items-start gap-2 rounded-xl border border-emerald-200/55 bg-emerald-50/70 px-3 py-2.5 text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-950/25 dark:text-emerald-200"
+            >
+              <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{point}</span>
+            </li>
+          ))}
+        </ul>
 
         {/* Keep funding/contact/download actions in one section so this teaser route
             remains the single trustworthy handoff surface for pre-release support. */}
@@ -110,12 +225,10 @@ export default async function LectureSummaryComingSoonPage() {
             </Link>
           </Button>
 
-          <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-cyan-300/40 bg-cyan-500/5 text-cyan-700 hover:bg-cyan-500/10 dark:text-cyan-300">
-            {/* The sample is a real static public file so download stays deterministic
-                without introducing temporary API routes or fake placeholders. */}
-            <a href={SAMPLE_SUMMARY_DOWNLOAD_SRC} download="zootopia-lecture-summary-sample-ar.txt">
-              <ArrowDownToLine className="h-4.5 w-4.5" />
-              تحميل عينة ملخص جاهزة
+          <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-cyan-300/40 bg-cyan-500/8 text-cyan-700 hover:bg-cyan-500/12 dark:text-cyan-300">
+            <a href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC} download={LECTURE_SUMMARY_PREVIEW_IMAGE_DOWNLOAD_NAME}>
+              <Gift className="h-4.5 w-4.5" />
+              تنزيل هدية المعاينة
             </a>
           </Button>
         </div>

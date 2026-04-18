@@ -3869,3 +3869,87 @@ Runtime notes:
 ~ Build logs still include the pre-existing operational warning:
   `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
 ~ Warning is unchanged by this feature and outside this UI-only scope.
+
+2026-04-18: LECTURE-SUMMARY UI POLISH PASS (IMAGE-FIRST HERO + TEASER GIFT ICON + REAL IMAGE DOWNLOAD)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE / DESIGN ISSUE:
+- The protected `lecture-summary` page was functionally correct but visually
+  text-dominant: the preview image existed yet did not lead the page hierarchy.
+- Text richness was present, but grouping/scanning rhythm was flatter than the
+  surrounding premium surfaces.
+- The download CTA still pointed to a text sample file, creating mismatch with
+  user expectation for a visual coming-soon preview.
+- The linked home teaser needed a stronger premium accent connection to the
+  page, specifically a visible gift marker.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/lecture-summary/page.tsx
+- apps/web/components/home/lecture-summary-coming-soon-teaser.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+TECHNICAL DETAILS:
+1. Image-first hero conversion on protected page
+   - Elevated `/coming-soon.png` to a dominant hero block with larger frame,
+     richer shadow depth, and top-level placement before detail cards.
+   - Updated image dimensions to real asset ratio (`1408x768`) and responsive
+     `sizes` tuned for mobile/tablet/desktop.
+   - Added direct preview-open affordance on the hero image itself.
+
+2. Text presentation improvement without reducing content richness
+   - Preserved core Arabic-first meaning and expanded structure into cleaner
+     premium cards:
+     - feature-details card with icon-led points,
+     - dedicated preview/download explainer card,
+     - support-impact card with checklisted operational value points.
+   - Improved hierarchy with stronger section headings, badges, spacing, and
+     scan-friendly card rhythm.
+
+3. Download behavior fix (real image, no txt placeholder)
+   - Replaced txt-based download target with the real preview image source:
+     `LECTURE_SUMMARY_PREVIEW_IMAGE_SRC = "/coming-soon.png"`.
+   - Added explicit open-preview action and image-download action using:
+     `download="zootopia-lecture-summary-preview.png"`.
+   - Removed old lecture-summary txt download usage from the page.
+
+4. Home teaser premium refinement + gift icon
+   - Added visible gift accent treatment in
+     `lecture-summary-coming-soon-teaser.tsx` using `Gift` icon in:
+     - badge lane (`هدية تجربة قريباً`),
+     - primary CTA icon chip.
+   - Kept teaser behavior/routing unchanged (same localStorage dismissal,
+     same protected-page link).
+
+5. Architecture/safety boundaries preserved
+   - No backend/auth/session/permissions changes.
+   - No route ownership changes; protected gate remains via
+     `requireCompletedUser(APP_ROUTES.lectureSummary)`.
+   - No unrelated page redesign.
+
+VERIFICATION:
+Diagnostics verification:
+✓ `get_errors` on changed files — PASS.
+
+Behavior/code-trace verification:
+✓ Protected lecture-summary route still built and listed in production build.
+✓ Hero image now primary visual lane (larger, top-level, dedicated preview frame).
+✓ Content richness preserved and reorganized into premium cards (no emptying pass).
+✓ Home teaser contains a clearly visible premium gift icon treatment.
+✓ Download/open actions now target `/coming-soon.png` (no txt placeholder path).
+✓ Responsive classes verified for mobile/desktop composition (`sm:`/`lg:` grids,
+  tuned `sizes`, adaptive spacing).
+
+Command verification:
+✓ `npm run lint` — PASS.
+✓ `npm run typecheck` — PASS.
+✓ `npm run build` — PASS.
+✓ `npm run build:vercel` — PASS.
+
+Runtime notes:
+~ Existing warning remains unchanged during build:
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
+~ Warning is pre-existing and outside this UI refinement scope.
