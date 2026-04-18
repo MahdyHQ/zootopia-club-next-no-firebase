@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Session capacity renewal/logout audit recorded)
+Last Updated: 2026-04-18 (Repository daily-credit TypeScript build fix recorded)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -2698,3 +2698,60 @@ FILES CHANGED:
 VERIFICATION:
 - Code-path audit only; no runtime code changes were made.
 - No lint/type/build run was needed for this audit-only ledger refresh.
+
+2026-04-18: BUILD FIX — LEGACY DAILY-CREDIT OWNER UID NARROWING + DAY-RECORD PREDICATE ALIGNMENT
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. The legacy daily-credit day-list mapper in
+   `apps/web/lib/server/repository.ts` read `documentSnapshot.data().ownerUid`
+   through repeated property access where snapshot fields are typed as
+   `unknown`, so the Next.js build TypeScript pass failed with:
+   `Type 'unknown' is not assignable to type 'string'`.
+2. After fixing that guard, TypeScript then surfaced a latent contract mismatch
+   in two `AssessmentDailyCreditLedgerDayRecord` filter predicates: the mapper
+   parameter type carried a normalized full ledger record while the predicate
+   target type uses `Partial<AssessmentDailyCreditLedgerDocument>`.
+
+CHANGES:
+1. In `listLegacyAssessmentDailyCreditLedgerRecordsForDay(...)`:
+   - Captured `documentSnapshot.data()` once into `documentData`.
+   - Added a local owner UID guard that narrows safely:
+     `const ownerUid = typeof documentData.ownerUid === "string" ? ... : ""`.
+   - Reused `documentData` for the normalize input record cast.
+2. In both day-list map paths that feed
+   `AssessmentDailyCreditLedgerDayRecord` filters:
+   - Kept runtime behavior unchanged.
+   - Aligned TypeScript contract by returning `record` as
+     `Partial<AssessmentDailyCreditLedgerDocument>`.
+
+FILES CHANGED:
+- apps/web/lib/server/repository.ts
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Resolve the exact production build blocker reported by the repository
+  TypeScript phase while preserving existing credit-ledger runtime behavior.
+- Keep the fix surgical and fully backward-compatible.
+
+TECHNICAL DETAILS:
+- The normalization path remains unchanged: legacy and structured rows still
+  converge through `normalizeAssessmentDailyCreditLedger(...)`.
+- No auth/session/credit authority logic changed.
+- No API contracts changed.
+
+RISKS / FOLLOW-UP:
+- Low risk: this patch is type-safety alignment in mapper glue code only.
+- If the day-record alias is later tightened from `Partial` to full ledger
+  ownership, all mapper return sites should be updated consistently in one pass.
+
+VERIFICATION:
+Diagnostics:
+✓ `get_errors` on `apps/web/lib/server/repository.ts` — PASS.
+
+Command verification:
+✓ `npm run build` — PASS (root workspace build, including Next.js TypeScript pass in `@zootopia/web`).

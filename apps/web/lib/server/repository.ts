@@ -3591,19 +3591,19 @@ async function listLegacyAssessmentDailyCreditLedgerRecordsForDay(input: {
 
   return snapshot.docs
     .map((documentSnapshot) => {
+      // Keep one stable snapshot payload so the ownerUid type guard narrows reliably.
+      const documentData = documentSnapshot.data();
+      const ownerUid = typeof documentData.ownerUid === "string" ? documentData.ownerUid : "";
       const record = normalizeAssessmentDailyCreditLedger({
-        ownerUid:
-          typeof documentSnapshot.data()?.ownerUid === "string"
-            ? documentSnapshot.data().ownerUid
-            : "",
+        ownerUid,
         dayKey: input.dayKey,
-        record: documentSnapshot.data() as Partial<AssessmentDailyCreditLedgerDocument>,
+        record: documentData as Partial<AssessmentDailyCreditLedgerDocument>,
         nowIso: input.nowIso,
       });
       return record.ownerUid
         ? {
             ownerUid: record.ownerUid,
-            record,
+            record: record as Partial<AssessmentDailyCreditLedgerDocument>,
           }
         : null;
     })
@@ -3746,7 +3746,7 @@ async function listAssessmentDailyCreditLedgersForDay(input: {
           dayKey: input.dayKey,
           record: preferredRecord,
           nowIso: input.nowIso,
-        }),
+        }) as Partial<AssessmentDailyCreditLedgerDocument>,
       };
     })
     .filter((entry): entry is AssessmentDailyCreditLedgerDayRecord => Boolean(entry));
