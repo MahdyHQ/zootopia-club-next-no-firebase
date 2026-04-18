@@ -91,7 +91,7 @@ export default async function HistoryPage() {
     historyDataLoadDegraded || previewParseResults.some((result) => !result.ok);
 
   return (
-    <div className="space-y-8">
+    <div className="min-w-0 space-y-8">
       {historyDataDegraded ? (
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-200">
           Some history records are temporarily unavailable. Showing best-effort results.
@@ -137,14 +137,14 @@ export default async function HistoryPage() {
               {documents.map((document) => (
                 <article
                   key={document.id}
-                  className="rounded-[1.4rem] border border-border bg-background-elevated/72 px-5 py-4 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
+                  className="w-full min-w-0 max-w-full overflow-hidden rounded-[1.4rem] border border-border bg-background-elevated/72 px-5 py-4 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
                 >
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0 xl:flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         {/* History file names must wrap first, then clamp with ellipsis to keep card rhythm and avoid narrow-screen overflow. */}
                         <p
-                          className="min-w-0 w-full max-w-full line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1"
+                          className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:line-clamp-2 sm:text-base sm:leading-6"
                           title={document.fileName}
                         >
                           {document.fileName}
@@ -195,14 +195,14 @@ export default async function HistoryPage() {
               {previews.map((preview) => (
                 <article
                   key={preview.id}
-                  className="rounded-[1.4rem] border border-border bg-background-elevated/72 px-5 py-5 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
+                  className="w-full min-w-0 max-w-full overflow-hidden rounded-[1.4rem] border border-border bg-background-elevated/72 px-5 py-5 transition-all hover:border-emerald-500/15 hover:shadow-sm sm:px-6"
                 >
                   <div className="flex flex-col gap-5">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         {/* Generated result names stay in-card by wrapping first and clamping with ellipsis only when they exceed the visual budget. */}
                         <p
-                          className="min-w-0 w-full max-w-full line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1"
+                          className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:line-clamp-2 sm:text-base sm:leading-6"
                           title={preview.title}
                         >
                           {preview.title}
@@ -212,7 +212,7 @@ export default async function HistoryPage() {
                         </span>
                       </div>
                       <p
-                        className="mt-2 break-words text-sm leading-6 text-foreground-muted [overflow-wrap:anywhere]"
+                        className="mt-2 line-clamp-2 break-words text-xs leading-5 text-foreground-muted [overflow-wrap:anywhere] sm:line-clamp-3 sm:text-sm sm:leading-6"
                         title={preview.summary}
                       >
                         {buildCardTextPreview(preview.summary, 220)}

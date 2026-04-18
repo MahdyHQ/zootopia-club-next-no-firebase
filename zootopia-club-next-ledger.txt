@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-17 (Shared title overflow finalization: wrap-first + ellipsis clamp for long file/result names)
+Last Updated: 2026-04-18 (Tiny-screen generated-card overflow hardening: no horizontal swipe + compact mobile actions)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -69,7 +69,7 @@ Domain Purpose: AI-powered document analysis, assessment generation, and
 2. CURRENT TRUTH SNAPSHOT
 ================================================================================
 
-As of 2026-04-17, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
+As of 2026-04-18, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
 using Supabase as the unified backend provider (Postgres database, Auth, Storage).
 
 Key verified facts:
@@ -386,6 +386,12 @@ Key verified facts:
   (`line-clamp`) with full-text hover title hints across Upload/Home/History/
   Assessment card surfaces and detached preview/result headers, so extreme
   names stay inside the card/surface with clean trailing `...` endings
+- Tiny-screen generated-card lanes now enforce viewport-fit no-swipe behavior:
+  protected-shell content no longer allows assessment-path horizontal auto-scroll,
+  shared generated-card/action wrappers use stricter `min-w-0`/`w-full`/
+  `max-w-full` shrink guards, selected action rails keep vertical-first mobile
+  stacking until `md`, and mobile action controls use compact sizing without
+  changing desktop/tablet interaction patterns
 - Exhausted daily-credit messaging now includes localized EN/AR escalation
   guidance to contact developer/admin Elmahdy Abdallah for private or urgent
   credits, rendered only in the exhausted-credit state
@@ -395,10 +401,10 @@ Key verified facts:
 - Admin panel includes user management, storage management, governance dashboard
 - Database uses Supabase Postgres with RLS policies
 - Migration management via scripts/supabase/apply-migrations.mjs
-- 14 migration files tracked in supabase/migrations (latest add canonical
-  `assessment_credit_mutations` table and
-  `assessment_prompt_entitlement` column on
-  `assessment_credit_accounts`)
+- 16 migration files tracked in supabase/migrations (latest include
+  `20260416193000_assessment_credit_private_realtime_authorization.sql`,
+  `20260416210000_assessment_credit_mutations.sql`, and
+  `20260417103000_assessment_credit_prompt_entitlement.sql`)
 
 ================================================================================
 3. PROJECT PURPOSE & PLATFORM DIRECTION
@@ -1676,6 +1682,100 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-18: TINY-SCREEN GENERATED-CARD VIEWPORT-FIT HARDENING (NO HORIZONTAL SWIPE)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Protected shell main content still permitted assessment-path horizontal
+   auto-scroll, so child card fixes alone could not fully prevent viewport
+   bleed on tiny screens.
+2. Shared export/history action rails still had intrinsic-width pressure from
+   metadata, badges, and button groups; on narrow devices this could force
+   card width beyond viewport bounds.
+3. Several action groups switched to horizontal at `sm`, which is too early
+   for the smallest phone widths.
+4. Generated title/summary surfaces were wrap-safe but not consistently
+   clamp-first/compact on tiny screens, leaving some cards visually dominant.
+
+CHANGES:
+1. Removed assessment-path horizontal auto-scroll in
+   `apps/web/components/layout/protected-shell.tsx`
+   - Protected workspace content now hides horizontal overflow by default,
+     eliminating shell-level swipe bleed from generated-card lanes.
+
+2. Hardened generated-card viewport constraints in
+   `apps/web/app/(protected)/(completed)/history/page.tsx`
+   `apps/web/app/(protected)/(completed)/page.tsx`
+   `apps/web/components/assessment/assessment-studio.tsx`
+   `apps/web/components/upload/upload-workspace.tsx`
+   - Added tighter width/shrink guards and stronger mobile title/summary clamp
+     behavior so long generated text remains in-card on tiny screens.
+
+3. Hardened shared action/export shrink behavior in
+   `apps/web/app/globals.css`
+   `apps/web/components/assessment/assessment-export-actions.tsx`
+   `apps/web/components/history/history-document-actions.tsx`
+   - Strengthened wrapper shrink rules (`min-w-0`/`w-full`/`max-w-full`).
+   - Kept vertical-first stacking on tiny screens and delayed horizontal switch
+     to `md` where required.
+   - Reduced mobile control sizing while preserving desktop/tablet rhythm.
+
+4. Tightened detached preview/result mobile clamping in
+   `apps/web/components/assessment/assessment-preview-shell.tsx`
+   - Reduced title dominance and strengthened summary clamp behavior on
+     small screens without changing backend metadata ownership.
+
+FILES CHANGED:
+- apps/web/components/layout/protected-shell.tsx
+- apps/web/app/(protected)/(completed)/history/page.tsx
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- apps/web/app/globals.css
+- apps/web/components/assessment/assessment-export-actions.tsx
+- apps/web/components/history/history-document-actions.tsx
+- apps/web/components/assessment/assessment-preview-shell.tsx
+- zootopia-club-next-ledger.txt
+
+REASON:
+- Complete the UI-only tiny-screen follow-up so generated cards no longer
+  produce horizontal swipe/overflow in protected surfaces.
+- Keep existing premium design language while making mobile controls more
+  compact and generated title/summary previews less dominant.
+
+TECHNICAL DETAILS:
+- Applied only minimal class/CSS hardening (`min-w-0`, `w-full`, `max-w-full`,
+  `overflow-hidden`, controlled clamp sizing, and breakpoint-safe stacking).
+- No backend/API/auth/session/repository/migration logic changed.
+- No dependency changes or architecture redesign.
+
+RISKS / FOLLOW-UP:
+- Low UI risk: tighter mobile clamps may shorten visible preview text sooner,
+  but hover/full-view paths still preserve full content access.
+- Targeted QA confirmed no horizontal overflow in tested route combinations,
+  but this sandbox's generation attempt returned
+  `ASSESSMENT_PROVIDER_AUTH_FAILED` (503), so generated export-toolbar-heavy
+  fixtures were limited in this run.
+
+VERIFICATION:
+Post-edit command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS
+✓ `npm run typecheck --workspace @zootopia/web` — PASS
+✓ `npm run build --workspace @zootopia/web` — PASS
+✓ `npm run build:vercel` — PASS
+
+Targeted tiny-screen QA verification:
+✓ `node .tmp/mobile-card-overflow-supabase-qa.mjs` (temporary helper removed
+  after run)
+  - combinations: 24 (route/theme/viewport)
+  - route failures: 0
+  - horizontal overflow failures: 0
+  - export stacking failures: 0
+  - compact button failures: 0
+  - upload attempt: status 201 (ok)
+  - generation attempt: status 503 (`ASSESSMENT_PROVIDER_AUTH_FAILED`)
+  - report: `output/playwright/mobile-card-overflow/2026-04-18T00-32-52-709Z/mobile-card-overflow-report.json`
 
 2026-04-17: SHARED GENERATED-CARD WRAP HARDENING + PREVIEW TITLE FIX + LIGHT-MODE BADGE CONTRAST
 ────────────────────────────────────────────────────────────────────────────

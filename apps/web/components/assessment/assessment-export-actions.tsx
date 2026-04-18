@@ -28,7 +28,7 @@ const defaultActionClassName =
   "assessment-export-actions__action assessment-export-actions__action--secondary assessment-export-actions__default-action";
 
 // Unified action container
-const unifiedContainerClassName = "assessment-export-actions";
+const unifiedContainerClassName = "assessment-export-actions min-w-0";
 
 function createPdfExportStatus(
   messages: AppMessages,
@@ -175,7 +175,7 @@ export function AssessmentExportActions({
     : defaultActionClassName;
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 w-full space-y-3">
       <div className={unifiedContainerClassName}>
         {/* ROW 1: two buttons */}
         <button

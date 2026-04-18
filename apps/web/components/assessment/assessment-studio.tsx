@@ -2388,7 +2388,7 @@ export function AssessmentStudio({
         latestDocument={latestDocument}
       />
 
-      <section className="surface-strong rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 lg:p-8">
+      <section className="surface-strong min-w-0 rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 lg:p-8">
         <div className="border-b border-border pb-4">
           <div>
             <p className="section-label">{messages.assessmentHistoryTitle}</p>
@@ -2408,7 +2408,7 @@ export function AssessmentStudio({
               {generations.map((generation, index) => (
                 <article
                   key={generation.id}
-                  className={`rounded-[1.4rem] border px-5 py-4 transition-all sm:px-6 ${
+                  className={`w-full min-w-0 max-w-full overflow-hidden rounded-[1.4rem] border px-5 py-4 transition-all sm:px-6 ${
                     generation.id === latestGeneration?.id
                       ? "border-emerald-500/20 bg-emerald-500/5 shadow-sm"
                       : "border-border bg-background-elevated/80 hover:border-emerald-500/15 hover:shadow-sm"
@@ -2419,7 +2419,7 @@ export function AssessmentStudio({
                       <div className="flex flex-wrap items-center gap-2">
                         {/* Generated result names in this shared history card lane must wrap first and clamp to keep the action rail aligned. */}
                         <p
-                          className="min-w-0 w-full max-w-full line-clamp-2 break-words font-semibold text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1"
+                          className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:line-clamp-2 sm:text-base sm:leading-6"
                           title={generation.title}
                         >
                           {generation.title}
@@ -2431,7 +2431,7 @@ export function AssessmentStudio({
                         ) : null}
                       </div>
                       <p
-                        className="mt-2 break-words text-sm leading-6 text-foreground-muted [overflow-wrap:anywhere]"
+                        className="mt-2 line-clamp-2 break-words text-xs leading-5 text-foreground-muted [overflow-wrap:anywhere] sm:line-clamp-3 sm:text-sm sm:leading-6"
                         title={generation.meta.summary}
                       >
                         {buildCardTextPreview(generation.meta.summary, 220)}
@@ -2452,13 +2452,13 @@ export function AssessmentStudio({
                         {formatAssessmentDate(generation.createdAt, locale)}
                       </p>
                     </div>
-                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:max-w-[32rem] xl:justify-end">
+                    <div className="flex w-full min-w-0 flex-col gap-1.5 md:w-auto md:flex-row md:flex-wrap md:items-center xl:max-w-[32rem] xl:justify-end">
                       <button
                         type="button"
                         onClick={() => {
                           void handleRefreshGeneration(generation.id);
                         }}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border-strong bg-background-strong px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:border-emerald-500/30 hover:text-emerald-700 sm:w-auto dark:hover:text-emerald-200"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border-strong bg-background-strong px-2.5 py-1.5 text-[11px] font-semibold text-foreground-muted transition hover:border-emerald-500/30 hover:text-emerald-700 md:w-auto md:px-3 md:text-xs dark:hover:text-emerald-200"
                       >
                         {readbackId === generation.id ? (
                           <span className="loading-spinner h-3.5 w-3.5 border-2" />
@@ -2471,14 +2471,14 @@ export function AssessmentStudio({
                       </button>
                       <Link
                         href={generation.previewRoute}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border-strong bg-background-strong px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-emerald-500/30 hover:text-emerald-700 sm:w-auto dark:hover:text-emerald-200"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border-strong bg-background-strong px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-emerald-500/30 hover:text-emerald-700 md:w-auto md:px-3 md:text-xs dark:hover:text-emerald-200"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         {messages.assessmentOpenPreview}
                       </Link>
                       <Link
                         href={generation.resultRoute}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border-strong bg-background-strong px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-emerald-500/30 hover:text-emerald-700 sm:w-auto dark:hover:text-emerald-200"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border-strong bg-background-strong px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-emerald-500/30 hover:text-emerald-700 md:w-auto md:px-3 md:text-xs dark:hover:text-emerald-200"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         {messages.assessmentOpenResult}

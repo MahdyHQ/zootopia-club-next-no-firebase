@@ -184,7 +184,7 @@ export function AssessmentPreviewShell({
           <div className="min-w-0">
             {/* Detached preview/result names must stay inside the shared header shell: wrap first, then clamp with ellipsis for extreme lengths. */}
             <h1
-              className="min-w-0 w-full max-w-full line-clamp-3 break-words text-balance text-3xl font-bold tracking-tight [overflow-wrap:anywhere] sm:max-w-4xl sm:text-4xl"
+              className="min-w-0 w-full max-w-full line-clamp-2 break-words text-balance text-2xl font-bold tracking-tight [overflow-wrap:anywhere] sm:max-w-4xl sm:line-clamp-3 sm:text-4xl"
               title={preview.title}
             >
               {preview.title}
@@ -195,7 +195,7 @@ export function AssessmentPreviewShell({
                 a one-off tweak inside one page or inside the question/result renderer below. */}
             <div className={`assessment-file-summary mt-4 ${dark ? "assessment-file-summary--dark" : ""}`}>
               <span className="assessment-file-summary__badge">{summaryBadgeLabel}</span>
-              <p className="assessment-file-summary__body">{preview.summary}</p>
+              <p className="assessment-file-summary__body line-clamp-3 sm:line-clamp-none">{preview.summary}</p>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {preview.compositionBadges.map((badge) => (

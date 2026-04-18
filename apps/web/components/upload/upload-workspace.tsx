@@ -743,20 +743,20 @@ export function UploadWorkspace({
                     </div>
                     {/* Active document names must stay inside this shared CTA surface; clamp after wrapping to avoid overgrowing the action rail block. */}
                     <p
-                      className="mt-3 min-w-0 w-full max-w-full line-clamp-2 break-words text-base font-semibold text-foreground [overflow-wrap:anywhere] dark:text-white"
+                      className="mt-3 min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere] dark:text-white sm:line-clamp-2 sm:text-base sm:leading-6"
                       title={activeDocument.fileName}
                     >
                       {activeDocument.fileName}
                     </p>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-muted dark:text-white/62">
+                    <p className="mt-2 max-w-2xl line-clamp-2 text-xs leading-5 text-foreground-muted dark:text-white/62 sm:line-clamp-3 sm:text-sm sm:leading-6">
                       {messages.uploadContinueBody}
                     </p>
                   </div>
 
-                  <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
+                  <div className="flex w-full min-w-0 flex-col gap-2 md:w-auto md:flex-row md:flex-wrap">
                     <Link
                       href={APP_ROUTES.assessment}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent-strong px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(217,119,6,0.22)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(217,119,6,0.28)] sm:w-auto dark:shadow-[0_14px_32px_rgba(16,185,129,0.22)] dark:hover:shadow-[0_18px_38px_rgba(16,185,129,0.28)]"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent-strong px-3 py-2.5 text-xs font-semibold text-white shadow-[0_14px_32px_rgba(217,119,6,0.22)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(217,119,6,0.28)] md:w-auto md:px-4 md:py-3 md:text-sm dark:shadow-[0_14px_32px_rgba(16,185,129,0.22)] dark:hover:shadow-[0_18px_38px_rgba(16,185,129,0.28)]"
                     >
                       <BrainCircuit className="h-4 w-4" />
                       {messages.uploadOpenAssessmentAction}
@@ -765,7 +765,7 @@ export function UploadWorkspace({
                     {canAccessInfographic ? (
                       <Link
                         href={APP_ROUTES.infographic}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/65 bg-white/58 px-4 py-3 text-sm font-semibold text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] transition-all hover:-translate-y-0.5 hover:border-amber-300/60 hover:bg-amber-50/85 hover:text-amber-700 sm:w-auto dark:border-white/12 dark:bg-white/[0.05] dark:text-white/86 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] dark:hover:border-amber-300/30 dark:hover:bg-amber-400/10 dark:hover:text-amber-100"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/65 bg-white/58 px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] transition-all hover:-translate-y-0.5 hover:border-amber-300/60 hover:bg-amber-50/85 hover:text-amber-700 md:w-auto md:px-4 md:py-3 md:text-sm dark:border-white/12 dark:bg-white/[0.05] dark:text-white/86 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] dark:hover:border-amber-300/30 dark:hover:bg-amber-400/10 dark:hover:text-amber-100"
                       >
                         <PieChart className="h-4 w-4" />
                         {messages.uploadOpenInfographicAction}
@@ -776,7 +776,7 @@ export function UploadWorkspace({
                       type="button"
                       onClick={handleRemoveActiveDocument}
                       disabled={isBusy}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger transition-all hover:-translate-y-0.5 hover:bg-danger/20 sm:w-auto disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-danger/20 bg-danger/10 px-3 py-2.5 text-xs font-semibold text-danger transition-all hover:-translate-y-0.5 hover:bg-danger/20 md:w-auto md:px-4 md:py-3 md:text-sm disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Trash2 className="h-4 w-4" />
                       {removingDocumentId === activeDocument.id

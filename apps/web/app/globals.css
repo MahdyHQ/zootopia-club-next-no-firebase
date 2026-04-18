@@ -1248,12 +1248,17 @@ html[dir="rtl"] .field-control {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   width: min(100%, 34.75rem);
+  min-width: 0;
+  max-width: 100%;
   gap: 0.64rem;
 }
 
 .assessment-export-actions__action {
   position: relative;
   display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 2.98rem;
   align-items: center;
   justify-content: center;
@@ -1604,8 +1609,10 @@ html[dir="rtl"] .field-control {
 @media (max-width: 639px) {
   .assessment-export-actions {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     grid-template-columns: 1fr;
-    gap: 0.52rem;
+    gap: 0.44rem;
   }
 
   .assessment-export-actions__action--full-width {
@@ -1614,22 +1621,36 @@ html[dir="rtl"] .field-control {
 
   .assessment-export-actions__action,
   .assessment-export-actions__default-action {
-    min-height: 2.8rem;
-    padding: 0.68rem 1rem;
-    padding-inline-end: 1.42rem;
-    font-size: 0.83rem;
+    min-height: 2.42rem;
+    justify-content: flex-start;
+    gap: 0.44rem;
+    padding: 0.54rem 0.78rem;
+    padding-inline-end: 1.06rem;
+    font-size: 0.75rem;
+    line-height: 1.18;
+    white-space: normal;
+    text-align: start;
+  }
+
+  .assessment-export-actions__badge {
+    top: 0.2rem;
+    inset-inline-end: 0.52rem;
+    min-height: 0.88rem;
+    padding: 0.04rem 0.38rem 0.05rem;
+    font-size: 0.49rem;
+    letter-spacing: 0.08em;
   }
 
   .assessment-export-actions__action--hero {
-    min-height: 3.16rem;
-    padding: 0.87rem 1.14rem;
-    padding-inline-end: 1.62rem;
+    min-height: 2.72rem;
+    padding: 0.66rem 0.9rem;
+    padding-inline-end: 1.32rem;
   }
 
   .assessment-export-actions__action--preview-lane {
-    min-height: 3.45rem;
-    padding: 1rem 1.42rem;
-    padding-inline-end: 1.85rem;
+    min-height: 2.94rem;
+    padding: 0.74rem 1rem;
+    padding-inline-end: 1.36rem;
   }
 }
 

@@ -249,7 +249,7 @@ export default async function HomePage() {
               documents.slice(0, 4).map((document) => (
                 <div
                   key={document.id}
-                  className="flex flex-col justify-between gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 sm:flex-row sm:items-center dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
+                  className="flex w-full min-w-0 max-w-full flex-col justify-between gap-3 overflow-hidden rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 sm:flex-row sm:items-center dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
                 >
                   <div className="flex min-w-0 items-start gap-3 sm:flex-1">
                     <div className="mt-0.5 rounded-lg bg-blue-100 p-1.5 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
@@ -258,7 +258,7 @@ export default async function HomePage() {
                     <div className="min-w-0">
                       {/* Home document names use wrap-first + clamp so long values stay inside cards while still showing a clean ellipsis boundary. */}
                       <p
-                        className="min-w-0 w-full max-w-full line-clamp-2 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] dark:text-white"
+                        className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-bold leading-5 text-zinc-900 [overflow-wrap:anywhere] dark:text-white sm:line-clamp-2 sm:text-base sm:leading-6"
                         title={document.fileName}
                       >
                         {document.fileName}
@@ -307,11 +307,11 @@ export default async function HomePage() {
               assessments.slice(0, 4).map((generation) => (
                 <div
                   key={generation.id}
-                  className="flex min-w-0 flex-col gap-3 rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 sm:flex-row sm:items-start sm:justify-between dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
+                  className="flex w-full min-w-0 max-w-full flex-col gap-3 overflow-hidden rounded-[1.25rem] border border-white/30 bg-white/34 p-4 transition-all hover:bg-white/60 sm:flex-row sm:items-start sm:justify-between dark:border-white/5 dark:bg-zinc-900/32 dark:hover:bg-zinc-800/50"
                 >
                   {/* Recent-result names wrap first, then clamp with ellipsis only when needed so cards stay stable across breakpoints. */}
                   <p
-                    className="min-w-0 w-full max-w-full line-clamp-2 break-words font-bold text-zinc-900 [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:pr-3 dark:text-white"
+                    className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-bold leading-5 text-zinc-900 [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:line-clamp-2 sm:pr-3 sm:text-base sm:leading-6 dark:text-white"
                     title={generation.title}
                   >
                     {generation.title}
