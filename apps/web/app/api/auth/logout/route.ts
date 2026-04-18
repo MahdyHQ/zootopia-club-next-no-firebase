@@ -35,7 +35,8 @@ function readLogoutSessionUser(value: unknown) {
 export async function POST() {
   /* Logout cleanup intentionally reads the raw Auth.js session cookie instead of the
      renewal-gated session helper. This route must still release the active-user lease when
-     session rehydration is degraded, otherwise a stale slot can remain occupied until TTL expiry. */
+     session rehydration is degraded, otherwise a stale slot can remain occupied until
+     the active-user lease window expires. */
   const activeSession = await auth();
   const user = readLogoutSessionUser(activeSession?.user);
   const response = applyNoStore(apiSuccess({ loggedOut: true }));

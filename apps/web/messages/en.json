@@ -39,7 +39,7 @@
   "loginStatusRefreshTitle": "Sign-in needs to be refreshed",
   "loginStatusRefreshBody": "Sign in again to create a fresh secure session.",
   "loginStatusRetryLaterTitle": "We’re pacing sign-in requests right now",
-  "loginStatusRetryLaterBody": "We’re organizing sign-in and sign-up traffic to reduce pressure. Please try again in about 15 minutes.",
+  "loginStatusRetryLaterBody": "We’re organizing sign-in and sign-up traffic to reduce pressure. Please wait for the current admission window to reset, then try again.",
   "loginStatusAdmissionUnavailableTitle": "Sign-in admission is temporarily unavailable",
   "loginStatusAdmissionUnavailableBody": "We couldn’t verify workspace admission right now. Please wait a moment and try again.",
   "loginStatusCapacityFullTitle": "Platform capacity is currently full",

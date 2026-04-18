@@ -5,6 +5,7 @@ import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
 import { normalizeAuthFailure } from "@/lib/auth-failure";
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import {
+  getAuthAdmissionConfig,
   reserveAuthAdmissionAttempt,
   type AuthAdmissionSnapshot,
 } from "@/lib/server/auth-admission-governance";
@@ -32,8 +33,18 @@ type SignupSuccessPayload = {
   refreshToken: string | null;
 };
 
-const SIGNUP_ADMISSION_DELAY_MESSAGE =
-  "We’re organizing sign-up requests to reduce pressure. Please try again in about 15 minutes.";
+const AUTH_ADMISSION_CONFIG = getAuthAdmissionConfig();
+
+function buildAdmissionDelayMessage(windowSeconds: number) {
+  const minutes = Math.max(1, Math.ceil(windowSeconds / 60));
+  const minuteLabel = minutes === 1 ? "minute" : "minutes";
+  return "We’re organizing sign-up requests to reduce pressure. "
+    + `Please try again in about ${minutes} ${minuteLabel}.`;
+}
+
+const SIGNUP_ADMISSION_DELAY_MESSAGE = buildAdmissionDelayMessage(
+  AUTH_ADMISSION_CONFIG.windowSeconds,
+);
 
 function normalizeEmail(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -177,7 +188,7 @@ export async function POST(request: Request) {
     const failure = applyNoStore(
       apiError("AUTH_RATE_LIMITED", SIGNUP_ADMISSION_DELAY_MESSAGE, 503),
     );
-    failure.headers.set("Retry-After", "900");
+    failure.headers.set("Retry-After", String(AUTH_ADMISSION_CONFIG.windowSeconds));
     return failure;
   }
 

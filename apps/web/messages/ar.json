@@ -39,7 +39,7 @@
   "loginStatusRefreshTitle": "تحتاج جلسة الدخول إلى تحديث",
   "loginStatusRefreshBody": "ابدأ تسجيل الدخول مرة أخرى لإنشاء جلسة آمنة.",
   "loginStatusRetryLaterTitle": "نُنظّم محاولات الدخول حالياً",
-  "loginStatusRetryLaterBody": "نرتّب ضغط طلبات الدخول وإنشاء الحساب لتخفيف الحمل. حاول مرة أخرى بعد نحو 15 دقيقة.",
+  "loginStatusRetryLaterBody": "نرتّب ضغط طلبات الدخول وإنشاء الحساب لتخفيف الحمل. يُرجى الانتظار حتى تنتهي نافذة الإتاحة الحالية ثم المحاولة مرة أخرى.",
   "loginStatusAdmissionUnavailableTitle": "التحقق من إتاحة الدخول غير متاح مؤقتاً",
   "loginStatusAdmissionUnavailableBody": "تعذّر التحقق من إتاحة دخول المساحة الآن. انتظر قليلاً ثم حاول مرة أخرى.",
   "loginStatusCapacityFullTitle": "سعة المنصة ممتلئة حالياً",

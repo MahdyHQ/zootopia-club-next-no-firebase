@@ -8,6 +8,7 @@ import {
   type ActiveNormalUserCapacitySnapshot,
 } from "@/lib/server/active-normal-user-session-governance";
 import {
+  getAuthAdmissionConfig,
   reserveAuthAdmissionAttempt,
   type AuthAdmissionSnapshot,
 } from "@/lib/server/auth-admission-governance";
@@ -20,8 +21,18 @@ type LoginAdmissionRequestBody = {
   email?: unknown;
 };
 
-const LOGIN_ADMISSION_DELAY_MESSAGE =
-  "We’re organizing login requests to reduce pressure. Please try again in about 15 minutes.";
+const AUTH_ADMISSION_CONFIG = getAuthAdmissionConfig();
+
+function buildAdmissionDelayMessage(windowSeconds: number) {
+  const minutes = Math.max(1, Math.ceil(windowSeconds / 60));
+  const minuteLabel = minutes === 1 ? "minute" : "minutes";
+  return "We’re organizing login requests to reduce pressure. "
+    + `Please try again in about ${minutes} ${minuteLabel}.`;
+}
+
+const LOGIN_ADMISSION_DELAY_MESSAGE = buildAdmissionDelayMessage(
+  AUTH_ADMISSION_CONFIG.windowSeconds,
+);
 const LOGIN_CAPACITY_UNAVAILABLE_MESSAGE =
   "Secure login admission is temporarily unavailable. Please wait a moment and try again.";
 const CAPACITY_RETRY_AFTER_SECONDS = 15;

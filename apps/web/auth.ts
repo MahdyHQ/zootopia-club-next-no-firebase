@@ -999,6 +999,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   session: {
     strategy: "jwt",
+    /* Global Auth.js session lifetime for all identities. Active normal-user lease
+       duration is governed separately in active-normal-user-session-governance.ts. */
     maxAge: getSessionTtlSeconds(),
   },
   providers: [

@@ -42,6 +42,10 @@ const MIN_ACTIVE_NORMAL_USER_SESSION_MINUTES = 1;
 const MAX_ACTIVE_NORMAL_USER_SESSION_MINUTES = 24 * 60;
 const REQUIRED_EXEMPT_EMAIL = "elmahdyabdulla208@gmail.com";
 
+/* Capacity lease minutes govern only active_normal_user_sessions occupancy expiry.
+  They do not alter Auth.js session TTL, which stays controlled by
+  ZOOTOPIA_SESSION_TTL_SECONDS in session-config.ts. */
+
 /**
  * This advisory lock serializes capacity decisions across concurrent requests/instances.
  * It prevents race over-admission when multiple normal-user logins hit the server at once.

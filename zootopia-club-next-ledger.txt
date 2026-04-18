@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Assessment result-viewer full title/summary wrap exception recorded)
+Last Updated: 2026-04-18 (Session TTL vs active normal-user lease separation audit hardening recorded)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -92,15 +92,15 @@ Key verified facts:
   backend-shaped without moving Auth.js trust out of the server
 - Public user sign-in now performs same-origin admission preflight through
   `POST /api/auth/login/admission` before browser `signInWithPassword()`,
-  using persisted cross-instance account/IP windows and calm 15-minute retry
-  guidance when the auth edge is being shaped under pressure
+  using persisted cross-instance account/IP windows and admission-window-aware
+  retry guidance when the auth edge is being shaped under pressure
 - Login admission now short-circuits allowlisted admin emails plus
   `ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS` identities before public
   auth-admission shaping, so exempt/admin users no longer depend on the
   admission-store path to bypass active normal-user capacity governance
 - `AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE` now stays distinct through auth
   normalization and public login UI rendering, so temporary admission-state
-  outages no longer show the 15-minute queue/pacing message, and capacity-full
+  outages no longer show stale fixed-duration queue/pacing copy, and capacity-full
   fallback copy stays truthful even when a live count snapshot is unavailable
 - Confirm-email success now clears the helper Supabase browser session and
   redirects back to `/login` or `/admin/login` with verified-email context;
@@ -1530,7 +1530,8 @@ Public Auth Admission Governance (2026-04-18):
 - Sign-in IP max attempts: 60 (`ZOOTOPIA_AUTH_SIGNIN_IP_MAX_ATTEMPTS`)
 - Hash salt: `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT`
 - API: `POST /api/auth/signup` and `POST /api/auth/login/admission`
-- Both routes return Retry-After + calm 15-minute retry guidance when shaping public auth load
+- Both routes return Retry-After with admission-window-aware retry guidance
+  when shaping public auth load
 
 ================================================================================
 22. SECURITY ASSUMPTIONS & TRUST BOUNDARIES
@@ -1815,6 +1816,59 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-18: WEB LINT WARNING CLEANUP (ASSESSMENT STUDIO + CONFIRM EMAIL PANEL)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. `apps/web/components/assessment/assessment-studio.tsx` set
+   `aria-disabled` on a native `<form>`, but `form` already has an implicit
+   role and does not support `aria-disabled` in the lint accessibility rule.
+2. `apps/web/components/auth/confirm-email-panel.tsx` used `flow` inside a
+   `useEffect` body while omitting it from the dependency array, which raised
+   the React Hooks exhaustive-deps warning.
+
+FILES CHANGED:
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/components/auth/confirm-email-panel.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Apply a minimal, backward-compatible lint cleanup pass that preserves current
+  UX behavior, accessibility intent, and auth/redirect flow semantics.
+
+TECHNICAL DETAILS:
+1. Assessment Studio accessibility fix
+   - Removed invalid `aria-disabled` from the `<form>` element.
+   - Added `aria-describedby` on the form when platform lock is active,
+     pointing to the existing lock guidance copy.
+   - Added stable id `assessment-platform-capacity-lock-message` to the lock
+     body text so assistive technologies can associate form state with the
+     visible lock explanation.
+   - Existing lock behavior remained unchanged (same lock banner, same submit
+     blocking conditions, same backend-authoritative enforcement).
+
+2. Confirm-email hook dependency fix
+   - Added `flow` to the finalize `useEffect` dependency array.
+   - Preserved current rerun protections via existing refs
+     (`finalizationStartedRef`, `redirectStartedRef`) so no duplicate
+     finalization/redirect path was introduced.
+
+WHAT WAS INTENTIONALLY PRESERVED:
+- No backend/auth/session/permission/business logic changes.
+- No route contract changes.
+- No UI redesign or control-flow rewrite.
+
+VERIFICATION:
+Diagnostics verification:
+✓ `get_errors` on changed files — PASS.
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS (0 warnings, 0 errors).
 
 2026-04-18: ASSESSMENT RESULT-VIEWER FULL TITLE + SUMMARY WRAP EXCEPTION (UI-ONLY)
 ────────────────────────────────────────────────────────────────────────────
@@ -3246,3 +3300,216 @@ Command verification:
 ✓ `npm run lint --workspace @zootopia/web` — PASS (existing pre-existing warning in unrelated `assessment-studio.tsx`).
 ✓ `npm run typecheck --workspace @zootopia/web` — PASS.
 ✓ `npm run build --workspace @zootopia/web` — PASS.
+
+2026-04-18: AUTH ADMISSION ENV CONTRACT + WINDOW-AWARE RETRY MESSAGING ALIGNMENT
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Runtime auth-admission controls were already server-authoritative in
+  `apps/web/lib/server/auth-admission-governance.ts`, but
+  `.env.example` did not document the canonical
+  `ZOOTOPIA_AUTH_ADMISSION_*` and sign-in/sign-up attempt-budget env keys.
+2. Public auth pacing copy in routes/localized login feedback still carried
+  fixed "about 15 minutes" wording while the admission window is env-driven
+  (`ZOOTOPIA_AUTH_ADMISSION_WINDOW_SECONDS`).
+3. One signup admission fallback path still hardcoded `Retry-After: 900`
+  instead of reusing the configured admission window.
+
+CHANGES:
+1. Env contract refresh in `.env.example`:
+  - added `ZOOTOPIA_AUTH_ADMISSION_MODE`
+  - added `ZOOTOPIA_AUTH_ADMISSION_WINDOW_SECONDS`
+  - added `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT`
+  - added `ZOOTOPIA_AUTH_SIGNIN_ACCOUNT_MAX_ATTEMPTS`
+  - added `ZOOTOPIA_AUTH_SIGNIN_IP_MAX_ATTEMPTS`
+  - added `ZOOTOPIA_AUTH_SIGNUP_ACCOUNT_MAX_ATTEMPTS`
+  - added `ZOOTOPIA_AUTH_SIGNUP_IP_MAX_ATTEMPTS`
+  - documented mode/range behavior and salt-stability guidance.
+2. Login admission API message alignment:
+  - `apps/web/app/api/auth/login/admission/route.ts` now builds retry copy
+    from `getAuthAdmissionConfig().windowSeconds` (minute-rounded), removing
+    fixed-duration drift.
+3. Signup API message + fallback header alignment:
+  - `apps/web/app/api/auth/signup/route.ts` now builds retry copy from the
+    same configured admission window.
+  - signup reservation-failure fallback now sets `Retry-After` from
+    configured `windowSeconds` instead of fixed `900`.
+4. Localized login retry body truthfulness refresh:
+  - `apps/web/messages/en.json` no longer claims a fixed 15-minute delay and
+    now references waiting for the current admission window reset.
+  - `apps/web/messages/ar.json` updated with the same window-neutral meaning.
+
+FILES CHANGED:
+- .env.example
+- apps/web/app/api/auth/login/admission/route.ts
+- apps/web/app/api/auth/signup/route.ts
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+PRESERVED INTENTIONALLY:
+- Existing server-owned auth/session authority model.
+- Existing signup -> confirm-email -> login onboarding/capacity flow.
+- Existing auth admission store semantics (account/IP windows + Retry-After).
+
+VERIFICATION:
+Diagnostics:
+✓ `get_errors` on changed files — PASS.
+
+Command verification (repo root):
+✓ `npm run lint` — PASS.
+✓ `npm run typecheck` — PASS.
+✓ `npm run build` — PASS.
+✓ `npm run build:vercel` — PASS.
+
+Notes:
+- Build logs show expected warning when `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT`
+  is unset; this is existing guardrail behavior and not a regression.
+
+2026-04-18: SESSION TTL VS ACTIVE-NORMAL-USER LEASE SEPARATION AUDIT (HARDENING)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Runtime ownership was already correctly separated, but a few comments/env
+  lines still used generic "TTL" phrasing that could be misread as coupling
+  Auth.js session lifetime with active normal-user lease duration.
+
+AUDIT FINDINGS (CODE-TRACE):
+1. Global session TTL authority is isolated:
+  - `apps/web/lib/server/session-config.ts` is the single parser/owner for
+    `ZOOTOPIA_SESSION_TTL_SECONDS` with bounded fallback behavior.
+  - `apps/web/auth.ts` applies this value only to Auth.js JWT `session.maxAge`.
+2. Active normal-user lease authority is isolated:
+  - `apps/web/lib/server/active-normal-user-session-governance.ts` is the
+    owner for `ZOOTOPIA_ACTIVE_NORMAL_USER_SESSION_MINUTES` and lease
+    reserve/renew/release behavior.
+3. Admin/exempt isolation remains enforced:
+  - Admin and exempt identities bypass normal-user capacity and trigger
+    best-effort stale lease cleanup; they are not blocked by normal-user
+    capacity persistence degradation.
+4. Renewal/release flow remains server-authoritative and decoupled:
+  - Decisive normal-user reserve/renew in Auth.js `authorize`.
+  - Ongoing renew in trusted verified session rehydration path.
+  - Logout release in `/api/auth/logout` using raw Auth.js session parsing.
+5. Expiry semantics stay independent:
+  - Auth.js session expiry is controlled by `ZOOTOPIA_SESSION_TTL_SECONDS`.
+  - Active seat occupancy is controlled by lease expiry and query filtering on
+    `lease_expires_at > NOW()` with expired-lease purging.
+
+CHANGES:
+1. Clarified global TTL ownership comment:
+  - `apps/web/lib/server/session-config.ts`
+2. Clarified lease-vs-session separation comment:
+  - `apps/web/lib/server/active-normal-user-session-governance.ts`
+3. Clarified Auth.js config boundary comment near `session.maxAge`:
+  - `apps/web/auth.ts`
+4. Removed ambiguous "TTL expiry" wording in logout lease-release comment:
+  - `apps/web/app/api/auth/logout/route.ts`
+5. Clarified env contract separation for operators:
+  - `.env.example`
+
+FILES CHANGED:
+- .env.example
+- apps/web/lib/server/session-config.ts
+- apps/web/lib/server/active-normal-user-session-governance.ts
+- apps/web/auth.ts
+- apps/web/app/api/auth/logout/route.ts
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+PRESERVED INTENTIONALLY:
+- Auth.js trust boundary and server-authoritative session verification.
+- Active normal-user capacity governance authority and advisory-lock flow.
+- Admin/exempt non-consumption of normal-user seats.
+- Existing env keys, defaults, and runtime semantics.
+
+VERIFICATION:
+Diagnostics:
+✓ `get_errors` not required after command-level full validation because lint,
+  typecheck, and both builds completed successfully.
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS.
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS.
+
+Notes:
+- `build:vercel` logs still show existing guardrail warning for unset
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT`; not introduced by this audit.
+- This pass is comment/env-contract hardening only (no runtime behavior change).
+
+2026-04-18: .ENV.EXAMPLE SOURCE-TRUTH REFACTOR (MIXED/PUBLIC/SERVER CONTRACT)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. `.env.example` had accumulated high-value env notes over time but remained
+  difficult to operate as a strict contract because ownership boundaries were
+  not explicitly separated into mixed/public/server domains.
+2. Several active runtime env keys used in server helpers were either missing
+  or under-documented in the contract (notably production durability fallback,
+  password-security hash salt, and client diagnostics toggle).
+3. Existing comments were accurate in many places, but accepted-value parsers,
+  clamp ranges, and alias/fallback chains were not consistently visible in one
+  clear operational layout.
+
+CHANGES:
+1. Rewrote `.env.example` into explicit ownership sections:
+  - `[MIXED]` runtime-crossing keys
+  - `[PUBLIC]` browser-safe UI shaping keys
+  - `[SERVER]` server-authoritative secrets/governance keys
+2. Added/clarified source-truth parser contracts directly in comments:
+  - accepted boolean tokens per parser (`1|true|yes|on`, etc. where applicable)
+  - min/max clamp windows for admission, verification resend, sessions, limits
+  - stable-hash-salt guidance for deterministic governance lookups
+  - route sanitization behavior for auth redirect env keys
+  - base URL normalization and fallback chain behavior
+3. Added active env keys that were missing from the contract:
+  - `ZOOTOPIA_ALLOW_PRODUCTION_MEMORY_FALLBACK`
+  - `NEXT_PUBLIC_ZOOTOPIA_ASSESSMENT_CREDIT_DIAGNOSTICS`
+  - `ZOOTOPIA_PASSWORD_SECURITY_HASH_SALT`
+  - `NEXTAUTH_SECRET` as explicit compatibility alias
+4. Preserved compatibility notes and fallback aliases without changing runtime:
+  - Supabase publishable key alias
+  - verification resend legacy aliases
+  - DashScope base URL legacy aliases
+  - Postgres URL fallback alias (`DATABASE_URL`)
+5. Replaced hardcoded personal admin-email sample values with neutral example
+  placeholder to keep template reusable and safe for distribution.
+
+FILES CHANGED:
+- .env.example
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+PRESERVED INTENTIONALLY:
+1. No runtime code paths were changed.
+2. No env-key names were renamed or removed from runtime contracts.
+3. Existing fallback/alias behavior remained documented as compatibility-only,
+  with canonical keys clearly marked.
+4. Session TTL vs active-capacity lease separation remained explicit and
+  unchanged in behavior.
+
+VERIFICATION:
+Code-trace/source-truth verification:
+✓ Re-traced env readers across auth/session/admission/capacity/Supabase/
+  storage retention/assessment locks/provider runtime/admin helpers/maintenance
+  route/contact relay before applying the rewrite.
+
+Diagnostics:
+✓ `get_errors` on `.env.example` — PASS.
+
+Command verification:
+~ No lint/typecheck/build rerun for this pass because only documentation
+  contract files changed (`.env.example` + ledger), with no TypeScript/runtime
+  implementation edits.

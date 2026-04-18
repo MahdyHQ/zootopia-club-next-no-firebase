@@ -1842,7 +1842,7 @@ export function AssessmentStudio({
 
             <form
               className={`space-y-6 ${platformUsageLocked ? "opacity-95" : ""}`}
-              aria-disabled={platformUsageLocked}
+              aria-describedby={platformUsageLocked ? "assessment-platform-capacity-lock-message" : undefined}
               onSubmit={handleSubmit}
             >
               {/* Daily credit UI mirrors the latest server summary for the signed-in owner.
@@ -1862,7 +1862,10 @@ export function AssessmentStudio({
                         <p className="font-semibold">
                           {messages.assessmentPlatformDailyCapacityLockedTitle}
                         </p>
-                        <p className="mt-1 leading-6 text-amber-800/90 dark:text-amber-100/90">
+                        <p
+                          id="assessment-platform-capacity-lock-message"
+                          className="mt-1 leading-6 text-amber-800/90 dark:text-amber-100/90"
+                        >
                           {messages.assessmentPlatformDailyCapacityLockedBody}
                         </p>
                       </div>

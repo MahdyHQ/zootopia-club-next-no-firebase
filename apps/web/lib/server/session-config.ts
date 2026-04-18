@@ -16,6 +16,8 @@ function parsePositiveInteger(value: string | undefined) {
 
 /* Session TTL is centralized here so auth bootstrap, cookie lifetime, upload-workspace expiry,
    and cleanup behavior stay aligned between local development and the active server runtime.
+   This global Auth.js session lifetime applies to all authenticated identities and remains
+   independent from active normal-user capacity lease minutes.
    Future agents should not reintroduce scattered hardcoded TTL constants in route handlers. */
 export function getSessionTtlSeconds() {
   const configured = parsePositiveInteger(process.env[SESSION_TTL_ENV_KEY]);

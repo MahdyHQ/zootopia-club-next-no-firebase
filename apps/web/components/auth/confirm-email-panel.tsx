@@ -964,7 +964,7 @@ export function ConfirmEmailPanel({
         }
       }
     })();
-  }, [email, flowKind, initialFinalize, messages, returnRoute, router, supabaseConfigured]);
+  }, [email, flow, flowKind, initialFinalize, messages, returnRoute, router, supabaseConfigured]);
 
   const normalizedEmail = email.trim().toLowerCase();
   const hasValidEmail = isValidEmail(normalizedEmail);
