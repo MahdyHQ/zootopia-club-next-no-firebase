@@ -3468,6 +3468,107 @@ CHANGES:
 2. Added/clarified source-truth parser contracts directly in comments:
   - accepted boolean tokens per parser (`1|true|yes|on`, etc. where applicable)
   - min/max clamp windows for admission, verification resend, sessions, limits
+
+2026-04-18: LECTURE-SUMMARY PREMIUM POLISH (IMAGE-FIRST HERO + INSTRUMENTATION SAMPLE)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. The protected `/lecture-summary` page already had rich Arabic content, but
+  visual scanning still leaned text-first before the main preview image.
+2. The page only showcased one sample image (`coming-soon.png`), while
+  `apps/web/public/coming-soon-2.png` existed without intentional UI usage.
+3. The home teaser needed a small content-level alignment pass so its voice and
+  value proposition stayed consistent with the refined lecture-summary surface.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/lecture-summary/page.tsx
+- apps/web/components/home/lecture-summary-coming-soon-teaser.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Deliver the requested premium UI refinement only for the protected
+  lecture-summary page and its linked home teaser.
+- Keep routing/auth/session/permission architecture unchanged.
+- Ensure all visible download actions use real image assets (no fake text-file
+  fallback behavior).
+
+TECHNICAL DETAILS:
+1. Stronger opening headline + expressive accent
+  - Added top Arabic opening headline:
+    `انتهى عصر التلخيص اليدوي` with a tasteful soft emoji accent (`🥹`).
+  - Kept rich explanatory Arabic copy and improved hierarchy spacing for faster
+    scanability.
+
+2. Image-first hero composition for `coming-soon.png`
+  - Kept `coming-soon.png` as the dominant opening visual element.
+  - Promoted the image card earlier in the hero flow and strengthened visual
+    treatment (larger frame, stronger depth, cleaner caption chip).
+  - Preserved responsive image sizing and non-distorting rendering with the
+    existing `next/image` approach and tuned `sizes` hints.
+
+3. Added dedicated instrumentation-summary section using `coming-soon-2.png`
+  - Introduced a new polished section labeled as an instrumentation summary
+    showcase and added clear Arabic copy including:
+    `هذه صورة ملخص لمادة الإنسترو`.
+  - Added real preview + direct-download CTAs for `coming-soon-2.png`.
+  - Download now uses:
+    `download={LECTURE_SUMMARY_INSTRUMENTATION_IMAGE_DOWNLOAD_NAME}`
+    with `href="/coming-soon-2.png"`.
+
+4. Download behavior hardening
+  - Kept/expanded real-image download CTAs for `coming-soon.png`.
+  - Added direct real-image download CTA for `coming-soon-2.png`.
+  - Confirmed no `.txt` placeholder download behavior in the lecture-summary
+    page path.
+
+5. Home teaser alignment
+  - Preserved existing teaser architecture (localStorage dismissal +
+    `APP_ROUTES.lectureSummary` linking).
+  - Added a matching opening line with tasteful emoji accent and refreshed copy
+    to reflect the two real sample images now available on the target page.
+
+PRESERVED INTENTIONALLY:
+- `requireCompletedUser(APP_ROUTES.lectureSummary)` protection on the page.
+- Backend/auth/session/permissions ownership and trust boundaries.
+- Existing route constants and home teaser routing contract.
+- Existing premium design language, dark/light support, RTL direction, and
+  responsive class strategy.
+
+VERIFICATION:
+Diagnostics:
+✓ `get_errors` on changed UI files — PASS.
+
+Command verification:
+✓ `npm run lint` — PASS.
+✓ `npm run typecheck` — PASS.
+✓ `npm run build` — PASS.
+✓ `npm run build:vercel` — PASS.
+
+Runtime route verification:
+✓ `GET /api/health` on local runtime — `200`.
+✓ `GET /lecture-summary` (unauthenticated, manual redirect) — `307` with
+  `Location: /login` (protected-route contract preserved).
+
+Requirement-specific verification:
+✓ Opening Arabic headline and tasteful emoji are present.
+✓ `coming-soon.png` remains rendered as the dominant hero visual.
+✓ `coming-soon-2.png` is now integrated in a dedicated polished section.
+✓ Direct download button for the instrumentation-summary image points to the
+  real image asset.
+✓ Lecture-summary image download CTAs are image-only (no fake `.txt` path).
+✓ Home teaser still links correctly via `APP_ROUTES.lectureSummary`.
+
+Notes:
+- Build logs still show the existing warning for unset
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT`; this pre-existed and is unrelated to
+  this UI pass.
+- Full authenticated visual QA across mobile/desktop viewports was validated at
+  code-level responsive class ownership in this pass; live authenticated
+  browser-playback screenshots were not generated in this environment.
   - stable-hash-salt guidance for deterministic governance lookups
   - route sanitization behavior for auth redirect env keys
   - base URL normalization and fallback chain behavior
@@ -3953,3 +4054,107 @@ Runtime notes:
 ~ Existing warning remains unchanged during build:
   `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
 ~ Warning is pre-existing and outside this UI refinement scope.
+
+2026-04-18: HOME TEASER DARK-MODE CTA CONTRAST FIX + SHARED PLATFORM SLOGAN ON HOME AND LECTURE-SUMMARY
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE / DESIGN ISSUE:
+- The Home lecture-summary teaser CTA is a one-off raw `Link` in
+  `lecture-summary-coming-soon-teaser.tsx`, not the shared `Button` primitive.
+- Because that CTA used fixed local classes and no explicit dark-mode text rule,
+  its dark-theme readability depended on the static one-off class stack instead
+  of an intentional theme override.
+- The requested platform slogan did not exist on either the protected Home hero
+  or the protected `/lecture-summary` hero, so the platform lacked a shared
+  compact branding line across those two related discovery surfaces.
+
+FILES CHANGED:
+- apps/web/components/branding/platform-slogan-note.tsx (new)
+- apps/web/components/home/lecture-summary-coming-soon-teaser.tsx
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/app/(protected)/(completed)/lecture-summary/page.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+TECHNICAL DETAILS:
+1. Dark-mode-only Home teaser CTA text fix
+   - Added an explicit `dark:text-slate-950` override to the primary teaser CTA
+     link in `apps/web/components/home/lecture-summary-coming-soon-teaser.tsx`.
+   - This keeps light mode unchanged while hardening text contrast when the
+     protected shell is in dark mode.
+   - No routing, dismissal behavior, badge layout, or CTA structure changed.
+
+2. Shared slogan component introduced
+   - Added `PlatformSloganNote` in
+     `apps/web/components/branding/platform-slogan-note.tsx`.
+   - The component renders the exact Arabic line:
+     `شعارنا: زوتوبيا كلوب - السبق لنا، والتميّز عنواننا`
+   - The component uses one compact, wrap-safe layout with:
+     - a small premium `Crown` icon chip,
+     - responsive small typography,
+     - `overflow-wrap:anywhere` protection for narrow screens,
+     - a tiny tone switch (`adaptive` vs `hero-dark`) so Home and
+       `/lecture-summary` stay visually aligned without forcing one rigid style
+       across different hero backgrounds.
+
+3. Home slogan placement
+   - Mounted `PlatformSloganNote` inside the protected Home title stack in
+     `apps/web/app/(protected)/(completed)/page.tsx`, directly below the main
+     hero title.
+   - Placement was intentionally kept inside the existing title lane so the hero
+     gains brand reinforcement without adding another full-width card or
+     disturbing current page hierarchy.
+
+4. `/lecture-summary` slogan placement
+   - Mounted `PlatformSloganNote tone="hero-dark"` inside the lecture-summary
+     hero intro block in
+     `apps/web/app/(protected)/(completed)/lecture-summary/page.tsx`.
+   - Placement sits with the existing hero badges/title/lead copy so the slogan
+     visually matches Home while still feeling native to the permanently dark
+     lecture-summary hero surface.
+
+5. Architecture / safety preserved
+   - No backend changes.
+   - No auth/session/permission changes.
+   - No route ownership changes.
+   - No navigation or redirect behavior changes.
+   - No dependency changes.
+
+VERIFICATION:
+Code-trace verification:
+✓ Confirmed Home still mounts the teaser in the protected hero sequence and now
+  mounts the shared slogan directly under the title stack.
+✓ Confirmed `/lecture-summary` still calls
+  `requireCompletedUser(APP_ROUTES.lectureSummary)` and now mounts the same
+  slogan component inside the hero intro.
+✓ Confirmed the CTA contrast fix is isolated to the Home teaser link class list.
+✓ Confirmed the slogan component is wrap-safe and responsive by class design
+  (`max-w-full`, compact text sizing, `overflow-wrap:anywhere`, adaptive hero
+  tone classes).
+
+Command verification:
+✓ `npm run lint` — PASS
+✓ `npm run typecheck` — PASS
+✓ `npm run build` — PASS
+✓ `npm run build:vercel` — PASS
+
+Runtime verification:
+✓ Browser automation against the production server confirmed the app boots and
+  protected routing remains intact:
+  - `http://127.0.0.1:3000/` redirected to `/login`
+  - `http://127.0.0.1:3000/lecture-summary` redirected to `/login`
+~ No authenticated browser session was available in this environment, so the
+  protected Home and `/lecture-summary` UI surfaces could not be visually
+  inspected live after login.
+~ Therefore, the dark-mode teaser CTA readability, Home slogan rendering,
+  lecture-summary slogan rendering, and mobile/desktop visual fit are verified
+  by code trace plus successful lint/type/build/build:vercel, not by an
+  authenticated browser screenshot session.
+
+Runtime notes:
+~ Build/start logs continue to show the pre-existing operational warning:
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
+~ Warning is unchanged by this UI-only refinement and remains outside this task.

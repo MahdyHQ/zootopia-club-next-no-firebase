@@ -16,12 +16,16 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 
+import { PlatformSloganNote } from "@/components/branding/platform-slogan-note";
 import { Button } from "@/components/ui/button";
 import { requireCompletedUser } from "@/lib/server/session";
 
 const LECTURE_SUMMARY_PREVIEW_IMAGE_SRC = "/coming-soon.png";
 const LECTURE_SUMMARY_PREVIEW_IMAGE_DOWNLOAD_NAME =
   "zootopia-lecture-summary-preview.png";
+const LECTURE_SUMMARY_INSTRUMENTATION_IMAGE_SRC = "/coming-soon-2.png";
+const LECTURE_SUMMARY_INSTRUMENTATION_IMAGE_DOWNLOAD_NAME =
+  "zootopia-instrumentation-summary-preview.png";
 
 const LECTURE_SUMMARY_FEATURE_ITEMS = [
   {
@@ -40,6 +44,18 @@ const LECTURE_SUMMARY_FEATURE_ITEMS = [
     icon: BadgeCheck,
     text: "تهيئة المخرجات بصيغة جاهزة للمذاكرة والطباعة أو الحفظ.",
   },
+] as const;
+
+const LECTURE_SUMMARY_STRUCTURE_ITEMS = [
+  "عنوان محاضرة واضح مع ترتيب بصري يساعد على المراجعة السريعة.",
+  "تلخيص مركّز لكل جزء مع إبراز المفاهيم والقوانين الأساسية.",
+  "ملاحظات تطبيقية قصيرة وأسئلة مراجعة لتثبيت الفهم قبل الاختبار.",
+] as const;
+
+const LECTURE_SUMMARY_INSTRUMENTATION_POINTS = [
+  "هذه صورة ملخص لمادة الإنسترو بصياغة مرئية أقرب لشكل المنتج النهائي.",
+  "التقسيم داخل النموذج يوضح كيف سيتم إبراز المحاور الأساسية دون إغراق بصري.",
+  "يمكن تنزيل الصورة مباشرة لاستخدامها كمرجع سريع أثناء التحضير أو المراجعة.",
 ] as const;
 
 const LECTURE_SUMMARY_SUPPORT_POINTS = [
@@ -76,17 +92,22 @@ export default async function LectureSummaryComingSoonPage() {
           </div>
 
           <h1 className="max-w-3xl font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-white sm:text-[2.5rem]">
-            ملخص المحاضرات الذكي
+            انتهى عصر التلخيص اليدوي
+            <span aria-hidden className="ms-2 text-[0.92em]">
+              🥹
+            </span>
           </h1>
 
-          <p className="max-w-3xl text-sm leading-7 text-cyan-50/90 sm:text-base sm:leading-8">
-            نعمل حالياً على إطلاق أداة ذكية تحول محتوى المحاضرة إلى ملخص دقيق
-            ومنظم يخدم المذاكرة السريعة. الهدف هو تقليل وقت الفرز اليدوي وتمكينك
-            من الوصول المباشر لأهم النقاط العلمية في دقائق.
+          <p className="max-w-3xl text-base font-black leading-8 text-cyan-50 sm:text-[1.08rem]">
+            ملخص المحاضرات الذكي يجعل الصورة أوضح من أول نظرة، ثم يضع التفاصيل المهمة
+            في بطاقات مرتبة وسهلة المسح.
           </p>
+          {/* Keep the shared slogan inside the lecture-summary hero intro so this protected
+              route mirrors the Home branding cue without introducing a second independent pattern. */}
+          <PlatformSloganNote tone="hero-dark" className="max-w-3xl" />
 
-          {/* Keep the preview image as the visual hero so the page immediately communicates
-              the upcoming feature surface before users dive into the detailed explanatory cards. */}
+          {/* Keep the first preview image dominant near the top so the page feels
+              visual-first while the richer Arabic copy remains available below it. */}
           <a
             href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
             target="_blank"
@@ -94,10 +115,10 @@ export default async function LectureSummaryComingSoonPage() {
             className="group block"
             aria-label="فتح معاينة الصورة بالحجم الكامل"
           >
-            <div className="relative overflow-hidden rounded-[1.55rem] border border-white/28 bg-[linear-gradient(135deg,rgba(255,255,255,0.16),rgba(148,163,184,0.08))] p-2.5 shadow-[0_30px_70px_rgba(2,6,23,0.42)] sm:rounded-[1.8rem] sm:p-3.5">
+            <div className="relative overflow-hidden rounded-[1.75rem] border border-white/28 bg-[linear-gradient(135deg,rgba(255,255,255,0.18),rgba(148,163,184,0.1))] p-3 shadow-[0_35px_80px_rgba(2,6,23,0.46)] sm:rounded-[1.95rem] sm:p-4">
               <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-white/35 bg-slate-950/45 px-2.5 py-1 text-[10px] font-black tracking-[0.14em] text-cyan-100">
                 <Eye className="h-3.5 w-3.5" />
-                افتح المعاينة الكاملة
+                الصورة الرسمية الأولى
               </span>
               <Image
                 src={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
@@ -105,14 +126,43 @@ export default async function LectureSummaryComingSoonPage() {
                 width={1408}
                 height={768}
                 sizes="(max-width: 640px) 95vw, (max-width: 1024px) 92vw, 1100px"
-                className="h-auto w-full rounded-[1.2rem] object-cover object-center transition-transform duration-300 group-hover:scale-[1.01] sm:rounded-[1.35rem]"
+                className="h-auto w-full rounded-[1.35rem] object-cover object-center transition-transform duration-300 group-hover:scale-[1.01] sm:rounded-[1.5rem]"
               />
             </div>
           </a>
 
+          <p className="max-w-3xl text-sm leading-7 text-cyan-50/90 sm:text-base sm:leading-8">
+            نعمل حالياً على إطلاق أداة ذكية تحول محتوى المحاضرة إلى ملخص دقيق
+            ومنظم يخدم المذاكرة السريعة. الهدف هو تقليل وقت الفرز اليدوي وتمكينك
+            من الوصول المباشر لأهم النقاط العلمية في دقائق.
+          </p>
+
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-cyan-300/45 bg-cyan-500/8 text-cyan-100 hover:bg-cyan-500/16 dark:text-cyan-200">
+              <a
+                href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Eye className="h-4.5 w-4.5" />
+                فتح الصورة في نافذة مستقلة
+              </a>
+            </Button>
+
+            <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-cyan-300/45 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/18 dark:text-cyan-200">
+              <a
+                href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
+                download={LECTURE_SUMMARY_PREVIEW_IMAGE_DOWNLOAD_NAME}
+              >
+                <ArrowDownToLine className="h-4.5 w-4.5" />
+                تحميل صورة المعاينة الأولى
+              </a>
+            </Button>
+          </div>
+
           <p className="inline-flex items-center gap-2 rounded-xl border border-cyan-200/20 bg-cyan-300/8 px-3 py-2 text-xs font-semibold text-cyan-50/95">
             <Eye className="h-4 w-4" />
-            يمكنك فتح الصورة بالحجم الكامل أو تنزيلها مباشرة من أزرار المعاينة بالأسفل.
+            الواجهة الآن تعتمد تنزيل الصور الحقيقية مباشرة بدون أي ملفات تجريبية وهمية.
           </p>
         </div>
       </section>
@@ -149,36 +199,105 @@ export default async function LectureSummaryComingSoonPage() {
           <article className="rounded-[1.4rem] border border-cyan-300/24 bg-[linear-gradient(145deg,rgba(236,254,255,0.86),rgba(224,242,254,0.62))] p-4 shadow-[0_16px_36px_rgba(14,116,144,0.12)] dark:border-cyan-300/20 dark:bg-[linear-gradient(145deg,rgba(8,47,73,0.6),rgba(15,23,42,0.62))] sm:p-5">
             <h3 className="mb-2 inline-flex items-center gap-2 font-[family-name:var(--font-display)] text-xl font-black tracking-tight text-zinc-900 dark:text-white">
               <ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-300" />
-              معاينة وتنزيل الصورة الرسمية
+              شكل العرض داخل الملخص النهائي
             </h3>
             <p className="text-sm leading-7 text-zinc-700 dark:text-zinc-300">
-              زر التحميل الآن يعمل مباشرة على صورة المعاينة الحقيقية الخاصة بالميزة،
-              بدون أي ملف نصي بديل. يمكنك إما فتحها في تبويب مستقل أو تنزيلها مباشرة.
+              بدلاً من النصوص المبعثرة، سيتم تقديم الملخص في هيكل واضح يساعد العين على
+              الانتقال بين الفقرات بسرعة مع الحفاظ على العمق العلمي.
             </p>
 
-            <div className="mt-4 grid gap-2.5">
-              <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-cyan-300/45 bg-cyan-500/8 text-cyan-800 hover:bg-cyan-500/14 dark:text-cyan-200">
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {LECTURE_SUMMARY_STRUCTURE_ITEMS.map((item) => (
+                <li
+                  key={item}
+                  className="inline-flex items-start gap-2 rounded-xl border border-cyan-300/30 bg-white/68 px-3 py-2.5 leading-6 text-zinc-700 dark:border-cyan-300/20 dark:bg-slate-900/45 dark:text-zinc-200"
+                >
+                  <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-cyan-700 dark:text-cyan-300" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      {/* This section introduces the second premium sample image as a dedicated
+          instrumentation-summary showcase with real file download ownership. */}
+      <section className="rounded-[2rem] border border-white/15 bg-white/44 p-4 backdrop-blur-2xl dark:border-white/8 dark:bg-zinc-950/36 sm:p-6">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:items-start">
+          <article className="rounded-[1.4rem] border border-fuchsia-300/24 bg-[linear-gradient(145deg,rgba(253,244,255,0.82),rgba(224,242,254,0.62))] p-4 shadow-[0_16px_36px_rgba(124,58,237,0.08)] dark:border-fuchsia-300/22 dark:bg-[linear-gradient(145deg,rgba(70,31,102,0.36),rgba(15,23,42,0.62))] sm:p-5">
+            <p className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/35 bg-fuchsia-300/14 px-3 py-1 text-[10px] font-black tracking-[0.14em] text-fuchsia-900 dark:text-fuchsia-100">
+              <Gift className="h-3.5 w-3.5" />
+              Instrumentation Summary
+            </p>
+
+            <h2 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-black tracking-tight text-zinc-900 dark:text-white">
+              نموذج بصري لمادة الإنسترو
+            </h2>
+
+            <p className="mt-2 text-sm leading-7 text-zinc-700 dark:text-zinc-300">
+              هذه صورة ملخص لمادة الإنسترو، مصممة لتوضح مستوى التنسيق الذي نستهدفه
+              في النسخة القادمة: تقسيم نظيف، تركيز أعلى، وقراءة أسرع.
+            </p>
+
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {LECTURE_SUMMARY_INSTRUMENTATION_POINTS.map((point) => (
+                <li
+                  key={point}
+                  className="inline-flex items-start gap-2 rounded-xl border border-fuchsia-300/28 bg-white/72 px-3 py-2.5 leading-6 text-zinc-700 dark:border-fuchsia-300/22 dark:bg-slate-900/48 dark:text-zinc-200"
+                >
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-700 dark:text-fuchsia-300" />
+                  <span>{point}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+              <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-fuchsia-300/45 bg-fuchsia-500/10 text-fuchsia-800 hover:bg-fuchsia-500/16 dark:text-fuchsia-200">
                 <a
-                  href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
+                  href={LECTURE_SUMMARY_INSTRUMENTATION_IMAGE_SRC}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   <Eye className="h-4.5 w-4.5" />
-                  فتح الصورة في نافذة مستقلة
+                  فتح صورة الإنسترو
                 </a>
               </Button>
 
-              <Button asChild variant="outline" className="h-auto min-h-11 justify-center gap-2 rounded-xl border-cyan-300/45 bg-cyan-500/10 text-cyan-800 hover:bg-cyan-500/16 dark:text-cyan-200">
+              <Button asChild className="h-auto min-h-11 justify-center gap-2 rounded-xl bg-fuchsia-600 text-white hover:bg-fuchsia-500">
                 <a
-                  href={LECTURE_SUMMARY_PREVIEW_IMAGE_SRC}
-                  download={LECTURE_SUMMARY_PREVIEW_IMAGE_DOWNLOAD_NAME}
+                  href={LECTURE_SUMMARY_INSTRUMENTATION_IMAGE_SRC}
+                  download={LECTURE_SUMMARY_INSTRUMENTATION_IMAGE_DOWNLOAD_NAME}
                 >
                   <ArrowDownToLine className="h-4.5 w-4.5" />
-                  تحميل صورة المعاينة
+                  تنزيل صورة ملخص الإنسترو
                 </a>
               </Button>
             </div>
           </article>
+
+          <a
+            href={LECTURE_SUMMARY_INSTRUMENTATION_IMAGE_SRC}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block"
+            aria-label="فتح صورة ملخص مادة الإنسترو بالحجم الكامل"
+          >
+            <div className="relative overflow-hidden rounded-[1.55rem] border border-white/30 bg-[linear-gradient(135deg,rgba(255,255,255,0.22),rgba(148,163,184,0.1))] p-3 shadow-[0_24px_56px_rgba(30,27,75,0.18)] sm:rounded-[1.7rem] sm:p-3.5">
+              <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-fuchsia-300/45 bg-fuchsia-950/45 px-2.5 py-1 text-[10px] font-black tracking-[0.14em] text-fuchsia-100">
+                <Eye className="h-3.5 w-3.5" />
+                معاينة ملخص الإنسترو
+              </span>
+              <Image
+                src={LECTURE_SUMMARY_INSTRUMENTATION_IMAGE_SRC}
+                alt="نموذج بصري لملخص مادة الإنسترو"
+                width={1574}
+                height={672}
+                sizes="(max-width: 640px) 95vw, (max-width: 1024px) 92vw, 980px"
+                className="h-auto w-full rounded-[1.22rem] object-cover object-center transition-transform duration-300 group-hover:scale-[1.01] sm:rounded-[1.35rem]"
+              />
+            </div>
+          </a>
         </div>
       </section>
 

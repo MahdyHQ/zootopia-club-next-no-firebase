@@ -83,25 +83,32 @@ export function LectureSummaryComingSoonTeaser() {
             </p>
           </div>
 
+          <p className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-black tracking-[0.04em] text-white/95">
+            انتهى عصر التلخيص اليدوي
+            <span aria-hidden className="text-sm">
+              🥹
+            </span>
+          </p>
+
           <h2 className="font-[family-name:var(--font-display)] text-2xl font-black tracking-tight text-white sm:text-[1.8rem]">
-            ملخص المحاضرات الذكي أصبح أقرب من أي وقت
+            صفحة ملخص المحاضرات أصبحت أكثر وضوحاً وجاهزية
           </h2>
 
           <p className="max-w-2xl text-sm leading-7 text-cyan-50/90 sm:text-[0.95rem]">
-            جهّزنا صفحة مخصصة توضح ما الذي نطوره الآن: أداة ذكية لاستخراج ملخص
-            مركز ومنظّم من ملفات المحاضرات، مع تجربة مصممة خصيصاً لمسار طلاب
-            كلية العلوم داخل زوتوبيا كلوب.
+            جهّزنا صفحة مخصصة تعرض الآن معاينتين بصريتين حقيقيتين لواجهة الملخص:
+            الصورة الرسمية الأولى وصورة ملخص مادة الإنسترو، مع تنزيل مباشر للصور
+            نفسها داخل المسار المحمي.
           </p>
 
           <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
             <Link
               href={APP_ROUTES.lectureSummary}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-200/55 bg-white px-4 py-2.5 text-sm font-black text-sky-900 shadow-[0_10px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-0.5 hover:bg-cyan-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-200/55 bg-white px-4 py-2.5 text-sm font-black text-sky-900 shadow-[0_10px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-0.5 hover:bg-cyan-50 dark:text-slate-950"
             >
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-fuchsia-300/45 bg-fuchsia-100 text-fuchsia-700">
                 <Gift className="h-3.5 w-3.5" />
               </span>
-              افتح صفحة الميزة
+              افتح صفحة الصور والنماذج
               <ArrowUpLeft className="h-4 w-4" />
             </Link>
 

@@ -28,6 +28,7 @@ import {
 import { requireCompletedUser } from "@/lib/server/session";
 import { PlatformStoryCta } from "@/components/home/platform-story-cta";
 import { LectureSummaryComingSoonTeaser } from "@/components/home/lecture-summary-coming-soon-teaser";
+import { PlatformSloganNote } from "@/components/branding/platform-slogan-note";
 import { Button } from "@/components/ui/button";
 
 export default async function HomePage() {
@@ -107,6 +108,9 @@ export default async function HomePage() {
             <h1 className="max-w-2xl font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-zinc-900 md:text-4xl dark:text-white">
               {uiContext.messages.homeTitle}
             </h1>
+            {/* Keep the slogan inside the title stack so Home gains a refined brand cue
+                without adding another full-width surface or disturbing the hero card rhythm. */}
+            <PlatformSloganNote className="max-w-2xl" />
           </div>
         </div>
 
