@@ -40,18 +40,30 @@ function unwrapSingleQuotedEnvValue(value: string) {
   return normalized;
 }
 
+const ADMIN_EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function readConfiguredAdminEmailsFromEnv() {
   const normalizedEnvValue = unwrapSingleQuotedEnvValue(
     process.env.ZOOTOPIA_ADMIN_EMAILS ?? "",
   );
 
   /* Admin allowlist parsing feeds both admin auth and admin-implied active-capacity exemption.
-     Keep delimiter/quote tolerance aligned with the exempt-email parser so a routine env edit
-     cannot silently break admin access or cause admin identities to lose their bypass. */
+     Keep delimiter/quote tolerance and validation aligned with the exempt-email parser so a
+     routine env edit cannot silently break admin access or cause admin identities to lose their
+     bypass. Invalid-format entries are dropped with a warning, not silently accepted. */
   return normalizedEnvValue
     .split(/[,\n;]+/g)
     .map((value) => normalizeIdentifier(value))
-    .filter(Boolean);
+    .filter(Boolean)
+    .flatMap((value) => {
+      if (!ADMIN_EMAIL_FORMAT_REGEX.test(value)) {
+        console.warn(
+          `[admin-auth] Ignoring malformed ZOOTOPIA_ADMIN_EMAILS entry "${value.slice(0, 30)}".`,
+        );
+        return [];
+      }
+      return [value];
+    });
 }
 
 export function getAllowlistedAdminEmails() {

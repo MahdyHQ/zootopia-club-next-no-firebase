@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npx tsc:*)",
       "Bash(npx eslint:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(xargs grep *)",
+      "Bash(npm run *)",
+      "Bash(wait *)",
+      "Bash(echo \"Ledger append done, exit code: $?\")"
     ]
   }
 }

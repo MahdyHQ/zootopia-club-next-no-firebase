@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Session TTL vs active normal-user lease separation audit hardening recorded)
+Last Updated: 2026-04-18 (Full queue/admission/capacity system audit + admin email validation hardening)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -3513,3 +3513,143 @@ Command verification:
 ~ No lint/typecheck/build rerun for this pass because only documentation
   contract files changed (`.env.example` + ledger), with no TypeScript/runtime
   implementation edits.
+
+2026-04-18: FULL QUEUE/ADMISSION/CAPACITY SYSTEM AUDIT + ADMIN EMAIL VALIDATION HARDENING
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+A comprehensive architecture-level audit of the full queue/admission/capacity
+system was requested to verify correctness end-to-end: env parsing, exempt/admin
+bypass ordering, signup/confirm-email compatibility, Auth.js consistency, DB
+governance, error taxonomy, and user-facing messaging.
+
+One real hardening gap was found:
+  ZOOTOPIA_ADMIN_EMAILS parsing in admin-auth.ts was missing format validation.
+  The exempt-email parser in active-normal-user-session-governance.ts already
+  validated each entry with regex /^[^\s@]+@[^\s@]+\.[^\s@]+$/ and logged a
+  warning for malformed entries, but the admin email parser only trimmed and
+  lowercased without any format check. A typo like admin@@example.com would
+  silently become a valid admin entry and also feed the exempt-capacity
+  exclusion list, potentially creating a phantom admin identity that could
+  never actually authenticate.
+
+FILES CHANGED:
+- apps/web/lib/server/admin-auth.ts
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+Harden admin email parsing to match the exempt-email parser so both use the
+same validation contract: split, trim, lowercase, validate, warn, drop invalid.
+Close the gap where a typo in ZOOTOPIA_ADMIN_EMAILS could silently persist as a
+malformed admin allowlist entry with no runtime warning.
+
+TECHNICAL DETAILS:
+1. Admin email validation added
+   - Added ADMIN_EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/ constant
+     at module level in admin-auth.ts.
+   - readConfiguredAdminEmailsFromEnv() now calls .flatMap() after the existing
+     .map(normalizeIdentifier).filter(Boolean) chain.
+   - Each entry that fails the regex emits a console.warn and is dropped from
+     the returned allowlist (identical pattern to exempt-email handling).
+   - Quote-handling, delimiter tolerance, and lowercase normalization unchanged.
+   - Deduplication by getAllowlistedAdminEmails() (new Set()) is unchanged.
+   - Updated comment to reflect validation alignment is now complete.
+
+AUDIT FINDINGS (all system areas reviewed, no other bugs found):
+
+A. Queue/capacity system
+   - Server-authoritative via advisory-locked DB transactions. Correct.
+   - Only non-exempt users count: readActiveNormalUserCount() uses
+     email != ALL(excludedEmails) in the SQL query.
+   - Expired rows excluded via WHERE lease_expires_at > NOW() plus proactive
+     purge at start of each capacity transaction.
+   - Active count is truthful. Count is sanitized to non-negative.
+
+B. Environment variables
+   - All 13 queue/admission/capacity env vars correctly documented in .env.example.
+   - ZOOTOPIA_ACTIVE_NORMAL_USER_LIMIT, _SESSION_MINUTES, _EXEMPT_EMAILS: robustly
+     parsed with clamping, quote-unwrapping, delimiter tolerance, and validation.
+   - ZOOTOPIA_ADMIN_EMAILS: now fully aligned with exempt parser (see fix above).
+   - AUTH_ADMISSION_CONFIG is cached at module load in admission/route.ts and
+     signup/route.ts. Env changes require restart/redeploy. Documented behavior.
+
+C. Exempt/admin bypass ordering
+   - Admission route POST: capacity decision evaluated first, exempt early return
+     happens BEFORE reserveAuthAdmissionAttempt() is called. Correct.
+   - Auth.js authorizeUserCredentials: calls reserveOrRenewActiveNormalUserSession
+     Lease() where exempt check is the first operation. Correct.
+   - Session rehydration: admin role calls releaseActiveNormalUserSessionLease()
+     best-effort; exempt email passes through the lease function which returns
+     immediately with allowed=true.
+   - No location found where an exempt user can be blocked before exemption is applied.
+
+D. Signup + confirm-email + onboarding
+   - POST /api/auth/signup performs admission rate-limiting but NO capacity check.
+     Account creation is not the same as active session admission. Correct.
+   - Confirm-email success redirects to /login?confirmed=1&email=...&onboarding=signup.
+   - Login panel reads ?onboarding=signup and renders onboarding-aware capacity
+     messaging if the platform is full when the new user tries to log in.
+   - Users are never confused about whether signup failed vs. capacity being full.
+
+E. Auth.js / session / logout consistency
+   - authorizeUserCredentials and getVerifiedSessionContext both call
+     reserveOrRenewActiveNormalUserSessionLease with the same logic, fail-closed
+     for non-exempt normal users.
+   - authorizeAdminCredentials calls releaseActiveNormalUserSessionLease to clean
+     up stale user-mode leases. Admin sessions are never capacity-gated.
+   - Logout reads raw auth() cookie and calls releaseActiveNormalUserSessionLease
+     best-effort so lease release cannot block the logout response.
+   - No logical contradictions between authorize and session rehydration.
+
+F. Error taxonomy + UI messaging
+   - 14 distinct AUTH_* error codes. None collapse incorrectly.
+   - AUTH_ACTIVE_USER_CAPACITY_FULL and AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE
+     are distinct raw codes, distinct normalized codes, and distinct UI states.
+   - AUTH_RATE_LIMITED is distinct from both: different source, different message,
+     no count interpolation.
+   - Auto-refresh polling every 5 seconds on capacity-blocked states.
+   - EN/AR message sets complete and coherent for all states including onboarding.
+   - Admin login does not handle capacity codes. Appropriate.
+
+G. Database / migration
+   - public.active_normal_user_sessions table: correct structure, proper PK,
+     constraints. RLS: deny-all for both anon and authenticated roles.
+   - No accidental browser access possible.
+   - Indexes on lease_expires_at and email. Adequate for max-100-user scale.
+   - Advisory lock key 381104202 serializes all capacity decisions across instances.
+   - No RLS drift or policy gaps found.
+
+H. Logic review summary
+   - No false queue messages for non-capacity states.
+   - No stale counters. No misordered checks.
+   - Design note: lease TTL (default 15min) is intentionally decoupled from
+     Auth.js session TTL (default 60min). This is documented behavior, not a bug.
+
+PRESERVED INTENTIONALLY:
+- Auth.js as the server trust boundary.
+- Server-authoritative queue/admission logic.
+- Admin authority and exempt-account behavior.
+- Existing error normalization architecture.
+- All working features across signup, confirm-email, login, session, logout.
+
+VERIFICATION:
+Code-trace verification:
+✓ 10 parallel exploration agents traced all system areas before any changes.
+✓ All agents consolidated before implementing the fix.
+✓ Only one real hardening gap identified (admin email validation).
+✓ All other system areas verified correct by code tracing.
+
+Command verification:
+✓ npm run typecheck:web — PASS
+✓ npm run build:web — PASS (Compiled successfully in 10.2s)
+✓ npm run lint:web — PASS (no errors; 2 pre-existing warnings unchanged)
+
+Runtime proof:
+~ No live concurrent-session QA run was executed in this environment.
+~ Verification is code-traced plus lint/type/build command passes.
+~ Outstanding live QA gap: dedicated credential-backed admin login, exempt user
+  session rehydration cycle, and controlled capacity-full occupancy fixture.
