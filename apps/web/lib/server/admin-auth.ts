@@ -19,9 +19,37 @@ function normalizeIdentifier(value: string) {
   return value.trim().toLowerCase();
 }
 
+function unwrapSingleQuotedEnvValue(value: string) {
+  const normalized = value.trim();
+  if (normalized.length < 2) {
+    return normalized;
+  }
+
+  const startsWithDoubleQuote = normalized.startsWith("\"");
+  const endsWithDoubleQuote = normalized.endsWith("\"");
+  if (startsWithDoubleQuote && endsWithDoubleQuote) {
+    return normalized.slice(1, -1).trim();
+  }
+
+  const startsWithSingleQuote = normalized.startsWith("'");
+  const endsWithSingleQuote = normalized.endsWith("'");
+  if (startsWithSingleQuote && endsWithSingleQuote) {
+    return normalized.slice(1, -1).trim();
+  }
+
+  return normalized;
+}
+
 function readConfiguredAdminEmailsFromEnv() {
-  return (process.env.ZOOTOPIA_ADMIN_EMAILS ?? "")
-    .split(",")
+  const normalizedEnvValue = unwrapSingleQuotedEnvValue(
+    process.env.ZOOTOPIA_ADMIN_EMAILS ?? "",
+  );
+
+  /* Admin allowlist parsing feeds both admin auth and admin-implied active-capacity exemption.
+     Keep delimiter/quote tolerance aligned with the exempt-email parser so a routine env edit
+     cannot silently break admin access or cause admin identities to lose their bypass. */
+  return normalizedEnvValue
+    .split(/[,\n;]+/g)
     .map((value) => normalizeIdentifier(value))
     .filter(Boolean);
 }

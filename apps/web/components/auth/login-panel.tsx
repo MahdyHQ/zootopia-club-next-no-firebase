@@ -746,6 +746,17 @@ export function LoginPanel({
         if (cancelled) {
           return;
         }
+
+        /* Capacity polling belongs to the `/login` admission truth surface. When that refresh
+           degrades, do not keep showing stale queue/capacity copy as if it were current truth;
+           preserve the blocked state but surface the temporary admission-availability message
+           until the next successful server refresh proves the real state again. */
+        setStatus(
+          mapRegularLoginError(
+            createAuthFlowError("AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE"),
+            messages,
+          ),
+        );
       }
     };
 
@@ -1148,8 +1159,8 @@ export function LoginPanel({
               : {
                   tone: "warning",
                   icon: "warning",
-                  title: messages.loginStatusRetryLaterTitle,
-                  body: messages.loginStatusRetryLaterBody,
+                  title: messages.loginStatusCapacityFullTitle,
+                  body: messages.loginStatusCapacityFullFallbackBody,
                 },
           );
         }

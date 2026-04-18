@@ -150,21 +150,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const admission = await reserveAuthAdmissionAttempt({
-      request,
-      email,
-      kind: "sign_in",
-    });
-
-    if (!admission.allowed && admission.reservationAccepted !== true) {
-      return withAdmissionHeaders(
-        applyNoStore(
-          apiError("AUTH_RATE_LIMITED", LOGIN_ADMISSION_DELAY_MESSAGE, 429),
-        ),
-        admission,
-      );
-    }
-
     const capacityDecision = await evaluateActiveNormalUserAdmissionByEmail({
       email,
     });
@@ -181,8 +166,38 @@ export async function POST(request: Request) {
         capacityDecision.snapshot,
       );
       failure.headers.set("Retry-After", String(CAPACITY_RETRY_AFTER_SECONDS));
+      return failure;
+    }
 
-      return withAdmissionHeaders(failure, admission);
+    /* Login admission owns the public pacing/throttle edge, but exempt/admin identities must
+       bypass that generic admission store before any blocking result is returned for `/login`.
+       Keep this early return here so temporary auth-admission degradation never re-gates
+       identities that the decisive Auth.js/session capacity layer already treats as exempt. */
+    if (capacityDecision.exempt) {
+      return withCapacityHeaders(
+        applyNoStore(
+          apiSuccess({
+            accepted: true,
+            capacity: capacityDecision,
+          }),
+        ),
+        capacityDecision.snapshot,
+      );
+    }
+
+    const admission = await reserveAuthAdmissionAttempt({
+      request,
+      email,
+      kind: "sign_in",
+    });
+
+    if (!admission.allowed && admission.reservationAccepted !== true) {
+      return withAdmissionHeaders(
+        applyNoStore(
+          apiError("AUTH_RATE_LIMITED", LOGIN_ADMISSION_DELAY_MESSAGE, 429),
+        ),
+        admission,
+      );
     }
 
     return withAdmissionHeaders(

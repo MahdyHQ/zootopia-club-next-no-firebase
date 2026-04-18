@@ -215,6 +215,13 @@ export function mapRegularLoginError(
         messages.loginStatusAccountExistsTitle,
         messages.loginStatusAccountExistsBody,
       );
+    case "AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE":
+      return status(
+        "warning",
+        "warning",
+        messages.loginStatusAdmissionUnavailableTitle,
+        messages.loginStatusAdmissionUnavailableBody,
+      );
     case "AUTH_RATE_LIMITED":
       return status(
         "warning",
@@ -238,7 +245,7 @@ export function mapRegularLoginError(
         messages.loginStatusCapacityFullTitle,
         snapshot
           ? interpolateCapacityTemplate(messages.loginStatusCapacityFullBody, snapshot)
-          : messages.loginStatusRetryLaterBody,
+          : messages.loginStatusCapacityFullFallbackBody,
       );
     }
     case "AUTH_SESSION_CREATION_FAILED":

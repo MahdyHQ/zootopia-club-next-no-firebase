@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (First-time signup onboarding capacity messaging hardening recorded)
+Last Updated: 2026-04-18 (Exempt login-admission bypass + truthful admission-unavailable messaging recorded)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -94,6 +94,14 @@ Key verified facts:
   `POST /api/auth/login/admission` before browser `signInWithPassword()`,
   using persisted cross-instance account/IP windows and calm 15-minute retry
   guidance when the auth edge is being shaped under pressure
+- Login admission now short-circuits allowlisted admin emails plus
+  `ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS` identities before public
+  auth-admission shaping, so exempt/admin users no longer depend on the
+  admission-store path to bypass active normal-user capacity governance
+- `AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE` now stays distinct through auth
+  normalization and public login UI rendering, so temporary admission-state
+  outages no longer show the 15-minute queue/pacing message, and capacity-full
+  fallback copy stays truthful even when a live count snapshot is unavailable
 - Confirm-email success now clears the helper Supabase browser session and
   redirects back to `/login` or `/admin/login` with verified-email context;
   Auth.js bootstrap only happens after the user explicitly logs in again
@@ -1725,6 +1733,166 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-18: EXEMPT LOGIN-ADMISSION BYPASS + TRUTHFUL ADMISSION-UNAVAILABLE MESSAGING
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. `POST /api/auth/login/admission` still reserved the generic public
+   auth-admission window before checking the active normal-user exempt/admin
+   bypass, so exempt identities could still be blocked by admission-store
+   degradation even though the decisive Auth.js/session capacity paths already
+   treated them as exempt.
+2. `AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE` was normalized into
+   `AUTH_RATE_LIMITED`, so the public login UI rendered the 15-minute pacing/
+   queue copy for a temporary admission-state availability problem.
+3. When a real capacity-full denial lost its live count snapshot, the fallback
+   login copy also dropped to the retry-later pacing message instead of staying
+   on truthful capacity-full wording.
+4. `ZOOTOPIA_ADMIN_EMAILS` parsing was still stricter than the exempt-email
+   parser, so accidental env quote wrapping or newline/semicolon separators
+   could silently break admin matching and the admin-implied bypass path.
+
+FILES CHANGED:
+- apps/web/app/api/auth/login/admission/route.ts
+- apps/web/lib/auth-failure.ts
+- apps/web/components/auth/auth-feedback.ts
+- apps/web/components/auth/login-panel.tsx
+- apps/web/lib/server/admin-auth.ts
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Ensure exempt/admin identities bypass public login admission before any
+  blocking admission decision is returned.
+- Keep normal users fail-closed while letting exempt/admin identities fail open
+  when the admission-state store is temporarily unavailable.
+- Preserve truthful user-facing messaging by separating real capacity-full from
+  temporary admission availability degradation.
+- Keep Auth.js as the trust boundary and avoid redesigning the surrounding auth
+  architecture.
+
+TECHNICAL DETAILS:
+1. Login admission ordering hardening
+   - `POST /api/auth/login/admission` now evaluates active normal-user
+     admission first.
+   - Capacity-full responses now return immediately with
+     `AUTH_ACTIVE_USER_CAPACITY_FULL`.
+   - Exempt/admin identities now return `accepted: true` immediately and skip
+     `reserveAuthAdmissionAttempt(...)`, so the generic public auth-admission
+     store can no longer re-gate them before Auth.js authorize runs.
+
+2. Distinct auth failure normalization
+   - `apps/web/lib/auth-failure.ts` now preserves
+     `AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE` as its own normalized code
+     instead of collapsing it into `AUTH_RATE_LIMITED`.
+
+3. Truthful UI mapping
+   - `apps/web/components/auth/auth-feedback.ts` now maps
+     `AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE` to dedicated temporary
+     availability copy.
+   - Capacity-full fallback copy now stays on a capacity-full message even when
+     the exact active/limit snapshot is unavailable.
+   - `apps/web/components/auth/login-panel.tsx` now surfaces the temporary
+     admission-unavailable state during blocked-login polling instead of
+     silently leaving stale queue/capacity copy on screen.
+
+4. Admin env parsing hardening
+   - `apps/web/lib/server/admin-auth.ts` now tolerates one accidental outer
+     quote pair plus newline/semicolon delimiters so admin allowlist parsing
+     stays aligned with the exempt-email parser used by active-capacity
+     governance.
+
+5. Auth.js/session/logout preservation
+   - Re-traced `apps/web/auth.ts`, `apps/web/lib/server/session.ts`, and
+     `apps/web/app/api/auth/logout/route.ts`.
+   - No logic change was required there because:
+     - user authorize already calls the decisive
+       `reserveOrRenewActiveNormalUserSessionLease(...)`
+     - exempt identities already fail open inside that lease helper
+     - admin authorize/session rehydration already best-effort release stale
+       leases instead of renewing them
+     - logout already reads raw `auth()` and releases the lease without routing
+       through renewal-gated session rehydration
+
+WHAT WAS INTENTIONALLY PRESERVED:
+- Auth.js cookie -> server session rehydration remains the only protected-route
+  trust boundary.
+- Normal-user active-capacity governance remains server-authoritative and
+  fail-closed for non-exempt identities.
+- Allowlisted admins still must use the dedicated admin lane; this patch stops
+  public login preflight from mislabeling them as queued, but it does not turn
+  `/login` into a second admin entrance.
+- Existing sign-up, confirm-email, profile-completion, repository, and owner-
+  scope architecture remained unchanged.
+
+RISKS / FOLLOW-UP:
+1. Full live Auth.js admin sign-in and live exempt authenticated session
+   rehydration still require dedicated QA credentials to prove beyond code
+   tracing.
+2. Real capacity-full browser proof still requires a controlled occupied-seat
+   fixture or concurrent-session test setup; it was not forced in this
+   environment.
+3. The client diagnosis stage can still read as
+   `AUTH_STAGE_E_SESSION_HYDRATION` for some preflight-originated failures
+   because the login panel currently buckets submit failures at that later
+   surface; this patch targeted the raw code truth and UI messaging, not a
+   broader stage-taxonomy redesign.
+
+VERIFICATION:
+Parallel investigation:
+✓ Completed the requested multi-agent trace lanes before editing and
+  consolidated the findings against the live codebase.
+
+Code-trace verification:
+✓ Verified exempt/admin bypass already exists in the decisive
+  Auth.js authorize, session rehydration, and logout release paths.
+✓ Verified the misleading queue message came from auth-failure normalization
+  collapsing `AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE` into
+  `AUTH_RATE_LIMITED`.
+✓ Verified the public login admission route was the only decisive remaining
+  bypass gap.
+
+Command verification:
+✓ `npm run lint` — PASS (2 pre-existing warnings only:
+  `assessment-studio.tsx` aria-disabled on form role, and
+  `confirm-email-panel.tsx` missing `flow` dependency in `useEffect`)
+✓ `npm run typecheck` — PASS
+✓ `npm run build` — PASS
+✓ `npm run build:vercel` — PASS
+
+Live runtime proof (final patched build on `127.0.0.1:3020`):
+✓ `GET /login` — `200`
+✓ `GET /admin/login` — `200`
+✓ `POST /api/auth/login/admission` with required exempt email
+  `elmahdyabdulla208@gmail.com` — `200`, `accepted: true`,
+  `capacity.exempt: true`, `reason: "EXEMPT"`
+✓ `POST /api/auth/login/admission` with allowlisted admin email
+  `alahlyeagle@gmail.com` — `200`, `accepted: true`,
+  `capacity.exempt: true`, `reason: "EXEMPT"`
+✓ `POST /api/auth/login/admission` with non-exempt
+  `normal-user@example.com` — `503`,
+  `AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE`,
+  `"Secure login admission is temporarily unavailable. Please wait a moment and try again."`
+✓ Headless browser submit on `/login` with non-exempt
+  `normal-user@example.com` matched the temporary
+  admission-unavailable UI message, not the 15-minute queue text
+✓ Headless browser submit on `/login` with required exempt email
+  `elmahdyabdulla208@gmail.com` reached the invalid-credentials UI path,
+  which proves the exempt identity bypassed the public queue/admission gate
+  and continued to the downstream Supabase/Auth.js lane instead
+
+Runtime proof still not completed live:
+~ No dedicated credential-backed admin Auth.js sign-in was executed.
+~ No dedicated credential-backed exempt Auth.js sign-in + protected-session
+  rehydration cycle was executed.
+~ No controlled live capacity-full occupancy fixture was created in this
+  environment.
 
 2026-04-18: SMART TITLE END-VISIBILITY POLISH + HOME TINY-SCREEN VIEWPORT CONTAINMENT
 ────────────────────────────────────────────────────────────────────────────
