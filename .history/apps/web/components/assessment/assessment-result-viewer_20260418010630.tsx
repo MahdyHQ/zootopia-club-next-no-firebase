@@ -6,7 +6,6 @@ import type {
 } from "@/lib/assessment-preview-model";
 import { buildAssessmentFileQuestionPages } from "@/lib/assessment-file-layout";
 import type { AppMessages } from "@/lib/messages";
-import { buildSmartTitleDisplay } from "@/lib/smart-title-display";
 
 import { AssessmentGroupedView } from "@/components/assessment/assessment-grouped-view";
 import { AssessmentFileFooter } from "@/components/assessment/assessment-file-footer";
@@ -50,6 +49,7 @@ export function AssessmentResultViewer({
 
   return (
     <div className="space-y-6">
+  import { buildSmartTitleDisplay } from "@/lib/smart-title-display";
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {preview.metadata.map((item) => (
           <article
@@ -90,13 +90,13 @@ export function AssessmentResultViewer({
                     dark ? "bg-blue-500/15 text-blue-100" : "bg-blue-50 text-blue-700"
                   }`}
                 >
+                  {messages.assessmentSourceDocument}: {preview.sourceDocumentLabel}
+                </span>
+              ) : null}
                   {messages.assessmentSourceDocument}: {buildSmartTitleDisplay(preview.sourceDocumentLabel, {
                     maxLength: 48,
                     suffixLengthWithExtension: 8,
                   })}
-                </span>
-              ) : null}
-            </div>
 
             <div className="grid gap-4">
               <AssessmentGroupedView
