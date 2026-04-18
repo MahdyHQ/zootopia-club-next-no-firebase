@@ -1447,6 +1447,7 @@ export function AssessmentStudio({
         ...current,
         prompt: "",
       }));
+      setError(null);
       setUnlockPassword("");
       setUnlockPasswordVisible(false);
       setUnlockError(null);
@@ -1634,6 +1635,29 @@ export function AssessmentStudio({
       if (!response.ok || !payload.ok) {
         if (!payload.ok && payload.error.fieldErrors) {
           setFieldErrors(payload.error.fieldErrors);
+        }
+
+        if (
+          !payload.ok &&
+          (
+            payload.error.code === "ASSESSMENT_PROMPT_LOCKED"
+            || payload.error.code === "ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED"
+          )
+        ) {
+          /* Assessment prompt authority stays server-owned. If the cookie expires, the
+             env password rotates, or entitlement is revoked, relock the prompt UI
+             immediately so the client cannot keep rendering an outdated unlocked state. */
+          setPromptAccess((current) => ({
+            ...current,
+            lockEnabled: true,
+            unlocked: false,
+            entitlement:
+              payload.error.code === "ASSESSMENT_PROMPT_ENTITLEMENT_REQUIRED"
+                ? "disabled"
+                : current.entitlement,
+          }));
+          setUnlockSuccessVisible(false);
+          setUnlockSuccessEntered(false);
         }
 
         if (!payload.ok && payload.error.code === "ASSESSMENT_DAILY_CREDITS_EXHAUSTED") {

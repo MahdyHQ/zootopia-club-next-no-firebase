@@ -6,6 +6,15 @@ import type { AssessmentPromptEntitlement, SessionUser } from "@zootopia/shared-
 import { cookies } from "next/headers";
 
 import { getAssessmentPromptEntitlementForUser } from "@/lib/server/repository";
+import {
+  hasTimingSafeStringMatch,
+  hasTimingSafeStringMatchAny,
+  normalizeSubmittedPasswordGateValue,
+  readPasswordGateBooleanFlag,
+  readPasswordGateMatchConfig,
+  resolvePasswordGateSigningSecret,
+  type PasswordGateSecretSource,
+} from "@/lib/server/password-gate-runtime";
 import { getSessionTtlSeconds } from "@/lib/server/session-config";
 
 const ASSESSMENT_PROMPT_LOCK_ENABLED_ENV_KEY = "ZOOTOPIA_ASSESSMENT_PROMPT_LOCK_ENABLED";
@@ -24,8 +33,11 @@ type AssessmentPromptUnlockPayload = {
 type AssessmentPromptLockConfig = {
   lockEnabled: boolean;
   password: string | null;
+  passwordComparisonValues: string[];
+  passwordHasQuotedWrapper: boolean;
   passwordFingerprint: string | null;
   signingSecret: string | null;
+  signingSecretSource: PasswordGateSecretSource | null;
   cookieMaxAgeSeconds: number;
 };
 
@@ -35,28 +47,6 @@ export type AssessmentPromptAccessState = {
   isAdmin: boolean;
   entitlement: AssessmentPromptEntitlement;
 };
-
-function readBooleanEnvFlag(value: string | undefined) {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-
-  if (["1", "true", "yes", "on"].includes(normalized)) {
-    return true;
-  }
-
-  if (["0", "false", "no", "off"].includes(normalized)) {
-    return false;
-  }
-
-  return null;
-}
-
-function readTrimmedEnvValue(value: string | undefined) {
-  const normalized = String(value ?? "").trim();
-  return normalized.length > 0 ? normalized : null;
-}
 
 function toBase64Url(input: Buffer | string) {
   const source = typeof input === "string" ? Buffer.from(input) : input;
@@ -76,34 +66,28 @@ function buildPromptUnlockSignature(payloadSegment: string, signingSecret: strin
 }
 
 function readPromptLockConfig(): AssessmentPromptLockConfig {
-  const configuredPassword = readTrimmedEnvValue(
+  const passwordConfig = readPasswordGateMatchConfig(
     process.env[ASSESSMENT_PROMPT_UNLOCK_PASSWORD_ENV_KEY],
   );
-  const explicitLockEnabled = readBooleanEnvFlag(
+  const signingSecret = resolvePasswordGateSigningSecret();
+  const explicitLockEnabled = readPasswordGateBooleanFlag(
     process.env[ASSESSMENT_PROMPT_LOCK_ENABLED_ENV_KEY],
   );
-  const lockEnabled = Boolean(configuredPassword) && explicitLockEnabled !== false;
+  const lockEnabled =
+    Boolean(passwordConfig.configuredValue) && explicitLockEnabled !== false;
 
   return {
     lockEnabled,
-    password: configuredPassword,
-    passwordFingerprint: configuredPassword
-      ? createHash("sha256").update(configuredPassword).digest("hex")
+    password: passwordConfig.configuredValue,
+    passwordComparisonValues: passwordConfig.comparisonValues,
+    passwordHasQuotedWrapper: passwordConfig.hasQuotedWrapper,
+    passwordFingerprint: passwordConfig.configuredValue
+      ? createHash("sha256").update(passwordConfig.configuredValue).digest("hex")
       : null,
-    signingSecret: readTrimmedEnvValue(process.env.AUTH_SECRET),
+    signingSecret: signingSecret.value,
+    signingSecretSource: signingSecret.source,
     cookieMaxAgeSeconds: getSessionTtlSeconds(),
   };
-}
-
-function hasTimingSafeStringMatch(left: string, right: string) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function signPromptUnlockPayload(
@@ -224,6 +208,9 @@ export function getAssessmentPromptLockRuntimeState() {
     lockEnabled: config.lockEnabled,
     signingReady: Boolean(config.signingSecret && config.passwordFingerprint),
     cookieMaxAgeSeconds: config.cookieMaxAgeSeconds,
+    passwordConfigured: Boolean(config.password),
+    passwordHasQuotedWrapper: config.passwordHasQuotedWrapper,
+    signingSecretSource: config.signingSecretSource,
   };
 }
 
@@ -233,7 +220,11 @@ export function isAssessmentPromptUnlockPasswordValid(inputPassword: string) {
     return false;
   }
 
-  return hasTimingSafeStringMatch(String(inputPassword ?? "").trim(), config.password);
+  const normalizedInput = normalizeSubmittedPasswordGateValue(inputPassword);
+  return hasTimingSafeStringMatchAny(
+    normalizedInput,
+    config.passwordComparisonValues,
+  );
 }
 
 export function buildAssessmentPromptUnlockCookieValueForUser(userUid: string) {

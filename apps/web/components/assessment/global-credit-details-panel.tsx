@@ -10,7 +10,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { Clock3, RefreshCcw, ShieldCheck, WalletCards } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   formatAssessmentCreditCount,
@@ -26,6 +26,7 @@ import type { AppMessages } from "@/lib/messages";
 type GlobalCreditDetailsPanelProps = {
   locale: Locale;
   messages: AppMessages;
+  onLockRejected?: () => void;
 };
 
 type CreditBreakdownRow = {
@@ -377,6 +378,7 @@ function buildBreakdownRows(input: {
 export function GlobalCreditDetailsPanel({
   locale,
   messages,
+  onLockRejected,
 }: GlobalCreditDetailsPanelProps) {
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -427,6 +429,14 @@ export function GlobalCreditDetailsPanel({
         : [],
     [copy, creditDetails, locale],
   );
+
+  useEffect(() => {
+    if (creditDetailsQuery.error?.code !== "GLOBAL_CREDIT_PAGE_LOCKED") {
+      return;
+    }
+
+    onLockRejected?.();
+  }, [creditDetailsQuery.error?.code, onLockRejected]);
 
   async function handleRefresh() {
     setIsRefreshing(true);

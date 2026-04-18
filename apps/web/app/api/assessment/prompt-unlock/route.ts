@@ -107,6 +107,14 @@ export async function POST(request: Request) {
   }
 
   if (!lockRuntime.signingReady) {
+    console.warn("[assessment-prompt-unlock] lock misconfigured", {
+      uid: user.uid,
+      role: user.role,
+      lockEnabled: lockRuntime.lockEnabled,
+      passwordConfigured: lockRuntime.passwordConfigured,
+      passwordHasQuotedWrapper: lockRuntime.passwordHasQuotedWrapper,
+      signingSecretSource: lockRuntime.signingSecretSource,
+    });
     return applyNoStore(
       apiError(
         "ASSESSMENT_PROMPT_LOCK_MISCONFIGURED",
@@ -138,6 +146,15 @@ export async function POST(request: Request) {
   }
 
   if (!isAssessmentPromptUnlockPasswordValid(password)) {
+    console.warn("[assessment-prompt-unlock] invalid password rejected", {
+      uid: user.uid,
+      role: user.role,
+      lockEnabled: lockRuntime.lockEnabled,
+      passwordConfigured: lockRuntime.passwordConfigured,
+      passwordHasQuotedWrapper: lockRuntime.passwordHasQuotedWrapper,
+      signingReady: lockRuntime.signingReady,
+      signingSecretSource: lockRuntime.signingSecretSource,
+    });
     return applyNoStore(
       apiError(
         "ASSESSMENT_PROMPT_UNLOCK_INVALID_PASSWORD",

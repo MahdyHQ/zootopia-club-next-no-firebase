@@ -34,8 +34,13 @@ function getGlobalCreditsGateCopy(locale: Locale) {
         unlockActionPending: "جارٍ التحقق...",
         passwordRequired: "يرجى إدخال كلمة المرور أولاً.",
         invalidPassword: "كلمة المرور غير صحيحة.",
+        signInRequired: "يجب تسجيل الدخول أولاً لفتح هذه الصفحة.",
+        profileIncomplete:
+          "أكمل إعداد ملفك الشخصي أولاً قبل فتح صفحة الرصيد العام.",
         misconfigured:
           "تعذر فتح الصفحة حالياً بسبب إعداد داخلي في الخادم. تواصل مع المطوّر.",
+        unlockExpired:
+          "انتهى فتح الصفحة أو لم يثبت بعد على الخادم. أعد إدخال كلمة المرور ثم جرّب مرة أخرى.",
         genericFailure: "تعذر فتح الصفحة حالياً. حاول مرة أخرى بعد قليل.",
       }
     : {
@@ -48,8 +53,13 @@ function getGlobalCreditsGateCopy(locale: Locale) {
         unlockActionPending: "Verifying...",
         passwordRequired: "Please enter the password first.",
         invalidPassword: "Invalid password.",
+        signInRequired: "Sign in is required before opening this page.",
+        profileIncomplete:
+          "Complete your profile before opening the global credits page.",
         misconfigured:
           "The global credit page lock is currently misconfigured on the server.",
+        unlockExpired:
+          "The page unlock expired or was not persisted on the server yet. Enter the password again.",
         genericFailure: "Unable to unlock this page right now. Please try again.",
       };
 }
@@ -65,6 +75,10 @@ function resolveUnlockErrorMessage(input: {
       return copy.passwordRequired;
     case "GLOBAL_CREDIT_PAGE_UNLOCK_INVALID_PASSWORD":
       return copy.invalidPassword;
+    case "UNAUTHENTICATED":
+      return copy.signInRequired;
+    case "PROFILE_INCOMPLETE":
+      return copy.profileIncomplete;
     case "GLOBAL_CREDIT_PAGE_LOCK_MISCONFIGURED":
       return copy.misconfigured;
     default:
@@ -88,6 +102,18 @@ export function GlobalCreditsUnlockGate({
       <GlobalCreditDetailsPanel
         locale={locale}
         messages={messages}
+        onLockRejected={() => {
+          /* The details route remains the server authority for `/credits`. If the signed unlock
+             cookie expires or no longer validates, relock the gate instead of leaving the page
+             in a misleading half-unlocked state with generic data-fetch errors. */
+          setAccess((current) => ({
+            ...current,
+            lockEnabled: true,
+            unlocked: false,
+          }));
+          setPassword("");
+          setError(copy.unlockExpired);
+        }}
       />
     );
   }

@@ -77,6 +77,10 @@ export async function POST(request: Request) {
       route: "/api/assessment/credits/page-unlock",
       role: user.role,
       lockEnabled: lockRuntime.lockEnabled,
+      signingReady: lockRuntime.signingReady,
+      passwordConfigured: lockRuntime.passwordConfigured,
+      passwordHasQuotedWrapper: lockRuntime.passwordHasQuotedWrapper,
+      signingSecretSource: lockRuntime.signingSecretSource,
     },
   });
 
@@ -101,6 +105,20 @@ export async function POST(request: Request) {
   }
 
   if (!lockRuntime.signingReady) {
+    logAssessmentCreditDiagnostic({
+      event: "assessment_global_credits_unlock_misconfigured",
+      level: "error",
+      traceId,
+      details: {
+        ownerUid: user.uid,
+        route: "/api/assessment/credits/page-unlock",
+        role: user.role,
+        lockEnabled: lockRuntime.lockEnabled,
+        passwordConfigured: lockRuntime.passwordConfigured,
+        passwordHasQuotedWrapper: lockRuntime.passwordHasQuotedWrapper,
+        signingSecretSource: lockRuntime.signingSecretSource,
+      },
+    });
     return applyNoStore(
       apiError(
         "GLOBAL_CREDIT_PAGE_LOCK_MISCONFIGURED",
@@ -139,6 +157,10 @@ export async function POST(request: Request) {
       details: {
         ownerUid: user.uid,
         route: "/api/assessment/credits/page-unlock",
+        passwordConfigured: lockRuntime.passwordConfigured,
+        passwordHasQuotedWrapper: lockRuntime.passwordHasQuotedWrapper,
+        signingReady: lockRuntime.signingReady,
+        signingSecretSource: lockRuntime.signingSecretSource,
       },
     });
     return applyNoStore(
@@ -180,6 +202,7 @@ export async function POST(request: Request) {
       ownerUid: user.uid,
       route: "/api/assessment/credits/page-unlock",
       lockEnabled: lockRuntime.lockEnabled,
+      passwordHasQuotedWrapper: lockRuntime.passwordHasQuotedWrapper,
     },
   });
 
