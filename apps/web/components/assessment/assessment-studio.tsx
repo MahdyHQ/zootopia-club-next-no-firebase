@@ -26,8 +26,6 @@ import {
   BrainCircuit,
   Check,
   CheckCircle2,
-  Eye,
-  EyeOff,
   ExternalLink,
   FileText,
   Gauge,
@@ -72,6 +70,7 @@ import {
 import { AssessmentFieldSelect } from "@/components/assessment/assessment-field-select";
 import { AuthSupportDetails } from "@/components/auth/auth-status";
 import { DocumentContextCard } from "@/components/document/document-context-card";
+import { PasswordVisibilityInput } from "@/components/ui/password-visibility-input";
 
 type AssessmentStudioProps = {
   locale: Locale;
@@ -994,7 +993,6 @@ export function AssessmentStudio({
   const [promptAccess, setPromptAccess] =
     useState<AssessmentPromptAccess>(initialPromptAccess);
   const [unlockPassword, setUnlockPassword] = useState("");
-  const [unlockPasswordVisible, setUnlockPasswordVisible] = useState(false);
   const [unlockPending, setUnlockPending] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [unlockSuccessVisible, setUnlockSuccessVisible] = useState(false);
@@ -1448,7 +1446,6 @@ export function AssessmentStudio({
             entitlement: "disabled",
           }));
           setUnlockPassword("");
-          setUnlockPasswordVisible(false);
         }
 
         setUnlockSuccessVisible(false);
@@ -1470,7 +1467,6 @@ export function AssessmentStudio({
       }));
       setError(null);
       setUnlockPassword("");
-      setUnlockPasswordVisible(false);
       setUnlockError(null);
       setUnlockSuccessVisible(true);
       setUnlockSuccessEntered(false);
@@ -2197,46 +2193,21 @@ export function AssessmentStudio({
                           <span className="block text-xs font-semibold text-foreground-muted">
                             {ASSESSMENT_PROMPT_LOCK_COPY.passwordLabel}
                           </span>
-                          <div className="relative">
-                            <input
-                              type={unlockPasswordVisible ? "text" : "password"}
-                              value={unlockPassword}
-                              onChange={(event) => {
-                                setUnlockError(null);
-                                setUnlockPassword(event.target.value);
-                              }}
-                              placeholder={ASSESSMENT_PROMPT_LOCK_COPY.passwordPlaceholder}
-                              className="field-control assessment-premium-field w-full pl-10"
-                              autoComplete="current-password"
-                              disabled={unlockPending}
-                            />
-                            {/* Visibility toggle is UI-only; password verification remains fully
-                                server-authoritative through the unlock endpoint. */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setUnlockPasswordVisible((current) => !current);
-                              }}
-                              aria-label={
-                                unlockPasswordVisible
-                                  ? ASSESSMENT_PROMPT_LOCK_COPY.hidePasswordAction
-                                  : ASSESSMENT_PROMPT_LOCK_COPY.showPasswordAction
-                              }
-                              title={
-                                unlockPasswordVisible
-                                  ? ASSESSMENT_PROMPT_LOCK_COPY.hidePasswordAction
-                                  : ASSESSMENT_PROMPT_LOCK_COPY.showPasswordAction
-                              }
-                              disabled={unlockPending}
-                              className="absolute inset-y-0 left-2 inline-flex items-center justify-center text-foreground-muted/90 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {unlockPasswordVisible ? (
-                                <EyeOff className="h-4 w-4" />
-                              ) : (
-                                <Eye className="h-4 w-4" />
-                              )}
-                            </button>
-                          </div>
+                          {/* Visibility toggle is UI-only; password verification remains fully
+                              server-authoritative through the unlock endpoint. */}
+                          <PasswordVisibilityInput
+                            value={unlockPassword}
+                            onChange={(event) => {
+                              setUnlockError(null);
+                              setUnlockPassword(event.target.value);
+                            }}
+                            placeholder={ASSESSMENT_PROMPT_LOCK_COPY.passwordPlaceholder}
+                            className="field-control assessment-premium-field w-full"
+                            autoComplete="current-password"
+                            disabled={unlockPending}
+                            showPasswordLabel={ASSESSMENT_PROMPT_LOCK_COPY.showPasswordAction}
+                            hidePasswordLabel={ASSESSMENT_PROMPT_LOCK_COPY.hidePasswordAction}
+                          />
                         </label>
 
                         <button

@@ -2,13 +2,13 @@
 
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { ApiResult, Locale } from "@zootopia/shared-types";
-import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
-import { ArrowLeft, Eye, EyeOff, LoaderCircle, ShieldCheck } from "lucide-react";
+import { ArrowLeft, LoaderCircle, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AuthStatusDescriptor } from "@/components/auth/auth-feedback";
 import { AuthStatus } from "@/components/auth/auth-status";
+import { PasswordVisibilityInput } from "@/components/ui/password-visibility-input";
 import {
   getEphemeralSupabaseClient,
   isSupabaseWebConfigured,
@@ -17,6 +17,8 @@ import {
 import {
   getPasswordPolicyErrorMessage,
   getPasswordPolicyHint,
+  getPasswordPolicyMinLength,
+  validateUserPasswordPolicy,
 } from "@/lib/password-policy";
 
 export type ResetPasswordInitialFinalizeParams = {
@@ -459,10 +461,9 @@ export function ResetPasswordPanel({
   const [email, setEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const passwordMinLength = getPasswordPolicyMinLength();
 
   useEffect(() => {
     let cancelled = false;
@@ -728,21 +729,10 @@ export function ResetPasswordPanel({
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="space-y-2 block">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
-                {text.passwordLabel}
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowNewPassword((value) => !value)}
-                className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
-                aria-label={showNewPassword ? text.hidePassword : text.showPassword}
-              >
-                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <input
-              type={showNewPassword ? "text" : "password"}
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+              {text.passwordLabel}
+            </span>
+            <PasswordVisibilityInput
               value={newPassword}
               onChange={(event) => {
                 setNewPassword(event.target.value);
@@ -755,26 +745,17 @@ export function ResetPasswordPanel({
               placeholder={text.passwordPlaceholder}
               disabled={busy || !ready || initializing || completed}
               required
-              minLength={12}
+              minLength={passwordMinLength}
+              showPasswordLabel={text.showPassword}
+              hidePasswordLabel={text.hidePassword}
             />
           </label>
 
           <label className="space-y-2 block">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
-                {text.confirmPasswordLabel}
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword((value) => !value)}
-                className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
-                aria-label={showConfirmPassword ? text.hidePassword : text.showPassword}
-              >
-                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <input
-              type={showConfirmPassword ? "text" : "password"}
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+              {text.confirmPasswordLabel}
+            </span>
+            <PasswordVisibilityInput
               value={confirmPassword}
               onChange={(event) => {
                 setConfirmPassword(event.target.value);
@@ -787,7 +768,9 @@ export function ResetPasswordPanel({
               placeholder={text.confirmPasswordPlaceholder}
               disabled={busy || !ready || initializing || completed}
               required
-              minLength={12}
+              minLength={passwordMinLength}
+              showPasswordLabel={text.showPassword}
+              hidePasswordLabel={text.hidePassword}
             />
           </label>
 

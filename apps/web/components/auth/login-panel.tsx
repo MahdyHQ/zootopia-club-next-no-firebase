@@ -2,8 +2,7 @@
 
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { ApiResult, Locale, SessionUser } from "@zootopia/shared-types";
-import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
-import { Eye, EyeOff, LoaderCircle, LogIn, Mail, Shield, UserPlus } from "lucide-react";
+import { LoaderCircle, LogIn, Mail, Shield, UserPlus } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -40,7 +39,10 @@ import { buildClientAuthDeviceLabelMetadata } from "@/lib/auth-device-label";
 import {
   getPasswordPolicyErrorMessage,
   getPasswordPolicyHint,
+  getPasswordPolicyMinLength,
+  validateUserPasswordPolicy,
 } from "@/lib/password-policy";
+import { PasswordVisibilityInput } from "@/components/ui/password-visibility-input";
 
 type LoginPanelProps = {
   messages: AppMessages;
@@ -102,6 +104,8 @@ function buildLocalText(locale: Locale) {
       emailVerificationRequired:
         "تم إنشاء الحساب. راجع بريدك الإلكتروني لتأكيد الحساب ثم عد لتسجيل الدخول.",
       forgotPasswordAction: "نسيت كلمة المرور؟",
+      showPasswordAction: "إظهار كلمة المرور",
+      hidePasswordAction: "إخفاء كلمة المرور",
     };
   }
 
@@ -120,6 +124,8 @@ function buildLocalText(locale: Locale) {
     emailVerificationRequired:
       "Account created. Verify your email, then return to sign in.",
     forgotPasswordAction: "Forgot password?",
+    showPasswordAction: "Show password",
+    hidePasswordAction: "Hide password",
   };
 }
 
@@ -591,8 +597,6 @@ export function LoginPanel({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [capacityBlockedSnapshot, setCapacityBlockedSnapshot] =
     useState<ActiveNormalUserCapacitySnapshot | null>(null);
   const [capacityBlockedEmail, setCapacityBlockedEmail] = useState<string | null>(null);
@@ -600,6 +604,7 @@ export function LoginPanel({
   const supabaseConfigured = isSupabaseWebConfigured();
   const isBusy = phase !== "idle";
   const localText = buildLocalText(locale);
+  const passwordMinLength = getPasswordPolicyMinLength();
 
   const normalizedEmail = email.trim().toLowerCase();
   const isOnboardingCapacityContext =
@@ -1329,21 +1334,10 @@ export function LoginPanel({
           </label>
 
           <label className="space-y-2 block">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
-                {localText.passwordLabel}
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowPassword((value) => !value)}
-                className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <input
-              type={showPassword ? "text" : "password"}
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+              {localText.passwordLabel}
+            </span>
+            <PasswordVisibilityInput
               value={password}
               onChange={(event) => {
                 setPassword(event.target.value);
@@ -1355,7 +1349,9 @@ export function LoginPanel({
               className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 placeholder:text-foreground-muted/80"
               placeholder="••••••••"
               required
-              minLength={mode === "sign_up" ? 12 : 1}
+              minLength={mode === "sign_up" ? passwordMinLength : 1}
+              showPasswordLabel={localText.showPasswordAction}
+              hidePasswordLabel={localText.hidePasswordAction}
             />
           </label>
 
@@ -1372,21 +1368,10 @@ export function LoginPanel({
 
           {mode === "sign_up" ? (
             <label className="space-y-2 block">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
-                  {localText.confirmPasswordLabel}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((value) => !value)}
-                  className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
-                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
-                >
-                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <input
-                type={showConfirmPassword ? "text" : "password"}
+              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+                {localText.confirmPasswordLabel}
+              </span>
+              <PasswordVisibilityInput
                 value={confirmPassword}
                 onChange={(event) => {
                   setConfirmPassword(event.target.value);
@@ -1398,7 +1383,9 @@ export function LoginPanel({
                 className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 placeholder:text-foreground-muted/80"
                 placeholder="••••••••"
                 required
-                minLength={12}
+                minLength={passwordMinLength}
+                showPasswordLabel={localText.showPasswordAction}
+                hidePasswordLabel={localText.hidePasswordAction}
               />
 
               <p className="rounded-2xl border border-border bg-background/60 px-3.5 py-3 text-xs leading-5 text-foreground-muted">

@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
 
+import { validateUserPasswordPolicy } from "@/lib/password-policy";
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import { isAllowlistedAdminEmail } from "@/lib/server/admin-auth";
 import { recordUserPasswordSecurityEvent } from "@/lib/server/password-security-events";

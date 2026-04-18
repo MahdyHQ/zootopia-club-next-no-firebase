@@ -3653,3 +3653,131 @@ Runtime proof:
 ~ Verification is code-traced plus lint/type/build command passes.
 ~ Outstanding live QA gap: dedicated credential-backed admin login, exempt user
   session rehydration cycle, and controlled capacity-full occupancy fixture.
+
+2026-04-18: ENV-DRIVEN PASSWORD MIN-LENGTH (DEFAULT 10) + SHARED IN-FIELD PASSWORD TOGGLE STANDARDIZATION
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+Regular-user password policy was still carrying a hardcoded min-length contract
+in multiple app surfaces (frontend minLength attrs, localized hint/error copy,
+and backend callsites that imported shared validation directly). The previous
+baseline remained 12 in those paths, which prevented true environment-driven
+control and made policy messaging drift-prone.
+
+Password visibility toggles were also implemented with repeated local state and
+different UI placements across panels (some in header rows, some missing), so
+password-entry UX behavior was not standardized.
+
+FILES CHANGED:
+- .env.example
+- packages/shared-utils/src/validation.ts
+- apps/web/lib/password-policy.ts
+- apps/web/app/api/auth/signup/route.ts
+- apps/web/app/api/auth/password/change/route.ts
+- apps/web/components/ui/password-visibility-input.tsx (new)
+- apps/web/components/auth/login-panel.tsx
+- apps/web/components/auth/reset-password-panel.tsx
+- apps/web/components/settings/password-change-panel.tsx
+- apps/web/components/auth/admin-login-panel.tsx
+- apps/web/components/assessment/global-credits-unlock-gate.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+Establish one canonical runtime-tunable policy source for regular-user password
+minimum length with default 10, while preserving server authority and existing
+auth/session/admission/security architecture. Remove scattered hardcoded UI
+assumptions and keep all user-facing copy synchronized with the active policy.
+
+TECHNICAL DETAILS:
+1. Canonical env contract introduced (default 10)
+   - Added NEXT_PUBLIC_ZOOTOPIA_PASSWORD_MIN_LENGTH=10 to .env.example.
+   - Documented as the canonical regular-user password min length for signup,
+     reset-password, and in-account password-change flows.
+   - Contract normalization/clamp behavior documented and implemented as 8..128.
+
+2. Shared validator made min-length configurable (with safe defaults)
+   - packages/shared-utils validateUserPasswordPolicy() now accepts optional
+     minLength and normalizes it through a bounded helper.
+   - Default shared fallback changed from 12 to 10 to align with requested
+     platform default when no explicit override is passed.
+   - PASSWORD_TOO_SHORT error text now reflects the resolved minLength value.
+
+3. App policy wrapper became the single app-side authority
+   - apps/web/lib/password-policy.ts now:
+     - exposes PASSWORD_POLICY_MIN_LENGTH_ENV_KEY
+       (NEXT_PUBLIC_ZOOTOPIA_PASSWORD_MIN_LENGTH)
+     - resolves and clamps min length at runtime via getPasswordPolicyMinLength()
+     - wraps shared validation through validateUserPasswordPolicy() so all app
+       callsites can inherit env-driven behavior
+     - renders localized hint/error messages dynamically from resolved minLength
+       (EN + AR) instead of fixed "12" text.
+
+4. Backend callsites rewired to env-aware wrapper
+   - signup route and password change route switched imports from direct
+     @zootopia/shared-utils validator to @/lib/password-policy wrapper.
+   - This removes backend drift risk where route validation could bypass app env
+     policy resolution.
+
+5. Frontend minLength hardcoding removed from password policy surfaces
+   - login sign-up password + confirm fields now use getPasswordPolicyMinLength().
+   - reset-password new + confirm fields now use getPasswordPolicyMinLength().
+   - settings password-change new + confirm fields now use
+     getPasswordPolicyMinLength().
+   - Browser-native minLength attrs now match server validation policy.
+
+6. Password-eye toggle standardized with one reusable in-input component
+   - Added shared PasswordVisibilityInput component that:
+     - keeps toggle icon inside the input field
+     - owns visibility state per field
+     - supports localized show/hide labels
+     - preserves disabled semantics/accessibility labels
+   - Reused in:
+     - login panel password/confirm inputs
+     - reset-password panel new/confirm inputs
+     - settings password-change current/new/confirm inputs
+     - admin login password input
+     - global credits unlock gate password input
+     - assessment studio prompt unlock password input
+
+7. Behavioral boundaries preserved
+   - No auth trust-boundary move: server actions/routes remain authoritative.
+   - No session/admission/capacity/security architecture changes.
+   - No route ownership or permission model changes.
+   - No database schema or migration changes.
+
+SCATTERED HARDCODED ASSUMPTIONS REMOVED:
+- Fixed "12 characters" hints/errors in password-policy copy removed and replaced
+  with resolved minLength interpolation.
+- Fixed minLength={12} attrs in key regular-user password inputs removed.
+- Direct backend imports that skipped app-level env policy resolution removed.
+- Repeated per-panel eye-toggle state and ad-hoc placement replaced by shared
+  in-input component behavior.
+
+VERIFICATION:
+Code-trace verification:
+✓ Re-traced all touched password validation callsites and confirmed they now
+  resolve through apps/web/lib/password-policy.ts in app surfaces.
+✓ Confirmed env key contract exists in .env.example and policy copy now renders
+  dynamic min-length text.
+✓ Confirmed shared password visibility component is reused across the targeted
+  auth/settings/assessment unlock password fields.
+
+Diagnostics:
+✓ get_errors on all changed files — PASS (no file diagnostics).
+
+Command verification:
+✓ npm run lint --workspace @zootopia/web — PASS
+✓ npm run typecheck — PASS
+✓ npm run build — PASS
+✓ npm run build:vercel — PASS
+~ Existing non-blocking operational warning remains unchanged during build:
+  missing auth-admission hash salt warning (pre-existing, outside this scope).
+
+Runtime proof:
+~ No interactive browser QA pass executed in this environment for this patch.
+~ Verification is code-traced plus lint/typecheck/build/build:vercel passes.

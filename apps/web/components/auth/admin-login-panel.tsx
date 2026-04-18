@@ -6,7 +6,7 @@ import type {
   AdminIdentifierResolution,
   SessionUser,
 } from "@zootopia/shared-types";
-import { Eye, EyeOff, GraduationCap, LoaderCircle } from "lucide-react";
+import { GraduationCap, LoaderCircle } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -36,6 +36,7 @@ import {
 } from "@/lib/supabase/client";
 import { readCredentialsSignInErrorCode } from "@/components/auth/signin-result";
 import { buildClientAuthDeviceLabelMetadata } from "@/lib/auth-device-label";
+import { PasswordVisibilityInput } from "@/components/ui/password-visibility-input";
 
 type AdminLoginPanelProps = {
   messages: AppMessages;
@@ -247,7 +248,6 @@ export function AdminLoginPanel({
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [phase, setPhase] = useState<AdminLoginPhase>("idle");
   const [status, setStatus] = useState<AuthStatusDescriptor | null>(null);
   const supabaseConfigured = isSupabaseWebConfigured();
@@ -548,25 +548,10 @@ export function AdminLoginPanel({
             </label>
 
             <label className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
-                  {messages.adminLoginPasswordLabel}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="me-2 inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" aria-hidden="true" />
-                  ) : (
-                    <Eye className="h-4 w-4" aria-hidden="true" />
-                  )}
-                </button>
-              </div>
-              <input
-                type={showPassword ? "text" : "password"}
+              <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
+                {messages.adminLoginPasswordLabel}
+              </span>
+              <PasswordVisibilityInput
                 value={password}
                 onChange={(event) => {
                   setPassword(event.target.value);
@@ -575,6 +560,8 @@ export function AdminLoginPanel({
                 placeholder={messages.adminLoginPasswordPlaceholder}
                 autoComplete="current-password"
                 className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 placeholder:text-foreground-muted/80"
+                showPasswordLabel="Show password"
+                hidePasswordLabel="Hide password"
               />
             </label>
 

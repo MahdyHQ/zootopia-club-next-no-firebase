@@ -2,15 +2,17 @@
 
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { ApiResult, Locale } from "@zootopia/shared-types";
-import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
-import { Eye, EyeOff, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
+import { KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { PasswordVisibilityInput } from "@/components/ui/password-visibility-input";
 import {
   getPasswordPolicyErrorMessage,
   getPasswordPolicyHint,
+  getPasswordPolicyMinLength,
+  validateUserPasswordPolicy,
 } from "@/lib/password-policy";
 import {
   getSupabaseClient,
@@ -121,13 +123,11 @@ export function PasswordChangePanel({ locale }: PasswordChangePanelProps) {
   const router = useRouter();
   const text = useMemo(() => buildLocalText(locale), [locale]);
   const policyHint = getPasswordPolicyHint(locale);
+  const passwordMinLength = getPasswordPolicyMinLength();
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{
     tone: PasswordChangeStatusTone;
@@ -334,21 +334,10 @@ export function PasswordChangePanel({ locale }: PasswordChangePanelProps) {
 
       <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
         <label className="space-y-2 block">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
-              {text.currentPasswordLabel}
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowCurrentPassword((value) => !value)}
-              className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
-              aria-label={showCurrentPassword ? text.hidePassword : text.showPassword}
-            >
-              {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-          <input
-            type={showCurrentPassword ? "text" : "password"}
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+            {text.currentPasswordLabel}
+          </span>
+          <PasswordVisibilityInput
             value={currentPassword}
             onChange={(event) => {
               setCurrentPassword(event.target.value);
@@ -363,6 +352,8 @@ export function PasswordChangePanel({ locale }: PasswordChangePanelProps) {
             autoComplete="current-password"
             disabled={busy}
             required
+            showPasswordLabel={text.showPassword}
+            hidePasswordLabel={text.hidePassword}
           />
           {fieldErrors.currentPassword ? (
             <p className="text-xs font-semibold text-rose-600 dark:text-rose-300">
@@ -372,21 +363,10 @@ export function PasswordChangePanel({ locale }: PasswordChangePanelProps) {
         </label>
 
         <label className="space-y-2 block">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
-              {text.newPasswordLabel}
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowNewPassword((value) => !value)}
-              className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
-              aria-label={showNewPassword ? text.hidePassword : text.showPassword}
-            >
-              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-          <input
-            type={showNewPassword ? "text" : "password"}
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+            {text.newPasswordLabel}
+          </span>
+          <PasswordVisibilityInput
             value={newPassword}
             onChange={(event) => {
               setNewPassword(event.target.value);
@@ -401,7 +381,9 @@ export function PasswordChangePanel({ locale }: PasswordChangePanelProps) {
             autoComplete="new-password"
             disabled={busy}
             required
-            minLength={12}
+            minLength={passwordMinLength}
+            showPasswordLabel={text.showPassword}
+            hidePasswordLabel={text.hidePassword}
           />
           {fieldErrors.newPassword ? (
             <p className="text-xs font-semibold text-rose-600 dark:text-rose-300">
@@ -411,21 +393,10 @@ export function PasswordChangePanel({ locale }: PasswordChangePanelProps) {
         </label>
 
         <label className="space-y-2 block">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
-              {text.confirmPasswordLabel}
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword((value) => !value)}
-              className="inline-flex items-center justify-center text-foreground-muted transition-colors hover:text-foreground"
-              aria-label={showConfirmPassword ? text.hidePassword : text.showPassword}
-            >
-              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-          <input
-            type={showConfirmPassword ? "text" : "password"}
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground-muted">
+            {text.confirmPasswordLabel}
+          </span>
+          <PasswordVisibilityInput
             value={confirmPassword}
             onChange={(event) => {
               setConfirmPassword(event.target.value);
@@ -440,7 +411,9 @@ export function PasswordChangePanel({ locale }: PasswordChangePanelProps) {
             autoComplete="new-password"
             disabled={busy}
             required
-            minLength={12}
+            minLength={passwordMinLength}
+            showPasswordLabel={text.showPassword}
+            hidePasswordLabel={text.hidePassword}
           />
           {fieldErrors.confirmPassword ? (
             <p className="text-xs font-semibold text-rose-600 dark:text-rose-300">

@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { APP_ROUTES } from "@zootopia/shared-config";
-import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
 
 import { normalizeAuthFailure } from "@/lib/auth-failure";
+import { validateUserPasswordPolicy } from "@/lib/password-policy";
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import {
   getAuthAdmissionConfig,

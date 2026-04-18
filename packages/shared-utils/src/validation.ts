@@ -81,7 +81,9 @@ const NAME_LETTERS_ONLY_PATTERN = /^[\p{Script=Arabic}\p{Script=Latin}]+$/u;
 const LOCATION_TEXT_PATTERN =
   /^[\p{Script=Arabic}\p{Script=Latin}\s.'-]+$/u;
 const E164_PHONE_PATTERN = /^\+[1-9]\d{6,17}$/;
-const USER_PASSWORD_MIN_LENGTH = 12;
+const DEFAULT_USER_PASSWORD_MIN_LENGTH = 10;
+const USER_PASSWORD_MIN_LENGTH_LOWER_BOUND = 8;
+const USER_PASSWORD_MIN_LENGTH_UPPER_BOUND = 128;
 const USER_PASSWORD_STRICT_COMPLEXITY_LENGTH = 16;
 const USER_PASSWORD_MIN_PASSPHRASE_WORDS = 3;
 const USER_PASSWORD_COMMON_PATTERNS = [
@@ -409,6 +411,22 @@ function readEmailLocalPart(value: string | null | undefined) {
   return normalized.split("@")[0] ?? "";
 }
 
+function normalizeUserPasswordMinLength(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_USER_PASSWORD_MIN_LENGTH;
+  }
+
+  const rounded = Math.trunc(value);
+  if (!Number.isFinite(rounded)) {
+    return DEFAULT_USER_PASSWORD_MIN_LENGTH;
+  }
+
+  return Math.min(
+    USER_PASSWORD_MIN_LENGTH_UPPER_BOUND,
+    Math.max(USER_PASSWORD_MIN_LENGTH_LOWER_BOUND, rounded),
+  );
+}
+
 function hasSequentialPattern(value: string) {
   const normalized = normalizePasswordComparableToken(value);
   if (normalized.length < PASSWORD_SEQUENTIAL_WINDOW) {
@@ -433,21 +451,23 @@ function hasSequentialPattern(value: string) {
 
 /**
  * User-password policy for app-owned signup/reset/change surfaces.
- * This intentionally favors long passphrases (12+ chars) while still rejecting
+ * This intentionally favors long passphrases (env-configurable, default 10 chars) while still rejecting
  * obvious weak patterns and identity-derived values.
  */
 export function validateUserPasswordPolicy(input: {
   password: string;
   email?: string | null;
   fullName?: string | null;
+  minLength?: number | null;
 }): UserPasswordPolicyValidationResult {
   const password = String(input.password || "");
+  const minLength = normalizeUserPasswordMinLength(input.minLength);
 
-  if (password.length < USER_PASSWORD_MIN_LENGTH) {
+  if (password.length < minLength) {
     return {
       ok: false,
       code: "PASSWORD_TOO_SHORT",
-      error: `Password must be at least ${USER_PASSWORD_MIN_LENGTH} characters long.`,
+      error: `Password must be at least ${minLength} characters long.`,
     };
   }
 

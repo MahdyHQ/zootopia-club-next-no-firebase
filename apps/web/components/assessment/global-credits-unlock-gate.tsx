@@ -4,6 +4,7 @@ import { LockKeyhole, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { GlobalCreditDetailsPanel } from "@/components/assessment/global-credit-details-panel";
+import { PasswordVisibilityInput } from "@/components/ui/password-visibility-input";
 import type { AppMessages } from "@/lib/messages";
 import type { Locale } from "@zootopia/shared-types";
 
@@ -30,6 +31,8 @@ function getGlobalCreditsGateCopy(locale: Locale) {
           "للاطلاع على صفحة الرصيد العام لهذا الحساب، أدخل كلمة المرور التي يحددها المطوّر من إعدادات البيئة.",
         passwordLabel: "كلمة المرور",
         passwordPlaceholder: "أدخل كلمة مرور صفحة الرصيد العام",
+        showPassword: "إظهار كلمة المرور",
+        hidePassword: "إخفاء كلمة المرور",
         unlockAction: "فتح الصفحة",
         unlockActionPending: "جارٍ التحقق...",
         passwordRequired: "يرجى إدخال كلمة المرور أولاً.",
@@ -49,6 +52,8 @@ function getGlobalCreditsGateCopy(locale: Locale) {
           "Enter the env-configured password to open this account's global credit page.",
         passwordLabel: "Password",
         passwordPlaceholder: "Enter global credit page password",
+        showPassword: "Show password",
+        hidePassword: "Hide password",
         unlockAction: "Unlock page",
         unlockActionPending: "Verifying...",
         passwordRequired: "Please enter the password first.",
@@ -184,8 +189,7 @@ export function GlobalCreditsUnlockGate({
             <span className="block text-xs font-semibold text-foreground-muted">
               {copy.passwordLabel}
             </span>
-            <input
-              type="password"
+            <PasswordVisibilityInput
               value={password}
               onChange={(event) => {
                 setError(null);
@@ -195,6 +199,8 @@ export function GlobalCreditsUnlockGate({
               className="field-control assessment-premium-field w-full"
               autoComplete="current-password"
               disabled={pending}
+              showPasswordLabel={copy.showPassword}
+              hidePasswordLabel={copy.hidePassword}
             />
           </label>
 
