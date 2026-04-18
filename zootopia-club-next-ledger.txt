@@ -3,9 +3,9 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Smart mobile middle-ellipsis titles + Home tiny-screen viewport-fit guard hardening)
+Last Updated: 2026-04-18 (Public auth admission hardening + confirm-email redirect-to-login flow)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
-Current Commit: 0802351f102a6e5f277b04980fe63f5d8dd3787e
+Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
 Runtime: Node.js >= 20.9.0
 
@@ -86,6 +86,19 @@ Key verified facts:
   separation and password-security metadata persistence
 - Public auth surfaces now include `/forgot-password` and `/reset-password`, and
   signup/reset/settings password entry points share one policy validator contract
+- Public user sign-up now enters through same-origin `POST /api/auth/signup`
+  instead of browser-direct `supabase.auth.signUp()`, so account creation,
+  duplicate-account handling, and confirm-email redirect ownership stay
+  backend-shaped without moving Auth.js trust out of the server
+- Public user sign-in now performs same-origin admission preflight through
+  `POST /api/auth/login/admission` before browser `signInWithPassword()`,
+  using persisted cross-instance account/IP windows and calm 15-minute retry
+  guidance when the auth edge is being shaped under pressure
+- Confirm-email success now clears the helper Supabase browser session and
+  redirects back to `/login` or `/admin/login` with verified-email context;
+  Auth.js bootstrap only happens after the user explicitly logs in again
+- Duplicate sign-up attempts now normalize to `AUTH_ACCOUNT_ALREADY_EXISTS`
+  with truthful guidance instead of surfacing as a generic upstream failure
 - Profile completion gating blocks incomplete profiles from protected features
 - AI providers: Google AI (Gemini) and DashScope (Qwen/Alibaba)
 - Tool default models are now server-authoritative per real tool via
@@ -408,10 +421,10 @@ Key verified facts:
 - Admin panel includes user management, storage management, governance dashboard
 - Database uses Supabase Postgres with RLS policies
 - Migration management via scripts/supabase/apply-migrations.mjs
-- 16 migration files tracked in supabase/migrations (latest include
-  `20260416193000_assessment_credit_private_realtime_authorization.sql`,
-  `20260416210000_assessment_credit_mutations.sql`, and
-  `20260417103000_assessment_credit_prompt_entitlement.sql`)
+- 17 migration files tracked in supabase/migrations (latest include
+  `20260416210000_assessment_credit_mutations.sql`,
+  `20260417103000_assessment_credit_prompt_entitlement.sql`, and
+  `20260418110000_auth_admission_governance.sql`)
 
 ================================================================================
 3. PROJECT PURPOSE & PLATFORM DIRECTION
@@ -893,8 +906,17 @@ Credential Providers:
 1. user-credentials — Regular user login
 2. admin-credentials — Admin login (separate provider)
 
+Public User Sign-Up Flow:
+1. Client posts email/password to `/api/auth/signup`
+2. Server reserves persisted admission capacity (account + IP windows) before calling Supabase Auth
+3. Server calls Supabase sign-up with server-owned confirm-email callback URL
+4. If confirmation is required, client is redirected to `/confirm-email`
+5. If environment ever returns an immediately confirmed session, client restores the helper Supabase session
+   and then continues through the normal Auth.js login bootstrap path
+
 User Login Flow:
-1. Client signs in via Supabase browser client → receives idToken
+1. Client calls `/api/auth/login/admission` to reserve persisted login capacity
+2. Client signs in via Supabase browser client → receives idToken
 2. Client calls signIn("user-credentials", { idToken, ...deviceMetadata })
 3. Server (auth.ts → authorizeUserCredentials):
    a. Runtime check: Supabase admin runtime + allowlist must be configured
@@ -1343,8 +1365,10 @@ Email Confirmation:
 - /confirm-email page handles email verification
 - Supabase sends confirmation email via Resend
 - User clicks link → redirected to /confirm-email
-- Finalization now verifies provider-confirmed email state before Auth.js bootstrap
-- Only confirmed callbacks proceed to role/profile redirect resolution
+- Finalization now verifies provider-confirmed email state before any success UI
+- Only confirmed callbacks proceed to redirect back to `/login` or `/admin/login`
+- Confirm-email success intentionally cleans up the helper Supabase session so
+  Auth.js remains the only entry path into protected routes
 
 Password Recovery Callbacks:
 - `/forgot-password` requests reset emails through `/api/auth/password/forgot` with privacy-preserving success responses
@@ -1354,7 +1378,7 @@ Auth Flow Redirects:
 - Login success → default redirect or profile completion check
 - Profile incomplete → redirect to /settings
 - Admin login → admin default redirect
-- Email confirmation → user default redirect
+- Email confirmation → `/login` or `/admin/login`, then explicit Auth.js login
 
 Runtime-Origin Authority (2026-04-12 hardening):
 - Server-only redirects/callback URLs now use getServerRuntimeOrigin() instead of request origin
@@ -1405,6 +1429,18 @@ Email Templates:
 
 Legacy Aliases (still accepted):
 - ZOOTOPIA_VERIFICATION_RESEND_* (all variants)
+
+Public Auth Admission Governance (2026-04-18):
+- auth-admission-governance.ts enforces persisted account/IP admission windows
+  for sign-up and sign-in across instances
+- Window: 15 minutes by default (`ZOOTOPIA_AUTH_ADMISSION_WINDOW_SECONDS`)
+- Sign-up account max attempts: 3 (`ZOOTOPIA_AUTH_SIGNUP_ACCOUNT_MAX_ATTEMPTS`)
+- Sign-up IP max attempts: 15 (`ZOOTOPIA_AUTH_SIGNUP_IP_MAX_ATTEMPTS`)
+- Sign-in account max attempts: 12 (`ZOOTOPIA_AUTH_SIGNIN_ACCOUNT_MAX_ATTEMPTS`)
+- Sign-in IP max attempts: 60 (`ZOOTOPIA_AUTH_SIGNIN_IP_MAX_ATTEMPTS`)
+- Hash salt: `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT`
+- API: `POST /api/auth/signup` and `POST /api/auth/login/admission`
+- Both routes return Retry-After + calm 15-minute retry guidance when shaping public auth load
 
 ================================================================================
 22. SECURITY ASSUMPTIONS & TRUST BOUNDARIES
@@ -2162,3 +2198,147 @@ Verification note:
 ~ An initial parallel run of `build:web` and `build:vercel` caused `build:web` to hit Next's
   existing "Another next build process is already running" lock. `build:web` was rerun alone and
   passed cleanly, so the final verified state is green.
+
+2026-04-18: PUBLIC AUTH ADMISSION HARDENING + CONFIRM-EMAIL REDIRECT-TO-LOGIN
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Regular-user sign-up still ran browser-direct through `supabase.auth.signUp()` in
+   `apps/web/components/auth/login-panel.tsx`, so the public auth edge had no shared
+   cross-instance admission control before provider user creation started.
+2. The existing auth-edge throttling for regular login/signup was either client-local or
+   process-local, which is too weak for concurrent production-style bursts across multiple
+   instances.
+3. Confirm-email success still bootstrapped Auth.js immediately from the callback page, which
+   bypassed the explicit "verify email -> go back to login -> log in -> profile gating" path
+   required by the current runtime.
+4. Duplicate sign-up attempts could still surface as generic upstream failures instead of a
+   truthful "account already exists" path.
+
+FILES CHANGED:
+- apps/web/lib/server/auth-admission-governance.ts
+- apps/web/app/api/auth/login/admission/route.ts
+- apps/web/app/api/auth/signup/route.ts
+- apps/web/components/auth/login-panel.tsx
+- apps/web/components/auth/confirm-email-panel.tsx
+- apps/web/components/auth/auth-feedback.ts
+- apps/web/lib/auth-failure.ts
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- supabase/migrations/20260418110000_auth_admission_governance.sql
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- Added `20260418110000_auth_admission_governance.sql`
+  - Creates backend-only `public.auth_admission_governance`
+  - Stores sign-in/sign-up admission windows for account/IP buckets
+  - Enables RLS and deny-all policies for `anon` and `authenticated`
+
+REASON:
+- Make new-user registration reliable without rebuilding auth.
+- Add a small production-grade public-auth admission layer that matches the
+  current Auth.js + Supabase runtime.
+- Keep email verification isolated per account and return users to the login
+  surface after successful confirmation.
+- Preserve profile completion gating, owner-scoped persistence, admin
+  separation, and backend authority.
+
+TECHNICAL DETAILS:
+1. Public auth admission control
+   - Added `auth-admission-governance.ts`, modeled after the existing
+     verification resend governance table/transaction pattern.
+   - Uses persisted account/IP windows with row locking, shared across
+     instances, instead of per-process memory only.
+   - Default shaping window is 15 minutes with env-tunable per-flow attempt
+     budgets and `Retry-After`/`X-RateLimit-Reset` headers.
+
+2. Sign-up hardening
+   - Added `POST /api/auth/signup` as the server-owned sign-up entry point.
+   - Route validates email/password, reserves admission capacity, builds the
+     confirm-email callback URL from `getServerRuntimeOrigin()`, and calls
+     Supabase with a transient publishable-key server client.
+   - Duplicate existing-account responses now normalize to
+     `AUTH_ACCOUNT_ALREADY_EXISTS` with truthful user guidance.
+   - If Supabase ever returns an immediately usable session, the client now
+     restores the helper browser session and still enters through Auth.js.
+
+3. Login hardening
+   - Added `POST /api/auth/login/admission` and wired `login-panel.tsx` to
+     preflight login capacity before browser `signInWithPassword()`.
+   - User-facing overload copy now explicitly asks users to retry in about
+     15 minutes when public auth traffic is being paced.
+
+4. Confirm-email flow
+   - `confirm-email-panel.tsx` still finalizes the Supabase callback and
+     verifies provider-confirmed email state, but no longer bootstraps Auth.js
+     from the callback page.
+   - Success now performs best-effort local Supabase session cleanup and
+     redirects to `/login` or `/admin/login` with `confirmed=1&email=...`.
+   - `login-panel.tsx` now reads that redirect state, pre-fills the email, and
+     shows the post-confirmation sign-in prompt.
+
+5. Shared auth diagnostics / UX
+   - Extended `auth-failure.ts` with `AUTH_ACCOUNT_ALREADY_EXISTS`.
+   - Updated `auth-feedback.ts` and EN/AR messages so regular-user rate limiting,
+     duplicate-account guidance, and post-confirmation guidance are centralized
+     instead of scattered raw strings.
+
+RUNTIME / DEPLOYMENT NOTES:
+1. Local integrated development
+   - The original checkout in `C:\zootopia-club-next` remained ACL-locked for
+     existing tracked files, so this pass was implemented and verified in a
+     writable sibling clone at `C:\zootopia-club-next-codex-auth` on the same
+     repository HEAD (`378c7a0063d7de2e3e75cf5d94be3409df64d46b`).
+   - Same-origin app/API ownership and Supabase provider integration remained unchanged.
+
+2. Vercel + Supabase
+   - Auth.js/JWT remains the server trust boundary.
+   - Browser Supabase auth remains helper-only for password sign-in token
+     acquisition, confirmation finalization, and private Realtime auth.
+   - The new admission layer is backend-owned and compatible with multi-instance
+     deployments because it uses persisted Postgres windows.
+
+PRESERVED INTENTIONALLY:
+- Auth.js as the only protected-route/session trust boundary.
+- Admin authority on the backend only.
+- Existing profile-completion redirect model (`/settings` until complete).
+- Existing owner-scoped upload/document/result/export persistence and retrieval.
+- Existing admin governance, user-management visibility, and protected-shell behavior.
+- Existing confirm-email resend governance and branded public auth design language.
+
+RISKS / FOLLOW-UP:
+- Fresh browser proof with real user credentials is still recommended to confirm
+  the exact Supabase provider responses for:
+  1. successful unconfirmed signup
+  2. duplicate existing-account signup
+  3. expired/used confirmation links
+- Admission budgets are intentionally conservative defaults and may need tuning
+  per deployment once real auth traffic is observed.
+- This pass did not add an admin UI for admission-governance inspection; the
+  persisted table is backend-observable now, but operational tooling could be
+  added later if needed.
+
+VERIFICATION:
+Code-path verification:
+✓ Re-traced regular sign-up, login, confirm-email, profile-gating, owner-scope,
+  and admin-boundary code paths before editing.
+✓ Verified confirm-email success now redirects to login/admin-login instead of
+  bootstrapping protected access directly.
+✓ Verified protected/profile-completion, owner-scoped persistence, and admin
+  server-enforced paths were preserved and not redesigned in this pass.
+
+Command verification:
+✓ `npm install` — PASS
+✓ `npm run lint:web` — PASS
+✓ `npm run typecheck:web` — PASS
+✓ `npm run build:web` — PASS
+✓ `npm run build:vercel` — PASS
+✓ `npm run supabase:migrations:validate` — PASS (`Validated 17 migration file(s).`)
+
+Runtime proof status:
+~ No live end-to-end browser signup/login/confirmation run was performed because
+  no dedicated QA credentials or safe live test account workflow were available
+  in this environment.
+~ New signup/login overload behavior and duplicate-account handling were
+  verified by route logic, auth error normalization, route manifest inclusion,
+  migration validation, and full lint/type/build/build:vercel passes.

@@ -164,12 +164,19 @@ export function mapRegularLoginError(
         messages.loginStatusEmailNotConfirmedTitle,
         messages.loginStatusEmailNotConfirmedBody,
       );
+    case "AUTH_ACCOUNT_ALREADY_EXISTS":
+      return status(
+        "warning",
+        "warning",
+        messages.loginStatusAccountExistsTitle,
+        messages.loginStatusAccountExistsBody,
+      );
     case "AUTH_RATE_LIMITED":
       return status(
         "warning",
         "warning",
-        messages.adminLoginStatusRetryLaterTitle,
-        messages.adminLoginStatusRetryLaterBody,
+        messages.loginStatusRetryLaterTitle,
+        messages.loginStatusRetryLaterBody,
       );
     case "AUTH_ACCOUNT_SUSPENDED":
       return status(

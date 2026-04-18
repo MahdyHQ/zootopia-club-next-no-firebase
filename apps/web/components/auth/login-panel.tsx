@@ -6,7 +6,7 @@ import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
 import { Eye, EyeOff, LoaderCircle, LogIn, Mail, Shield, UserPlus } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -53,6 +53,8 @@ type LoginMode = "sign_in" | "sign_up";
 const BOOTSTRAP_TIMEOUT_MS = 20_000;
 const SESSION_BOOTSTRAP_MAX_ATTEMPTS = 40;
 const SESSION_BOOTSTRAP_RETRY_MS = 200;
+const USER_LOGIN_ADMISSION_API_ROUTE = "/api/auth/login/admission";
+const USER_SIGNUP_API_ROUTE = "/api/auth/signup";
 
 function buildLocalText(locale: Locale) {
   if (locale === "ar") {
@@ -130,6 +132,66 @@ function mapSupabaseBrowserError(input: {
       mode: input.mode,
     },
   );
+}
+
+type LoginAdmissionPayload = {
+  accepted: boolean;
+};
+
+type SignupPayload = {
+  accepted: boolean;
+  email: string;
+  requiresEmailConfirmation: boolean;
+  confirmRoute: string;
+  accessToken: string | null;
+  refreshToken: string | null;
+};
+
+async function requestLoginAdmission(email: string) {
+  const response = await fetch(USER_LOGIN_ADMISSION_API_ROUTE, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify({
+      email,
+    }),
+  });
+
+  const payload = await readApiResult<LoginAdmissionPayload>(response, "LOGIN_ADMISSION_RESPONSE_INVALID");
+  if (!response.ok || !payload.ok) {
+    throw createAuthFlowError(
+      payload.ok ? "AUTH_RATE_LIMITED" : payload.error.code,
+      payload.ok ? undefined : payload.error.message,
+    );
+  }
+
+  return payload.data;
+}
+
+async function requestSignup(input: {
+  email: string;
+  password: string;
+}) {
+  const response = await fetch(USER_SIGNUP_API_ROUTE, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify(input),
+  });
+
+  const payload = await readApiResult<SignupPayload>(response, "SIGNUP_RESPONSE_INVALID");
+  if (!response.ok || !payload.ok) {
+    throw createAuthFlowError(
+      payload.ok ? "AUTH_UNKNOWN_UPSTREAM_FAILURE" : payload.error.code,
+      payload.ok ? undefined : payload.error.message,
+    );
+  }
+
+  return payload.data;
 }
 
 async function completeAuthJsCredentialsSignIn(input: {
@@ -271,7 +333,9 @@ export function LoginPanel({
   supabaseAuthReady,
 }: LoginPanelProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const bootstrapRequestRef = useRef<Promise<void> | null>(null);
+  const confirmationPrefillKeyRef = useRef<string | null>(null);
   const [mode, setMode] = useState<LoginMode>("sign_in");
   const [phase, setPhase] = useState<LoginPhase>("idle");
   const [status, setStatus] = useState<AuthStatusDescriptor | null>(null);
@@ -293,6 +357,32 @@ export function LoginPanel({
       // Surface concrete configuration errors during active submit flows.
     });
   }, [supabaseConfigured]);
+
+  useEffect(() => {
+    const confirmed = searchParams.get("confirmed") === "1";
+    const confirmedEmail = searchParams.get("email")?.trim() ?? "";
+    const confirmationKey = `${confirmed}:${confirmedEmail.toLowerCase()}`;
+
+    if (!confirmed || !confirmedEmail || confirmationPrefillKeyRef.current === confirmationKey) {
+      return;
+    }
+
+    confirmationPrefillKeyRef.current = confirmationKey;
+
+    /* Post-confirmation redirects land back on the login page by design.
+       Prefill the verified email and show the next-step banner so users can
+       continue with Auth.js sign-in instead of being dropped into the app directly. */
+    setMode("sign_in");
+    setEmail(confirmedEmail);
+    setPassword("");
+    setConfirmPassword("");
+    setStatus({
+      tone: "success",
+      icon: "success",
+      title: messages.loginStatusEmailConfirmedTitle,
+      body: messages.loginStatusEmailConfirmedBody,
+    });
+  }, [messages, searchParams]);
 
   const clearClientSession = useCallback(async () => {
     if (!supabaseConfigured) {
@@ -482,23 +572,15 @@ export function LoginPanel({
       });
 
       if (mode === "sign_up") {
-        const { data, error } = await supabase.auth.signUp({
+        const signupResult = await requestSignup({
           email: email.trim(),
           password,
         });
 
-        if (error) {
-          throw mapSupabaseBrowserError({
-            error,
-            mode,
-            routePath: APP_ROUTES.login,
-          });
-        }
-
-        if (!data.session?.access_token) {
+        if (signupResult.requiresEmailConfirmation || !signupResult.accessToken || !signupResult.refreshToken) {
           /* Supabase sign-up may intentionally omit a session until email confirmation is complete.
              Route the user to the dedicated confirmation surface instead of mislabeling this as a refresh/session bug. */
-          const confirmRoute = buildConfirmEmailRoute({
+          const confirmRoute = signupResult.confirmRoute || buildConfirmEmailRoute({
             email: email.trim(),
             flow: "sign_up",
             fromRoute: APP_ROUTES.login,
@@ -529,9 +611,22 @@ export function LoginPanel({
           return;
         }
 
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: signupResult.accessToken,
+          refresh_token: signupResult.refreshToken,
+        });
+
+        if (sessionError) {
+          throw mapSupabaseBrowserError({
+            error: sessionError,
+            mode,
+            routePath: APP_ROUTES.login,
+          });
+        }
+
         const deviceMetadata = await buildClientAuthDeviceLabelMetadata();
         await bootstrapSession({
-          idToken: data.session.access_token,
+          idToken: signupResult.accessToken,
           deviceLabel: deviceMetadata.deviceLabel,
           deviceLabelSource: deviceMetadata.deviceLabelSource,
           deviceLabelConfidence: deviceMetadata.deviceLabelConfidence,
@@ -539,6 +634,8 @@ export function LoginPanel({
         });
         return;
       }
+
+      await requestLoginAdmission(email.trim());
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -613,6 +710,10 @@ export function LoginPanel({
       });
 
       await clearClientSession();
+      if (failure.normalizedCode === "AUTH_ACCOUNT_ALREADY_EXISTS" && mode === "sign_up") {
+        setMode("sign_in");
+        setConfirmPassword("");
+      }
       setPhase("idle");
       setStatus(mapRegularLoginError(nextError, messages));
     }

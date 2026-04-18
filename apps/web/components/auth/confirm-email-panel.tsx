@@ -1,10 +1,8 @@
 "use client";
 
 import { APP_ROUTES } from "@zootopia/shared-config";
-import type { ApiResult, SessionUser } from "@zootopia/shared-types";
 import type { EmailOtpType, SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
-import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,20 +12,17 @@ import {
   createAuthFlowError,
   type AuthStatusDescriptor,
 } from "@/components/auth/auth-feedback";
-import { readCredentialsSignInErrorCode } from "@/components/auth/signin-result";
 import {
   logAuthDiagnosis,
   normalizeAuthFailure,
   type NormalizedAuthFailure,
 } from "@/lib/auth-failure";
 import type { AppMessages } from "@/lib/messages";
-import { resolveAuthenticatedUserRedirectPath } from "@/lib/return-to";
 import {
   getEphemeralSupabaseClient,
   isSupabaseWebConfigured,
   primeEphemeralSupabaseClient,
 } from "@/lib/supabase/client";
-import { buildClientAuthDeviceLabelMetadata } from "@/lib/auth-device-label";
 
 export type ConfirmEmailFlow = "sign_in" | "sign_up" | "admin";
 
@@ -51,8 +46,6 @@ type ConfirmEmailPanelProps = {
 };
 
 const CONFIRM_EMAIL_RESEND_API_ROUTE = "/api/auth/confirm-email/resend";
-const SESSION_BOOTSTRAP_MAX_ATTEMPTS = 40;
-const SESSION_BOOTSTRAP_RETRY_MS = 200;
 const CALLBACK_URL_SENSITIVE_PARAM_KEYS = [
   "code",
   "token_hash",
@@ -145,17 +138,7 @@ type ConfirmEmailFinalizePayload = {
   refreshToken: string | null;
 };
 
-type AuthBootstrapProviderId = "user-credentials" | "admin-credentials";
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
-
-async function readApiResult<T>(response: Response, invalidCode: string) {
-  try {
-    return (await response.json()) as ApiResult<T>;
-  } catch {
-    throw createAuthFlowError(invalidCode);
-  }
-}
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -276,17 +259,6 @@ function cleanupConfirmationCallbackUrl() {
   window.history.replaceState({}, "", nextUrl);
 }
 
-function resolveAuthBootstrapProvider(input: {
-  flow: ConfirmEmailFlow;
-  fromRoute: string;
-}): AuthBootstrapProviderId {
-  if (input.flow === "admin" || input.fromRoute === APP_ROUTES.adminLogin) {
-    return "admin-credentials";
-  }
-
-  return "user-credentials";
-}
-
 // ─── Email confirmation finalization ─────────────────────────────────────────
 
 async function finalizeEmailConfirmation(input: {
@@ -339,97 +311,18 @@ async function finalizeEmailConfirmation(input: {
   );
 }
 
-async function bootstrapAuthenticatedSession(input: {
-  providerId: AuthBootstrapProviderId;
-  idToken: string;
-  deviceLabel: string | null;
-  deviceLabelSource: string | null;
-  deviceLabelConfidence: number | null;
-  clientBestEffortSignInMetadataJson: string | null;
+function buildPostConfirmationRedirectUrl(input: {
+  returnRoute: string;
+  email: string;
 }) {
-  const signInResult = await signIn(input.providerId, {
-    redirect: false,
-    idToken: input.idToken,
-    deviceLabel: input.deviceLabel ?? "",
-    deviceLabelSource: input.deviceLabelSource ?? "",
-    deviceLabelConfidence:
-      typeof input.deviceLabelConfidence === "number"
-        ? String(input.deviceLabelConfidence)
-        : "",
-    clientBestEffortSignInMetadata: input.clientBestEffortSignInMetadataJson ?? "",
-  });
+  const params = new URLSearchParams();
+  params.set("confirmed", "1");
 
-  if (!signInResult) {
-    throw createAuthFlowError("AUTH_SESSION_CREATION_FAILED", "Missing Auth.js response.");
+  if (input.email.trim().length > 0) {
+    params.set("email", input.email.trim());
   }
 
-  if (signInResult.error) {
-    throw createAuthFlowError(
-      readCredentialsSignInErrorCode(signInResult) || "AUTH_SESSION_CREATION_FAILED",
-      signInResult.error,
-    );
-  }
-
-  if (!signInResult.ok) {
-    throw createAuthFlowError(
-      "AUTH_SESSION_CREATION_FAILED",
-      "Unable to establish authenticated session after email confirmation.",
-    );
-  }
-
-  let lastBootstrapCode: string | null = null;
-
-  for (let attempt = 0; attempt < SESSION_BOOTSTRAP_MAX_ATTEMPTS; attempt += 1) {
-    const meResponse = await fetch("/api/auth/me", {
-      method: "GET",
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-
-    const mePayload = await readApiResult<{
-      session: {
-        authenticated: boolean;
-        user: SessionUser | null;
-      };
-    }>(meResponse, "BOOTSTRAP_RESPONSE_INVALID");
-
-    if (meResponse.ok && mePayload.ok && mePayload.data.session.authenticated && mePayload.data.session.user) {
-      if (input.providerId === "admin-credentials" && mePayload.data.session.user.role !== "admin") {
-        throw createAuthFlowError(
-          "ADMIN_ACCOUNT_UNAUTHORIZED",
-          "This account is not authorized for admin access.",
-        );
-      }
-
-      return mePayload.data.session.user;
-    }
-
-    const responseErrorCode = mePayload.ok ? null : mePayload.error.code;
-    lastBootstrapCode = responseErrorCode;
-
-    const hasAttemptsRemaining = attempt + 1 < SESSION_BOOTSTRAP_MAX_ATTEMPTS;
-    const isTransientBootstrapState =
-      responseErrorCode === null
-      || responseErrorCode === "SESSION_NOT_ESTABLISHED"
-      || (meResponse.status >= 500 && meResponse.status < 600);
-
-    if (!isTransientBootstrapState) {
-      throw createAuthFlowError(
-        responseErrorCode || "AUTH_SESSION_CREATION_FAILED",
-        mePayload.ok ? undefined : mePayload.error.message,
-      );
-    }
-
-    if (hasAttemptsRemaining) {
-      await new Promise((resolve) => window.setTimeout(resolve, SESSION_BOOTSTRAP_RETRY_MS));
-      continue;
-    }
-  }
-
-  throw createAuthFlowError(
-    lastBootstrapCode || "AUTH_SESSION_REFRESH_REQUIRED",
-    "Session cookie was not observed after confirmation bootstrap.",
-  );
+  return `${input.returnRoute}?${params.toString()}`;
 }
 
 // ─── Error mapping ────────────────────────────────────────────────────────────
@@ -871,10 +764,6 @@ export function ConfirmEmailPanel({
   const supabaseConfigured = isSupabaseWebConfigured();
 
   const returnRoute = useMemo(() => resolveReturnRoute(flow, fromRoute), [flow, fromRoute]);
-  const authBootstrapProviderId = useMemo(() => resolveAuthBootstrapProvider({
-    flow,
-    fromRoute,
-  }), [flow, fromRoute]);
   const flowKind = flow === "admin" ? "admin" : "user";
 
   const syncGovernanceState = useCallback(async (
@@ -998,34 +887,19 @@ export function ConfirmEmailPanel({
           );
         }
 
-        const deviceMetadata = await buildClientAuthDeviceLabelMetadata();
-        const sessionUser = await bootstrapAuthenticatedSession({
-          providerId: authBootstrapProviderId,
-          idToken,
-          deviceLabel: deviceMetadata.deviceLabel,
-          deviceLabelSource: deviceMetadata.deviceLabelSource,
-          deviceLabelConfidence: deviceMetadata.deviceLabelConfidence,
-          clientBestEffortSignInMetadataJson: deviceMetadata.clientBestEffortSignInMetadataJson,
+        /* Confirm-email belongs to the verification lane only.
+           After Supabase confirms this exact account, clean up the helper session and
+           return users to the correct login page so Auth.js remains the only trust
+           boundary for entering protected routes. */
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {
+          // Best-effort helper-session cleanup only.
         });
-
-        const redirectDecision = resolveAuthenticatedUserRedirectPath({
-          role: sessionUser.role,
-          profileCompleted: sessionUser.profileCompleted,
-        });
-
-        // Keep the provider session after confirmation bootstrap so private Realtime channels can
-        // authenticate in protected routes. Auth.js session checks remain the authoritative gate
-        // for protected navigation and API ownership.
 
         console.info("[auth-confirmation]", {
           routePath: APP_ROUTES.confirmEmail,
           flow: flowKind,
-          providerId: authBootstrapProviderId,
           callbackKind,
-          role: sessionUser.role,
-          profileCompleted: sessionUser.profileCompleted,
-          redirectTo: redirectDecision.path,
-          redirectReason: redirectDecision.reason,
+          redirectTo: returnRoute,
           finalized: true,
         });
 
@@ -1040,18 +914,18 @@ export function ConfirmEmailPanel({
         });
 
         setIsFinalizing(false);
-        router.replace(redirectDecision.path);
+        router.replace(buildPostConfirmationRedirectUrl({
+          returnRoute,
+          email,
+        }));
         router.refresh();
       } catch (nextError) {
-        const failureStage = callbackKind
-          ? "AUTH_STAGE_E_SESSION_HYDRATION"
-          : "AUTH_STAGE_C_PROVIDER_RESPONSE";
         const failure = normalizeAuthFailure({
           error: nextError,
           flow: flowKind,
-          stage: failureStage,
+          stage: "AUTH_STAGE_C_PROVIDER_RESPONSE",
           routePath: APP_ROUTES.confirmEmail,
-          sessionCreationAttempted: Boolean(callbackKind),
+          sessionCreationAttempted: false,
         });
 
         logAuthDiagnosis({
@@ -1062,7 +936,6 @@ export function ConfirmEmailPanel({
         console.warn("[auth-confirmation]", {
           routePath: APP_ROUTES.confirmEmail,
           flow: flowKind,
-          providerId: authBootstrapProviderId,
           callbackKind,
           finalized: false,
           normalizedCode: failure.normalizedCode,
@@ -1083,7 +956,7 @@ export function ConfirmEmailPanel({
         }
       }
     })();
-  }, [authBootstrapProviderId, flowKind, initialFinalize, messages, router, supabaseConfigured]);
+  }, [email, flowKind, initialFinalize, messages, returnRoute, router, supabaseConfigured]);
 
   const normalizedEmail = email.trim().toLowerCase();
   const hasValidEmail = isValidEmail(normalizedEmail);

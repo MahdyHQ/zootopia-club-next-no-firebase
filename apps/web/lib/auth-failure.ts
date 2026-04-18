@@ -12,6 +12,7 @@ export type AuthFailureStage =
 export type AuthFailureCode =
   | "AUTH_INVALID_CREDENTIALS"
   | "AUTH_EMAIL_NOT_CONFIRMED"
+  | "AUTH_ACCOUNT_ALREADY_EXISTS"
   | "AUTH_ACCOUNT_SUSPENDED"
   | "AUTH_PROVIDER_MISCONFIGURED"
   | "AUTH_ENV_MISCONFIGURED"
@@ -53,6 +54,11 @@ const RAW_CODE_TO_NORMALIZED: Record<string, AuthFailureCode> = {
   EMAIL_NOT_CONFIRMED: "AUTH_EMAIL_NOT_CONFIRMED",
   EMAIL_NOT_VERIFIED: "AUTH_EMAIL_NOT_CONFIRMED",
   EMAIL_NOT_CONFIRMED_ERROR: "AUTH_EMAIL_NOT_CONFIRMED",
+
+  AUTH_ACCOUNT_ALREADY_EXISTS: "AUTH_ACCOUNT_ALREADY_EXISTS",
+  USER_ALREADY_EXISTS: "AUTH_ACCOUNT_ALREADY_EXISTS",
+  USER_ALREADY_REGISTERED: "AUTH_ACCOUNT_ALREADY_EXISTS",
+  EMAIL_EXISTS: "AUTH_ACCOUNT_ALREADY_EXISTS",
 
   AUTH_ACCOUNT_SUSPENDED: "AUTH_ACCOUNT_SUSPENDED",
   USER_SUSPENDED: "AUTH_ACCOUNT_SUSPENDED",
@@ -139,6 +145,7 @@ const PROVIDER_MISCONFIGURED_PATTERNS = [
 const AUTH_FAILURE_CODE_VALUES: AuthFailureCode[] = [
   "AUTH_INVALID_CREDENTIALS",
   "AUTH_EMAIL_NOT_CONFIRMED",
+  "AUTH_ACCOUNT_ALREADY_EXISTS",
   "AUTH_ACCOUNT_SUSPENDED",
   "AUTH_PROVIDER_MISCONFIGURED",
   "AUTH_ENV_MISCONFIGURED",
@@ -344,6 +351,14 @@ function inferByMessage(message: string | null) {
 
   if (normalized.includes("email not confirmed") || normalized.includes("email not verified")) {
     return "AUTH_EMAIL_NOT_CONFIRMED" satisfies AuthFailureCode;
+  }
+
+  if (
+    normalized.includes("already registered")
+    || normalized.includes("already exists")
+    || normalized.includes("already been registered")
+  ) {
+    return "AUTH_ACCOUNT_ALREADY_EXISTS" satisfies AuthFailureCode;
   }
 
   if (PROVIDER_MISCONFIGURED_PATTERNS.some((pattern) => normalized.includes(pattern))) {

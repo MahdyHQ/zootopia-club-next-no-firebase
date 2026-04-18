@@ -1,0 +1,278 @@
+import { createClient } from "@supabase/supabase-js";
+import { APP_ROUTES } from "@zootopia/shared-config";
+import { validateUserPasswordPolicy } from "@zootopia/shared-utils";
+
+import { normalizeAuthFailure } from "@/lib/auth-failure";
+import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
+import {
+  reserveAuthAdmissionAttempt,
+  type AuthAdmissionSnapshot,
+} from "@/lib/server/auth-admission-governance";
+import { getServerRuntimeOrigin } from "@/lib/server/runtime-base-url";
+import {
+  getSupabasePublishableKey,
+  getSupabaseUrl,
+} from "@/lib/supabase/public-config";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type SignupRequestBody = {
+  email?: unknown;
+  password?: unknown;
+};
+
+type SignupSuccessPayload = {
+  accepted: true;
+  email: string;
+  requiresEmailConfirmation: boolean;
+  confirmRoute: string;
+  accessToken: string | null;
+  refreshToken: string | null;
+};
+
+const SIGNUP_ADMISSION_DELAY_MESSAGE =
+  "We’re organizing sign-up requests to reduce pressure. Please try again in about 15 minutes.";
+
+function normalizeEmail(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizePassword(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function createSignupSupabaseClient() {
+  const supabaseUrl = getSupabaseUrl();
+  const supabasePublishableKey = getSupabasePublishableKey();
+
+  if (!supabaseUrl || !supabasePublishableKey) {
+    return null;
+  }
+
+  return createClient(supabaseUrl, supabasePublishableKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+function isSupabaseEmailConfirmed(user: unknown) {
+  if (!user || typeof user !== "object") {
+    return false;
+  }
+
+  const userRecord = user as Record<string, unknown>;
+  return typeof userRecord.email_confirmed_at === "string" && userRecord.email_confirmed_at.length > 0;
+}
+
+function isDuplicateSignupFailure(error: { code?: string | null; message?: string | null }) {
+  const code = String(error.code ?? "").trim().toLowerCase();
+  const message = String(error.message ?? "").trim().toLowerCase();
+
+  return (
+    code.includes("already")
+    || code.includes("exists")
+    || message.includes("already registered")
+    || message.includes("already exists")
+    || message.includes("already been registered")
+  );
+}
+
+function buildConfirmEmailRoute(email: string) {
+  const params = new URLSearchParams();
+  params.set("email", email);
+  params.set("flow", "sign_up");
+  params.set("from", APP_ROUTES.login);
+  return `${APP_ROUTES.confirmEmail}?${params.toString()}`;
+}
+
+function buildConfirmationRedirectUrl(email: string) {
+  /* Signup email links must stay server-owned so host-header drift cannot move
+     verification callbacks onto the wrong origin or preview hostname. */
+  const redirectUrl = new URL(APP_ROUTES.confirmEmail, getServerRuntimeOrigin());
+  redirectUrl.searchParams.set("flow", "sign_up");
+  redirectUrl.searchParams.set("from", APP_ROUTES.login);
+  redirectUrl.searchParams.set("email", email);
+  return redirectUrl.toString();
+}
+
+function withAdmissionHeaders(response: Response, snapshot: AuthAdmissionSnapshot) {
+  response.headers.set("X-Auth-Admission-Code", snapshot.governanceCode);
+  response.headers.set("X-Auth-Admission-Account-Remaining", String(snapshot.account.remainingAttempts));
+  response.headers.set("X-Auth-Admission-Ip-Remaining", String(snapshot.ip.remainingAttempts));
+
+  if (snapshot.retryAfterSeconds !== null) {
+    response.headers.set("Retry-After", String(snapshot.retryAfterSeconds));
+  }
+
+  if (snapshot.nextAllowedAt) {
+    const resetAtMs = Date.parse(snapshot.nextAllowedAt);
+    if (Number.isFinite(resetAtMs)) {
+      response.headers.set("X-RateLimit-Reset", String(Math.ceil(resetAtMs / 1000)));
+    }
+  }
+
+  return response;
+}
+
+export async function POST(request: Request) {
+  let body: SignupRequestBody;
+
+  try {
+    body = (await request.json()) as SignupRequestBody;
+  } catch {
+    return applyNoStore(
+      apiError("INVALID_JSON", "Request body must be valid JSON.", 400),
+    );
+  }
+
+  const email = normalizeEmail(body.email);
+  const password = normalizePassword(body.password);
+
+  if (!email || !isValidEmail(email)) {
+    return applyNoStore(
+      apiError("SIGNUP_EMAIL_INVALID", "A valid account email is required to create an account.", 400),
+    );
+  }
+
+  if (!password) {
+    return applyNoStore(
+      apiError("SIGNUP_PASSWORD_REQUIRED", "A password is required to create an account.", 400),
+    );
+  }
+
+  const passwordPolicy = validateUserPasswordPolicy({
+    password,
+    email,
+  });
+  if (!passwordPolicy.ok) {
+    return applyNoStore(
+      apiError("PASSWORD_POLICY_FAILED", passwordPolicy.error, 400, {
+        password: passwordPolicy.error,
+      }),
+    );
+  }
+
+  let admission: AuthAdmissionSnapshot;
+  try {
+    admission = await reserveAuthAdmissionAttempt({
+      request,
+      email,
+      kind: "sign_up",
+    });
+  } catch (error) {
+    console.error("[auth-signup] failed to reserve admission capacity", {
+      routePath: APP_ROUTES.login,
+      error,
+    });
+
+    const failure = applyNoStore(
+      apiError("AUTH_RATE_LIMITED", SIGNUP_ADMISSION_DELAY_MESSAGE, 503),
+    );
+    failure.headers.set("Retry-After", "900");
+    return failure;
+  }
+
+  if (!admission.allowed && admission.reservationAccepted !== true) {
+    return withAdmissionHeaders(
+      applyNoStore(
+        apiError("AUTH_RATE_LIMITED", SIGNUP_ADMISSION_DELAY_MESSAGE, 429),
+      ),
+      admission,
+    );
+  }
+
+  const supabase = createSignupSupabaseClient();
+  if (!supabase) {
+    return withAdmissionHeaders(
+      applyNoStore(
+        apiError(
+          "AUTH_ENV_MISCONFIGURED",
+          "Secure sign-up is not available in this environment right now.",
+          503,
+        ),
+      ),
+      admission,
+    );
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: buildConfirmationRedirectUrl(email),
+    },
+  });
+
+  if (error) {
+    if (isDuplicateSignupFailure(error)) {
+      return withAdmissionHeaders(
+        applyNoStore(
+          apiError(
+            "AUTH_ACCOUNT_ALREADY_EXISTS",
+            "An account with this email already exists. Sign in instead, or finish email confirmation if it is still pending.",
+            409,
+          ),
+        ),
+        admission,
+      );
+    }
+
+    const failure = normalizeAuthFailure({
+      error,
+      flow: "user",
+      stage: "AUTH_STAGE_C_PROVIDER_RESPONSE",
+      routePath: APP_ROUTES.login,
+      sessionCreationAttempted: false,
+    });
+
+    const status =
+      failure.normalizedCode === "AUTH_RATE_LIMITED"
+        ? 429
+        : failure.normalizedCode === "AUTH_NETWORK_FAILURE"
+          ? 502
+          : failure.normalizedCode === "AUTH_ENV_MISCONFIGURED"
+            || failure.normalizedCode === "AUTH_PROVIDER_MISCONFIGURED"
+            ? 503
+            : 502;
+
+    const message =
+      failure.normalizedCode === "AUTH_RATE_LIMITED"
+        ? SIGNUP_ADMISSION_DELAY_MESSAGE
+        : failure.safeProviderMessage
+          ?? "Secure sign-up could not be completed right now.";
+
+    return withAdmissionHeaders(
+      applyNoStore(
+        apiError(failure.normalizedCode, message, status),
+      ),
+      admission,
+    );
+  }
+
+  const accessToken = data.session?.access_token?.trim() || null;
+  const refreshToken = data.session?.refresh_token?.trim() || null;
+  const requiresEmailConfirmation = !isSupabaseEmailConfirmed(data.user) || !accessToken || !refreshToken;
+
+  const payload: SignupSuccessPayload = {
+    accepted: true,
+    email,
+    requiresEmailConfirmation,
+    confirmRoute: buildConfirmEmailRoute(email),
+    accessToken,
+    refreshToken,
+  };
+
+  return withAdmissionHeaders(
+    applyNoStore(apiSuccess(payload)),
+    admission,
+  );
+}
