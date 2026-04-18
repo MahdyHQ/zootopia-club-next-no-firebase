@@ -18,6 +18,10 @@ import {
   getUserByUid,
   sweepExpiredUploadedSources,
 } from "@/lib/server/repository";
+import {
+  releaseActiveNormalUserSessionLease,
+  reserveOrRenewActiveNormalUserSessionLease,
+} from "@/lib/server/active-normal-user-session-governance";
 
 const ANONYMOUS_SESSION: SessionSnapshot = {
   authenticated: false,
@@ -144,6 +148,44 @@ const getVerifiedSessionContext = cache(
 
     if (normalizedUser.status !== "active") {
       return null;
+    }
+
+    if (normalizedUser.role === "admin") {
+      /* Admin sessions are permanently exempt from normal-user capacity. Release any stale
+         lease row best-effort here so role promotions or prior user sessions cannot keep an
+         admin identity counted after the live persisted role has changed. */
+      void releaseActiveNormalUserSessionLease({
+        uid: normalizedUser.uid,
+      }).catch(() => undefined);
+    } else {
+      try {
+        /* Active normal-user occupancy is renewed at the same server boundary that
+           rehydrates live user truth. This keeps slot ownership server-authoritative and
+           prevents stale client state from extending capacity leases. */
+        const leaseDecision = await reserveOrRenewActiveNormalUserSessionLease({
+          uid: normalizedUser.uid,
+          email: normalizedUser.email,
+          role: normalizedUser.role,
+        });
+
+        if (!leaseDecision.allowed) {
+          console.warn("[session] rejecting session after active-user capacity denial", {
+            uid,
+            activeNormalUsers: leaseDecision.snapshot.activeNormalUsers,
+            maxActiveNormalUsers: leaseDecision.snapshot.maxActiveNormalUsers,
+          });
+          return null;
+        }
+      } catch (error) {
+        /* Fail closed for non-exempt normal-user sessions when authoritative lease state
+           cannot be read or renewed. Exempt identities are handled as fail-open in the
+           governance helper and do not throw here for capacity persistence degradation. */
+        console.warn("[session] rejecting session after active-user lease renewal failure", {
+          uid,
+          errorCode: getErrorCode(error),
+        });
+        return null;
+      }
     }
 
     return {

@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Public auth admission hardening + confirm-email redirect-to-login flow)
+Last Updated: 2026-04-18 (Session capacity renewal/logout audit recorded)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -2342,3 +2342,359 @@ Runtime proof status:
 ~ New signup/login overload behavior and duplicate-account handling were
   verified by route logic, auth error normalization, route manifest inclusion,
   migration validation, and full lint/type/build/build:vercel passes.
+
+2026-04-18: ACTIVE NORMAL-USER SESSION CAPACITY GOVERNANCE (SERVER-AUTHORITATIVE)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Public auth admission previously paced traffic without a strict concurrent
+   active-user cap for normal users, so bursts could still admit more active
+   sessions than intended.
+2. Admission preflight alone is not decisive under race conditions; authoritative
+   slot reservation/renewal must happen in trusted server flows.
+3. The login UX needed a truthful live "capacity full" counter that reflects the
+   current backend snapshot instead of static messaging.
+
+FILES CHANGED:
+- supabase/migrations/20260418123000_active_normal_user_session_capacity.sql
+- apps/web/lib/server/active-normal-user-session-governance.ts
+- apps/web/app/api/auth/login/admission/route.ts
+- apps/web/auth.ts
+- apps/web/lib/server/session.ts
+- apps/web/app/api/auth/logout/route.ts
+- apps/web/components/auth/login-panel.tsx
+- apps/web/lib/auth-failure.ts
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- .env.example
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- Added `20260418123000_active_normal_user_session_capacity.sql`
+  - Creates `public.active_normal_user_sessions` for active normal-user leases.
+  - Adds indexes for lease expiry and normalized email lookups.
+  - Enables RLS and deny-all policies for `anon` and `authenticated` so only
+    backend SQL clients can read/write this governance table.
+
+REASON:
+- Replace wait-only pacing with a backend-authoritative concurrent active
+  normal-user capacity model.
+- Enforce the cap at trusted server boundaries while preserving admin and
+  explicit exempt-account bypass behavior.
+- Keep login UX accurate by exposing safe capacity snapshots to the login page.
+
+TECHNICAL DETAILS:
+1. New server-only capacity governance module
+   - Introduced `active-normal-user-session-governance.ts` with bounded env
+     parsing and normalized exemption logic.
+   - Added a required exempt email (`elmahdyabdulla208@gmail.com`) plus env
+     extension via `ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS`.
+   - Added transactional advisory-lock control using
+     `pg_advisory_xact_lock(381104202)` to serialize capacity decisions across
+     concurrent requests and instances.
+   - Admission model now purges expired leases, reads active count, and either
+     reserves/renews or denies based on configured limit.
+
+2. Decisive server enforcement points
+   - `POST /api/auth/login/admission` now evaluates normal-user capacity after
+     existing auth-admission checks and returns 429 when full.
+   - `GET /api/auth/login/admission` now returns live capacity snapshot for the
+     login page polling loop.
+   - Auth.js `authorize` in `apps/web/auth.ts` now calls
+     `reserveOrRenewActiveNormalUserSessionLease` as the decisive gate before
+     issuing normal-user authenticated state.
+   - `session.ts` renews the lease in verified non-admin server session
+     rehydration, and fail-closes non-exempt sessions when renewal cannot be
+     trusted.
+   - `logout` route performs best-effort lease release to free slots quickly.
+
+3. Client UX and failure normalization
+   - `login-panel.tsx` now parses capacity snapshot headers/details, blocks
+     submit while full, and polls the admission GET endpoint for live counts.
+   - Added capacity-aware status/button copy in EN/AR messages.
+   - `auth-failure.ts` now normalizes active-user-capacity failure codes so race
+     denials from server-authoritative paths map to stable UX behavior.
+
+4. Environment contract additions
+   - `ZOOTOPIA_ACTIVE_NORMAL_USER_LIMIT` (default 3)
+   - `ZOOTOPIA_ACTIVE_NORMAL_USER_SESSION_MINUTES` (default 15)
+   - `ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS` (comma-separated)
+
+PRESERVED INTENTIONALLY:
+- Auth.js server trust boundary for protected runtime ownership.
+- Backend authority for admission and session decisions.
+- Admin bypass behavior and allowlist-based exemption model.
+- Existing auth admission governance and sign-up/login architecture.
+- Existing profile-completion gating and protected-shell behavior.
+- Existing localization and design language, with only targeted messaging
+  additions for capacity states.
+
+RISKS / FOLLOW-UP:
+- Runtime capacity behavior should still be browser-validated with multiple
+  concurrent normal-user sessions plus one exempt/admin account to verify:
+  1. strict cap denial for normal users,
+  2. exempt bypass and non-counting behavior,
+  3. lease expiry release behavior after inactivity window.
+- This pass intentionally kept messaging simple and did not add an admin
+  inspection UI for current active lease rows.
+
+VERIFICATION:
+Code-path verification:
+✓ Re-traced trusted auth/session/login/logout paths after edits to confirm
+  decisive slot control occurs on backend server boundaries.
+✓ Verified exempt/admin paths are always allowed and normal-user paths fail
+  closed on uncertain decisive renewal states.
+✓ Verified login UI now receives and refreshes live capacity snapshot data.
+
+Diagnostics verification:
+✓ `get_errors` on all changed files — PASS (no language-service errors).
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS
+✓ `npm run typecheck --workspace @zootopia/web` — PASS
+✓ `npm run build --workspace @zootopia/web` — PASS
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS
+✓ `npm run supabase:migrations:validate` — PASS (`Validated 18 migration file(s).`)
+
+Runtime proof status:
+~ No dedicated live concurrent-session QA run was executed in this environment.
+~ Enforcement and UX behavior were validated by server-path tracing, static
+  diagnostics, migration validation, and full lint/type/build/build:vercel
+  command passes.
+
+2026-04-18: ADMIN-TO-USER CREDIT CONTROL + OWNER-SCOPE AUTHORITY AUDIT HARDENING
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. The production credit-control architecture already kept mutation authority
+  on the backend repository path, but one active admin detail server-action
+  lane (`/admin/users/[uid]`) did not append dedicated admin logs for inline
+  role/status mutations.
+2. This created an audit-governance parity gap between API-route mutations
+  (which already logged role/status changes) and same-page server-action
+  mutations.
+3. The full system required architecture-first revalidation to prove admin
+  target UID integrity, owner-scope isolation, canonical credit read ownership,
+  private realtime invalidation scope, and repository boundary preservation.
+
+FILES CHANGED:
+- apps/web/app/(protected)/admin/users/[uid]/page.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+- Existing migration inventory and order revalidated (`18` files).
+
+REASON:
+- Harden admin governance metadata completeness without redesigning runtime
+  architecture.
+- Keep server-action and API-route mutation lanes consistent for operator
+  forensics and post-incident attribution.
+- Preserve strict backend authority, owner scoping, and canonical read models.
+
+WHAT WAS FIXED:
+1. Added best-effort admin audit logging for inline role/status mutations in
+  `apps/web/app/(protected)/admin/users/[uid]/page.tsx`:
+  - `runInlineRoleMutation(...)` now imports and calls `appendAdminLog(...)`
+    after successful `setUserRole(...)`.
+  - `runInlineStatusMutation(...)` now imports and calls `appendAdminLog(...)`
+    after successful `setUserStatus(...)`.
+  - Logged metadata now includes server-action source marker:
+    `source: "admin-user-detail-server-action"`.
+2. Preserved existing best-effort semantics for observability operations so
+  authoritative commits are never rolled back by logging failures.
+
+WHAT WAS PRESERVED:
+- Admin/user role and status mutation authority remains repository-owned in
+  `setUserRole(...)` / `setUserStatus(...)`.
+- Self-mutation protections remained unchanged and enforced in both API and
+  server-action lanes.
+- Credit mutation authority remained in
+  `applyAdminAssessmentCreditMutation(...)` only.
+- Canonical credit totals remain server-owned through
+  `/api/assessment/credits` read path.
+- Realtime remained invalidation-only; no balance truth moved to browser.
+- Owner-scoped uploads/results/artifacts/storage path model remained unchanged.
+
+OWNER-SCOPING ENFORCEMENT (CREDITS, UPLOADS, RESULTS, METADATA):
+1. Credits:
+  - User lanes read only via session UID through
+    `getAssessmentDailyCreditsSummaryForUser({ uid, role })`.
+  - Admin mutation targets are explicit `uid` route params, resolved server-side,
+    and persisted with target `ownerUid` + actor metadata.
+2. Uploads/Documents:
+  - Upload create/finalize/delete and download routes derive owner from session
+    (`user.uid`) and use owner-filtered repository methods (`*ForOwner`).
+  - Storage keys are enforced by `assertOwnerScopedStoragePath(...)` with
+    canonical `users/{ownerUid}/...` namespacing.
+3. Assessments/Results/Exports:
+  - Owner read routes use `getAssessmentGenerationForOwner(...)` and reject
+    mismatched owner UIDs.
+4. Artifact metadata:
+  - Artifact mirror sync remains transaction-coupled to generation persistence
+    through `syncAssessmentArtifactMetadataForGeneration(...)`.
+
+ADMIN GOVERNANCE (SERVER-ENFORCED):
+1. Admin routes continue to require `getAdminSessionUser()`/`requireAdminUser()`.
+2. Role/status/credit/prompt/storage operations remain backend-only, never
+  client-authoritative.
+3. Self-mutation protections remain active in role/status/credits/delete flows.
+4. Role elevation continues to enforce allowlist governance for admin role.
+5. New inline role/status audit entries now match API mutation observability
+  expectations on the active page server-action lane.
+
+REPOSITORY BOUNDARY STATUS:
+1. Sensitive persistence remains centralized in `apps/web/lib/server/repository.ts`:
+  - credits: reserve/commit/release/admin mutation
+  - role/status/prompt entitlement mutations
+  - owner-scoped document/generation reads
+  - audit log append helper
+2. Route handlers remain orchestration/auth layers and do not introduce ad-hoc
+  SQL/write bypasses for sensitive credit or owner data mutations.
+3. No client-side second authority was introduced.
+
+BACKEND AUTHORITY STATUS:
+- Privileged operations remain server-owned:
+  - admin credit mutation
+  - prompt entitlement mutation
+  - role/status mutation
+  - audit log writes
+  - realtime publication
+  - upload/result/artifact persistence
+- Browser code still triggers flows only; it does not own balance truth,
+  artifact truth, or mutation authority.
+
+PRIVATE SUPABASE CHANNEL DELIVERY (CURRENT CONTRACT):
+1. Topic namespace stays owner-scoped private:
+  `assessment-credit:owner:{uid}`.
+2. Server publishing uses `publishAssessmentCreditLiveUpdate(...)` with
+  `private: true` channel config.
+3. Browser subscription applies Supabase access token via
+  `supabaseClient.realtime.setAuth(...)` before channel join.
+4. Payload remains invalidation envelope only (`eventId`, `emittedAt`, `traceId`);
+  no balance numbers are trusted from realtime payload.
+5. Canonical refresh path remains query invalidation + server re-read.
+
+DATABASE PERSISTENCE GUARANTEES:
+1. Admin credit mutations remain transaction-backed in
+  `applyAdminAssessmentCreditMutation(...)`.
+2. Before/after snapshots and mutation metadata persist durably in mutation
+  history structures and structured mirror tables.
+3. Assessment credit consumption remains reserve -> commit -> release aware
+  with transaction-coupled final commit in
+  `saveAssessmentGenerationWithCreditCommit(...)`.
+4. Post-commit reread degradation fallback remains in place, preventing false
+  failed responses after committed writes.
+
+CREDIT SUBTRACTION / CONSUMPTION VERIFICATION:
+1. Reserve path verified in `reserveAssessmentDailyCreditAttempt(...)`.
+2. Durable commit path verified in
+  `saveAssessmentGenerationWithCreditCommit(...)`.
+3. Failure/retry release path verified in
+  `releaseAssessmentDailyCreditReservation(...)` and route cleanup paths.
+4. Idempotency guard remains active for assessment create requests with
+  `Idempotency-Key` and repository idempotency lock documents.
+
+RUNTIME / DEPLOYMENT NOTES (SEPARATED):
+1. Local integrated development
+  - Frontend: Next.js protected/admin pages and client query invalidation.
+  - Backend: same-origin App Router APIs + server actions + repository layer.
+  - Auth/session: Auth.js cookie -> server session rehydration by UID.
+  - Same-origin vs provider-managed: app routes same-origin, Supabase
+    provider-managed for Auth/Realtime/Storage.
+  - This change applies identically in local runtime.
+
+2. Vercel + Supabase (active path)
+  - Frontend: Vercel-hosted pages; client subscribes to private channel.
+  - Backend: server actions + API handlers on Vercel continue to own mutations.
+  - Auth/session: Auth.js trust boundary unchanged.
+  - Env-sensitive areas: Auth.js secret, Supabase runtime/service credentials,
+    admin allowlist, credit config envs.
+  - This change is shared and path-agnostic (server-action logging only).
+
+3. Legacy/reference assumptions
+  - Legacy docs/compatibility flows remain non-authoritative references.
+  - No legacy path activation or architectural rework was introduced.
+
+RISKS / FOLLOW-UP:
+1. Live multi-user browser proof for admin mutation + target-user realtime
+  invalidation delivery remains recommended with dedicated QA credentials.
+2. Existing best-effort observability operations (audit/realtime) remain
+  intentionally non-blocking after durable commits.
+3. No additional migration was required because hardening was governance-path
+  metadata parity, not schema drift.
+
+VERIFICATION:
+Architecture/code-trace verification:
+✓ Completed 8-lane parallel exploration and consolidated findings before edits.
+✓ Re-traced exact end-to-end credit flow:
+  admin UI/server action/API -> repository transaction -> mutation history ->
+  realtime invalidation publish -> canonical `/api/assessment/credits` read.
+✓ Re-traced owner-scoped upload/result/artifact flow and confirmed session UID
+  ownership enforcement plus path assertions.
+
+Diagnostics verification:
+✓ `get_errors` on changed file(s) — PASS.
+
+Command verification:
+✓ `npm run lint` — PASS
+✓ `npm run typecheck` — PASS
+✓ `npm run build` — PASS
+✓ `npm run build:vercel` — PASS
+✓ `npm run supabase:migrations:validate` — PASS (`Validated 18 migration file(s).`)
+
+Runtime proof status:
+~ No fresh live authenticated browser concurrency run was executed in this
+  environment for admin-target mutation and private-channel delivery.
+~ Behavior was verified by code-path tracing and full lint/type/build/migration
+  validation passes after the surgical governance patch.
+
+2026-04-18: AUDIT ONLY — ACTIVE NORMAL-USER SESSION RENEWAL + LOGOUT RELEASE TRACE
+────────────────────────────────────────────────────────────────────────────
+
+SCOPE:
+- `apps/web/lib/server/session.ts`
+- `apps/web/app/api/auth/logout/route.ts`
+- Traced supporting paths in `apps/web/auth.ts`,
+  `apps/web/lib/server/active-normal-user-session-governance.ts`,
+  `apps/web/components/auth/sign-out-button.tsx`, and
+  `apps/web/components/settings/password-change-panel.tsx`
+
+CURRENT VERIFIED BEHAVIOR:
+1. Renewal
+   - Normal-user capacity is reserved decisively during Auth.js credentials
+     authorize in `apps/web/auth.ts`.
+   - Protected-session rehydration in `apps/web/lib/server/session.ts`
+     re-loads persisted user truth first, then renews the active normal-user
+     lease for non-admin users, and fail-closes when the renewal decision
+     cannot be trusted.
+2. Logout release
+   - Client sign-out flows call `POST /api/auth/logout` before Auth.js
+     `signOut()`, so the release route runs while the Auth.js cookie is still
+     present when the helper request succeeds.
+   - The logout route performs best-effort lease release, then workspace
+     cleanup, then session audit logging.
+
+CONCRETE RISK:
+1. Lease release is currently coupled to the renewal-gated session helper.
+   - `apps/web/app/api/auth/logout/route.ts` reads the user through
+     `getAuthenticatedSessionUser()`, which routes through
+     `getVerifiedSessionContext()` in `apps/web/lib/server/session.ts`.
+   - That helper renews the active normal-user lease and returns `null` on
+     persisted-user lookup failure, inactive status, lease-renewal failure, or
+     capacity denial.
+   - When that happens during logout, the route skips
+     `releaseActiveNormalUserSessionLease(...)` entirely, so an existing lease
+     row can remain until TTL expiry even though the browser still proceeds to
+     clear the Auth.js session cookie.
+   - Impact: a temporary false occupancy/capacity hold is possible for the
+     affected normal-user slot until the lease expires or another trusted
+     server path cleans it up.
+
+FILES CHANGED:
+- `zootopia-club-next-ledger.txt`
+
+VERIFICATION:
+- Code-path audit only; no runtime code changes were made.
+- No lint/type/build run was needed for this audit-only ledger refresh.

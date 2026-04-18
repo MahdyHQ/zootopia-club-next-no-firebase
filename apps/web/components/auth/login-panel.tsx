@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createAuthFlowError,
   createAuthFlowErrorWithDetails,
+  getAuthFlowErrorCode,
   mapRegularLoginError,
   type AuthStatusDescriptor,
   type AuthSupportNote,
@@ -55,6 +56,34 @@ const SESSION_BOOTSTRAP_MAX_ATTEMPTS = 40;
 const SESSION_BOOTSTRAP_RETRY_MS = 200;
 const USER_LOGIN_ADMISSION_API_ROUTE = "/api/auth/login/admission";
 const USER_SIGNUP_API_ROUTE = "/api/auth/signup";
+const USER_LOGIN_ADMISSION_STATUS_REFRESH_MS = 5_000;
+
+const ACTIVE_NORMAL_USERS_HEADER = "X-Zootopia-Active-Normal-Users";
+const ACTIVE_NORMAL_USERS_LIMIT_HEADER = "X-Zootopia-Active-Normal-User-Limit";
+const ACTIVE_NORMAL_USERS_SESSION_MINUTES_HEADER = "X-Zootopia-Active-Normal-User-Session-Minutes";
+const ACTIVE_NORMAL_USERS_AVAILABLE_SLOTS_HEADER = "X-Zootopia-Active-Normal-User-Available-Slots";
+
+type ActiveNormalUserCapacitySnapshot = {
+  activeNormalUsers: number;
+  maxActiveNormalUsers: number;
+  sessionMinutes: number;
+  availableSlots: number;
+  isFull: boolean;
+};
+
+type LoginAdmissionCapacityDecision = {
+  allowed: boolean;
+  exempt: boolean;
+  reason: "EXEMPT" | "CAPACITY_AVAILABLE" | "CAPACITY_FULL";
+  snapshot: ActiveNormalUserCapacitySnapshot;
+};
+
+type LoginCapacityStatusPayload = {
+  allowed: boolean;
+  exempt: boolean;
+  reason: "EXEMPT" | "CAPACITY_AVAILABLE" | "CAPACITY_FULL";
+  capacity: ActiveNormalUserCapacitySnapshot;
+};
 
 function buildLocalText(locale: Locale) {
   if (locale === "ar") {
@@ -136,6 +165,7 @@ function mapSupabaseBrowserError(input: {
 
 type LoginAdmissionPayload = {
   accepted: boolean;
+  capacity?: LoginAdmissionCapacityDecision | null;
 };
 
 type SignupPayload = {
@@ -146,6 +176,141 @@ type SignupPayload = {
   accessToken: string | null;
   refreshToken: string | null;
 };
+
+function parseHeaderNumber(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readCapacitySnapshotFromHeaders(headers: Headers) {
+  const activeNormalUsers = parseHeaderNumber(headers.get(ACTIVE_NORMAL_USERS_HEADER));
+  const maxActiveNormalUsers = parseHeaderNumber(headers.get(ACTIVE_NORMAL_USERS_LIMIT_HEADER));
+  const sessionMinutes = parseHeaderNumber(headers.get(ACTIVE_NORMAL_USERS_SESSION_MINUTES_HEADER));
+  const availableSlots = parseHeaderNumber(headers.get(ACTIVE_NORMAL_USERS_AVAILABLE_SLOTS_HEADER));
+
+  if (
+    activeNormalUsers === null
+    || maxActiveNormalUsers === null
+    || sessionMinutes === null
+  ) {
+    return null;
+  }
+
+  const computedAvailableSlots = Math.max(
+    0,
+    maxActiveNormalUsers - activeNormalUsers,
+  );
+
+  return {
+    activeNormalUsers: Math.max(0, activeNormalUsers),
+    maxActiveNormalUsers: Math.max(1, maxActiveNormalUsers),
+    sessionMinutes: Math.max(1, sessionMinutes),
+    availableSlots: availableSlots === null
+      ? computedAvailableSlots
+      : Math.max(0, availableSlots),
+    isFull: (availableSlots === null ? computedAvailableSlots : Math.max(0, availableSlots)) <= 0,
+  } satisfies ActiveNormalUserCapacitySnapshot;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readCapacitySnapshotFromError(error: unknown) {
+  if (!isRecord(error) || !isRecord(error.details)) {
+    return null;
+  }
+
+  const maybeSnapshot = error.details.capacity;
+  if (!isRecord(maybeSnapshot)) {
+    return null;
+  }
+
+  const activeNormalUsers = typeof maybeSnapshot.activeNormalUsers === "number"
+    ? maybeSnapshot.activeNormalUsers
+    : null;
+  const maxActiveNormalUsers = typeof maybeSnapshot.maxActiveNormalUsers === "number"
+    ? maybeSnapshot.maxActiveNormalUsers
+    : null;
+  const sessionMinutes = typeof maybeSnapshot.sessionMinutes === "number"
+    ? maybeSnapshot.sessionMinutes
+    : null;
+  const availableSlots = typeof maybeSnapshot.availableSlots === "number"
+    ? maybeSnapshot.availableSlots
+    : null;
+  const isFull = typeof maybeSnapshot.isFull === "boolean"
+    ? maybeSnapshot.isFull
+    : null;
+
+  if (
+    activeNormalUsers === null
+    || maxActiveNormalUsers === null
+    || sessionMinutes === null
+    || availableSlots === null
+    || isFull === null
+  ) {
+    return null;
+  }
+
+  return {
+    activeNormalUsers,
+    maxActiveNormalUsers,
+    sessionMinutes,
+    availableSlots,
+    isFull,
+  } satisfies ActiveNormalUserCapacitySnapshot;
+}
+
+function readRawFailureCode(error: unknown) {
+  if (!isRecord(error) || !isRecord(error.details) || !isRecord(error.details.failure)) {
+    return null;
+  }
+
+  const rawCode = error.details.failure.rawCode;
+  if (typeof rawCode === "string" && rawCode.trim().length > 0) {
+    return rawCode.trim();
+  }
+
+  return null;
+}
+
+function interpolateTemplate(template: string, replacements: Record<string, string>) {
+  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+    return replacements[key] ?? match;
+  });
+}
+
+function formatLocaleCount(value: number, locale: Locale) {
+  try {
+    return new Intl.NumberFormat(locale === "ar" ? "ar" : "en").format(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function buildCapacityFullStatus(input: {
+  messages: AppMessages;
+  locale: Locale;
+  snapshot: ActiveNormalUserCapacitySnapshot;
+}): AuthStatusDescriptor {
+  const active = formatLocaleCount(input.snapshot.activeNormalUsers, input.locale);
+  const limit = formatLocaleCount(input.snapshot.maxActiveNormalUsers, input.locale);
+
+  return {
+    tone: "warning",
+    icon: "warning",
+    title: input.messages.loginStatusCapacityFullTitle,
+    body: interpolateTemplate(input.messages.loginStatusCapacityFullBody, {
+      active,
+      limit,
+    }),
+    live: "polite",
+  };
+}
 
 async function requestLoginAdmission(email: string) {
   const response = await fetch(USER_LOGIN_ADMISSION_API_ROUTE, {
@@ -159,10 +324,53 @@ async function requestLoginAdmission(email: string) {
     }),
   });
 
+  const capacityFromHeaders = readCapacitySnapshotFromHeaders(response.headers);
+
   const payload = await readApiResult<LoginAdmissionPayload>(response, "LOGIN_ADMISSION_RESPONSE_INVALID");
   if (!response.ok || !payload.ok) {
-    throw createAuthFlowError(
+    throw createAuthFlowErrorWithDetails(
       payload.ok ? "AUTH_RATE_LIMITED" : payload.error.code,
+      payload.ok ? undefined : payload.error.message,
+      {
+        capacity: capacityFromHeaders,
+      },
+    );
+  }
+
+  const capacity = payload.data.capacity
+    ?? (capacityFromHeaders
+      ? {
+          allowed: !capacityFromHeaders.isFull,
+          exempt: false,
+          reason: capacityFromHeaders.isFull ? "CAPACITY_FULL" : "CAPACITY_AVAILABLE",
+          snapshot: capacityFromHeaders,
+        }
+      : null);
+
+  return {
+    ...payload.data,
+    capacity,
+  };
+}
+
+async function requestLoginCapacityStatus(email: string) {
+  const query = new URLSearchParams();
+  query.set("email", email);
+
+  const response = await fetch(`${USER_LOGIN_ADMISSION_API_ROUTE}?${query.toString()}`, {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+
+  const payload = await readApiResult<LoginCapacityStatusPayload>(
+    response,
+    "LOGIN_CAPACITY_STATUS_RESPONSE_INVALID",
+  );
+
+  if (!response.ok || !payload.ok) {
+    throw createAuthFlowError(
+      payload.ok ? "AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE" : payload.error.code,
       payload.ok ? undefined : payload.error.message,
     );
   }
@@ -344,9 +552,21 @@ export function LoginPanel({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [capacityBlockedSnapshot, setCapacityBlockedSnapshot] =
+    useState<ActiveNormalUserCapacitySnapshot | null>(null);
+  const [capacityBlockedEmail, setCapacityBlockedEmail] = useState<string | null>(null);
   const supabaseConfigured = isSupabaseWebConfigured();
   const isBusy = phase !== "idle";
   const localText = buildLocalText(locale);
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const isCapacityBlocked =
+    mode === "sign_in"
+    && phase === "idle"
+    && Boolean(capacityBlockedSnapshot)
+    && normalizedEmail.length > 0
+    && capacityBlockedEmail === normalizedEmail;
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -383,6 +603,96 @@ export function LoginPanel({
       body: messages.loginStatusEmailConfirmedBody,
     });
   }, [messages, searchParams]);
+
+  useEffect(() => {
+    if (!capacityBlockedEmail) {
+      return;
+    }
+
+    if (normalizedEmail.length === 0 || normalizedEmail !== capacityBlockedEmail) {
+      setCapacityBlockedEmail(null);
+      setCapacityBlockedSnapshot(null);
+
+      if (phase === "idle") {
+        setStatus(null);
+      }
+    }
+  }, [capacityBlockedEmail, normalizedEmail, phase]);
+
+  useEffect(() => {
+    if (mode === "sign_in") {
+      return;
+    }
+
+    if (capacityBlockedEmail || capacityBlockedSnapshot) {
+      setCapacityBlockedEmail(null);
+      setCapacityBlockedSnapshot(null);
+    }
+  }, [capacityBlockedEmail, capacityBlockedSnapshot, mode]);
+
+  useEffect(() => {
+    if (
+      !capacityBlockedEmail
+      || !supabaseConfigured
+      || !supabaseAuthReady
+      || phase !== "idle"
+      || mode !== "sign_in"
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshCapacity = async () => {
+      try {
+        const capacityStatus = await requestLoginCapacityStatus(capacityBlockedEmail);
+        if (cancelled) {
+          return;
+        }
+
+        if (!capacityStatus.allowed || capacityStatus.reason === "CAPACITY_FULL") {
+          setCapacityBlockedSnapshot(capacityStatus.capacity);
+          setStatus(buildCapacityFullStatus({
+            messages,
+            locale,
+            snapshot: capacityStatus.capacity,
+          }));
+          return;
+        }
+
+        setCapacityBlockedEmail(null);
+        setCapacityBlockedSnapshot(null);
+        setStatus({
+          tone: "success",
+          icon: "success",
+          title: messages.loginStatusCapacityAvailableTitle,
+          body: messages.loginStatusCapacityAvailableBody,
+        });
+      } catch {
+        if (cancelled) {
+          return;
+        }
+      }
+    };
+
+    void refreshCapacity();
+    const intervalId = window.setInterval(() => {
+      void refreshCapacity();
+    }, USER_LOGIN_ADMISSION_STATUS_REFRESH_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    capacityBlockedEmail,
+    locale,
+    messages,
+    mode,
+    phase,
+    supabaseAuthReady,
+    supabaseConfigured,
+  ]);
 
   const clearClientSession = useCallback(async () => {
     if (!supabaseConfigured) {
@@ -510,7 +820,7 @@ export function LoginPanel({
       uxAction: "retry",
     });
 
-    if (!supabaseConfigured || !supabaseAuthReady || isBusy) {
+    if (!supabaseConfigured || !supabaseAuthReady || isBusy || isCapacityBlocked) {
       return;
     }
 
@@ -550,6 +860,8 @@ export function LoginPanel({
     }
 
     setPhase("authenticating");
+    setCapacityBlockedEmail(null);
+    setCapacityBlockedSnapshot(null);
     setStatus({
       tone: "info",
       icon: "working",
@@ -635,7 +947,20 @@ export function LoginPanel({
         return;
       }
 
-      await requestLoginAdmission(email.trim());
+      const loginAdmission = await requestLoginAdmission(email.trim());
+
+      if (loginAdmission.capacity && !loginAdmission.capacity.allowed) {
+        const blockedEmail = email.trim().toLowerCase();
+        setPhase("idle");
+        setCapacityBlockedEmail(blockedEmail);
+        setCapacityBlockedSnapshot(loginAdmission.capacity.snapshot);
+        setStatus(buildCapacityFullStatus({
+          messages,
+          locale,
+          snapshot: loginAdmission.capacity.snapshot,
+        }));
+        return;
+      }
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -672,6 +997,46 @@ export function LoginPanel({
         clientBestEffortSignInMetadataJson: deviceMetadata.clientBestEffortSignInMetadataJson,
       });
     } catch (nextError) {
+      const rawAuthCode = readRawFailureCode(nextError) ?? getAuthFlowErrorCode(nextError);
+
+      if (mode === "sign_in" && rawAuthCode === "AUTH_ACTIVE_USER_CAPACITY_FULL") {
+        const blockedEmail = email.trim().toLowerCase();
+        let snapshot = readCapacitySnapshotFromError(nextError);
+
+        if (!snapshot && blockedEmail) {
+          try {
+            const capacityStatus = await requestLoginCapacityStatus(blockedEmail);
+            snapshot = capacityStatus.capacity;
+          } catch {
+            // Keep fallback warning below when live status cannot be read yet.
+          }
+        }
+
+        await clearClientSession();
+        setPhase("idle");
+        if (blockedEmail) {
+          setCapacityBlockedEmail(blockedEmail);
+        }
+
+        if (snapshot) {
+          setCapacityBlockedSnapshot(snapshot);
+          setStatus(buildCapacityFullStatus({
+            messages,
+            locale,
+            snapshot,
+          }));
+        } else {
+          setStatus({
+            tone: "warning",
+            icon: "warning",
+            title: messages.loginStatusRetryLaterTitle,
+            body: messages.loginStatusRetryLaterBody,
+          });
+        }
+
+        return;
+      }
+
       const failure = normalizeAuthFailure({
         error: nextError,
         flow: "user",
@@ -720,6 +1085,7 @@ export function LoginPanel({
   }
 
   const disabled = !supabaseConfigured || !supabaseAuthReady || isBusy;
+  const isSubmitDisabled = disabled || isCapacityBlocked;
   const blockingStatus =
     !supabaseConfigured
       ? {
@@ -750,6 +1116,9 @@ export function LoginPanel({
   }
 
   const submitButtonLabel =
+    isCapacityBlocked
+      ? messages.loginStatusCapacityBlockedButton
+      :
     mode === "sign_up"
       ? (isBusy ? messages.loginCtaWorking : localText.signUpButton)
       : (isBusy ? messages.loginCtaWorking : localText.signInButton);
@@ -765,6 +1134,8 @@ export function LoginPanel({
             type="button"
             onClick={() => {
               setMode("sign_in");
+              setCapacityBlockedEmail(null);
+              setCapacityBlockedSnapshot(null);
               setStatus(null);
             }}
             className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition ${
@@ -780,6 +1151,8 @@ export function LoginPanel({
             type="button"
             onClick={() => {
               setMode("sign_up");
+              setCapacityBlockedEmail(null);
+              setCapacityBlockedSnapshot(null);
               setStatus(null);
             }}
             className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition ${
@@ -807,6 +1180,8 @@ export function LoginPanel({
                 value={email}
                 onChange={(event) => {
                   setEmail(event.target.value);
+                  setCapacityBlockedEmail(null);
+                  setCapacityBlockedSnapshot(null);
                   if (phase === "idle") {
                     setStatus(null);
                   }
@@ -900,7 +1275,7 @@ export function LoginPanel({
 
           <button
             type="submit"
-            disabled={disabled}
+            disabled={isSubmitDisabled}
             aria-busy={isBusy}
             className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-emerald-600 px-5 py-3.5 text-[1rem] font-semibold text-white shadow-[0_8px_24px_rgba(16,185,129,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-emerald-500 disabled:opacity-60 disabled:hover:translate-y-0"
           >

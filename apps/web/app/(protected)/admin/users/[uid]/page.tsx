@@ -1419,7 +1419,7 @@ export default async function AdminUserDetailPage({
   ): Promise<AdminUserDetailInlineActionState> {
     "use server";
 
-    const { setUserRole } = await import("@/lib/server/repository");
+    const { appendAdminLog, setUserRole } = await import("@/lib/server/repository");
     const { requireAdminUser } = await import("@/lib/server/session");
 
     const targetUidFromForm = String(formData.get("targetUid") || "").trim();
@@ -1447,8 +1447,9 @@ export default async function AdminUserDetailPage({
       });
     }
 
+    let updatedUser: Awaited<ReturnType<typeof setUserRole>>;
     try {
-      await setUserRole(targetUidFromForm, nextRoleFromForm);
+      updatedUser = await setUserRole(targetUidFromForm, nextRoleFromForm);
     } catch (error) {
       if (readPlatformErrorCode(error) === "USER_NOT_FOUND") {
         return buildAdminUserDetailInlineActionState("error", {
@@ -1468,6 +1469,25 @@ export default async function AdminUserDetailPage({
       });
     }
 
+    /* Keep inline role mutations auditable even when the admin detail page bypasses the
+       API route. This preserves actor/target/route traceability on the active server-action
+       lane without moving role authority out of the existing repository mutation path. */
+    await appendAdminLog({
+      actorUid: admin.uid,
+      actorRole: admin.role,
+      targetUid: targetUidFromForm,
+      ownerUid: targetUidFromForm,
+      ownerRole: updatedUser.role,
+      action: `set-role:${nextRoleFromForm}`,
+      resourceType: "user",
+      resourceId: targetUidFromForm,
+      route: "/admin/users/[uid]",
+      metadata: {
+        nextRole: updatedUser.role,
+        source: "admin-user-detail-server-action",
+      },
+    });
+
     return buildAdminUserDetailInlineActionState("success", {
       code: nextRoleFromForm,
       message:
@@ -1482,7 +1502,7 @@ export default async function AdminUserDetailPage({
   ): Promise<AdminUserDetailInlineActionState> {
     "use server";
 
-    const { setUserStatus } = await import("@/lib/server/repository");
+    const { appendAdminLog, setUserStatus } = await import("@/lib/server/repository");
     const { requireAdminUser } = await import("@/lib/server/session");
 
     const targetUidFromForm = String(formData.get("targetUid") || "").trim();
@@ -1510,8 +1530,9 @@ export default async function AdminUserDetailPage({
       });
     }
 
+    let updatedUser: Awaited<ReturnType<typeof setUserStatus>>;
     try {
-      await setUserStatus(targetUidFromForm, nextStatusFromForm);
+      updatedUser = await setUserStatus(targetUidFromForm, nextStatusFromForm);
     } catch (error) {
       if (readPlatformErrorCode(error) === "USER_NOT_FOUND") {
         return buildAdminUserDetailInlineActionState("error", {
@@ -1525,6 +1546,24 @@ export default async function AdminUserDetailPage({
         message: ADMIN_USER_DETAIL_ERROR_MESSAGES.status_update_failed,
       });
     }
+
+    /* Status toggles can lock users out immediately, so inline server-action updates must keep
+       the same admin-governance trail as API-path mutations for post-incident reconstruction. */
+    await appendAdminLog({
+      actorUid: admin.uid,
+      actorRole: admin.role,
+      targetUid: targetUidFromForm,
+      ownerUid: targetUidFromForm,
+      ownerRole: updatedUser.role,
+      action: `set-status:${nextStatusFromForm}`,
+      resourceType: "user",
+      resourceId: targetUidFromForm,
+      route: "/admin/users/[uid]",
+      metadata: {
+        nextStatus: nextStatusFromForm,
+        source: "admin-user-detail-server-action",
+      },
+    });
 
     return buildAdminUserDetailInlineActionState("success", {
       code: nextStatusFromForm,

@@ -12,6 +12,11 @@ import type {
 } from "@zootopia/shared-types";
 
 import {
+  buildActiveNormalUserCapacityFullMessage,
+  releaseActiveNormalUserSessionLease,
+  reserveOrRenewActiveNormalUserSessionLease,
+} from "@/lib/server/active-normal-user-session-governance";
+import {
   getDecodedSignInProvider,
   hasConfiguredAdminAllowlist,
   hasRecentSignIn,
@@ -762,6 +767,31 @@ async function authorizeUserCredentials(
         "This account is suspended and cannot start a session.",
       );
     }
+
+    /* Final admission authority for normal-user platform capacity stays on the server.
+       Login preflight is advisory; this reserve/renew check is the decisive anti-race gate. */
+    const activeNormalUserLease = await reserveOrRenewActiveNormalUserSessionLease({
+      uid: user.uid,
+      email: user.email,
+      role: user.role,
+    });
+
+    if (!activeNormalUserLease.allowed) {
+      logAuthStageFailure(
+        traceContext,
+        AUTH_STAGE_STATUS_CHECK,
+        new Error("AUTH_ACTIVE_USER_CAPACITY_FULL"),
+        {
+          activeNormalUsers: activeNormalUserLease.snapshot.activeNormalUsers,
+          maxActiveNormalUsers: activeNormalUserLease.snapshot.maxActiveNormalUsers,
+        },
+      );
+      throwAuthCode(
+        "AUTH_ACTIVE_USER_CAPACITY_FULL",
+        buildActiveNormalUserCapacityFullMessage(activeNormalUserLease.snapshot),
+      );
+    }
+
     logAuthStageSuccess(traceContext, AUTH_STAGE_STATUS_CHECK);
 
     const normalizedProfileCompleted = normalizeSignedInProfileState({
@@ -937,6 +967,13 @@ async function authorizeAdminCredentials(
         "This admin account is suspended and cannot start a session.",
       );
     }
+
+    /* Admin sessions are always exempt from the active normal-user cap. Clear any stale
+       lease row before issuing the Auth.js admin session so prior user-mode occupancy or
+       role-promotion leftovers cannot keep this identity counted. */
+    await releaseActiveNormalUserSessionLease({
+      uid: user.uid,
+    }).catch(() => undefined);
     logAuthStageSuccess(traceContext, AUTH_STAGE_STATUS_CHECK);
 
     const normalizedProfileCompleted = normalizeSignedInProfileState({

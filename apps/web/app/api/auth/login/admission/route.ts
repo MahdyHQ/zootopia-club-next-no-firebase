@@ -2,6 +2,12 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import {
+  buildActiveNormalUserCapacityFullMessage,
+  evaluateActiveNormalUserAdmissionByEmail,
+  readActiveNormalUserCapacitySnapshot,
+  type ActiveNormalUserCapacitySnapshot,
+} from "@/lib/server/active-normal-user-session-governance";
+import {
   reserveAuthAdmissionAttempt,
   type AuthAdmissionSnapshot,
 } from "@/lib/server/auth-admission-governance";
@@ -16,6 +22,14 @@ type LoginAdmissionRequestBody = {
 
 const LOGIN_ADMISSION_DELAY_MESSAGE =
   "We’re organizing login requests to reduce pressure. Please try again in about 15 minutes.";
+const LOGIN_CAPACITY_UNAVAILABLE_MESSAGE =
+  "Secure login admission is temporarily unavailable. Please wait a moment and try again.";
+const CAPACITY_RETRY_AFTER_SECONDS = 15;
+
+const ACTIVE_NORMAL_USERS_HEADER = "X-Zootopia-Active-Normal-Users";
+const ACTIVE_NORMAL_USERS_LIMIT_HEADER = "X-Zootopia-Active-Normal-User-Limit";
+const ACTIVE_NORMAL_USERS_SESSION_MINUTES_HEADER = "X-Zootopia-Active-Normal-User-Session-Minutes";
+const ACTIVE_NORMAL_USERS_AVAILABLE_SLOTS_HEADER = "X-Zootopia-Active-Normal-User-Available-Slots";
 
 function normalizeEmail(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
@@ -42,6 +56,75 @@ function withAdmissionHeaders(response: Response, snapshot: AuthAdmissionSnapsho
   }
 
   return response;
+}
+
+function withCapacityHeaders(response: Response, snapshot: ActiveNormalUserCapacitySnapshot) {
+  response.headers.set(ACTIVE_NORMAL_USERS_HEADER, String(snapshot.activeNormalUsers));
+  response.headers.set(ACTIVE_NORMAL_USERS_LIMIT_HEADER, String(snapshot.maxActiveNormalUsers));
+  response.headers.set(ACTIVE_NORMAL_USERS_SESSION_MINUTES_HEADER, String(snapshot.sessionMinutes));
+  response.headers.set(ACTIVE_NORMAL_USERS_AVAILABLE_SLOTS_HEADER, String(snapshot.availableSlots));
+  return response;
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const rawEmail = url.searchParams.get("email");
+  const email = normalizeEmail(rawEmail);
+
+  if (rawEmail !== null && (!email || !isValidEmail(email))) {
+    return applyNoStore(
+      apiError(
+        "LOGIN_EMAIL_INVALID",
+        "A valid account email is required when requesting email-scoped capacity status.",
+        400,
+      ),
+    );
+  }
+
+  try {
+    if (email) {
+      const capacity = await evaluateActiveNormalUserAdmissionByEmail({ email });
+      return withCapacityHeaders(
+        applyNoStore(
+          apiSuccess({
+            allowed: capacity.allowed,
+            exempt: capacity.exempt,
+            reason: capacity.reason,
+            capacity: capacity.snapshot,
+          }),
+        ),
+        capacity.snapshot,
+      );
+    }
+
+    const snapshot = await readActiveNormalUserCapacitySnapshot();
+    return withCapacityHeaders(
+      applyNoStore(
+        apiSuccess({
+          allowed: !snapshot.isFull,
+          exempt: false,
+          reason: snapshot.isFull ? "CAPACITY_FULL" : "CAPACITY_AVAILABLE",
+          capacity: snapshot,
+        }),
+      ),
+      snapshot,
+    );
+  } catch (error) {
+    console.error("[auth-login-admission] failed to read active-user capacity status", {
+      routePath: APP_ROUTES.login,
+      error,
+    });
+
+    const failure = applyNoStore(
+      apiError(
+        "AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE",
+        LOGIN_CAPACITY_UNAVAILABLE_MESSAGE,
+        503,
+      ),
+    );
+    failure.headers.set("Retry-After", String(CAPACITY_RETRY_AFTER_SECONDS));
+    return failure;
+  }
 }
 
 export async function POST(request: Request) {
@@ -82,12 +165,36 @@ export async function POST(request: Request) {
       );
     }
 
+    const capacityDecision = await evaluateActiveNormalUserAdmissionByEmail({
+      email,
+    });
+
+    if (!capacityDecision.allowed) {
+      const failure = withCapacityHeaders(
+        applyNoStore(
+          apiError(
+            "AUTH_ACTIVE_USER_CAPACITY_FULL",
+            buildActiveNormalUserCapacityFullMessage(capacityDecision.snapshot),
+            429,
+          ),
+        ),
+        capacityDecision.snapshot,
+      );
+      failure.headers.set("Retry-After", String(CAPACITY_RETRY_AFTER_SECONDS));
+
+      return withAdmissionHeaders(failure, admission);
+    }
+
     return withAdmissionHeaders(
-      applyNoStore(
-        apiSuccess({
-          accepted: true,
-          admission,
-        }),
+      withCapacityHeaders(
+        applyNoStore(
+          apiSuccess({
+            accepted: true,
+            admission,
+            capacity: capacityDecision,
+          }),
+        ),
+        capacityDecision.snapshot,
       ),
       admission,
     );
@@ -98,9 +205,13 @@ export async function POST(request: Request) {
     });
 
     const failure = applyNoStore(
-      apiError("AUTH_RATE_LIMITED", LOGIN_ADMISSION_DELAY_MESSAGE, 503),
+      apiError(
+        "AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE",
+        LOGIN_CAPACITY_UNAVAILABLE_MESSAGE,
+        503,
+      ),
     );
-    failure.headers.set("Retry-After", "900");
+    failure.headers.set("Retry-After", String(CAPACITY_RETRY_AFTER_SECONDS));
     return failure;
   }
 }

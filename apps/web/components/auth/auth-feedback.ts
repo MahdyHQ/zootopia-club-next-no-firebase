@@ -36,6 +36,11 @@ export type AuthFlowError = {
   details?: Record<string, unknown>;
 };
 
+type CapacitySnapshot = {
+  activeNormalUsers: number;
+  maxActiveNormalUsers: number;
+};
+
 const POPUP_POLICY_CLOSE_FALLBACK_WINDOW_MS = 1500;
 
 function status(
@@ -79,6 +84,45 @@ export function getAuthFlowErrorCode(error: unknown) {
   }
 
   return null;
+}
+
+function readCapacitySnapshot(error: unknown): CapacitySnapshot | null {
+  if (
+    typeof error !== "object"
+    || !error
+    || !("details" in error)
+    || typeof error.details !== "object"
+    || !error.details
+    || !("capacity" in error.details)
+    || typeof error.details.capacity !== "object"
+    || !error.details.capacity
+  ) {
+    return null;
+  }
+
+  const capacity = error.details.capacity as {
+    activeNormalUsers?: unknown;
+    maxActiveNormalUsers?: unknown;
+  };
+  if (
+    typeof capacity.activeNormalUsers !== "number"
+    || !Number.isFinite(capacity.activeNormalUsers)
+    || typeof capacity.maxActiveNormalUsers !== "number"
+    || !Number.isFinite(capacity.maxActiveNormalUsers)
+  ) {
+    return null;
+  }
+
+  return {
+    activeNormalUsers: Math.max(0, Math.trunc(capacity.activeNormalUsers)),
+    maxActiveNormalUsers: Math.max(1, Math.trunc(capacity.maxActiveNormalUsers)),
+  };
+}
+
+function interpolateCapacityTemplate(template: string, snapshot: CapacitySnapshot) {
+  return template
+    .replace("{active}", String(snapshot.activeNormalUsers))
+    .replace("{limit}", String(snapshot.maxActiveNormalUsers));
 }
 
 /* Popup-first must remain the default auth entry path.
@@ -186,6 +230,17 @@ export function mapRegularLoginError(
         messages.loginStatusSuspendedBody,
         "assertive",
       );
+    case "AUTH_ACTIVE_USER_CAPACITY_FULL": {
+      const snapshot = readCapacitySnapshot(error);
+      return status(
+        "warning",
+        "warning",
+        messages.loginStatusCapacityFullTitle,
+        snapshot
+          ? interpolateCapacityTemplate(messages.loginStatusCapacityFullBody, snapshot)
+          : messages.loginStatusRetryLaterBody,
+      );
+    }
     case "AUTH_SESSION_CREATION_FAILED":
       return withOperationalSupport(
         status(
