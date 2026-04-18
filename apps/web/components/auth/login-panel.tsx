@@ -312,6 +312,47 @@ function buildCapacityFullStatus(input: {
   };
 }
 
+function buildOnboardingCapacityFullStatus(input: {
+  messages: AppMessages;
+  locale: Locale;
+  snapshot: ActiveNormalUserCapacitySnapshot;
+}): AuthStatusDescriptor {
+  const active = formatLocaleCount(input.snapshot.activeNormalUsers, input.locale);
+  const limit = formatLocaleCount(input.snapshot.maxActiveNormalUsers, input.locale);
+
+  return {
+    tone: "warning",
+    icon: "warning",
+    title: input.messages.loginStatusOnboardingWaitingTitle,
+    body: interpolateTemplate(input.messages.loginStatusOnboardingWaitingBody, {
+      active,
+      limit,
+    }),
+    live: "polite",
+  };
+}
+
+function buildCapacityAvailableStatus(input: {
+  messages: AppMessages;
+  onboarding: boolean;
+}): AuthStatusDescriptor {
+  if (input.onboarding) {
+    return {
+      tone: "success",
+      icon: "success",
+      title: input.messages.loginStatusOnboardingCapacityAvailableTitle,
+      body: input.messages.loginStatusOnboardingCapacityAvailableBody,
+    };
+  }
+
+  return {
+    tone: "success",
+    icon: "success",
+    title: input.messages.loginStatusCapacityAvailableTitle,
+    body: input.messages.loginStatusCapacityAvailableBody,
+  };
+}
+
 async function requestLoginAdmission(email: string) {
   const response = await fetch(USER_LOGIN_ADMISSION_API_ROUTE, {
     method: "POST",
@@ -555,11 +596,16 @@ export function LoginPanel({
   const [capacityBlockedSnapshot, setCapacityBlockedSnapshot] =
     useState<ActiveNormalUserCapacitySnapshot | null>(null);
   const [capacityBlockedEmail, setCapacityBlockedEmail] = useState<string | null>(null);
+  const [onboardingSignupEmail, setOnboardingSignupEmail] = useState<string | null>(null);
   const supabaseConfigured = isSupabaseWebConfigured();
   const isBusy = phase !== "idle";
   const localText = buildLocalText(locale);
 
   const normalizedEmail = email.trim().toLowerCase();
+  const isOnboardingCapacityContext =
+    mode === "sign_in"
+    && normalizedEmail.length > 0
+    && onboardingSignupEmail === normalizedEmail;
 
   const isCapacityBlocked =
     mode === "sign_in"
@@ -581,7 +627,8 @@ export function LoginPanel({
   useEffect(() => {
     const confirmed = searchParams.get("confirmed") === "1";
     const confirmedEmail = searchParams.get("email")?.trim() ?? "";
-    const confirmationKey = `${confirmed}:${confirmedEmail.toLowerCase()}`;
+    const onboarding = searchParams.get("onboarding")?.trim().toLowerCase() === "signup";
+    const confirmationKey = `${confirmed}:${confirmedEmail.toLowerCase()}:${onboarding ? "signup" : "none"}`;
 
     if (!confirmed || !confirmedEmail || confirmationPrefillKeyRef.current === confirmationKey) {
       return;
@@ -596,6 +643,7 @@ export function LoginPanel({
     setEmail(confirmedEmail);
     setPassword("");
     setConfirmPassword("");
+    setOnboardingSignupEmail(onboarding ? confirmedEmail.toLowerCase() : null);
     setStatus({
       tone: "success",
       icon: "success",
@@ -620,15 +668,29 @@ export function LoginPanel({
   }, [capacityBlockedEmail, normalizedEmail, phase]);
 
   useEffect(() => {
+    if (!onboardingSignupEmail) {
+      return;
+    }
+
+    if (normalizedEmail.length > 0 && normalizedEmail !== onboardingSignupEmail) {
+      setOnboardingSignupEmail(null);
+    }
+  }, [onboardingSignupEmail, normalizedEmail]);
+
+  useEffect(() => {
     if (mode === "sign_in") {
       return;
+    }
+
+    if (onboardingSignupEmail) {
+      setOnboardingSignupEmail(null);
     }
 
     if (capacityBlockedEmail || capacityBlockedSnapshot) {
       setCapacityBlockedEmail(null);
       setCapacityBlockedSnapshot(null);
     }
-  }, [capacityBlockedEmail, capacityBlockedSnapshot, mode]);
+  }, [capacityBlockedEmail, capacityBlockedSnapshot, mode, onboardingSignupEmail]);
 
   useEffect(() => {
     if (
@@ -650,24 +712,36 @@ export function LoginPanel({
           return;
         }
 
+        const isOnboardingBlockedEmail =
+          onboardingSignupEmail !== null
+          && capacityBlockedEmail === onboardingSignupEmail;
+
         if (!capacityStatus.allowed || capacityStatus.reason === "CAPACITY_FULL") {
           setCapacityBlockedSnapshot(capacityStatus.capacity);
-          setStatus(buildCapacityFullStatus({
-            messages,
-            locale,
-            snapshot: capacityStatus.capacity,
-          }));
+          setStatus(
+            isOnboardingBlockedEmail
+              ? buildOnboardingCapacityFullStatus({
+                  messages,
+                  locale,
+                  snapshot: capacityStatus.capacity,
+                })
+              : buildCapacityFullStatus({
+                  messages,
+                  locale,
+                  snapshot: capacityStatus.capacity,
+                }),
+          );
           return;
         }
 
         setCapacityBlockedEmail(null);
         setCapacityBlockedSnapshot(null);
-        setStatus({
-          tone: "success",
-          icon: "success",
-          title: messages.loginStatusCapacityAvailableTitle,
-          body: messages.loginStatusCapacityAvailableBody,
-        });
+        setStatus(
+          buildCapacityAvailableStatus({
+            messages,
+            onboarding: isOnboardingBlockedEmail,
+          }),
+        );
       } catch {
         if (cancelled) {
           return;
@@ -689,6 +763,7 @@ export function LoginPanel({
     locale,
     messages,
     mode,
+    onboardingSignupEmail,
     phase,
     supabaseAuthReady,
     supabaseConfigured,
@@ -917,6 +992,7 @@ export function LoginPanel({
             title: localText.signUpTab,
             body: localText.emailVerificationRequired,
           });
+          setOnboardingSignupEmail(email.trim().toLowerCase());
           setMode("sign_in");
           setConfirmPassword("");
           router.push(confirmRoute);
@@ -951,14 +1027,26 @@ export function LoginPanel({
 
       if (loginAdmission.capacity && !loginAdmission.capacity.allowed) {
         const blockedEmail = email.trim().toLowerCase();
+        const isOnboardingBlockedEmail =
+          onboardingSignupEmail !== null
+          && blockedEmail.length > 0
+          && onboardingSignupEmail === blockedEmail;
         setPhase("idle");
         setCapacityBlockedEmail(blockedEmail);
         setCapacityBlockedSnapshot(loginAdmission.capacity.snapshot);
-        setStatus(buildCapacityFullStatus({
-          messages,
-          locale,
-          snapshot: loginAdmission.capacity.snapshot,
-        }));
+        setStatus(
+          isOnboardingBlockedEmail
+            ? buildOnboardingCapacityFullStatus({
+                messages,
+                locale,
+                snapshot: loginAdmission.capacity.snapshot,
+              })
+            : buildCapacityFullStatus({
+                messages,
+                locale,
+                snapshot: loginAdmission.capacity.snapshot,
+              }),
+        );
         return;
       }
 
@@ -999,8 +1087,16 @@ export function LoginPanel({
     } catch (nextError) {
       const rawAuthCode = readRawFailureCode(nextError) ?? getAuthFlowErrorCode(nextError);
 
-      if (mode === "sign_in" && rawAuthCode === "AUTH_ACTIVE_USER_CAPACITY_FULL") {
+      if ((mode === "sign_in" || mode === "sign_up") && rawAuthCode === "AUTH_ACTIVE_USER_CAPACITY_FULL") {
         const blockedEmail = email.trim().toLowerCase();
+        const isSignupOnboardingCapacity = mode === "sign_up";
+        const isOnboardingBlockedEmail =
+          isSignupOnboardingCapacity
+          || (
+            blockedEmail.length > 0
+            && onboardingSignupEmail !== null
+            && onboardingSignupEmail === blockedEmail
+          );
         let snapshot = readCapacitySnapshotFromError(nextError);
 
         if (!snapshot && blockedEmail) {
@@ -1014,24 +1110,48 @@ export function LoginPanel({
 
         await clearClientSession();
         setPhase("idle");
+        if (isSignupOnboardingCapacity) {
+          setMode("sign_in");
+          setConfirmPassword("");
+        }
         if (blockedEmail) {
           setCapacityBlockedEmail(blockedEmail);
+          if (isOnboardingBlockedEmail) {
+            setOnboardingSignupEmail(blockedEmail);
+          }
         }
 
         if (snapshot) {
           setCapacityBlockedSnapshot(snapshot);
-          setStatus(buildCapacityFullStatus({
-            messages,
-            locale,
-            snapshot,
-          }));
+          setStatus(
+            isOnboardingBlockedEmail
+              ? buildOnboardingCapacityFullStatus({
+                  messages,
+                  locale,
+                  snapshot,
+                })
+              : buildCapacityFullStatus({
+                  messages,
+                  locale,
+                  snapshot,
+                }),
+          );
         } else {
-          setStatus({
-            tone: "warning",
-            icon: "warning",
-            title: messages.loginStatusRetryLaterTitle,
-            body: messages.loginStatusRetryLaterBody,
-          });
+          setStatus(
+            isOnboardingBlockedEmail
+              ? {
+                  tone: "warning",
+                  icon: "warning",
+                  title: messages.loginStatusOnboardingWaitingTitle,
+                  body: messages.loginStatusOnboardingWaitingFallbackBody,
+                }
+              : {
+                  tone: "warning",
+                  icon: "warning",
+                  title: messages.loginStatusRetryLaterTitle,
+                  body: messages.loginStatusRetryLaterBody,
+                },
+          );
         }
 
         return;
@@ -1116,8 +1236,10 @@ export function LoginPanel({
   }
 
   const submitButtonLabel =
-    isCapacityBlocked
-      ? messages.loginStatusCapacityBlockedButton
+    isCapacityBlocked && isOnboardingCapacityContext
+      ? messages.loginStatusOnboardingBlockedButton
+      : isCapacityBlocked
+        ? messages.loginStatusCapacityBlockedButton
       :
     mode === "sign_up"
       ? (isBusy ? messages.loginCtaWorking : localText.signUpButton)
@@ -1153,6 +1275,7 @@ export function LoginPanel({
               setMode("sign_up");
               setCapacityBlockedEmail(null);
               setCapacityBlockedSnapshot(null);
+              setOnboardingSignupEmail(null);
               setStatus(null);
             }}
             className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition ${

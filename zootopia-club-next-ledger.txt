@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Repository daily-credit TypeScript build fix recorded)
+Last Updated: 2026-04-18 (First-time signup onboarding capacity messaging hardening recorded)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -2835,3 +2835,97 @@ Code and command verification:
 Runtime proof status:
 ~ No live authenticated browser multi-account runtime test was executed in this environment.
 ~ Verification here is code-trace + static checks + command outcomes above.
+
+2026-04-18: FIRST-TIME SIGNUP ONBOARDING + ACTIVE-CAPACITY WAITING UX HARDENING
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Active-capacity enforcement stayed correctly server-authoritative, but the
+   public login surface could still show the same generic capacity-full copy
+   to both existing users and newly-registered users.
+2. For first-time users who already completed account creation (and then hit
+   active-seat limits), this could feel like registration failed instead of a
+   separate admission-wait state.
+3. Confirm-email success redirects back to login already carried `confirmed=1`
+   and `email`, but did not preserve an explicit sign-up onboarding marker that
+   the login UI could use for friendlier post-registration wait guidance.
+
+CHANGES:
+1. Login onboarding-aware capacity status logic
+   - Updated `apps/web/components/auth/login-panel.tsx` to track a
+     first-signup onboarding email context and render dedicated waiting copy
+     when that exact email is blocked by active-capacity admission.
+   - Added onboarding-specific status builders for:
+     - capacity full after successful registration,
+     - capacity available after onboarding wait,
+     - fallback wait message when a capacity snapshot is temporarily missing.
+   - Capacity blocked button label now distinguishes normal wait vs
+     first-signup wait context.
+
+2. Confirm-email redirect marker for sign-up flow
+   - Updated `apps/web/components/auth/confirm-email-panel.tsx` so successful
+     sign-up confirmation redirects include `onboarding=signup` when flow is
+     `sign_up`.
+   - Login panel consumes this marker to preserve friendly first-time guidance
+     without changing backend authority.
+
+3. Localized onboarding-specific messaging
+   - Added EN/AR message keys in:
+     - `apps/web/messages/en.json`
+     - `apps/web/messages/ar.json`
+   - New copy explicitly explains:
+     - account creation succeeded,
+     - active-platform capacity is a separate admitted-usage gate,
+     - waiting status is temporary and refreshes automatically,
+     - next-step guidance when a slot becomes available.
+
+FILES CHANGED:
+- apps/web/components/auth/login-panel.tsx
+- apps/web/components/auth/confirm-email-panel.tsx
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Preserve a smooth, understandable first-registration experience while keeping
+  the active-capacity trust boundary entirely server-owned.
+- Distinguish clearly between:
+  1) account creation / first-time registration, and
+  2) active platform capacity admission for workspace usage.
+
+TECHNICAL DETAILS:
+1. Capacity authority is unchanged:
+   - server login admission endpoint and Auth.js authorize reserve/renew logic
+     still decide capacity.
+2. The new onboarding marker is UI-routing context only (`onboarding=signup`)
+   and does not grant access or bypass capacity checks.
+3. Sign-up remains non-hostile:
+   - account creation and email confirmation guidance proceed normally,
+   - capacity wait messaging is now explicit and reassuring for first-time
+     users instead of generic failure-like wording.
+
+PRESERVED INTENTIONALLY:
+- Auth.js server trust boundary.
+- Backend-only capacity enforcement and seat reservation semantics.
+- Existing sign-up, confirm-email, and login route ownership.
+- Existing admission-governance shaping behavior.
+
+RISKS / FOLLOW-UP:
+1. Live browser proof is still recommended with dedicated test identities to
+   validate the full first-time path:
+   - sign-up -> confirm-email -> first login while capacity full,
+   - auto-refresh into available-slot state,
+   - successful first admitted sign-in.
+
+VERIFICATION:
+Diagnostics verification:
+✓ `get_errors` on changed files — PASS.
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS (existing pre-existing warning in unrelated `assessment-studio.tsx`).
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.

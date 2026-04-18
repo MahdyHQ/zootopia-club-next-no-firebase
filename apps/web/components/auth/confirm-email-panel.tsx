@@ -314,12 +314,19 @@ async function finalizeEmailConfirmation(input: {
 function buildPostConfirmationRedirectUrl(input: {
   returnRoute: string;
   email: string;
+  isSignupFlow: boolean;
 }) {
   const params = new URLSearchParams();
   params.set("confirmed", "1");
 
   if (input.email.trim().length > 0) {
     params.set("email", input.email.trim());
+  }
+
+  if (input.isSignupFlow) {
+    /* Preserve a lightweight onboarding marker so login can explain capacity waits
+       as post-registration admission, not as account-creation failure. */
+    params.set("onboarding", "signup");
   }
 
   return `${input.returnRoute}?${params.toString()}`;
@@ -917,6 +924,7 @@ export function ConfirmEmailPanel({
         router.replace(buildPostConfirmationRedirectUrl({
           returnRoute,
           email,
+          isSignupFlow: flow === "sign_up",
         }));
         router.refresh();
       } catch (nextError) {
