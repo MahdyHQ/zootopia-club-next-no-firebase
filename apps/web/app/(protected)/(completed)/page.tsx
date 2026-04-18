@@ -262,9 +262,9 @@ export default async function HomePage() {
                         className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-bold leading-5 text-zinc-900 [overflow-wrap:anywhere] dark:text-white sm:line-clamp-2 sm:text-base sm:leading-6"
                         title={document.fileName}
                       >
-                        <span className="sm:hidden">
+                        <span className="inline-block align-top sm:hidden">
                           {buildSmartTitleDisplay(document.fileName, {
-                            maxLength: 40,
+                            maxLength: 34,
                             suffixLengthWithExtension: 7,
                           })}
                         </span>
@@ -321,9 +321,9 @@ export default async function HomePage() {
                     className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-bold leading-5 text-zinc-900 [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:line-clamp-2 sm:pr-3 sm:text-base sm:leading-6 dark:text-white"
                     title={generation.title}
                   >
-                    <span className="sm:hidden">
+                    <span className="inline-block align-top sm:hidden">
                       {buildSmartTitleDisplay(generation.title, {
-                        maxLength: 42,
+                        maxLength: 36,
                         suffixLengthWithExtension: 7,
                       })}
                     </span>

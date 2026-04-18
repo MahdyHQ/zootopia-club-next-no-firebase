@@ -188,9 +188,9 @@ export function AssessmentPreviewShell({
               className="min-w-0 w-full max-w-full line-clamp-2 break-words text-balance text-2xl font-bold tracking-tight [overflow-wrap:anywhere] sm:max-w-4xl sm:line-clamp-3 sm:text-4xl"
               title={preview.title}
             >
-              <span className="sm:hidden">
+              <span className="inline-block align-top sm:hidden">
                 {buildSmartTitleDisplay(preview.title, {
-                  maxLength: 52,
+                  maxLength: 44,
                   suffixLengthWithExtension: 8,
                 })}
               </span>

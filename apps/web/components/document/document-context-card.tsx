@@ -110,9 +110,9 @@ export function DocumentContextCard({
               className="min-w-0 w-full max-w-full line-clamp-2 break-words text-sm font-semibold text-foreground [overflow-wrap:anywhere]"
               title={highlightedDocument.fileName}
             >
-              <span className="sm:hidden">
+              <span className="inline-block align-top sm:hidden">
                 {buildSmartTitleDisplay(highlightedDocument.fileName, {
-                  maxLength: 42,
+                  maxLength: 36,
                   suffixLengthWithExtension: 7,
                 })}
               </span>

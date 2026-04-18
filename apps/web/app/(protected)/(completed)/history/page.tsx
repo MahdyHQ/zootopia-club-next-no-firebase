@@ -148,9 +148,9 @@ export default async function HistoryPage() {
                           className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:line-clamp-2 sm:text-base sm:leading-6"
                           title={document.fileName}
                         >
-                          <span className="sm:hidden">
+                          <span className="inline-block align-top sm:hidden">
                             {buildSmartTitleDisplay(document.fileName, {
-                              maxLength: 40,
+                              maxLength: 34,
                               suffixLengthWithExtension: 7,
                             })}
                           </span>
@@ -212,9 +212,9 @@ export default async function HistoryPage() {
                           className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:line-clamp-2 sm:text-base sm:leading-6"
                           title={preview.title}
                         >
-                          <span className="sm:hidden">
+                          <span className="inline-block align-top sm:hidden">
                             {buildSmartTitleDisplay(preview.title, {
-                              maxLength: 42,
+                              maxLength: 36,
                               suffixLengthWithExtension: 7,
                             })}
                           </span>
@@ -225,7 +225,7 @@ export default async function HistoryPage() {
                         </span>
                       </div>
                       <p
-                        className="mt-2 line-clamp-2 break-words text-xs leading-5 text-foreground-muted [overflow-wrap:anywhere] sm:line-clamp-3 sm:text-sm sm:leading-6"
+                        className="mt-2 line-clamp-3 break-words text-xs leading-5 text-foreground-muted [overflow-wrap:anywhere] sm:line-clamp-none sm:text-sm sm:leading-6"
                         title={preview.summary}
                       >
                         {buildCardTextPreview(preview.summary, 220)}

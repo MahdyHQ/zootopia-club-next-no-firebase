@@ -749,9 +749,9 @@ export function UploadWorkspace({
                     className="min-w-0 w-full max-w-full line-clamp-2 break-words text-sm font-medium text-foreground [overflow-wrap:anywhere] dark:text-white"
                     title={latestDocument.fileName}
                   >
-                    <span className="sm:hidden">
+                    <span className="inline-block align-top sm:hidden">
                       {buildSmartTitleDisplay(latestDocument.fileName, {
-                        maxLength: 44,
+                        maxLength: 36,
                         suffixLengthWithExtension: 8,
                       })}
                     </span>
@@ -786,9 +786,9 @@ export function UploadWorkspace({
                       className="mt-3 min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere] dark:text-white sm:line-clamp-2 sm:text-base sm:leading-6"
                       title={activeDocument.fileName}
                     >
-                      <span className="sm:hidden">
+                      <span className="inline-block align-top sm:hidden">
                         {buildSmartTitleDisplay(activeDocument.fileName, {
-                          maxLength: 46,
+                          maxLength: 38,
                           suffixLengthWithExtension: 8,
                         })}
                       </span>

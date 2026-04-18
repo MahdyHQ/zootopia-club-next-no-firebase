@@ -2324,9 +2324,9 @@ export function AssessmentStudio({
                         className="min-w-0 w-full max-w-full line-clamp-2 break-words font-medium text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1"
                         title={selectedDocument.fileName}
                       >
-                        <span className="sm:hidden">
+                        <span className="inline-block align-top sm:hidden">
                           {buildSmartTitleDisplay(selectedDocument.fileName, {
-                            maxLength: 44,
+                            maxLength: 36,
                             suffixLengthWithExtension: 8,
                           })}
                         </span>
@@ -2474,9 +2474,9 @@ export function AssessmentStudio({
                           className="min-w-0 w-full max-w-full line-clamp-1 break-words text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere] sm:w-auto sm:flex-1 sm:line-clamp-2 sm:text-base sm:leading-6"
                           title={generation.title}
                         >
-                          <span className="sm:hidden">
+                          <span className="inline-block align-top sm:hidden">
                             {buildSmartTitleDisplay(generation.title, {
-                              maxLength: 42,
+                              maxLength: 36,
                               suffixLengthWithExtension: 7,
                             })}
                           </span>
@@ -2489,7 +2489,7 @@ export function AssessmentStudio({
                         ) : null}
                       </div>
                       <p
-                        className="mt-2 line-clamp-2 break-words text-xs leading-5 text-foreground-muted [overflow-wrap:anywhere] sm:line-clamp-3 sm:text-sm sm:leading-6"
+                        className="mt-2 line-clamp-3 break-words text-xs leading-5 text-foreground-muted [overflow-wrap:anywhere] sm:line-clamp-none sm:text-sm sm:leading-6"
                         title={generation.meta.summary}
                       >
                         {buildCardTextPreview(generation.meta.summary, 220)}

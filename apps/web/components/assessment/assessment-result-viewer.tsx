@@ -86,14 +86,19 @@ export function AssessmentResultViewer({
               </span>
               {pageIndex === 0 && preview.sourceDocumentLabel ? (
                 <span
+                  title={preview.sourceDocumentLabel}
                   className={`inline-flex max-w-full break-words rounded-full px-3 py-1 text-xs font-semibold [overflow-wrap:anywhere] ${
                     dark ? "bg-blue-500/15 text-blue-100" : "bg-blue-50 text-blue-700"
                   }`}
                 >
-                  {messages.assessmentSourceDocument}: {buildSmartTitleDisplay(preview.sourceDocumentLabel, {
-                    maxLength: 48,
-                    suffixLengthWithExtension: 8,
-                  })}
+                  {messages.assessmentSourceDocument}:{" "}
+                  <span className="inline-block align-top sm:hidden">
+                    {buildSmartTitleDisplay(preview.sourceDocumentLabel, {
+                      maxLength: 36,
+                      suffixLengthWithExtension: 8,
+                    })}
+                  </span>
+                  <span className="hidden sm:inline">{preview.sourceDocumentLabel}</span>
                 </span>
               ) : null}
             </div>

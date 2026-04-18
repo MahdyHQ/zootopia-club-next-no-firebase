@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Exempt login-admission bypass + truthful admission-unavailable messaging recorded)
+Last Updated: 2026-04-18 (Shared card mobile compact-title + small-only summary clamp refinement recorded)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -288,6 +288,10 @@ Key verified facts:
   formatting on tiny screens, preserving meaningful start + visible tail/extension
   (for example: `lecture-one-beers-law...2026.pdf`) while keeping full raw titles
   on `sm+` breakpoints
+- Shared file/result card lanes now use tighter mobile smart-title budgets so
+  tiny-screen names remain compact without dropping visible extensions; generated
+  summary snippets on History and Assessment cards now clamp to 3 lines on
+  tiny screens and release clamping on `sm+` for wider-layout readability
 - Home generated-card and content rails now enforce stricter tiny-screen width
   guards (`min-w-0`/`max-w-full`) at the page root and main content grid so
   protected Home surfaces stay fully inside viewport bounds on very narrow devices
@@ -437,6 +441,83 @@ Key verified facts:
 ================================================================================
 3. PROJECT PURPOSE & PLATFORM DIRECTION
 ================================================================================
+
+2026-04-18: SHARED CARD MOBILE COMPACTNESS REFINEMENT (TITLE BUDGETS + SUMMARY CLAMP)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Shared file/result card surfaces already used mobile-only smart titles, but
+   several narrow-screen lanes still felt too wide because smart-title budgets
+   were tuned for larger tiny-screen widths.
+2. Generated summary snippets on key card surfaces were clamped as
+   `line-clamp-2 sm:line-clamp-3`, which made mobile excerpts too short while
+   still clipping on wider breakpoints.
+3. Detached result-view source-document labels always rendered through the
+   smart-title helper, so larger screens could not recover the full raw label.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/page.tsx
+- apps/web/app/(protected)/(completed)/history/page.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/components/assessment/assessment-preview-shell.tsx
+- apps/web/components/assessment/assessment-result-viewer.tsx
+- apps/web/components/document/document-context-card.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Deliver the requested UI-only responsive follow-up for narrow screens across
+  shared result/file card patterns without touching backend/auth/session logic.
+- Keep extension visibility for compact mobile names while preserving full raw
+  title/text behavior on wider breakpoints.
+
+TECHNICAL DETAILS:
+1. Mobile smart-title compactness
+   - Reduced mobile smart-title max-length budgets across Home, History,
+     Upload, Assessment Studio, detached Preview shell, shared Document
+     Context card, and Result Viewer source-document badge.
+   - Mobile smart-title spans now use compact inline rendering (`sm:hidden`
+     with inline-block alignment), while `sm+` still renders the full raw value.
+
+2. Summary clamp behavior
+   - History assessment summary cards and Assessment Studio generation summary
+     cards now use `line-clamp-3 sm:line-clamp-none`.
+   - This keeps a controlled 3-line preview on tiny screens and restores full
+     excerpt visibility on wider layouts.
+
+3. Detached result-view source document lane
+   - Result viewer source-document badge now renders compact smart title on
+     tiny screens only and full raw source-document label on `sm+`.
+   - Added hover `title` attribute to preserve full-value inspection parity.
+
+WHAT WAS INTENTIONALLY PRESERVED:
+- Backend/API/auth/session/repository/storage authority (unchanged).
+- Existing premium card hierarchy, dark/light behavior, localization, and
+  action-lane structure.
+- Existing extension-aware smart-title strategy and desktop/tablet raw-title
+  rendering pattern.
+
+RISKS / FOLLOW-UP:
+1. Low UI risk: tighter tiny-screen title budgets intentionally trade more
+   middle text for stronger compactness.
+2. Recommend an optional visual QA sweep on extra-small mobile widths to
+   confirm preferred readability tradeoffs for very long multilingual titles.
+
+VERIFICATION:
+Diagnostics verification:
+✓ `get_errors` on all changed files — PASS.
+
+Command verification:
+✓ `npm run lint` — PASS (2 pre-existing warnings only:
+  `assessment-studio.tsx` aria-disabled on form role,
+  `confirm-email-panel.tsx` missing `flow` dependency in `useEffect`).
+✓ `npm run typecheck` — PASS.
+✓ `npm run build` — PASS.
+✓ `npm run build:vercel` — PASS.
 
 Zootopia Club is an AI-powered platform that provides:
 
