@@ -2755,3 +2755,83 @@ Diagnostics:
 
 Command verification:
 ✓ `npm run build` — PASS (root workspace build, including Next.js TypeScript pass in `@zootopia/web`).
+
+2026-04-18: EXEMPT-EMAIL ENV PARSING HARDENING (ACTIVE-CAPACITY + PLATFORM DAILY LOCK INPUT)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE / GAP:
+1. `ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS` already supported comma-separated values,
+   trimming, lowercasing, malformed-entry rejection, and required fallback inclusion of
+   `elmahdyabdulla208@gmail.com`.
+2. However, a common real-world env formatting mistake remained: wrapping the full list
+   in quotes or using newline/semicolon separators could cause valid entries to be parsed as
+   malformed tokens and dropped.
+3. Because this exemption list is reused by both:
+   - active normal-user capacity exclusion, and
+   - global daily platform usage UI-lock exemption,
+   parser fragility here could produce surprising non-exempt behavior after env edits.
+
+FILES CHANGED:
+- apps/web/lib/server/active-normal-user-session-governance.ts
+- zootopia-club-next-ledger.txt
+
+REASON:
+- Keep the existing architecture and enforcement model intact while making exemption env
+  parsing more operationally robust and backward-compatible.
+- Reduce config-footgun risk without redesigning any auth/session/credit authority paths.
+
+TECHNICAL DETAILS:
+1. Added `unwrapSingleQuotedEnvValue(...)` helper:
+   - removes one accidental outer quote pair (`"..."` or `'...'`) and re-trims value.
+2. Updated exempt-email parser tokenization:
+   - now splits on `[,\n;]+` so comma, newline, and semicolon-delimited env lists are accepted.
+3. Preserved existing security/behavior controls:
+   - required fallback exempt email remains enforced
+   - values still normalize with trim + lowercase
+   - malformed entries still log warning and are ignored
+   - deduplication still enforced with `Set`
+4. No authority changes:
+   - Auth.js trust boundary unchanged
+   - backend governance logic unchanged
+   - UI lock remains a read-only client reflection of server-owned summary state.
+
+WHAT WAS VERIFIED (CODE-TRACE):
+1. Exempt-email env parsing path:
+   - `readConfiguredExemptEmails(...)` remains the canonical parser.
+2. Active normal-user capacity exclusion path:
+   - exclusion list still feeds capacity-count queries and admission/reservation checks.
+3. Global platform daily usage lock exemption path:
+   - repository daily usage summary still marks admin + exempt-email users as bypassed,
+     and UI lock only applies when server summary reports `locked: true` for applicable users.
+4. Upload + Assessment UI lock surfaces:
+   - Upload entry lock continues to disable dropzone/input for locked non-exempt users.
+   - Assessment generate path continues to disable submit and show lock alert when server
+     summary reports platform lock.
+
+INTENTIONALLY PRESERVED:
+- Existing active normal-user capacity architecture and advisory-lock flow.
+- Existing admin permanent exemption behavior.
+- Existing required exempt email guarantee (`elmahdyabdulla208@gmail.com`).
+- Existing env names and defaults, including
+  `ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT` default behavior.
+- Existing UI-only lock policy (no client-owned authority introduced).
+
+RISKS / FOLLOW-UP:
+1. Live runtime validation with concrete accounts is still recommended for final production
+   confidence:
+   - admin account,
+   - env-listed exempt account,
+   - normal non-exempt account.
+2. Build commands in this environment continue to fail when Google Fonts are unreachable;
+   this remains an environment/network limitation rather than a code regression.
+
+VERIFICATION:
+Code and command verification:
+✓ `npm run lint` — PASS (existing pre-existing a11y warning only in assessment form aria-disabled).
+✓ `npm run typecheck` — PASS.
+~ `npm run build` — FAIL due to external Google Fonts fetch connectivity in Next build runtime.
+~ `npm run build:vercel` — FAIL due to external Google Fonts fetch connectivity in Next build runtime.
+
+Runtime proof status:
+~ No live authenticated browser multi-account runtime test was executed in this environment.
+~ Verification here is code-trace + static checks + command outcomes above.

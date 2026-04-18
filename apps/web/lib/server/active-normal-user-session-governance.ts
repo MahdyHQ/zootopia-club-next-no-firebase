@@ -52,6 +52,27 @@ function readEnv(value: string | undefined) {
   return String(value ?? "").trim();
 }
 
+function unwrapSingleQuotedEnvValue(value: string) {
+  const normalized = value.trim();
+  if (normalized.length < 2) {
+    return normalized;
+  }
+
+  const startsWithDoubleQuote = normalized.startsWith("\"");
+  const endsWithDoubleQuote = normalized.endsWith("\"");
+  if (startsWithDoubleQuote && endsWithDoubleQuote) {
+    return normalized.slice(1, -1).trim();
+  }
+
+  const startsWithSingleQuote = normalized.startsWith("'");
+  const endsWithSingleQuote = normalized.endsWith("'");
+  if (startsWithSingleQuote && endsWithSingleQuote) {
+    return normalized.slice(1, -1).trim();
+  }
+
+  return normalized;
+}
+
 function normalizeEmail(value: string | null | undefined) {
   const normalized = String(value ?? "").trim().toLowerCase();
   return normalized.length > 0 ? normalized : null;
@@ -91,9 +112,13 @@ function parseBoundedInteger(input: {
 }
 
 function readConfiguredExemptEmails(raw: string | undefined) {
-  const normalizedEnvValue = readEnv(raw);
+  const normalizedEnvValue = unwrapSingleQuotedEnvValue(readEnv(raw));
   const fromEnv = normalizedEnvValue
-    .split(",")
+    /* Exempt-email env parsing must tolerate accidental quote wrapping and common delimiter
+       variants so one malformed separator doesn't silently disable intended exemptions. Keep
+       normalization here (server-side only) because active-user and platform-daily governance
+       both consume this exact list as their authority source. */
+    .split(/[,\n;]+/g)
     .map((value) => value.trim())
     .filter(Boolean)
     .flatMap((value) => {
