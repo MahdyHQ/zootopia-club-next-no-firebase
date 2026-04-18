@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Shared card mobile compact-title + small-only summary clamp refinement recorded)
+Last Updated: 2026-04-18 (Assessment result-viewer full title/summary wrap exception recorded)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -414,10 +414,11 @@ Key verified facts:
   with a trailing `...` continuation hint plus full-text hover titles, and
   Home/Upload/History card action lanes now use vertical-first mobile stacking
   to reduce narrow-screen crowding without altering desktop/tablet card rhythm
-- Shared file/result name lanes now apply wrap-first clamped title rendering
+- Shared file/result name lanes keep wrap-first clamped title rendering
   (`line-clamp`) with full-text hover title hints across Upload/Home/History/
-  Assessment card surfaces and detached preview/result headers, so extreme
-  names stay inside the card/surface with clean trailing `...` endings
+  Assessment card surfaces, while detached assessment preview/result header
+  title + summary now render full text with wrap-safe behavior (no clamp/
+  truncation) across breakpoints
 - Tiny-screen generated-card lanes now enforce viewport-fit no-swipe behavior:
   protected-shell content no longer allows assessment-path horizontal auto-scroll,
   shared generated-card/action wrappers use stricter `min-w-0`/`w-full`/
@@ -433,10 +434,10 @@ Key verified facts:
 - Admin panel includes user management, storage management, governance dashboard
 - Database uses Supabase Postgres with RLS policies
 - Migration management via scripts/supabase/apply-migrations.mjs
-- 17 migration files tracked in supabase/migrations (latest include
+- 18 migration files tracked in supabase/migrations (latest include
   `20260416210000_assessment_credit_mutations.sql`,
   `20260417103000_assessment_credit_prompt_entitlement.sql`, and
-  `20260418110000_auth_admission_governance.sql`)
+  `20260418123000_active_normal_user_session_capacity.sql`)
 
 ================================================================================
 3. PROJECT PURPOSE & PLATFORM DIRECTION
@@ -1814,6 +1815,73 @@ Sensitive Areas Requiring Extra Care:
 ================================================================================
 29. HISTORICAL CHANGE LOG
 ================================================================================
+
+2026-04-18: ASSESSMENT RESULT-VIEWER FULL TITLE + SUMMARY WRAP EXCEPTION (UI-ONLY)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Detached assessment preview/result header title still used mobile smart-title
+   truncation plus `line-clamp` limits, so long generated titles were not fully
+   visible on small screens.
+2. Detached header summary still used `line-clamp-3` on narrow screens, so
+   complete summary text was not always visible.
+3. The requested behavior required a targeted exception for this surface only,
+   without changing compact clamp behavior on other shared card lanes.
+
+FILES CHANGED:
+- apps/web/components/assessment/assessment-preview-shell.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Deliver a minimal, surgical UI-only refinement so assessment result-viewer
+  title and summary always render in full while preserving existing premium
+  styling, spacing, dark/light behavior, and actions.
+
+TECHNICAL DETAILS:
+1. Title truncation/clamp removal
+   - Removed `buildSmartTitleDisplay` usage for `preview.title` in detached
+     preview/result header rendering.
+   - Removed `line-clamp-*` classes from the `<h1>` title node.
+   - Title now renders full `preview.title` with wrap-safe classes:
+     `break-words` + `[overflow-wrap:anywhere]`.
+
+2. Summary clamp removal
+   - Removed `line-clamp-3 sm:line-clamp-none` from summary body.
+   - Summary now uses wrap-safe classes:
+     `assessment-file-summary__body break-words [overflow-wrap:anywhere]`.
+
+3. Scope containment
+   - Preserved existing detached surface hierarchy, metadata/action rails, and
+     theme treatment.
+   - No backend/auth/session/permission/query/business logic changes.
+   - No shared-card clamp behavior outside this detached assessment surface was
+     modified.
+
+VERIFICATION:
+Static/code verification:
+✓ `get_errors` on `assessment-preview-shell.tsx` — PASS.
+✓ Confirmed removed patterns are absent in the file:
+  `buildSmartTitleDisplay(preview.title)` and title/summary `line-clamp` classes.
+✓ Confirmed wrap-safe classes are present on title and summary nodes.
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS
+  (2 pre-existing warnings only:
+  `assessment-studio.tsx` aria-disabled on form role,
+  `confirm-email-panel.tsx` missing `flow` dependency in `useEffect`).
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS.
+
+Viewport-behavior verification:
+✓ Small/narrow screens: title/summary no longer contain clamp/truncate classes;
+  wrap utilities enforce downward wrapping within the existing container.
+✓ Large screens: existing detached header layout, spacing, and typography scale
+  were preserved while full title/summary remain visible.
 
 2026-04-18: EXEMPT LOGIN-ADMISSION BYPASS + TRUTHFUL ADMISSION-UNAVAILABLE MESSAGING
 ────────────────────────────────────────────────────────────────────────────

@@ -9,7 +9,6 @@ import type {
   NormalizedAssessmentPreview,
 } from "@/lib/assessment-preview-model";
 import type { AppMessages } from "@/lib/messages";
-import { buildSmartTitleDisplay } from "@/lib/smart-title-display";
 
 import { AssessmentExportActions } from "@/components/assessment/assessment-export-actions";
 import { AssessmentPreviewThemeToggle } from "@/components/assessment/assessment-preview-theme-toggle";
@@ -183,18 +182,14 @@ export function AssessmentPreviewShell({
               : messages.assessmentResultViewerTitle}
           </span>
           <div className="min-w-0">
-            {/* Detached preview/result names must stay inside the shared header shell: wrap first, then clamp with ellipsis for extreme lengths. */}
+            {/* Detached preview/result title is intentionally full-text on every breakpoint.
+                This header belongs to the assessment result-viewer surface and should wrap long text vertically
+                instead of clamping so users can always read the complete generated title. */}
             <h1
-              className="min-w-0 w-full max-w-full line-clamp-2 break-words text-balance text-2xl font-bold tracking-tight [overflow-wrap:anywhere] sm:max-w-4xl sm:line-clamp-3 sm:text-4xl"
+              className="min-w-0 w-full max-w-full break-words text-balance text-2xl font-bold tracking-tight [overflow-wrap:anywhere] sm:max-w-4xl sm:text-4xl"
               title={preview.title}
             >
-              <span className="inline-block align-top sm:hidden">
-                {buildSmartTitleDisplay(preview.title, {
-                  maxLength: 44,
-                  suffixLengthWithExtension: 8,
-                })}
-              </span>
-              <span className="hidden sm:inline">{preview.title}</span>
+              {preview.title}
             </h1>
             {/* This is the shared file-surface summary block for both detached preview and result
                 pages. Keep the SUMMARY badge, restrained gradients, and theme-aware copy here so
@@ -202,7 +197,7 @@ export function AssessmentPreviewShell({
                 a one-off tweak inside one page or inside the question/result renderer below. */}
             <div className={`assessment-file-summary mt-4 ${dark ? "assessment-file-summary--dark" : ""}`}>
               <span className="assessment-file-summary__badge">{summaryBadgeLabel}</span>
-              <p className="assessment-file-summary__body line-clamp-3 sm:line-clamp-none">{preview.summary}</p>
+              <p className="assessment-file-summary__body break-words [overflow-wrap:anywhere]">{preview.summary}</p>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {preview.compositionBadges.map((badge) => (
