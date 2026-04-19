@@ -1817,6 +1817,34 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
+2026-04-19: HOME PAGE TEASER CTA DARK MODE FIX
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. `apps/web/components/home/lecture-summary-coming-soon-teaser.tsx` had a CTA button
+   with `dark:bg-cyan-300/80` and `dark:text-slate-950`.
+2. This bright background in dark mode appeared too white-ish against the dark aesthetic
+   and made the text unreadable for users who expected a dark-themed button.
+
+FILES CHANGED:
+- apps/web/components/home/lecture-summary-coming-soon-teaser.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Apply a minimal UI-only fix targeting dark mode to make the button text clearly 
+  readable while matching the teaser's general look and feel.
+
+TECHNICAL DETAILS:
+- Changed the background styling for the "افتح صفحة الصور والنماذج" CTA button
+  from `dark:bg-cyan-300/80` to `dark:bg-cyan-950/50`.
+- Changed button text color from `dark:text-slate-950` to `dark:text-cyan-50`.
+- Changed button hover background from `dark:hover:bg-cyan-200/90` to `dark:hover:bg-cyan-900/60`.
+- Changed button border from implicitly inherited/cyan-200 to `dark:border-cyan-800/60`.
+
 2026-04-18: WEB LINT WARNING CLEANUP (ASSESSMENT STUDIO + CONFIRM EMAIL PANEL)
 ────────────────────────────────────────────────────────────────────────────
 

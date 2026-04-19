@@ -103,7 +103,7 @@ export function LectureSummaryComingSoonTeaser() {
           <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
             <Link
               href={APP_ROUTES.lectureSummary}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-200/55 bg-white px-4 py-2.5 text-sm font-black text-sky-900 shadow-[0_10px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-0.5 hover:bg-cyan-50 dark:text-slate-950"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-200/55 bg-white px-4 py-2.5 text-sm font-black text-sky-900 shadow-[0_10px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-0.5 hover:bg-cyan-50 dark:border-cyan-800/60 dark:bg-cyan-950/50 dark:text-cyan-50 dark:hover:bg-cyan-900/60"
             >
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-fuchsia-300/45 bg-fuchsia-100 text-fuchsia-700">
                 <Gift className="h-3.5 w-3.5" />
