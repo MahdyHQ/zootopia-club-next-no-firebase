@@ -159,6 +159,10 @@ export type AssessmentDailyCreditLedgerDocument = {
   dayKey: string;
   dailyLimit: number;
   successfulGenerationIds: string[];
+  /* Platform-wide usage lock must count successful generations from both daily and extra credit
+     sources. Keep this separate from `successfulGenerationIds` so per-user daily quota math stays
+     tied to daily-backed consumption only. */
+  platformSuccessfulGenerationIds: string[];
   pendingReservations: AssessmentDailyCreditReservation[];
   createdAt: string;
   updatedAt: string;
@@ -280,6 +284,7 @@ export function createEmptyAssessmentDailyCreditLedger(input: {
     dayKey: input.dayKey,
     dailyLimit: getDefaultDailyAssessmentCreditsLimit(),
     successfulGenerationIds: [],
+    platformSuccessfulGenerationIds: [],
     pendingReservations: [],
     createdAt: input.nowIso,
     updatedAt: input.nowIso,
@@ -306,6 +311,11 @@ export function normalizeAssessmentDailyCreditLedger(input: {
         input.record.successfulGenerationIds.map((value) => String(value || "").trim()),
       )
     : fallback.successfulGenerationIds;
+  const platformSuccessfulGenerationIds = Array.isArray(input.record?.platformSuccessfulGenerationIds)
+    ? uniqueStrings(
+        input.record.platformSuccessfulGenerationIds.map((value) => String(value || "").trim()),
+      )
+    : successfulGenerationIds;
   const pendingReservations = Array.isArray(input.record?.pendingReservations)
     ? input.record.pendingReservations
         .map((entry) => {
@@ -341,6 +351,7 @@ export function normalizeAssessmentDailyCreditLedger(input: {
         ? input.record.dailyLimit
         : fallback.dailyLimit,
     successfulGenerationIds,
+    platformSuccessfulGenerationIds,
     pendingReservations,
     createdAt: String(input.record?.createdAt || fallback.createdAt),
     updatedAt: String(input.record?.updatedAt || fallback.updatedAt),

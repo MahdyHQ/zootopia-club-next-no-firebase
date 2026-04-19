@@ -28,12 +28,6 @@ export default async function AssessmentPage() {
     uid: user.uid,
     role: user.role,
   });
-  /* Assessment Studio must know whether this signed-in identity is exempt before hydration so
-     the UI can fail closed for standard users when shared capacity truth is missing, without
-     accidentally blocking admin or configured exempt-email identities. */
-  const platformLockUiExempt =
-    user.role === "admin" || isActiveNormalUserExemptEmail(user.email);
-
   let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
   let generations = [] as Awaited<ReturnType<typeof listAssessmentGenerationsForUser>>;
   let activeDocument: Awaited<ReturnType<typeof listDocumentsForUser>>[number] | null = null;
@@ -72,6 +66,16 @@ export default async function AssessmentPage() {
       });
     }
   }
+
+  /* Assessment Studio must know whether this signed-in identity is exempt before hydration so
+     the UI can fail closed for standard users when shared capacity truth is missing, without
+     accidentally blocking admin or configured exempt-email identities. Prefer the canonical
+     summary flags when they are already available from the server render. */
+  const platformLockUiExempt =
+    initialCreditSummary?.platformDailyUsage.isAdminExempt === true
+    || initialCreditSummary?.platformDailyUsage.isEmailExempt === true
+    || user.role === "admin"
+    || isActiveNormalUserExemptEmail(user.email);
 
   return (
     <div className="min-w-0 space-y-5 px-0.5 sm:space-y-6 sm:px-0">

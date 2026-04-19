@@ -59,7 +59,10 @@ export default async function UploadPage() {
      to be derived on the server so exempt/admin identities do not depend on client heuristics
      when the shared capacity summary is still loading or temporarily unavailable. */
   const platformLockUiExempt =
-    user.role === "admin" || isActiveNormalUserExemptEmail(user.email);
+    initialCreditSummary?.platformDailyUsage.isAdminExempt === true
+    || initialCreditSummary?.platformDailyUsage.isEmailExempt === true
+    || user.role === "admin"
+    || isActiveNormalUserExemptEmail(user.email);
 
   return (
     <div className="min-w-0 space-y-12 pb-8">

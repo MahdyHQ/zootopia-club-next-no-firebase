@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-19 (Supabase credit bridge audit + relational backfill hardening)
+Last Updated: 2026-04-19 (platform daily lock second-pass audit + rollout bridge hardening)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -4814,3 +4814,287 @@ Runtime notes:
 ~ Build logs still include the pre-existing operational warning:
   `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
 ~ Warning is unchanged by this UI-only lecture-summary enhancement.
+
+2026-04-19: PLATFORM DAILY LOCK HARDENING — ALL-SOURCE AGGREGATION + ROLLOUT FALLBACK + OWNER-LOOKUP RESILIENCE
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Platform-wide daily usage lock aggregation was derived from per-ledger
+   `successfulGenerationIds`, which is intentionally tied to daily-quota-backed
+   usage. This could undercount successful generations consumed through extra /
+   manual / grant-backed credit sources.
+2. During rollout, hosts that ran newer code before applying the additive SQL
+   migration could return `503` from `/api/assessment/credits` because
+   `platform_successful_generation_ids` was not yet present.
+3. Runtime QA also surfaced a summary-fragility edge case: if any ledger row
+   has a malformed owner UID, `getUserByUid(...)` throws (Supabase UUID guard),
+   and the platform summary read could fail closed at the endpoint level.
+
+FILES CHANGED:
+- apps/web/lib/server/assessment-daily-credits.ts
+- apps/web/lib/server/repository.ts
+- supabase/migrations/20260419150000_assessment_daily_credit_platform_usage_ids.sql
+- .env.example
+- apps/web/messages/ar.json
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+1. Added `supabase/migrations/20260419150000_assessment_daily_credit_platform_usage_ids.sql`
+   - Adds `platform_successful_generation_ids text[] NOT NULL DEFAULT '{}'` to
+     `public.assessment_daily_credits`.
+   - Backfills empty new-column rows from legacy `successful_generation_ids`.
+
+TECHNICAL DETAILS:
+1. Ledger contract extension (additive, backward-compatible)
+   - `AssessmentDailyCreditLedgerDocument` now includes
+     `platformSuccessfulGenerationIds`.
+   - Empty-ledger factory initializes this array.
+   - Normalization falls back to `successfulGenerationIds` when the new lane is
+     absent, preserving compatibility for older rows/documents.
+
+2. Platform lock aggregation semantics hardening
+   - Platform used-count now prefers `platformSuccessfulGenerationIds`, with
+     fallback to `successfulGenerationIds` for compatibility.
+   - Commit paths append every successful generation ID to the platform lane,
+     regardless of daily vs extra/manual/grant source.
+   - Per-user daily quota semantics remain unchanged:
+     `successfulGenerationIds` stays tied to daily-backed usage accounting.
+
+3. Rollout compatibility fallback for structured SQL reads/writes
+   - Structured read/list/upsert paths now catch missing-column error `42703`
+     for `platform_successful_generation_ids` and transparently execute
+     legacy-compatible SQL shape instead of failing request handling.
+
+4. Owner-lookup resilience in platform aggregation
+   - `readPlatformDailyConsumedCreditCount(...)` now treats owner lookup throws
+     as unknown-owner fallback (owner = null) rather than aborting the summary.
+   - This preserves the existing conservative policy: unknown rows remain
+     counted unless server can positively prove admin/exempt identity.
+
+5. Contract and localization alignment
+   - `.env.example` clarified that platform global daily limit counts successful
+     generations across daily + extra/manual/grant sources for non-exempt users.
+   - Added missing AR translation keys required by typed message contract for
+     platform-status-unavailable variants on assessment/upload surfaces.
+
+VERIFICATION:
+Diagnostics and build checks:
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.
+
+Runtime verification (authoritative QA harness):
+✓ `/api/health` confirmed `supabase_postgres` runtime and auth flags enabled.
+✓ Runtime harness validated all required checks on `http://127.0.0.1:3026`:
+  - env limit applied (`platformDailyUsage.limit === 1`)
+  - platform used-count incremented by all-source platform IDs (+2)
+  - non-exempt user lock activated when limit reached
+  - lock copy rendered on both `/upload` and `/assessment`
+  - admin bypass preserved (`isAdminExempt=true`, `locked=false`)
+  - exempt-email bypass preserved (`isEmailExempt=true`, `locked=false`)
+
+RUNTIME NOTES / TEST CONDITIONS:
+1. QA server used explicit test env overrides:
+   - `ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT=1`
+   - `ZOOTOPIA_ACTIVE_NORMAL_USER_LIMIT=100`
+2. The active-user-limit override was a test-only isolation control to avoid
+   unrelated active-capacity admission denials masking platform-lock QA.
+3. Pre-existing warning remains unchanged:
+   `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
+
+RISK STATUS:
+1. Low migration risk (additive column + compatibility fallback).
+2. Authority model unchanged: lock truth remains server-owned; UI remains read-only.
+3. Daily quota math unchanged; only platform aggregation lane was broadened.
+
+2026-04-19: PLATFORM DAILY LOCK SECOND-PASS REVIEW — ROLLOUT BRIDGE FIX + CANONICAL UI EXEMPT SNAPSHOT
+────────────────────────────────────────────────────────────────────────────
+
+REVIEW SCOPE:
+1. Re-audited the recent platform-wide daily-credit aggregation + UI-lock patch
+   directly in code rather than trusting the prior summary/build pass.
+2. Traced runtime ownership from:
+   - assessment credit commit paths
+   - structured + legacy daily-credit ledger persistence
+   - platform aggregation builders
+   - `/api/assessment/credits`
+   - `/api/assessment`
+   - `/upload`
+   - `/assessment`
+   - admin/exempt helpers
+   - additive migration files
+
+SECOND-PASS CONCLUSION:
+1. The previous patch was close, but not fully complete.
+2. The all-source aggregation lane itself was correctly introduced.
+3. The remaining gap was rollout compatibility: when the new SQL column was
+   still missing, preference logic could still pick a structured row whose
+   fallback shape only exposed daily-backed ids, while the richer legacy mirror
+   already held `platformSuccessfulGenerationIds`.
+4. That meant platform-wide usage could still undercount extra/manual/grant
+   generations during a partial-deploy / delayed-migration window.
+
+SECOND-PASS FILES CHANGED:
+- apps/web/lib/server/repository.ts
+- apps/web/app/(protected)/(completed)/upload/page.tsx
+- apps/web/app/(protected)/(completed)/assessment/page.tsx
+- supabase/migrations/20260419160000_assessment_daily_credit_platform_usage_legacy_backfill.sql
+- zootopia-club-next-ledger.txt
+
+FILES RE-AUDITED BUT LEFT UNCHANGED IN THIS PASS:
+- .env.example
+- apps/web/lib/server/assessment-daily-credits.ts
+- apps/web/app/api/assessment/route.ts
+- apps/web/app/api/assessment/credits/route.ts
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/components/upload/upload-workspace.tsx
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+- apps/web/lib/server/active-normal-user-session-governance.ts
+- apps/web/lib/server/admin-auth.ts
+- supabase/migrations/20260419150000_assessment_daily_credit_platform_usage_ids.sql
+
+ROOT CAUSE / GAP FOUND:
+1. `AssessmentDailyCreditLedgerDocument.platformSuccessfulGenerationIds` and the
+   commit-path writes were already correct.
+2. `readPlatformDailyConsumedCreditCount(...)` already aggregated from the new
+   platform lane.
+3. However, record-preference + compatibility fallback still allowed a richer
+   legacy platform-id array to be discarded when the structured SQL row existed
+   but was temporarily on the pre-column fallback shape.
+
+TECHNICAL HARDENING:
+1. Rollout bridge merge fix
+   - Added `readAssessmentPlatformSuccessfulGenerationIds(...)` to read the
+     explicit platform lane first and fall back to `successfulGenerationIds`
+     only when needed.
+   - Added
+     `mergeAssessmentDailyCreditLedgerPlatformUsageRecord(...)` so preferred
+     records keep their normal authority (timestamps/daily math/reservations)
+     while platform-id arrays are unioned across preferred + legacy +
+     structured shapes.
+   - Wired this merge into both single-ledger reads and day-list reads before
+     platform aggregation runs.
+
+2. Migration repair for the overlap window
+   - Added
+     `supabase/migrations/20260419160000_assessment_daily_credit_platform_usage_legacy_backfill.sql`.
+   - This repair copies richer legacy `platformSuccessfulGenerationIds`
+     snapshots from `public.zc_entities` into
+     `public.assessment_daily_credits.platform_successful_generation_ids`
+     after the additive column exists.
+   - This keeps the missing-column fallback temporary instead of becoming a
+     permanent silent crutch for rows written during the rollout overlap.
+
+3. Missing-column compatibility warnings
+   - Structured read/list/upsert fallbacks now emit one-time warnings that name
+     both required migrations (`20260419150000` and `20260419160000`) so the
+     compatibility path is visible operationally instead of silently normalizing
+     schema drift forever.
+
+4. Owner lookup resilience
+   - Platform aggregation now checks whether ledger owner UIDs look like
+     Supabase auth UUIDs before lookup.
+   - Malformed owner UIDs and transient owner lookup failures now warn once and
+     remain counted conservatively.
+   - This preserves correctness bias: unknown rows do not disappear from the
+     platform total unless the server can positively prove admin/exempt status.
+
+5. Canonical post-commit summary echo
+   - Successful assessment-create responses now re-read the canonical summary
+     contract after commit when possible, then fall back safely if the reread
+     degrades.
+   - This keeps `/api/assessment` aligned with `/api/assessment/credits`
+     without making save success depend on a second summary read.
+
+6. UI exempt snapshot hardening
+   - `/upload` and `/assessment` now prefer the canonical server summary flags
+     (`platformDailyUsage.isAdminExempt` / `isEmailExempt`) when deriving the
+     fail-closed UI-only lock bypass, then fall back to the existing role/email
+     server helpers.
+   - Upload and Assessment still consume the same canonical lock summary in the
+     client components; this page-level tweak only makes the initial hydration
+     bypass decision match that summary more closely.
+
+AUDIT ANSWERS:
+1. All-source counting:
+   - Yes, now truly counts successful generations committed through daily quota
+     and extra/manual/grant-backed lanes without double-counting the same
+     generation id.
+2. Independence from per-user daily math:
+   - Yes. `successfulGenerationIds` still drives per-user daily quota math.
+     `platformSuccessfulGenerationIds` is a separate additive lane for the
+     platform cap only.
+3. Migration sufficiency:
+   - `20260419150000` alone was not fully sufficient for overlap-window rows.
+     `20260419160000` is the minimal repair that closes that gap.
+4. Compatibility fallback safety:
+   - Safe as rollout compatibility only after this pass because warnings now
+     surface it and the new repair migration closes the most important drift
+     window.
+5. Malformed owner UID handling:
+   - Now safe and conservative. Bad owner references no longer crash the
+     summary, but they also do not undercount platform usage.
+6. Canonical lock summary:
+   - Yes. Upload and Assessment both still read the same server-owned summary.
+7. Env authority:
+   - Yes. `ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT` remains authoritative
+     end to end through the server summary.
+8. Admin/exempt bypass:
+   - Yes. Admin accounts and
+     `ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS` identities remain excluded from
+     active-normal-user governance and the platform daily UI lock.
+
+VERIFICATION:
+Code-traced proof:
+✓ Verified `ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS` parsing still:
+  - unwraps accidental single-quoted env values
+  - splits on commas / semicolons / newlines
+  - trims + lowercases + validates entries
+  - logs malformed entries instead of silently accepting them
+  - force-includes `elmahdyabdulla208@gmail.com`
+✓ Verified admin allowlist parsing uses aligned delimiter/validation behavior.
+✓ Verified platform cap env parsing still rejects malformed numeric values,
+  clamps to bounds, and defaults to 33.
+✓ Verified per-user daily quota math still reads only `successfulGenerationIds`.
+✓ Verified platform aggregation now reads merged platform ids across structured +
+  legacy compatibility shapes.
+✓ Verified `/upload` and `/assessment` still lock from server-owned summary
+  state, not from client-owned counters.
+
+Runtime-verified proof:
+✓ `npm run lint:web` — PASS.
+✓ `npm run typecheck:web` — PASS.
+✓ `npm run supabase:migrations:validate` — PASS.
+✓ `npm run build:vercel` — PASS.
+✓ `npm run build:web` — PASS.
+✓ Production-style runtime QA on `http://127.0.0.1:3030` using `next start`
+  with test-only overrides:
+  - `ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT=1`
+  - `ZOOTOPIA_ACTIVE_NORMAL_USER_LIMIT=100`
+✓ `/api/health` reported `supabase_postgres` with auth/database runtime enabled.
+✓ Runtime harness proved:
+  - env limit applied (`limit === 1`)
+  - platform used-count increased by the two injected platform ids
+  - normal non-exempt user became locked
+  - Upload lock copy rendered
+  - Assessment lock copy rendered
+  - admin bypass remained unlocked
+  - exempt-email bypass remained unlocked
+
+REMAINING LIVE-RUNTIME GAP:
+1. The runtime harness proves the canonical path and env authority on a
+   production-style local server.
+2. Live production still must apply migrations in order:
+   - `20260419150000_assessment_daily_credit_platform_usage_ids.sql`
+   - `20260419160000_assessment_daily_credit_platform_usage_legacy_backfill.sql`
+3. If any host logs the new missing-column compatibility warning after rollout,
+   that is an operational signal that migration/application order still needs
+   attention.
+
+PRESERVED INTENTIONALLY:
+1. Auth.js remains the trust boundary.
+2. Backend authority remains server-side.
+3. Upload/Assessment lock remains UI-only.
+4. Existing active normal-user admission architecture was not redesigned.
+5. Existing per-user daily credit logic was not broadened or weakened.
+6. Admin boundaries and owner-scoped protections were preserved.

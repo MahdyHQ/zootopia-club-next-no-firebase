@@ -3249,10 +3249,105 @@ type StructuredAssessmentDailyCreditRow = {
   day_key: string;
   daily_limit: number | null;
   successful_generation_ids: string[] | null;
+  platform_successful_generation_ids: string[] | null;
   pending_reservations: AssessmentDailyCreditReservation[] | null;
   created_at: string | Date;
   updated_at: string | Date;
 };
+
+function isMissingPlatformSuccessfulGenerationIdsColumnError(error: unknown) {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+  const message =
+    typeof error === "object" && error && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : "";
+
+  return code === "42703" && message.includes("platform_successful_generation_ids");
+}
+
+const assessmentPlatformDailyUsageWarningKeys = new Set<string>();
+const SUPABASE_AUTH_UID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function summarizeAssessmentPlatformOwnerUidForLogs(ownerUid: string) {
+  const normalized = ownerUid.trim();
+  if (normalized.length <= 12) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+}
+
+function logAssessmentPlatformDailyUsageWarningOnce(input: {
+  key: string;
+  message: string;
+  details?: Record<string, unknown>;
+}) {
+  if (assessmentPlatformDailyUsageWarningKeys.has(input.key)) {
+    return;
+  }
+
+  assessmentPlatformDailyUsageWarningKeys.add(input.key);
+  console.warn("[assessment-platform-daily-usage]", {
+    message: input.message,
+    ...(input.details ?? {}),
+  });
+}
+
+function looksLikeSupabaseAuthUid(value: string) {
+  return SUPABASE_AUTH_UID_REGEX.test(value.trim());
+}
+
+function uniqueAssessmentPlatformStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function readAssessmentPlatformSuccessfulGenerationIds(
+  record: Partial<AssessmentDailyCreditLedgerDocument> | null | undefined,
+) {
+  const explicitPlatformIds = Array.isArray(record?.platformSuccessfulGenerationIds)
+    ? uniqueAssessmentPlatformStrings(
+        record.platformSuccessfulGenerationIds.map((value) => String(value || "").trim()),
+      )
+    : [];
+  if (explicitPlatformIds.length > 0) {
+    return explicitPlatformIds;
+  }
+
+  return Array.isArray(record?.successfulGenerationIds)
+    ? uniqueAssessmentPlatformStrings(
+        record.successfulGenerationIds.map((value) => String(value || "").trim()),
+      )
+    : [];
+}
+
+function mergeAssessmentDailyCreditLedgerPlatformUsageRecord(input: {
+  preferred: Partial<AssessmentDailyCreditLedgerDocument> | null;
+  legacy: Partial<AssessmentDailyCreditLedgerDocument> | null;
+  structured: Partial<AssessmentDailyCreditLedgerDocument> | null;
+}) {
+  if (!input.preferred) {
+    return null;
+  }
+
+  /* Rollout compatibility: when the structured SQL row is still on the pre-column shape, the
+     legacy mirror can temporarily hold a richer `platformSuccessfulGenerationIds` lane. Merge the
+     platform-id arrays here so the platform-wide count stays truthful without changing the
+     preferred record's daily-limit, reservation, or timestamp authority. */
+  const mergedPlatformSuccessfulGenerationIds = uniqueAssessmentPlatformStrings([
+    ...readAssessmentPlatformSuccessfulGenerationIds(input.preferred),
+    ...readAssessmentPlatformSuccessfulGenerationIds(input.legacy),
+    ...readAssessmentPlatformSuccessfulGenerationIds(input.structured),
+  ]);
+
+  return {
+    ...input.preferred,
+    platformSuccessfulGenerationIds: mergedPlatformSuccessfulGenerationIds,
+  } satisfies Partial<AssessmentDailyCreditLedgerDocument>;
+}
 
 type AssessmentDailyCreditLedgerDayRecord = {
   ownerUid: string;
@@ -3392,6 +3487,17 @@ function mapStructuredAssessmentDailyCreditRow(
   row: StructuredAssessmentDailyCreditRow,
   fallbackIso: string,
 ): Partial<AssessmentDailyCreditLedgerDocument> {
+  const successfulGenerationIds = Array.isArray(row.successful_generation_ids)
+    ? row.successful_generation_ids.filter(
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
+      )
+    : [];
+  const platformSuccessfulGenerationIds = Array.isArray(row.platform_successful_generation_ids)
+    ? row.platform_successful_generation_ids.filter(
+        (value): value is string => typeof value === "string" && value.trim().length > 0,
+      )
+    : successfulGenerationIds;
+
   return {
     id: row.id,
     ownerUid: row.owner_uid,
@@ -3400,11 +3506,8 @@ function mapStructuredAssessmentDailyCreditRow(
       typeof row.daily_limit === "number" && Number.isFinite(row.daily_limit)
         ? row.daily_limit
         : getDefaultDailyAssessmentCreditsLimit(),
-    successfulGenerationIds: Array.isArray(row.successful_generation_ids)
-      ? row.successful_generation_ids.filter(
-          (value): value is string => typeof value === "string" && value.trim().length > 0,
-        )
-      : [],
+    successfulGenerationIds,
+    platformSuccessfulGenerationIds,
     pendingReservations: Array.isArray(row.pending_reservations)
       ? row.pending_reservations
       : [],
@@ -3619,34 +3722,85 @@ async function readStructuredAssessmentDailyCreditLedgerRecord(input: {
 }) {
   const sql = input.sql ?? getZootopiaDatabase().sql;
   const documentId = buildAssessmentDailyCreditDocumentId(input.ownerUid, input.dayKey);
-  const rows = input.forUpdate
-    ? (await sql<StructuredAssessmentDailyCreditRow[]>`
-        SELECT
-          id,
-          owner_uid,
-          day_key,
-          daily_limit,
-          successful_generation_ids,
-          pending_reservations,
-          created_at,
-          updated_at
-        FROM public.assessment_daily_credits
-        WHERE id = ${documentId}
-        FOR UPDATE
-      `)
-    : (await sql<StructuredAssessmentDailyCreditRow[]>`
-        SELECT
-          id,
-          owner_uid,
-          day_key,
-          daily_limit,
-          successful_generation_ids,
-          pending_reservations,
-          created_at,
-          updated_at
-        FROM public.assessment_daily_credits
-        WHERE id = ${documentId}
-      `);
+  let rows: StructuredAssessmentDailyCreditRow[];
+
+  try {
+    rows = input.forUpdate
+      ? (await sql<StructuredAssessmentDailyCreditRow[]>`
+          SELECT
+            id,
+            owner_uid,
+            day_key,
+            daily_limit,
+            successful_generation_ids,
+            platform_successful_generation_ids,
+            pending_reservations,
+            created_at,
+            updated_at
+          FROM public.assessment_daily_credits
+          WHERE id = ${documentId}
+          FOR UPDATE
+        `)
+      : (await sql<StructuredAssessmentDailyCreditRow[]>`
+          SELECT
+            id,
+            owner_uid,
+            day_key,
+            daily_limit,
+            successful_generation_ids,
+            platform_successful_generation_ids,
+            pending_reservations,
+            created_at,
+            updated_at
+          FROM public.assessment_daily_credits
+          WHERE id = ${documentId}
+        `);
+  } catch (error) {
+    if (!isMissingPlatformSuccessfulGenerationIdsColumnError(error)) {
+      throw error;
+    }
+
+    /* Rollout compatibility: when application code reaches hosts before the additive
+       migration has landed, keep summary reads alive by falling back to daily-only ids. */
+    logAssessmentPlatformDailyUsageWarningOnce({
+      key: "missing-platform-successful-generation-ids-column",
+      message:
+        "Structured assessment_daily_credits.platform_successful_generation_ids is missing; using compatibility fallback until migrations 20260419150000 and 20260419160000 are applied.",
+      details: {
+        operation: "readStructuredAssessmentDailyCreditLedgerRecord",
+      },
+    });
+    rows = input.forUpdate
+      ? (await sql<StructuredAssessmentDailyCreditRow[]>`
+          SELECT
+            id,
+            owner_uid,
+            day_key,
+            daily_limit,
+            successful_generation_ids,
+            NULL::text[] AS platform_successful_generation_ids,
+            pending_reservations,
+            created_at,
+            updated_at
+          FROM public.assessment_daily_credits
+          WHERE id = ${documentId}
+          FOR UPDATE
+        `)
+      : (await sql<StructuredAssessmentDailyCreditRow[]>`
+          SELECT
+            id,
+            owner_uid,
+            day_key,
+            daily_limit,
+            successful_generation_ids,
+            NULL::text[] AS platform_successful_generation_ids,
+            pending_reservations,
+            created_at,
+            updated_at
+          FROM public.assessment_daily_credits
+          WHERE id = ${documentId}
+        `);
+  }
 
   const row = rows[0];
   return row ? mapStructuredAssessmentDailyCreditRow(row, input.nowIso) : null;
@@ -3658,20 +3812,53 @@ async function listStructuredAssessmentDailyCreditLedgerRowsForDay(input: {
   sql?: AssessmentCreditSqlExecutor;
 }) {
   const sql = input.sql ?? getZootopiaDatabase().sql;
-  const rows = await sql<StructuredAssessmentDailyCreditRow[]>`
-    SELECT
-      id,
-      owner_uid,
-      day_key,
-      daily_limit,
-      successful_generation_ids,
-      pending_reservations,
-      created_at,
-      updated_at
-    FROM public.assessment_daily_credits
-    WHERE day_key = ${input.dayKey}
-    LIMIT ${ASSESSMENT_PLATFORM_DAILY_USAGE_QUERY_LIMIT}
-  `;
+  let rows: StructuredAssessmentDailyCreditRow[];
+
+  try {
+    rows = await sql<StructuredAssessmentDailyCreditRow[]>`
+      SELECT
+        id,
+        owner_uid,
+        day_key,
+        daily_limit,
+        successful_generation_ids,
+        platform_successful_generation_ids,
+        pending_reservations,
+        created_at,
+        updated_at
+      FROM public.assessment_daily_credits
+      WHERE day_key = ${input.dayKey}
+      LIMIT ${ASSESSMENT_PLATFORM_DAILY_USAGE_QUERY_LIMIT}
+    `;
+  } catch (error) {
+    if (!isMissingPlatformSuccessfulGenerationIdsColumnError(error)) {
+      throw error;
+    }
+
+    logAssessmentPlatformDailyUsageWarningOnce({
+      key: "missing-platform-successful-generation-ids-column",
+      message:
+        "Structured assessment_daily_credits.platform_successful_generation_ids is missing; using compatibility fallback until migrations 20260419150000 and 20260419160000 are applied.",
+      details: {
+        operation: "listStructuredAssessmentDailyCreditLedgerRowsForDay",
+      },
+    });
+    rows = await sql<StructuredAssessmentDailyCreditRow[]>`
+      SELECT
+        id,
+        owner_uid,
+        day_key,
+        daily_limit,
+        successful_generation_ids,
+        NULL::text[] AS platform_successful_generation_ids,
+        pending_reservations,
+        created_at,
+        updated_at
+      FROM public.assessment_daily_credits
+      WHERE day_key = ${input.dayKey}
+      LIMIT ${ASSESSMENT_PLATFORM_DAILY_USAGE_QUERY_LIMIT}
+    `;
+  }
 
   return rows.map((row) => ({
     ownerUid: row.owner_uid,
@@ -3744,7 +3931,11 @@ async function listAssessmentDailyCreditLedgersForDay(input: {
         record: normalizeAssessmentDailyCreditLedger({
           ownerUid,
           dayKey: input.dayKey,
-          record: preferredRecord,
+          record: mergeAssessmentDailyCreditLedgerPlatformUsageRecord({
+            preferred: preferredRecord,
+            legacy: recordPair.legacy,
+            structured: recordPair.structured,
+          }),
           nowIso: input.nowIso,
         }) as Partial<AssessmentDailyCreditLedgerDocument>,
       };
@@ -3895,35 +4086,82 @@ async function upsertStructuredAssessmentDailyCreditLedger(input: {
   sql: AssessmentCreditSqlExecutor;
   ledger: AssessmentDailyCreditLedgerDocument;
 }) {
-  await input.sql`
-    INSERT INTO public.assessment_daily_credits (
-      id,
-      owner_uid,
-      day_key,
-      daily_limit,
-      successful_generation_ids,
-      pending_reservations,
-      created_at,
-      updated_at
-    ) VALUES (
-      ${input.ledger.id},
-      ${input.ledger.ownerUid},
-      ${input.ledger.dayKey},
-      ${input.ledger.dailyLimit},
-      ${input.ledger.successfulGenerationIds},
-      ${input.sql.json(input.ledger.pendingReservations as never)},
-      ${input.ledger.createdAt},
-      ${input.ledger.updatedAt}
-    )
-    ON CONFLICT (id)
-    DO UPDATE SET
-      owner_uid = EXCLUDED.owner_uid,
-      day_key = EXCLUDED.day_key,
-      daily_limit = EXCLUDED.daily_limit,
-      successful_generation_ids = EXCLUDED.successful_generation_ids,
-      pending_reservations = EXCLUDED.pending_reservations,
-      updated_at = EXCLUDED.updated_at
-  `;
+  try {
+    await input.sql`
+      INSERT INTO public.assessment_daily_credits (
+        id,
+        owner_uid,
+        day_key,
+        daily_limit,
+        successful_generation_ids,
+        platform_successful_generation_ids,
+        pending_reservations,
+        created_at,
+        updated_at
+      ) VALUES (
+        ${input.ledger.id},
+        ${input.ledger.ownerUid},
+        ${input.ledger.dayKey},
+        ${input.ledger.dailyLimit},
+        ${input.ledger.successfulGenerationIds},
+        ${input.ledger.platformSuccessfulGenerationIds},
+        ${input.sql.json(input.ledger.pendingReservations as never)},
+        ${input.ledger.createdAt},
+        ${input.ledger.updatedAt}
+      )
+      ON CONFLICT (id)
+      DO UPDATE SET
+        owner_uid = EXCLUDED.owner_uid,
+        day_key = EXCLUDED.day_key,
+        daily_limit = EXCLUDED.daily_limit,
+        successful_generation_ids = EXCLUDED.successful_generation_ids,
+        platform_successful_generation_ids = EXCLUDED.platform_successful_generation_ids,
+        pending_reservations = EXCLUDED.pending_reservations,
+        updated_at = EXCLUDED.updated_at
+    `;
+  } catch (error) {
+    if (!isMissingPlatformSuccessfulGenerationIdsColumnError(error)) {
+      throw error;
+    }
+
+    logAssessmentPlatformDailyUsageWarningOnce({
+      key: "missing-platform-successful-generation-ids-column",
+      message:
+        "Structured assessment_daily_credits.platform_successful_generation_ids is missing; using compatibility fallback until migrations 20260419150000 and 20260419160000 are applied.",
+      details: {
+        operation: "upsertStructuredAssessmentDailyCreditLedger",
+      },
+    });
+    await input.sql`
+      INSERT INTO public.assessment_daily_credits (
+        id,
+        owner_uid,
+        day_key,
+        daily_limit,
+        successful_generation_ids,
+        pending_reservations,
+        created_at,
+        updated_at
+      ) VALUES (
+        ${input.ledger.id},
+        ${input.ledger.ownerUid},
+        ${input.ledger.dayKey},
+        ${input.ledger.dailyLimit},
+        ${input.ledger.successfulGenerationIds},
+        ${input.sql.json(input.ledger.pendingReservations as never)},
+        ${input.ledger.createdAt},
+        ${input.ledger.updatedAt}
+      )
+      ON CONFLICT (id)
+      DO UPDATE SET
+        owner_uid = EXCLUDED.owner_uid,
+        day_key = EXCLUDED.day_key,
+        daily_limit = EXCLUDED.daily_limit,
+        successful_generation_ids = EXCLUDED.successful_generation_ids,
+        pending_reservations = EXCLUDED.pending_reservations,
+        updated_at = EXCLUDED.updated_at
+    `;
+  }
 }
 
 async function insertStructuredAssessmentCreditMutation(input: {
@@ -4646,19 +4884,29 @@ async function readAssessmentDailyCreditLedger(input: {
         })
       : null;
 
-    return (
-      pickPreferredAssessmentCreditRecord({
-        structured: structuredLedger,
-        legacy: legacyLedger,
-        fallbackIso: input.nowIso,
-      })
-      ?? normalizeAssessmentDailyCreditLedger({
-        ownerUid: input.ownerUid,
-        dayKey: input.dayKey,
-        record: null,
-        nowIso: input.nowIso,
-      })
-    );
+    const preferredLedger = pickPreferredAssessmentCreditRecord({
+      structured: structuredLedger,
+      legacy: legacyLedger,
+      fallbackIso: input.nowIso,
+    });
+
+    return preferredLedger
+      ? normalizeAssessmentDailyCreditLedger({
+          ownerUid: input.ownerUid,
+          dayKey: input.dayKey,
+          record: mergeAssessmentDailyCreditLedgerPlatformUsageRecord({
+            preferred: preferredLedger,
+            legacy: legacyLedger,
+            structured: structuredLedger,
+          }),
+          nowIso: input.nowIso,
+        })
+      : normalizeAssessmentDailyCreditLedger({
+          ownerUid: input.ownerUid,
+          dayKey: input.dayKey,
+          record: null,
+          nowIso: input.nowIso,
+        });
   }
 
   return normalizeAssessmentDailyCreditLedger({
@@ -4672,11 +4920,7 @@ async function readAssessmentDailyCreditLedger(input: {
 function countSuccessfulAssessmentGenerationsForLedger(
   ledger: Partial<AssessmentDailyCreditLedgerDocument> | null | undefined,
 ) {
-  return Array.isArray(ledger?.successfulGenerationIds)
-    ? ledger.successfulGenerationIds.filter(
-        (value): value is string => typeof value === "string" && value.trim().length > 0,
-      ).length
-    : 0;
+  return readAssessmentPlatformSuccessfulGenerationIds(ledger).length;
 }
 
 function isAssessmentPlatformDailyUsageExemptIdentity(input: {
@@ -4716,7 +4960,34 @@ async function readPlatformDailyConsumedCreditCount(input: {
 
     let owner = ownerCache.get(ownerUid);
     if (owner === undefined) {
-      owner = await getUserByUid(ownerUid);
+      if (!looksLikeSupabaseAuthUid(ownerUid)) {
+        logAssessmentPlatformDailyUsageWarningOnce({
+          key: `invalid-platform-usage-owner:${ownerUid}`,
+          message:
+            "Encountered a malformed assessment daily-credit owner UID while building platform-wide usage; counting the row conservatively until the owner reference is repaired.",
+          details: {
+            dayKey: input.dayKey,
+            ownerUid: summarizeAssessmentPlatformOwnerUidForLogs(ownerUid),
+          },
+        });
+        owner = null;
+      } else {
+        try {
+          owner = await getUserByUid(ownerUid);
+        } catch (error) {
+          logAssessmentPlatformDailyUsageWarningOnce({
+            key: `platform-usage-owner-lookup-failed:${ownerUid}`,
+            message:
+              "Owner lookup failed while building platform-wide daily usage; counting the row conservatively until identity can be resolved again.",
+            details: {
+              dayKey: input.dayKey,
+              ownerUid: summarizeAssessmentPlatformOwnerUidForLogs(ownerUid),
+              errorName: error instanceof Error ? error.name : typeof error,
+            },
+          });
+          owner = null;
+        }
+      }
       ownerCache.set(ownerUid, owner ?? null);
     }
 
@@ -6359,6 +6630,30 @@ function consumeOneExtraCredit(input: {
   };
 }
 
+/* Successful assessment-create responses should echo the same canonical summary contract that the
+   protected header and Assessment Studio later refetch. Re-read once after commit when possible,
+   but keep the in-transaction fallback summary so a degraded post-commit read never turns a
+   durable generation save into a false client-visible failure. */
+async function readCommittedAssessmentCreditsSummaryWithFallback(input: {
+  user: Pick<SessionUser, "uid" | "role">;
+  fallbackSummary: AssessmentDailyCreditsSummary;
+  generationId: string;
+  storageMode: "database" | "memory";
+}) {
+  try {
+    return await getAssessmentDailyCreditsSummaryForUser(input.user);
+  } catch (error) {
+    console.warn("Assessment credit post-commit reread degraded; returning fallback summary.", {
+      generationId: input.generationId,
+      ownerUid: input.user.uid,
+      role: input.user.role,
+      storageMode: input.storageMode,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return input.fallbackSummary;
+  }
+}
+
 /* The final Assessment save and one-credit consumption commit together in one transaction so
    durable success and quota accounting cannot drift apart. */
 export async function saveAssessmentGenerationWithCreditCommit(input: {
@@ -6511,6 +6806,7 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
           .length,
       });
       const successfulGenerationIds = [...ledger.successfulGenerationIds];
+      const platformSuccessfulGenerationIds = [...ledger.platformSuccessfulGenerationIds];
       let nextAccount: AssessmentCreditAccountRecord = {
         ...account,
       };
@@ -6556,11 +6852,18 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
         }
       }
 
+      /* Platform-wide daily usage lock must count successful generations regardless of whether
+         the committed credit source was daily quota or admin-managed extra credits. */
+      if (!platformSuccessfulGenerationIds.includes(normalizedRecord.id)) {
+        platformSuccessfulGenerationIds.push(normalizedRecord.id);
+      }
+
       const nextReservations = activeReservations.filter((entry) => entry.id !== reservation.id);
       const nextLedger: AssessmentDailyCreditLedgerDocument = {
         ...ledger,
         dailyLimit: computation.dailyLimit,
         successfulGenerationIds,
+        platformSuccessfulGenerationIds,
         pendingReservations: nextReservations,
         updatedAt: nowIso,
       };
@@ -6635,7 +6938,12 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
 
     return {
       generation: normalizedRecord,
-      credits: credits!,
+      credits: await readCommittedAssessmentCreditsSummaryWithFallback({
+        user: input.user,
+        fallbackSummary: credits!,
+        generationId: normalizedRecord.id,
+        storageMode: "database",
+      }),
     };
   }
 
@@ -6698,6 +7006,7 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
     extraReservationCount: activeReservations.filter((entry) => entry.source === "extra").length,
   });
   const successfulGenerationIds = [...ledger.successfulGenerationIds];
+  const platformSuccessfulGenerationIds = [...ledger.platformSuccessfulGenerationIds];
   let nextAccount: AssessmentCreditAccountRecord = {
     ...account,
   };
@@ -6742,11 +7051,16 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
     }
   }
 
+  if (!platformSuccessfulGenerationIds.includes(normalizedRecord.id)) {
+    platformSuccessfulGenerationIds.push(normalizedRecord.id);
+  }
+
   const nextReservations = activeReservations.filter((entry) => entry.id !== reservation.id);
   const nextLedger: AssessmentDailyCreditLedgerDocument = {
     ...ledger,
     dailyLimit: computation.dailyLimit,
     successfulGenerationIds,
+    platformSuccessfulGenerationIds,
     pendingReservations: nextReservations,
     updatedAt: nowIso,
   };
@@ -6767,18 +7081,25 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
     });
   }
 
+  const fallbackSummary = buildAssessmentCreditComputation({
+    role: input.user.role,
+    dayKey: reservation.dayKey,
+    resetsAt,
+    ledger: nextLedger,
+    account: nextAccount,
+    grants: nextGrants,
+    dailyReservationCount: nextReservations.filter((entry) => entry.source === "daily").length,
+    extraReservationCount: nextReservations.filter((entry) => entry.source === "extra").length,
+  }).summary;
+
   return {
     generation: normalizedRecord,
-    credits: buildAssessmentCreditComputation({
-      role: input.user.role,
-      dayKey: reservation.dayKey,
-      resetsAt,
-      ledger: nextLedger,
-      account: nextAccount,
-      grants: nextGrants,
-      dailyReservationCount: nextReservations.filter((entry) => entry.source === "daily").length,
-      extraReservationCount: nextReservations.filter((entry) => entry.source === "extra").length,
-    }).summary,
+    credits: await readCommittedAssessmentCreditsSummaryWithFallback({
+      user: input.user,
+      fallbackSummary,
+      generationId: normalizedRecord.id,
+      storageMode: "memory",
+    }),
   };
 }
 
