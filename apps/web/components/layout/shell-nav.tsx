@@ -73,6 +73,8 @@ export function ShellNav({
         return Crown;
       case APP_ROUTES.journey:
         return RouteIcon;
+      case APP_ROUTES.lectureSummary:
+        return RouteIcon;
       case APP_ROUTES.admin:
         return ShieldCheck;
       case APP_ROUTES.adminUsers:
@@ -109,6 +111,9 @@ export function ShellNav({
      /* Journey is a shared informational product page that should remain reachable
        from inside the workspace without forcing users to leave the protected nav model. */
      { href: APP_ROUTES.journey, label: messages.navJourney || "Platform Journey" },
+    /* Keep lecture-summary reachable from the protected sidebar so users can revisit
+       the teaser destination even after dismissing the Home prompt. */
+    { href: APP_ROUTES.lectureSummary, label: "Coming Soon" },
     { href: APP_ROUTES.about, label: messages.navAbout || "About" },
     { href: APP_ROUTES.contact, label: messages.navContact || "Contact" },
     ...(user.role === "admin"

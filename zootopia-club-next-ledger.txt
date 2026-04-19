@@ -3,7 +3,7 @@ ZOOTOPIA CLUB NEXT — PROJECT LEDGER
 Authoritative Encyclopedia & Master Project Memory
 ================================================================================
 
-Last Updated: 2026-04-18 (Full queue/admission/capacity system audit + admin email validation hardening)
+Last Updated: 2026-04-19 (Supabase credit bridge audit + relational backfill hardening)
 Repository: https://github.com/MahdyHQ/zootopia-club-next-no-firebase.git
 Current Commit: 378c7a0063d7de2e3e75cf5d94be3409df64d46b
 Framework: Next.js 16.2.2 (App Router) / React 19.2.4 / TypeScript 5
@@ -69,7 +69,7 @@ Domain Purpose: AI-powered document analysis, assessment generation, and
 2. CURRENT TRUTH SNAPSHOT
 ================================================================================
 
-As of 2026-04-18, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
+As of 2026-04-19, the project is a Next.js 16.2.2 monorepo deployed on Vercel,
 using Supabase as the unified backend provider (Postgres database, Auth, Storage).
 
 Key verified facts:
@@ -192,6 +192,14 @@ Key verified facts:
   legacy compatibility mirror by timestamp instead of trusting only one store,
   which closes the old “log says success but persisted balance stays stale”
   drift risk during the migration bridge
+- Structured credit tables now also have a dedicated historical backfill
+  migration from legacy `zc_entities` credit collections, and mutable credit
+  rows converge by `updated_at` so older account/ledger/grant rows no longer
+  need a future mutation before the relational schema reflects the current
+  owner-scoped truth
+- `assessment_credit_grants` now has an owner/date composite index aligned with
+  the repository read shape (`WHERE owner_uid = ? ORDER BY created_at DESC`)
+  used by owner/admin credit detail surfaces
 - Protected shell and Assessment Studio now share one TanStack Query cache key
   for `/api/assessment/credits`, and the Assessment page/studio no longer seed
   or patch that shared balance cache from page props, mutation responses, or
@@ -3915,6 +3923,85 @@ Runtime proof:
 ────────────────────────────────────────────────────────────────────────────
 
 ROOT REQUEST:
+
+2026-04-19: PROTECTED HOME REFINEMENT — COMING-SOON SIDEBAR LINK + ARABIC VISION CARD STACK
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. The protected `/lecture-summary` page was reachable from Home teaser context,
+   but users who dismissed or missed the teaser did not have a persistent sidebar
+   navigation path to revisit it later.
+2. The protected Home surface did not yet include the requested elegant,
+   vertically stacked, Arabic-first platform-story/community/future-vision cards.
+
+FILES CHANGED:
+- apps/web/components/layout/shell-nav.tsx
+- apps/web/app/(protected)/(completed)/page.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Apply a minimal, backward-compatible protected UI/content refinement that:
+  1) adds a safe persistent sidebar route to `/lecture-summary`, and
+  2) introduces the requested premium Arabic card stack on Home,
+  without changing backend/auth/session/permission/business logic.
+
+TECHNICAL DETAILS:
+1. Protected sidebar link addition
+   - File: `apps/web/components/layout/shell-nav.tsx`
+   - Added icon mapping for `APP_ROUTES.lectureSummary`.
+   - Added protected nav item:
+     `{ href: APP_ROUTES.lectureSummary, label: "Coming Soon" }`
+   - Inserted beside existing informational links to avoid nav clutter and keep
+     a sensible information-architecture position.
+
+2. Protected Home Arabic premium card stack
+   - File: `apps/web/app/(protected)/(completed)/page.tsx`
+   - Added `homeVisionCards` data model with four Arabic-only cards:
+     1) رحلة بناء المنصة
+     2) عايز اسمك وصورتك ورأيك هنا؟
+     3) ادعم تحويل المنصة إلى تطبيق
+     4) عندك فكرة تتمناها في المنصة؟
+   - Added a dedicated Home section (`dir="rtl"`) with a vertical stack layout
+     (`space-y-*`) so cards appear one under another on all breakpoints.
+   - Used expressive Lucide icons + tasteful emoji accents:
+     - Rocket + 🛠️
+     - MessageCircleMore + 🖼️
+     - HandCoins + 📱
+     - Lightbulb + 💡
+   - Preserved existing premium dark/light visual language with translucent
+     surfaces, subtle glow layers, balanced typography, and wrap-safe Arabic text.
+
+PRESERVED INTENTIONALLY:
+- No backend/API/auth/session/permissions/database/business-logic edits.
+- No routing/behavior changes beyond adding a sidebar link to an existing
+  protected route.
+- No redesign of existing Home card architecture outside the new requested section.
+
+VERIFICATION:
+Diagnostics:
+✓ `get_errors` on changed files — PASS (no errors).
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS.
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS.
+
+Code-trace requirement verification:
+✓ Sidebar now includes exact label `Coming Soon` targeting `APP_ROUTES.lectureSummary` (`/lecture-summary`).
+✓ New Home cards are Arabic-only visible content and vertically stacked.
+✓ Icon + emoji treatments are present per card.
+✓ Responsive layout guards remain in place (`min-w-0`, wrap-safe text,
+  adaptive spacing/typography classes) for mobile and desktop behavior.
+
+Runtime note:
+~ No authenticated visual browser session was available in this environment, so
+  sidebar click-through and final visual polish were verified by code trace plus
+  successful lint/type/build/build:vercel.
 - Add a minimal-risk protected teaser for a coming intelligent lecture-summary
   tool, targeted as a first-visit/new-user discovery surface.
 - Add a dedicated protected coming-soon page with Arabic-first visible copy,
@@ -4355,3 +4442,112 @@ RISKS / FOLLOW-UPS:
   password-reset token expiry, and true 3000+ concurrent sign-up traffic still
   requires an environment with production auth secrets, mail delivery, and a
   controlled load harness.
+
+2026-04-19: SUPABASE CREDIT BRIDGE AUDIT + RELATIONAL BACKFILL HARDENING
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE / AUDIT OUTCOME:
+- The live Supabase/Auth.js integration, owner-scoped storage paths, admin
+  credit mutation authority, and owner-scoped credit invalidation delivery were
+  already professionally server-owned in the current codebase.
+- The concrete architecture gap was historical schema drift inside the hybrid
+  credit bridge: older `zc_entities` credit account / daily-ledger / grant /
+  mutation-history rows could remain the only or newer copy until a fresh write
+  touched that owner again.
+- Repository reads already compensated by reconciling legacy and structured
+  state by timestamp, but the relational schema itself could lag behind the
+  effective owner-scoped truth.
+
+FILES CHANGED:
+- supabase/migrations/20260419110000_credit_bridge_relational_backfill.sql
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- Added `supabase/migrations/20260419110000_credit_bridge_relational_backfill.sql`
+
+TECHNICAL DETAILS:
+1. Full credit-bridge relational backfill
+   - Added a new migration that reads legacy `zc_entities` collections:
+     - `assessmentCreditAccounts`
+     - `assessmentDailyCredits`
+     - `assessmentCreditGrants`
+     - `assessmentCreditMutationHistory`
+   - The migration hydrates the canonical relational tables:
+     - `public.assessment_credit_accounts`
+     - `public.assessment_daily_credits`
+     - `public.assessment_credit_grants`
+     - `public.assessment_credit_mutations`
+
+2. Safe convergence rules
+   - Accounts, daily ledgers, and grants now use timestamp-gated upserts:
+     the legacy row can refresh the structured row only when the legacy mirror
+     is newer by `updated_at`.
+   - Mutation history stays append-only and inserts only missing relational rows
+     (`ON CONFLICT DO NOTHING`) because those records are immutable events.
+   - Result: the migration repairs stale structured credit rows without
+     overwriting newer relational truth.
+
+3. Query-shape index hardening
+   - Added `assessment_credit_grants_owner_uid_created_idx` on
+     `public.assessment_credit_grants (owner_uid, created_at DESC)`.
+   - This matches the repository grant-history/admin-detail read path and keeps
+     owner-scoped grant inspection aligned with the actual SQL access pattern.
+
+4. What was intentionally preserved
+   - No auth rewrite.
+   - No Auth.js trust-boundary change.
+   - No client-side authority expansion.
+   - No storage-path redesign.
+   - No RLS weakening.
+   - No removal of legacy mirrors or working hybrid reads.
+   - No unrelated UI or route changes.
+
+AUDIT FINDINGS PRESERVED AS CURRENT REALITY:
+- `apps/web/auth.ts` + `apps/web/lib/server/session.ts` still keep Auth.js as
+  the decisive server trust boundary; Supabase browser auth/session remains a
+  helper path, not the protected-data authority.
+- Owner-scoped document/result/export reads still flow through owner-bound
+  repository loaders plus storage-path assertions, not client-supplied owner ids.
+- Admin credit mutations remain backend-authoritative and self-target mutation
+  remains forbidden.
+- Credit live updates remain invalidation-only private realtime topics
+  (`assessment-credit:owner:{uid}`), not a second client balance truth.
+
+VERIFICATION:
+Code-trace verification:
+✓ Confirmed protected auth/session authority remains
+  `Auth.js cookie -> auth() -> apps/web/lib/server/session.ts -> persisted user`.
+✓ Confirmed admin credit mutation writes still originate in
+  `applyAdminAssessmentCreditMutation(...)` and remain backend-owned.
+✓ Confirmed upload/result/export storage paths remain owner-scoped under
+  `users/{uid}/...` and still require server-side ownership checks.
+✓ Confirmed the new migration is additive and does not remove or bypass the
+  current hybrid compatibility mirrors.
+
+Command verification:
+✓ `npm run supabase:migrations:validate` — PASS
+✓ `npm run supabase:migrations:list` — PASS
+✓ `npm run lint` — PASS
+✓ `npm run typecheck` — PASS
+✓ `npm run build` — PASS
+✓ `npm run build:vercel` — PASS
+
+Runtime verification:
+~ No live Supabase database connection was available in this environment, so the
+  new migration was validated by static review plus migration-order checks, not
+  by execution against a real Supabase instance.
+~ No authenticated multi-user runtime session was available here, so owner-scope
+  isolation, private realtime delivery, admin mutation delivery, and storage
+  artifact access remain code-traced rather than live dual-user proven.
+
+REMAINING RISKS / FOLLOW-UP:
+~ `supabase/migrations/20260410180001_phase1_storage_bucket.sql` still contains
+  the old `zootopia-app` bucket creation while runtime and later migrations use
+  `zootopia-private`; the current app path is correct, but the historical bucket
+  migration remains documented drift and was not deleted without live project
+  inspection.
+~ Because the repository still intentionally reads both legacy and structured
+  credit stores during the migration bridge, complete removal of legacy credit
+  mirrors should wait for live database inspection and a dedicated cleanup pass.
+~ Build logs still show the pre-existing operational warning:
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.

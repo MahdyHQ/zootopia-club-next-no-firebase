@@ -14,6 +14,10 @@ import {
   FileCheck,
   Crown,
   ShieldCheck,
+  Rocket,
+  MessageCircleMore,
+  HandCoins,
+  Lightbulb,
 } from "lucide-react";
 
 import { getRequestUiContext } from "@/lib/server/request-context";
@@ -82,6 +86,45 @@ export default async function HomePage() {
       icon: PieChart,
       color: "text-amber-500",
       bg: "bg-amber-500/10",
+    },
+  ];
+
+  const homeVisionCards = [
+    {
+      key: "platform-build-journey",
+      title: "رحلة بناء المنصة",
+      body: "تم تطوير وبرمجة هذه المنصة خلال شهر كامل من التعب والمجهود والتكلفة، ولولا فضل الله ثم مساعدة أدوات الذكاء الاصطناعي لكان هذا العمل قد امتد إلى تسعة أشهر أو أكثر.",
+      emoji: "🛠️",
+      icon: Rocket,
+      iconTone:
+        "border-cyan-300/35 bg-cyan-500/12 text-cyan-700 dark:border-cyan-400/30 dark:bg-cyan-400/10 dark:text-cyan-200",
+    },
+    {
+      key: "community-voice",
+      title: "عايز اسمك وصورتك ورأيك هنا؟",
+      body: "لو حابب أضيف اسمك وصورتك ورأيك عن المنصة بشكل جميل داخل التجربة، تواصل معي وسأرتب ذلك بإذن الله.",
+      emoji: "🖼️",
+      icon: MessageCircleMore,
+      iconTone:
+        "border-fuchsia-300/35 bg-fuchsia-500/12 text-fuchsia-700 dark:border-fuchsia-400/30 dark:bg-fuchsia-400/10 dark:text-fuchsia-200",
+    },
+    {
+      key: "app-support",
+      title: "ادعم تحويل المنصة إلى تطبيق",
+      body: "إذا كنت ترغب في دعم تحويل فكرة المنصة إلى تطبيق احترافي على أندرويد وآيفون، فتواصلك ودعمك سيساعدان كثيرًا في تحقيق ذلك.",
+      emoji: "📱",
+      icon: HandCoins,
+      iconTone:
+        "border-emerald-300/35 bg-emerald-500/12 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200",
+    },
+    {
+      key: "feature-ideas",
+      title: "عندك فكرة تتمناها في المنصة؟",
+      body: "لو عندك فكرة أو ميزة أو شيء تتمنى وجوده داخل المنصة، راسلني وسأحاول إضافته وتطويره بإذن الله.",
+      emoji: "💡",
+      icon: Lightbulb,
+      iconTone:
+        "border-amber-300/35 bg-amber-500/12 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200",
     },
   ];
 
@@ -368,6 +411,57 @@ export default async function HomePage() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section
+        dir="rtl"
+        className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-white/44 p-5 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/34 md:p-8"
+      >
+        <div className="pointer-events-none absolute -left-20 -top-20 h-56 w-56 rounded-full bg-emerald-400/10 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-24 -right-20 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl" aria-hidden />
+
+        <div className="relative z-10 space-y-4">
+          <div className="space-y-2">
+            <p className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-black tracking-[0.08em] text-emerald-700 dark:border-emerald-300/30 dark:bg-emerald-400/10 dark:text-emerald-200">
+              <span aria-hidden>✨</span>
+              من قلب الرحلة
+            </p>
+            <h2 className="font-[family-name:var(--font-display)] text-2xl font-black tracking-tight text-zinc-900 dark:text-white sm:text-[1.8rem]">
+              محطات تحكي رؤية المنصة والمجتمع
+            </h2>
+          </div>
+
+          {/* Keep these cards vertically stacked to present a calm narrative flow: platform story, community voice, support vision, then feature wishes. */}
+          <div className="space-y-3.5">
+            {homeVisionCards.map((card) => (
+              <article
+                key={card.key}
+                className="rounded-[1.35rem] border border-white/35 bg-white/60 p-4 shadow-[0_16px_34px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-colors dark:border-white/10 dark:bg-zinc-900/45 sm:p-5"
+              >
+                <div className="flex items-start gap-3.5 sm:gap-4">
+                  <div
+                    className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${card.iconTone}`}
+                    aria-hidden
+                  >
+                    <card.icon className="h-5 w-5" />
+                  </div>
+
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300/55 bg-white/70 px-2.5 py-0.5 text-[11px] font-bold text-zinc-700 dark:border-white/20 dark:bg-zinc-950/60 dark:text-zinc-200">
+                      <span aria-hidden>{card.emoji}</span>
+                    </div>
+                    <h3 className="text-lg font-black leading-tight tracking-tight text-zinc-900 dark:text-white sm:text-[1.25rem]">
+                      {card.title}
+                    </h3>
+                    <p className="text-sm leading-7 text-zinc-700 dark:text-zinc-200 sm:text-[0.96rem]">
+                      {card.body}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
