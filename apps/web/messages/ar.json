@@ -67,7 +67,7 @@
   "loginStatusSuspendedTitle": "لا يمكن لهذا الحساب تسجيل الدخول الآن",
   "loginStatusSuspendedBody": "تواصل مع مسؤول المنصة إذا كنت بحاجة إلى المساعدة.",
   "loginStatusInvalidCredentialsTitle": "تحقق من البريد وكلمة المرور",
-  "loginStatusInvalidCredentialsBody": "تعذر التحقق من تركيبة البريد الإلكتروني وكلمة المرور.",
+  "loginStatusInvalidCredentialsBody": "تعذر التحقق من تركيبة البريد الإلكتروني وكلمة المرور. إذا كان البريد صحيحاً، جرّب إعادة تعيين كلمة المرور.",
   "loginStatusBootstrapErrorTitle": "تعذر فتح مساحتك",
   "loginStatusBootstrapErrorBody": "تم استلام تسجيل دخولك، لكن تعذر إنشاء الجلسة الآمنة.",
   "loginStatusNetworkTitle": "تعذر الوصول إلى خدمة الدخول الآمن",

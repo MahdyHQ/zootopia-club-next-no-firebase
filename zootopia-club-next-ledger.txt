@@ -5247,3 +5247,106 @@ PRESERVED INTENTIONALLY:
    redesigned.
 4. Existing UI-only platform lock behavior was preserved.
 5. Existing owner-scoped protections were preserved.
+
+====================================================================================================
+2026-04-19: AUTH LOGIN FORENSIC TRACE - TARGET ACCOUNT PROOF + SUBMIT EMAIL CANONICALIZATION
+====================================================================================================
+
+DATE:
+- 2026-04-19
+
+FILES CHANGED:
+- apps/web/components/auth/login-panel.tsx
+- apps/web/messages/en.json
+- apps/web/messages/ar.json
+
+SUMMARY:
+- Completed a full auth/login forensic investigation for reported sign-in failure on
+  `elmahdyabdulla208@gmail.com`.
+- Confirmed in runtime that the account exists, is email-confirmed, uses password provider,
+  is not banned/suspended, and is not in admin allowlist.
+- Confirmed login admission route accepts this identity as exempt and does not block it.
+- Confirmed provider error shape mapping:
+  - wrong password -> `invalid_credentials`
+  - unconfirmed account -> `email_not_confirmed`
+- Applied a narrow client-side hardening to ensure every submit-time auth step uses a single
+  canonical normalized email (`trim().toLowerCase()`) and updated invalid-credentials copy
+  to include safe password reset guidance.
+
+REASON:
+- Reported user-facing message could be interpreted as either wrong credentials or masked
+  backend state. This pass was required to prove the exact failing layer with runtime evidence,
+  then make only the smallest safe UX/flow hardening change.
+
+TECHNICAL DETAILS:
+1. Root-cause location proof
+   - For the target account in the observed environment, server-side gates were not the blocker:
+     - account exists
+     - email confirmed
+     - provider is password/email
+     - not currently banned
+     - admission accepted with exempt path
+   - This narrows the observed invalid-credentials UI state to provider-stage password
+     verification failure path rather than admission/capacity/admin/confirmation gates.
+
+2. Minimal code hardening
+   - `login-panel.tsx` now computes one canonical `submittedEmail` once per submit.
+   - The same canonical value is used for:
+     - password policy email input
+     - sign-up request
+     - confirmation-route construction
+     - onboarding signup email marker
+     - login admission request
+     - Supabase `signInWithPassword`
+     - capacity-blocked email capture
+     - sign-in confirmation-failure redirect route
+   - This removes subtle submit-path shape drift and keeps provider + server preflight aligned.
+
+3. UX messaging adjustment
+   - `loginStatusInvalidCredentialsBody` (EN/AR) now includes explicit reset-password guidance
+     when email is correct.
+   - No server auth policy, trust boundary, or admission/capacity authority changed.
+
+VERIFICATION:
+Code-traced proof:
+- Confirmed `auth.ts` credentials gate sequence remained intact.
+- Confirmed `auth-failure.ts` normalization + feedback mapping still route
+  `invalid_credentials` and `email_not_confirmed` to distinct user statuses.
+
+Runtime-verified proof:
+- Account-state runtime check for `elmahdyabdulla208@gmail.com`:
+  - found true
+  - isEmailConfirmed true
+  - appProvider email
+  - isBannedNow false
+- Admission preflight runtime check for the same email:
+  - HTTP 200
+  - accepted true
+  - exempt true
+  - reason EXEMPT
+- Provider-shape runtime checks:
+  - wrong-password attempt returned `invalid_credentials`
+  - unconfirmed-account attempt returned `email_not_confirmed`
+- Build pipeline:
+  - `npm run lint --workspace @zootopia/web` - PASS
+  - `npm run typecheck --workspace @zootopia/web` - PASS
+  - `npm run build --workspace @zootopia/web` - PASS
+  - `npm run build:vercel --workspace @zootopia/web` - PASS
+
+NOTES:
+- First local `build` attempt failed with Windows `EBUSY` on `.next/standalone` due stale
+  running standalone server processes. After stopping the locking processes, both `build` and
+  `build:vercel` passed.
+
+REMAINING LIVE-RUNTIME GAP:
+1. The exact user-entered password for the reported account was not provided in this session,
+   so a direct replay with that claimed password could not be performed.
+2. Root-cause certainty therefore is:
+   - high for ruling out server-side account/admission gating in this runtime
+   - not absolute for proving what password was entered on the original failing attempt.
+
+PRESERVED INTENTIONALLY:
+1. Auth.js remained the trust boundary.
+2. Backend authority remained server-side.
+3. Existing admin/exempt/admission/capacity architecture was not redesigned.
+4. Existing confirm-email and reset-password flows were preserved.

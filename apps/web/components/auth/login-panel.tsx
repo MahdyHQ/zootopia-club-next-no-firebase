@@ -973,6 +973,9 @@ export function LoginPanel({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    // Keep the provider request and server preflight on one canonical email shape.
+    const submittedEmail = email.trim().toLowerCase();
+
     logAuthDiagnosis({
       failure: normalizeAuthFailure({
         error: createAuthFlowError("AUTH_UNKNOWN_UPSTREAM_FAILURE", "Credentials were submitted from login panel."),
@@ -988,7 +991,7 @@ export function LoginPanel({
       return;
     }
 
-    if (!email.trim() || !password) {
+    if (!submittedEmail || !password) {
       return;
     }
 
@@ -1005,7 +1008,7 @@ export function LoginPanel({
     if (mode === "sign_up") {
       const passwordPolicy = validateUserPasswordPolicy({
         password,
-        email: email.trim(),
+        email: submittedEmail,
       });
 
       if (!passwordPolicy.ok) {
@@ -1049,7 +1052,7 @@ export function LoginPanel({
 
       if (mode === "sign_up") {
         const signupResult = await requestSignup({
-          email: email.trim(),
+          email: submittedEmail,
           password,
         });
 
@@ -1057,7 +1060,7 @@ export function LoginPanel({
           /* Supabase sign-up may intentionally omit a session until email confirmation is complete.
              Route the user to the dedicated confirmation surface instead of mislabeling this as a refresh/session bug. */
           const confirmRoute = signupResult.confirmRoute || buildConfirmEmailRoute({
-            email: email.trim(),
+            email: submittedEmail,
             flow: "sign_up",
             fromRoute: APP_ROUTES.login,
           });
@@ -1081,7 +1084,7 @@ export function LoginPanel({
             title: localText.signUpTab,
             body: localText.emailVerificationRequired,
           });
-          setOnboardingSignupEmail(email.trim().toLowerCase());
+          setOnboardingSignupEmail(submittedEmail);
           setMode("sign_in");
           setConfirmPassword("");
           router.push(confirmRoute);
@@ -1113,7 +1116,7 @@ export function LoginPanel({
       }
 
       try {
-        await requestLoginAdmission(email.trim());
+        await requestLoginAdmission(submittedEmail);
       } catch (admissionError) {
         const admissionCode =
           readRawFailureCode(admissionError)
@@ -1132,7 +1135,7 @@ export function LoginPanel({
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: submittedEmail,
         password,
       });
 
@@ -1169,7 +1172,7 @@ export function LoginPanel({
       const rawAuthCode = readRawFailureCode(nextError) ?? getAuthFlowErrorCode(nextError);
 
       if ((mode === "sign_in" || mode === "sign_up") && rawAuthCode === "AUTH_ACTIVE_USER_CAPACITY_FULL") {
-        const blockedEmail = email.trim().toLowerCase();
+        const blockedEmail = submittedEmail;
         const isSignupOnboardingCapacity = mode === "sign_up";
         const isOnboardingBlockedEmail =
           isSignupOnboardingCapacity
@@ -1246,11 +1249,11 @@ export function LoginPanel({
         sessionCreationAttempted: true,
       });
 
-      if (isEmailConfirmationFailure(failure) && email.trim().length > 0) {
+      if (isEmailConfirmationFailure(failure) && submittedEmail.length > 0) {
         /* When provider/auth traces point to unconfirmed email, preserve diagnosis fidelity by
            redirecting to confirmation guidance instead of showing generic session refresh messaging. */
         const confirmRoute = buildConfirmEmailRoute({
-          email: email.trim(),
+          email: submittedEmail,
           flow: "sign_in",
           fromRoute: APP_ROUTES.login,
         });

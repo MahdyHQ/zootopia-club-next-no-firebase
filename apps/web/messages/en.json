@@ -67,7 +67,7 @@
   "loginStatusSuspendedTitle": "This account can’t sign in right now",
   "loginStatusSuspendedBody": "Please contact the platform administrator if you need help.",
   "loginStatusInvalidCredentialsTitle": "Check your email and password",
-  "loginStatusInvalidCredentialsBody": "We couldn’t verify this email/password combination.",
+  "loginStatusInvalidCredentialsBody": "We couldn’t verify this email/password combination. If the email is correct, try resetting your password.",
   "loginStatusBootstrapErrorTitle": "We couldn’t open your workspace",
   "loginStatusBootstrapErrorBody": "Your sign-in was received, but the secure session could not be created.",
   "loginStatusNetworkTitle": "We couldn’t reach secure sign-in",
