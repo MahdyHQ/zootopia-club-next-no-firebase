@@ -1941,10 +1941,10 @@ export function AssessmentStudio({
 
                     <div className="flex">
                       <Link
-                        href={APP_ROUTES.globalCredits}
+                        href={APP_ROUTES.assessmentCreditDetails}
                         className="inline-flex items-center rounded-xl border border-border bg-background-elevated/70 px-3 py-2 text-xs font-semibold text-foreground transition hover:border-emerald-500/30 hover:text-emerald-700 dark:hover:text-emerald-200"
                       >
-                        {messages.globalCreditsOpenDetailsAction ?? messages.assessmentCreditsOpenDetailsAction}
+                        {messages.assessmentCreditsOpenDetailsAction ?? messages.globalCreditsOpenDetailsAction}
                       </Link>
                     </div>
                   </div>

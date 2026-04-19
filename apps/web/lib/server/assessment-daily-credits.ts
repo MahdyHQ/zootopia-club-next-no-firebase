@@ -15,7 +15,10 @@ export const ASSESSMENT_DAILY_SUCCESS_LIMIT_ENV_KEY =
   "ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS";
 export const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_ENV_KEY =
   "ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS";
-export const PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_ENV_KEY =
+/* The env key keeps its deployed "platform global" name for compatibility, but the current
+   aggregate is still assessment-scoped: it counts successful assessment generations across
+   all assessment credit sources, not all tools in the product. */
+export const ASSESSMENT_PLATFORM_DAILY_USAGE_LIMIT_ENV_KEY =
   "ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT";
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MIN = 1;
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MAX = 1000;
@@ -111,11 +114,11 @@ export function getAssessmentCreditRenewalWindowHours() {
 
 export function getPlatformGlobalDailyCreditLimit() {
   return parsePositiveIntegerEnv({
-    raw: process.env[PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_ENV_KEY],
+    raw: process.env[ASSESSMENT_PLATFORM_DAILY_USAGE_LIMIT_ENV_KEY],
     fallback: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_FALLBACK,
     min: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MIN,
     max: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MAX,
-    envKey: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_ENV_KEY,
+    envKey: ASSESSMENT_PLATFORM_DAILY_USAGE_LIMIT_ENV_KEY,
     logPrefix: "assessment-daily-credits",
   });
 }

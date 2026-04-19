@@ -95,6 +95,10 @@ export interface AdminUserAssessmentCreditsResponse {
   state: AdminAssessmentCreditState;
 }
 
+/* This owner-facing details payload still lives beside admin credit types because the richer
+   history/grant records are shared with admin mutation views. Future refactors may move it into
+   a dedicated assessment-credit file, but keep the contract assessment-scoped rather than
+   rebranding it as a generic platform-wallet response before cross-tool crediting exists. */
 export interface AssessmentCreditDetailsResponse {
   account: AssessmentCreditAccountRecord;
   credits: AssessmentDailyCreditsSummary;

@@ -5098,3 +5098,152 @@ PRESERVED INTENTIONALLY:
 4. Existing active normal-user admission architecture was not redesigned.
 5. Existing per-user daily credit logic was not broadened or weakened.
 6. Admin boundaries and owner-scoped protections were preserved.
+
+====================================================================================================
+2026-04-19: CREDIT ARCHITECTURE AUDIT — ASSESSMENT-ONLY TRUTH + NAMING REALIGNMENT
+====================================================================================================
+
+DATE:
+- 2026-04-19
+
+FILES CHANGED:
+- .env.example
+- apps/web/app/(protected)/(completed)/assessment/credits/page.tsx
+- apps/web/app/(protected)/(completed)/credits/page.tsx
+- apps/web/app/api/assessment/credits/details/route.ts
+- apps/web/app/api/assessment/credits/page-unlock/route.ts
+- apps/web/components/assessment/assessment-studio.tsx
+- apps/web/components/assessment/global-credit-details-panel.tsx
+- apps/web/components/assessment/global-credits-unlock-gate.tsx
+- apps/web/components/layout/protected-shell.tsx
+- apps/web/components/layout/shell-nav.tsx
+- apps/web/lib/server/assessment-credit-page-lock.ts
+- apps/web/lib/server/assessment-daily-credits.ts
+- apps/web/lib/server/global-credit-page-lock.ts
+- apps/web/lib/server/password-gate-runtime.ts
+- apps/web/lib/server/repository.ts
+- apps/web/lib/site-content.ts
+- apps/web/messages/ar.json
+- apps/web/messages/en.json
+- packages/shared-config/src/routes.ts
+- packages/shared-types/src/admin.ts
+
+SUMMARY:
+- Completed a code-traced audit of all currently active tool execution paths.
+- Confirmed the platform does NOT yet have a true centralized cross-tool credit/accounting layer.
+- Confirmed the current strong, transaction-backed credit truth is assessment-specific:
+  `assessment_credit_accounts`, `assessment_credit_grants`,
+  `assessment_daily_credits`, `assessment_credit_mutations`, and the
+  `/api/assessment` reserve/commit path.
+- Confirmed the current platform-wide aggregate is cross-user but still
+  assessment-only in practice. It aggregates successful assessment generations
+  across assessment credit sources, not across all tools.
+- Applied a narrow hardening pass so route/module names, UI labels, and env
+  documentation stop overstating the current domain as a generic platform wallet.
+
+REASON:
+- The audit surfaced real architectural drift between code truth and naming.
+- `/credits`, its password gate, and multiple UI labels implied a global
+  cross-tool balance even though the backing system is still assessment-scoped.
+- A full generic wallet/grants rewrite would be materially larger and riskier
+  than this task allowed. The safe move here was to preserve the working
+  assessment-credit engine and make the current boundary explicit.
+
+TECHNICAL DETAILS:
+1. Cross-tool truth audit
+   - Assessment generation is still the only route that reserves, releases, and
+     commits credits (`/api/assessment` -> repository reserve/commit helpers).
+   - Uploads do not consume credits; they only read the server-owned assessment
+     credit summary for the UI-only platform-capacity lock.
+   - Infographic generation writes tool history only and does not enter the
+     assessment credit ledger.
+   - Assessment export/readback routes do not consume credits.
+
+2. Per-user global credit layer conclusion
+   - There is one canonical per-user credit/accounting layer today, but it is
+     assessment-only rather than product-global.
+   - Balance, grants, mutation history, and daily usage are all derived from the
+     assessment credit subsystem, not from a shared cross-tool wallet.
+
+3. Platform-wide aggregate conclusion
+   - The current aggregate remains assessment-only.
+   - `readAssessmentPlatformDailyConsumedCreditCount(...)` now uses an explicit
+     assessment-scoped name so future agents do not mistake it for a true
+     product-wide meter.
+   - `ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT` remains the deployed env key,
+     but comments now explicitly say it governs the current assessment-credit
+     aggregate only.
+
+4. Naming and file-role realignment
+   - Added `APP_ROUTES.assessmentCreditDetails` as the explicit canonical route
+     alias for `/credits`, while preserving `APP_ROUTES.globalCredits` as a
+     compatibility alias.
+   - Added `apps/web/lib/server/assessment-credit-page-lock.ts` as the explicit
+     import surface for the `/credits` password gate while preserving the legacy
+     env/cookie contract in `global-credit-page-lock.ts`.
+   - Updated route imports and comments to prefer assessment-specific names.
+   - Updated English/Arabic copy, nav labels, and header labels from “global
+     credits / platform balance” to “assessment credits”.
+   - Added comments in shared files where older names are preserved only for
+     compatibility and should not be mistaken for a cross-tool wallet.
+
+5. Data-model / migration conclusion
+   - No migration was added in this pass.
+   - The schema remains sufficient for the current assessment-credit domain.
+   - It is not yet a sufficient generic cross-tool wallet schema because there
+     is still no shared product-wide credit account/grant/usage event table that
+     all tools write to.
+
+SMALLEST SAFE PATH TO TRUE CENTRALIZATION:
+1. Add a generic server-owned credit/usage domain separate from the
+   assessment-specific one.
+2. Require each credit-consuming tool to write into that same shared domain.
+3. Derive platform-wide totals from the shared cross-tool domain rather than the
+   assessment ledger only.
+4. Preserve the current assessment tables as the assessment-specific subdomain
+   or bridge them into the new generic model incrementally.
+
+RISKS / FOLLOW-UP:
+1. The code is now more honest about current scope, but the runtime still does
+   not provide a true cross-tool wallet.
+2. Future centralization should be additive and server-authoritative; do not
+   rebrand the current assessment tables as generic platform credits.
+3. The legacy env names `ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT`,
+   `ZOOTOPIA_GLOBAL_CREDIT_PAGE_LOCK_ENABLED`, and
+   `ZOOTOPIA_GLOBAL_CREDIT_PAGE_PASSWORD` remain deployed compatibility
+   contracts. They are documented more clearly, but not renamed.
+
+VERIFICATION:
+Code-traced proof:
+✓ Confirmed only assessment generation writes the credit ledger/account truth.
+✓ Confirmed uploads, infographic, and export/readback flows bypass credit
+  accounting today.
+✓ Confirmed per-user credit balance/history remain assessment-specific.
+✓ Confirmed platform aggregate remains assessment-only and cross-user, not
+  cross-tool.
+
+Runtime-verified proof:
+✓ `npm run lint:web` — PASS
+✓ `npm run typecheck:web` — PASS
+✓ `npm run supabase:migrations:validate` — PASS
+✓ `npm run build:web` — PASS
+✓ `npm run build:vercel` — PASS
+✓ Production-style standalone boot verification:
+  - `node .next/standalone/server.js` booted successfully on port `3102`
+  - `GET /api/health` returned `200 OK`
+  - `GET /credits` returned `307 Temporary Redirect` to `/login`, confirming the
+    protected route remained live after the route/module alias changes
+
+REMAINING LIVE-RUNTIME GAP:
+1. No authenticated test credentials were available in this environment, so the
+   updated assessment-credits labels on the protected `/credits` screen were
+   verified by code trace + successful production builds rather than an
+   end-to-end signed-in clickthrough.
+
+PRESERVED INTENTIONALLY:
+1. Auth.js stayed the trust boundary.
+2. Backend authority stayed on the backend.
+3. Existing assessment credit math and admin mutation behavior were not
+   redesigned.
+4. Existing UI-only platform lock behavior was preserved.
+5. Existing owner-scoped protections were preserved.

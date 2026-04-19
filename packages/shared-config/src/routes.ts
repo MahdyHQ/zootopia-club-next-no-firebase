@@ -14,6 +14,10 @@ export const APP_ROUTES = {
   hallOfHonor: "/hall-of-honor",
   upload: "/upload",
   history: "/history",
+  assessmentCreditDetails: "/credits",
+  /* `/credits` is the canonical owner-facing assessment credits surface.
+     Keep the legacy `globalCredits` alias until older imports/bookmarks are fully retired,
+     but prefer `assessmentCreditDetails` in new code so route ownership stays explicit. */
   globalCredits: "/credits",
   assessment: "/assessment",
   assessmentCredits: "/assessment/credits",

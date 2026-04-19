@@ -23,6 +23,10 @@ const GLOBAL_CREDIT_PAGE_PASSWORD_ENV_KEY =
 const GLOBAL_CREDIT_PAGE_UNLOCK_COOKIE_NAME = "zootopia_global_credit_unlock";
 const GLOBAL_CREDIT_PAGE_UNLOCK_TOKEN_VERSION = 1;
 
+/* These env/cookie identifiers keep their older "global credit page" names for compatibility,
+   but the guarded surface is the owner-scoped assessment credits page at `/credits`. Avoid
+   introducing new runtime contracts that imply this gate protects a true cross-tool wallet. */
+
 type GlobalCreditPageUnlockPayload = {
   v: number;
   uid: string;
@@ -232,8 +236,9 @@ export function buildGlobalCreditPageUnlockCookieValueForUser(userUid: string) {
     return null;
   }
 
-  /* Global credits gate unlock is session-scoped and user-bound. Keeping the password fingerprint
-     in the signed payload ensures env password rotations revoke previous unlock cookies instantly. */
+  /* The assessment credits page unlock is session-scoped and user-bound. Keeping the password
+     fingerprint in the signed payload ensures env password rotations revoke previous unlock
+     cookies instantly. */
   return signUnlockPayload(
     {
       v: GLOBAL_CREDIT_PAGE_UNLOCK_TOKEN_VERSION,

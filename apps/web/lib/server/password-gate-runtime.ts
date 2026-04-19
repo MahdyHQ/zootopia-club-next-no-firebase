@@ -43,7 +43,7 @@ function dedupeStrings(values: string[]) {
   return [...new Set(values)];
 }
 
-/* Assessment prompt unlock and global credits page unlock both depend on env-backed
+/* Assessment prompt unlock and the legacy-named assessment credits page unlock both depend on env-backed
    passwords entered by operators through local files and dashboard forms. We trim
    surrounding whitespace and tolerate one accidental wrapping quote pair so copied
    Vercel-style values like `"secret"` do not falsely reject the intended password.

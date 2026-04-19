@@ -3,15 +3,15 @@ import { WalletCards } from "lucide-react";
 
 import { GlobalCreditsUnlockGate } from "@/components/assessment/global-credits-unlock-gate";
 import { getRequestUiContext } from "@/lib/server/request-context";
-import { getGlobalCreditPageAccessStateForUser } from "@/lib/server/global-credit-page-lock";
+import { getAssessmentCreditPageAccessStateForUser } from "@/lib/server/assessment-credit-page-lock";
 import { requireCompletedUser } from "@/lib/server/session";
 
 export default async function CreditsPage() {
   const [user, uiContext] = await Promise.all([
-    requireCompletedUser(APP_ROUTES.globalCredits),
+    requireCompletedUser(APP_ROUTES.assessmentCreditDetails),
     getRequestUiContext(),
   ]);
-  const initialAccess = await getGlobalCreditPageAccessStateForUser({
+  const initialAccess = await getAssessmentCreditPageAccessStateForUser({
     uid: user.uid,
     role: user.role,
   });
@@ -26,12 +26,12 @@ export default async function CreditsPage() {
           <div className="mb-4 flex items-center gap-3">
             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-200">
               <WalletCards className="h-3.5 w-3.5" />
-              {uiContext.messages.globalCreditsPageTitle}
+              {uiContext.messages.assessmentCreditsPageTitle}
             </span>
           </div>
 
           <h1 className="page-title max-w-3xl text-balance text-zinc-900 dark:text-white">
-            {uiContext.messages.globalCreditsPageSubtitle}
+            {uiContext.messages.assessmentCreditsPageSubtitle}
           </h1>
         </div>
       </section>

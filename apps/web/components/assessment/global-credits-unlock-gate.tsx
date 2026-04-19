@@ -28,9 +28,9 @@ function getGlobalCreditsGateCopy(locale: Locale) {
     ? {
         title: "هذه الصفحة محمية بكلمة مرور المطوّر",
         body:
-          "للاطلاع على صفحة الرصيد العام لهذا الحساب، أدخل كلمة المرور التي يحددها المطوّر من إعدادات البيئة.",
+          "لفتح صفحة اعتمادات التقييم لهذا الحساب، أدخل كلمة المرور التي يحددها المطوّر من إعدادات البيئة.",
         passwordLabel: "كلمة المرور",
-        passwordPlaceholder: "أدخل كلمة مرور صفحة الرصيد العام",
+        passwordPlaceholder: "أدخل كلمة مرور صفحة اعتمادات التقييم",
         showPassword: "إظهار كلمة المرور",
         hidePassword: "إخفاء كلمة المرور",
         unlockAction: "فتح الصفحة",
@@ -39,7 +39,7 @@ function getGlobalCreditsGateCopy(locale: Locale) {
         invalidPassword: "كلمة المرور غير صحيحة.",
         signInRequired: "يجب تسجيل الدخول أولاً لفتح هذه الصفحة.",
         profileIncomplete:
-          "أكمل إعداد ملفك الشخصي أولاً قبل فتح صفحة الرصيد العام.",
+          "أكمل إعداد ملفك الشخصي أولاً قبل فتح صفحة اعتمادات التقييم.",
         misconfigured:
           "تعذر فتح الصفحة حالياً بسبب إعداد داخلي في الخادم. تواصل مع المطوّر.",
         unlockExpired:
@@ -49,9 +49,9 @@ function getGlobalCreditsGateCopy(locale: Locale) {
     : {
         title: "This page is protected by a developer password",
         body:
-          "Enter the env-configured password to open this account's global credit page.",
+          "Enter the env-configured password to open this account's assessment credits page.",
         passwordLabel: "Password",
-        passwordPlaceholder: "Enter global credit page password",
+        passwordPlaceholder: "Enter assessment credits page password",
         showPassword: "Show password",
         hidePassword: "Hide password",
         unlockAction: "Unlock page",
@@ -60,9 +60,9 @@ function getGlobalCreditsGateCopy(locale: Locale) {
         invalidPassword: "Invalid password.",
         signInRequired: "Sign in is required before opening this page.",
         profileIncomplete:
-          "Complete your profile before opening the global credits page.",
+          "Complete your profile before opening the assessment credits page.",
         misconfigured:
-          "The global credit page lock is currently misconfigured on the server.",
+          "The assessment credits page lock is currently misconfigured on the server.",
         unlockExpired:
           "The page unlock expired or was not persisted on the server yet. Enter the password again.",
         genericFailure: "Unable to unlock this page right now. Please try again.",

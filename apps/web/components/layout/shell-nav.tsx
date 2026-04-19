@@ -58,6 +58,7 @@ export function ShellNav({
         return Activity;
       case APP_ROUTES.assessment:
         return FileText;
+      case APP_ROUTES.assessmentCreditDetails:
       case APP_ROUTES.assessmentCredits:
       case APP_ROUTES.globalCredits:
         return WalletCards;
@@ -92,8 +93,11 @@ export function ShellNav({
           { href: APP_ROUTES.history, label: messages.navHistory || "History" },
           { href: APP_ROUTES.assessment, label: messages.navAssessment || "AI Assessment" },
           {
-            href: APP_ROUTES.globalCredits,
-            label: messages.navGlobalCredits || messages.navAssessmentCredits || "Global Credits",
+            href: APP_ROUTES.assessmentCreditDetails,
+            label:
+              messages.navAssessmentCredits
+              || messages.navGlobalCredits
+              || "Assessment credits",
           },
           {
             href: APP_ROUTES.infographic,

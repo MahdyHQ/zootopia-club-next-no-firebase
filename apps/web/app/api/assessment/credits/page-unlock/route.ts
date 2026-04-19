@@ -7,22 +7,22 @@ import {
   logAssessmentCreditDiagnostic,
 } from "@/lib/server/assessment-credit-diagnostics";
 import {
-  buildGlobalCreditPageUnlockCookieValueForUser,
-  getGlobalCreditPageLockRuntimeState,
-  getGlobalCreditPageUnlockCookieName,
-  getGlobalCreditPageUnlockCookieOptions,
-  isGlobalCreditPagePasswordValid,
-} from "@/lib/server/global-credit-page-lock";
+  buildAssessmentCreditPageUnlockCookieValueForUser,
+  getAssessmentCreditPageLockRuntimeState,
+  getAssessmentCreditPageUnlockCookieName,
+  getAssessmentCreditPageUnlockCookieOptions,
+  isAssessmentCreditPagePasswordValid,
+} from "@/lib/server/assessment-credit-page-lock";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
 export const runtime = "nodejs";
 
-type GlobalCreditPageUnlockResponse = {
+type AssessmentCreditPageUnlockResponse = {
   unlocked: boolean;
   lockEnabled: boolean;
 };
 
-type GlobalCreditPageUnlockRequest = {
+type AssessmentCreditPageUnlockRequest = {
   password?: string;
 };
 
@@ -34,7 +34,7 @@ function buildPasswordRequiredFieldError() {
   return fieldErrors;
 }
 
-function clearGlobalCreditUnlockCookie(response: {
+function clearAssessmentCreditUnlockCookie(response: {
   cookies: {
     set: (
       name: string,
@@ -43,8 +43,8 @@ function clearGlobalCreditUnlockCookie(response: {
     ) => unknown;
   };
 }) {
-  response.cookies.set(getGlobalCreditPageUnlockCookieName(), "", {
-    ...getGlobalCreditPageUnlockCookieOptions(0),
+  response.cookies.set(getAssessmentCreditPageUnlockCookieName(), "", {
+    ...getAssessmentCreditPageUnlockCookieOptions(0),
     maxAge: 0,
   });
 }
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   const user = await getAuthenticatedSessionUser();
   if (!user) {
     return applyNoStore(
-      apiError("UNAUTHENTICATED", "Sign in is required for global credits.", 401),
+      apiError("UNAUTHENTICATED", "Sign in is required for assessment credits.", 401),
     );
   }
 
@@ -62,13 +62,13 @@ export async function POST(request: Request) {
     return applyNoStore(
       apiError(
         "PROFILE_INCOMPLETE",
-        "Complete your profile in Settings before opening global credits.",
+        "Complete your profile in Settings before opening assessment credits.",
         403,
       ),
     );
   }
 
-  const lockRuntime = getGlobalCreditPageLockRuntimeState();
+  const lockRuntime = getAssessmentCreditPageLockRuntimeState();
   logAssessmentCreditDiagnostic({
     event: "assessment_global_credits_unlock_requested",
     traceId,
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
 
   if (user.role === "admin") {
     return applyNoStore(
-      apiSuccess<GlobalCreditPageUnlockResponse>({
+      apiSuccess<AssessmentCreditPageUnlockResponse>({
         unlocked: true,
         lockEnabled: lockRuntime.lockEnabled,
       }),
@@ -95,12 +95,12 @@ export async function POST(request: Request) {
 
   if (!lockRuntime.lockEnabled) {
     const response = applyNoStore(
-      apiSuccess<GlobalCreditPageUnlockResponse>({
+      apiSuccess<AssessmentCreditPageUnlockResponse>({
         unlocked: true,
         lockEnabled: false,
       }),
     );
-    clearGlobalCreditUnlockCookie(response);
+    clearAssessmentCreditUnlockCookie(response);
     return response;
   }
 
@@ -122,15 +122,15 @@ export async function POST(request: Request) {
     return applyNoStore(
       apiError(
         "GLOBAL_CREDIT_PAGE_LOCK_MISCONFIGURED",
-        "Global credit page lock is misconfigured on the server.",
+        "Assessment credits page lock is misconfigured on the server.",
         503,
       ),
     );
   }
 
-  let body: GlobalCreditPageUnlockRequest;
+  let body: AssessmentCreditPageUnlockRequest;
   try {
-    body = (await request.json()) as GlobalCreditPageUnlockRequest;
+    body = (await request.json()) as AssessmentCreditPageUnlockRequest;
   } catch {
     return applyNoStore(
       apiError("INVALID_JSON", "Request body must be valid JSON.", 400),
@@ -142,14 +142,14 @@ export async function POST(request: Request) {
     return applyNoStore(
       apiError(
         "GLOBAL_CREDIT_PAGE_UNLOCK_PASSWORD_REQUIRED",
-        "Password is required to open the global credit page.",
+        "Password is required to open the assessment credits page.",
         400,
         buildPasswordRequiredFieldError(),
       ),
     );
   }
 
-  if (!isGlobalCreditPagePasswordValid(password)) {
+  if (!isAssessmentCreditPagePasswordValid(password)) {
     logAssessmentCreditDiagnostic({
       event: "assessment_global_credits_unlock_invalid_password",
       level: "warn",
@@ -166,33 +166,33 @@ export async function POST(request: Request) {
     return applyNoStore(
       apiError(
         "GLOBAL_CREDIT_PAGE_UNLOCK_INVALID_PASSWORD",
-        "The provided global credit page password is invalid.",
+        "The provided assessment credits page password is invalid.",
         403,
       ),
     );
   }
 
-  const unlockCookieValue = buildGlobalCreditPageUnlockCookieValueForUser(user.uid);
+  const unlockCookieValue = buildAssessmentCreditPageUnlockCookieValueForUser(user.uid);
   if (!unlockCookieValue) {
     return applyNoStore(
       apiError(
         "GLOBAL_CREDIT_PAGE_LOCK_MISCONFIGURED",
-        "Global credit page lock is misconfigured on the server.",
+        "Assessment credits page lock is misconfigured on the server.",
         503,
       ),
     );
   }
 
   const response = applyNoStore(
-    apiSuccess<GlobalCreditPageUnlockResponse>({
+    apiSuccess<AssessmentCreditPageUnlockResponse>({
       unlocked: true,
       lockEnabled: true,
     }),
   );
   response.cookies.set(
-    getGlobalCreditPageUnlockCookieName(),
+    getAssessmentCreditPageUnlockCookieName(),
     unlockCookieValue,
-    getGlobalCreditPageUnlockCookieOptions(lockRuntime.cookieMaxAgeSeconds),
+    getAssessmentCreditPageUnlockCookieOptions(lockRuntime.cookieMaxAgeSeconds),
   );
 
   logAssessmentCreditDiagnostic({

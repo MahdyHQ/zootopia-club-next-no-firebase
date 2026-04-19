@@ -4934,7 +4934,7 @@ function isAssessmentPlatformDailyUsageExemptIdentity(input: {
   return isActiveNormalUserExemptEmail(input.email);
 }
 
-async function readPlatformDailyConsumedCreditCount(input: {
+async function readAssessmentPlatformDailyConsumedCreditCount(input: {
   dayKey: string;
   nowIso: string;
 }) {
@@ -5024,7 +5024,7 @@ async function buildAssessmentPlatformDailyUsageForUser(input: {
           role: input.user.role,
         })
       : getUserByUid(input.user.uid),
-    readPlatformDailyConsumedCreditCount({
+    readAssessmentPlatformDailyConsumedCreditCount({
       dayKey: input.creditWindow.dayKey,
       nowIso: input.nowIso,
     }),
