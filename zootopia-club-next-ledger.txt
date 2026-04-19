@@ -4625,3 +4625,53 @@ REMAINING RISKS / FOLLOW-UP:
   mirrors should wait for live database inspection and a dedicated cleanup pass.
 ~ Build logs still show the pre-existing operational warning:
   `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
+
+2026-04-19: PROTECTED HOME ORDER REFINEMENT (VISION SECTION DIRECTLY AFTER TOP SCROLL STRIP)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE / UX ORDERING REQUEST:
+- The protected Home page already had both requested premium sections:
+  1) the top Arabic scroll-guidance strip
+  2) the Arabic narrative card stack titled:
+     `محطات تحكي رؤية المنصة والمجتمع`
+- The narrative stack was still positioned lower in the page flow (after the
+  workspace snapshot block), while the requested composition required it to
+  appear immediately under the top strip.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/page.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+TECHNICAL DETAILS:
+1. Pure render-order move in protected Home composition
+   - Moved the existing `محطات تحكي رؤية المنصة والمجتمع` section JSX block to
+     render directly after the top scroll-guidance strip section.
+   - Removed the original later occurrence to keep a single source of rendered
+     content and avoid duplication.
+
+2. Guaranteed non-functional surface
+   - Preserved all existing card data and mapping (`homeVisionCards`), Arabic
+     copy, icon/emoji accents, gradients, spacing, and dark/light classes.
+   - No edits to backend, auth, session, admission, permissions, routes,
+     storage, credits, or business logic.
+
+3. Visual intent after reorder
+   - New top flow in protected Home is now:
+     top scroll-guidance strip -> narrative vision cards -> unified hero ->
+     workspace snapshot -> upload/trust footer.
+
+VERIFICATION:
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS.
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS.
+
+Runtime notes:
+~ Build logs still include the pre-existing operational warning:
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
+~ Warning is unchanged by this render-order-only UI adjustment.
