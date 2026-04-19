@@ -134,4 +134,24 @@ export interface UserDocument {
 export interface UpdateUserProfileResponse {
   user: UserDocument;
   redirectTo: string;
+  completionTransition: ProfileCompletionTransition | null;
+}
+
+export interface ProfileCompletionCapacitySnapshot {
+  activeNormalUsers: number;
+  maxActiveNormalUsers: number;
+  sessionMinutes: number;
+  availableSlots: number;
+  isFull: boolean;
+}
+
+export type ProfileCompletionAdmissionState =
+  | "capacity_available"
+  | "capacity_full"
+  | "admission_unavailable";
+
+export interface ProfileCompletionTransition {
+  becameEligible: boolean;
+  admissionState: ProfileCompletionAdmissionState;
+  capacity: ProfileCompletionCapacitySnapshot | null;
 }

@@ -228,6 +228,26 @@ function isExemptIdentity(input: {
   return isExemptEmail(input.email, input.config);
 }
 
+export function shouldApplyActiveNormalUserCapacity(input: {
+  role: UserRole;
+  email: string | null;
+  profileCompleted: boolean;
+}) {
+  /* Active normal-user capacity starts only after the required user profile is complete.
+     This keeps first-time onboarding outside the seat counter until the server-owned
+     profile gate has been satisfied, while admin/exempt identities remain excluded. */
+  if (!input.profileCompleted) {
+    return false;
+  }
+
+  const config = getActiveNormalUserAdmissionConfig();
+  return !isExemptIdentity({
+    role: input.role,
+    email: input.email,
+    config,
+  });
+}
+
 async function acquireCapacityLock(sql: ReturnType<typeof getZootopiaSql>) {
   await sql`SELECT pg_advisory_xact_lock(${ACTIVE_NORMAL_USER_CAPACITY_ADVISORY_LOCK_KEY})`;
 }

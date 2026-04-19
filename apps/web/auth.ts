@@ -15,6 +15,7 @@ import {
   buildActiveNormalUserCapacityFullMessage,
   releaseActiveNormalUserSessionLease,
   reserveOrRenewActiveNormalUserSessionLease,
+  shouldApplyActiveNormalUserCapacity,
 } from "@/lib/server/active-normal-user-session-governance";
 import {
   getDecodedSignInProvider,
@@ -759,6 +760,11 @@ async function authorizeUserCredentials(
       status: user.status,
     });
 
+    const normalizedProfileCompleted = normalizeSignedInProfileState({
+      role: user.role,
+      profileCompleted: !isProfileCompletionRequired(user),
+    });
+
     logAuthStageStart(traceContext, AUTH_STAGE_STATUS_CHECK);
     if (user.status !== "active") {
       logAuthStageFailure(traceContext, AUTH_STAGE_STATUS_CHECK, new Error("USER_SUSPENDED"));
@@ -768,36 +774,46 @@ async function authorizeUserCredentials(
       );
     }
 
-    /* Final admission authority for normal-user platform capacity stays on the server.
-       Login preflight is advisory; this reserve/renew check is the decisive anti-race gate. */
-    const activeNormalUserLease = await reserveOrRenewActiveNormalUserSessionLease({
-      uid: user.uid,
-      email: user.email,
-      role: user.role,
-    });
+    if (
+      shouldApplyActiveNormalUserCapacity({
+        role: user.role,
+        email: user.email,
+        profileCompleted: normalizedProfileCompleted,
+      })
+    ) {
+      /* Active normal-user capacity starts only after required profile completion.
+         Keep the decisive lease reservation here so completed users remain server-gated,
+         while incomplete onboarding sessions stay outside the seat counter entirely. */
+      const activeNormalUserLease = await reserveOrRenewActiveNormalUserSessionLease({
+        uid: user.uid,
+        email: user.email,
+        role: user.role,
+      });
 
-    if (!activeNormalUserLease.allowed) {
-      logAuthStageFailure(
-        traceContext,
-        AUTH_STAGE_STATUS_CHECK,
-        new Error("AUTH_ACTIVE_USER_CAPACITY_FULL"),
-        {
-          activeNormalUsers: activeNormalUserLease.snapshot.activeNormalUsers,
-          maxActiveNormalUsers: activeNormalUserLease.snapshot.maxActiveNormalUsers,
-        },
-      );
-      throwAuthCode(
-        "AUTH_ACTIVE_USER_CAPACITY_FULL",
-        buildActiveNormalUserCapacityFullMessage(activeNormalUserLease.snapshot),
-      );
+      if (!activeNormalUserLease.allowed) {
+        logAuthStageFailure(
+          traceContext,
+          AUTH_STAGE_STATUS_CHECK,
+          new Error("AUTH_ACTIVE_USER_CAPACITY_FULL"),
+          {
+            activeNormalUsers: activeNormalUserLease.snapshot.activeNormalUsers,
+            maxActiveNormalUsers: activeNormalUserLease.snapshot.maxActiveNormalUsers,
+          },
+        );
+        throwAuthCode(
+          "AUTH_ACTIVE_USER_CAPACITY_FULL",
+          buildActiveNormalUserCapacityFullMessage(activeNormalUserLease.snapshot),
+        );
+      }
+    } else {
+      /* Fresh onboarding and other non-counted identities must actively shed any stale lease
+         before Auth.js issues the session so queue truth cannot outlive live profile state. */
+      await releaseActiveNormalUserSessionLease({
+        uid: user.uid,
+      }).catch(() => undefined);
     }
 
     logAuthStageSuccess(traceContext, AUTH_STAGE_STATUS_CHECK);
-
-    const normalizedProfileCompleted = normalizeSignedInProfileState({
-      role: user.role,
-      profileCompleted: !isProfileCompletionRequired(user),
-    });
 
     return {
       ...toAuthorizedUser(user),

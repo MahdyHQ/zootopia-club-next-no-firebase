@@ -21,6 +21,7 @@ import {
 import {
   releaseActiveNormalUserSessionLease,
   reserveOrRenewActiveNormalUserSessionLease,
+  shouldApplyActiveNormalUserCapacity,
 } from "@/lib/server/active-normal-user-session-governance";
 
 const ANONYMOUS_SESSION: SessionSnapshot = {
@@ -150,18 +151,25 @@ const getVerifiedSessionContext = cache(
       return null;
     }
 
-    if (normalizedUser.role === "admin") {
-      /* Admin sessions are permanently exempt from normal-user capacity. Release any stale
-         lease row best-effort here so role promotions or prior user sessions cannot keep an
-         admin identity counted after the live persisted role has changed. */
+    if (
+      !shouldApplyActiveNormalUserCapacity({
+        role: normalizedUser.role,
+        email: normalizedUser.email,
+        profileCompleted: normalizedUser.profileCompleted,
+      })
+    ) {
+      /* Public-onboarding and other non-counted identities must release any stale lease here.
+         This session helper is the live protected-route trust boundary, so it is also the
+         place that removes queue occupancy when profile truth or role truth says the user
+         should remain outside active-capacity governance. */
       void releaseActiveNormalUserSessionLease({
         uid: normalizedUser.uid,
       }).catch(() => undefined);
     } else {
       try {
-        /* Active normal-user occupancy is renewed at the same server boundary that
-           rehydrates live user truth. This keeps slot ownership server-authoritative and
-           prevents stale client state from extending capacity leases. */
+        /* Completed non-exempt users renew occupancy at the same boundary that rehydrates
+           live persisted truth. This keeps slot ownership server-authoritative and ensures
+           profile completion starts capacity governance only after the backend says so. */
         const leaseDecision = await reserveOrRenewActiveNormalUserSessionLease({
           uid: normalizedUser.uid,
           email: normalizedUser.email,

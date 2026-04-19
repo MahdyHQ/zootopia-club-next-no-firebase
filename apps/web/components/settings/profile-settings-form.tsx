@@ -1,5 +1,6 @@
 "use client";
 
+import { APP_ROUTES } from "@zootopia/shared-config";
 import type {
   ApiResult,
   Locale,
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
   SettingsCountrySelect,
@@ -55,7 +56,7 @@ type ProfileSettingsFormProps = {
   isAdmin?: boolean;
 };
 
-type ProfileSaveFeedbackTone = "idle" | "pending" | "success" | "error";
+type ProfileSaveFeedbackTone = "idle" | "pending" | "success" | "warning" | "error";
 
 type SavedFieldSnapshot = {
   fullName: string;
@@ -65,6 +66,28 @@ type SavedFieldSnapshot = {
   gender: UserGender | "";
   nationality: string;
 };
+
+function buildProfileTransitionText(locale: Locale) {
+  if (locale === "ar") {
+    return {
+      capacityAvailable:
+        "اكتمل ملفك الشخصي الآن، وأصبح حسابك خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة.",
+      capacityFull:
+        "اكتمل ملفك الشخصي الآن، وأصبح حسابك خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة. السعة ممتلئة حالياً، وسنعيدك إلى تسجيل الدخول لتجربة الدخول عند توفر مقعد.",
+      admissionUnavailable:
+        "اكتمل ملفك الشخصي الآن، وأصبح حسابك خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة. تعذر تأكيد حالة الإتاحة حالياً، لذا سجّل الدخول مرة أخرى بعد قليل.",
+    };
+  }
+
+  return {
+    capacityAvailable:
+      "Your profile is now complete, and your account now follows the platform's normal admission and capacity rules.",
+    capacityFull:
+      "Your profile is now complete, and your account now follows the platform's normal admission and capacity rules. Capacity is full right now, so we'll return you to login to try again when a slot opens.",
+    admissionUnavailable:
+      "Your profile is now complete, and your account now follows the platform's normal admission and capacity rules. We could not confirm availability right now, so please sign in again in a moment.",
+  };
+}
 
 function normalizeTextValue(value: string) {
   return String(value || "").trim().replace(/\s+/g, " ");
@@ -258,6 +281,7 @@ export function ProfileSettingsForm({
   isAdmin = false,
 }: ProfileSettingsFormProps) {
   const router = useRouter();
+  const redirectTimerRef = useRef<number | null>(null);
 
   const profileCountryOptions = useMemo(
     () => buildProfileCountryOptions(locale),
@@ -333,6 +357,11 @@ export function ProfileSettingsForm({
     [messages],
   );
 
+  const transitionText = useMemo(
+    () => buildProfileTransitionText(locale),
+    [locale],
+  );
+
   const phonePreview = useMemo(() => formatPhonePreview(phoneValue), [phoneValue]);
 
   const formTitle = isAdmin
@@ -385,6 +414,14 @@ export function ProfileSettingsForm({
     initialUniversityCode,
   ]);
 
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current !== null) {
+        window.clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
+
   const normalizedFullName = useMemo(() => normalizeTextValue(fullName), [fullName]);
   const normalizedUniversityCode = useMemo(
     () => normalizeTextValue(universityCode),
@@ -428,6 +465,19 @@ export function ProfileSettingsForm({
         ? current
         : { tone: "idle", message: null },
     );
+  }
+
+  function scheduleRedirect(nextUrl: string, refreshAfterReplace: boolean) {
+    if (redirectTimerRef.current !== null) {
+      window.clearTimeout(redirectTimerRef.current);
+    }
+
+    redirectTimerRef.current = window.setTimeout(() => {
+      router.replace(nextUrl);
+      if (refreshAfterReplace) {
+        router.refresh();
+      }
+    }, 1_500);
   }
 
   function handleNationalDigitsChange(rawInput: string) {
@@ -550,6 +600,54 @@ export function ProfileSettingsForm({
         gender: validation.value.gender,
         nationality: validation.value.nationality,
       });
+
+      const completionTransition = payload.data.completionTransition;
+      if (completionTransition?.becameEligible) {
+        if (completionTransition.admissionState === "capacity_full") {
+          const loginUrl = new URL(APP_ROUTES.login, window.location.origin);
+          if (payload.data.user.email) {
+            loginUrl.searchParams.set("email", payload.data.user.email);
+          }
+          loginUrl.searchParams.set("profileTransition", "1");
+          loginUrl.searchParams.set("profileTransitionState", "capacity_full");
+
+          setSaveFeedback({
+            tone: "warning",
+            message: transitionText.capacityFull,
+          });
+          scheduleRedirect(
+            `${loginUrl.pathname}${loginUrl.search}`,
+            false,
+          );
+          return;
+        }
+
+        if (completionTransition.admissionState === "admission_unavailable") {
+          const loginUrl = new URL(APP_ROUTES.login, window.location.origin);
+          if (payload.data.user.email) {
+            loginUrl.searchParams.set("email", payload.data.user.email);
+          }
+          loginUrl.searchParams.set("profileTransition", "1");
+          loginUrl.searchParams.set("profileTransitionState", "admission_unavailable");
+
+          setSaveFeedback({
+            tone: "warning",
+            message: transitionText.admissionUnavailable,
+          });
+          scheduleRedirect(
+            `${loginUrl.pathname}${loginUrl.search}`,
+            false,
+          );
+          return;
+        }
+
+        setSaveFeedback({
+          tone: "success",
+          message: transitionText.capacityAvailable,
+        });
+        scheduleRedirect(payload.data.redirectTo, true);
+        return;
+      }
 
       setSaveFeedback({
         tone: "success",
@@ -837,6 +935,8 @@ export function ProfileSettingsForm({
                   className={`inline-flex max-w-full items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold ${
                     saveFeedback.tone === "success"
                       ? "border-emerald-500/22 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/22 dark:bg-emerald-400/10 dark:text-emerald-200"
+                      : saveFeedback.tone === "warning"
+                        ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-200"
                       : saveFeedback.tone === "error"
                         ? "border-red-500/22 bg-red-500/10 text-red-700 dark:border-red-400/22 dark:bg-red-400/10 dark:text-red-200"
                         : "border-blue-500/22 bg-blue-500/10 text-blue-700 dark:border-blue-400/22 dark:bg-blue-400/10 dark:text-blue-200"

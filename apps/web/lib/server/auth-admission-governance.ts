@@ -550,6 +550,23 @@ async function persistScopeWindow(input: {
   `;
 }
 
+async function decrementScopeWindowAttempt(input: {
+  gateName: string;
+  sql: ReturnType<typeof getZootopiaSql>;
+  scope: GovernanceScope;
+  keyHash: string;
+}) {
+  await input.sql`
+    UPDATE public.auth_admission_governance
+    SET
+      attempt_count = GREATEST(attempt_count - 1, 0),
+      updated_at = NOW()
+    WHERE gate_name = ${input.gateName}
+      AND key_scope = ${input.scope}
+      AND key_hash = ${input.keyHash}
+  `;
+}
+
 /**
  * Server-backed public-auth admission control.
  * This keeps sign-up and login shaping consistent across concurrent requests and
@@ -686,5 +703,86 @@ export async function reserveAuthAdmissionAttempt(input: {
       }),
       reservationAccepted: true,
     };
+  }) as Promise<AuthAdmissionSnapshot>;
+}
+
+export async function rollbackAuthAdmissionAttempt(input: {
+  request: Request;
+  email: string;
+  kind: AuthAdmissionKind;
+}): Promise<AuthAdmissionSnapshot> {
+  const config = getAuthAdmissionConfig();
+  const nowMs = Date.now();
+  const windowMs = config.windowSeconds * 1000;
+  const limits = getLimitsForKind({
+    kind: input.kind,
+    config,
+  });
+  const subjectKeys = buildSubjectKeys({
+    request: input.request,
+    email: input.email,
+    config,
+  });
+  const sql = getZootopiaSql();
+
+  return sql.begin(async (tx) => {
+    const txSql = tx as unknown as ReturnType<typeof getZootopiaSql>;
+
+    const accountWindow = await loadScopeWindowForUpdate({
+      gateName: `${limits.gateNamePrefix}_account`,
+      sql: txSql,
+      scope: "account",
+      keyHash: subjectKeys.accountKeyHash,
+      nowMs,
+      windowMs,
+    });
+
+    if (accountWindow.attemptCount > 0) {
+      accountWindow.attemptCount -= 1;
+      await decrementScopeWindowAttempt({
+        gateName: `${limits.gateNamePrefix}_account`,
+        sql: txSql,
+        scope: "account",
+        keyHash: subjectKeys.accountKeyHash,
+      });
+    }
+
+    const ipKeyHash = subjectKeys.ipKeyHash ?? "undetected";
+    const ipWindow = subjectKeys.ipDetected
+      ? await loadScopeWindowForUpdate({
+          gateName: `${limits.gateNamePrefix}_ip`,
+          sql: txSql,
+          scope: "ip",
+          keyHash: ipKeyHash,
+          nowMs,
+          windowMs,
+        })
+      : buildFreshWindow({
+          scope: "ip",
+          keyHash: ipKeyHash,
+          nowMs,
+          windowMs,
+        });
+
+    if (subjectKeys.ipDetected && ipWindow.attemptCount > 0) {
+      ipWindow.attemptCount -= 1;
+      await decrementScopeWindowAttempt({
+        gateName: `${limits.gateNamePrefix}_ip`,
+        sql: txSql,
+        scope: "ip",
+        keyHash: ipKeyHash,
+      });
+    }
+
+    return buildSnapshot({
+      kind: input.kind,
+      mode: config.mode,
+      accountWindow,
+      ipWindow,
+      ipDetected: subjectKeys.ipDetected,
+      accountMaxAttempts: limits.accountMaxAttempts,
+      ipMaxAttempts: limits.ipMaxAttempts,
+      nowMs,
+    });
   }) as Promise<AuthAdmissionSnapshot>;
 }

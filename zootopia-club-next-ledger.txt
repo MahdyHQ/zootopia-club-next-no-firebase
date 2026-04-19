@@ -4186,3 +4186,172 @@ Runtime notes:
 ~ Build/start logs continue to show the pre-existing operational warning:
   `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
 ~ Warning is unchanged by this UI-only refinement and remains outside this task.
+
+2026-04-19: AUTH ONBOARDING + ACCOUNT LIFECYCLE HARDENING FOR PROFILE-GATED ADMISSION
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSES:
+- The decisive active-user capacity lease was being reserved and renewed before
+  the backend-confirmed profile-completion gate, so freshly registered users
+  could be counted by queue/admission logic too early.
+- Public login admission preflight could surface active-capacity blocking before
+  the decisive Auth.js/session authority ran, which risked confusing first-time
+  onboarding with active-seat governance.
+- Sign-up admission reservations had no rollback path when downstream provider
+  or configuration failures occurred after the reservation was accepted.
+- Password reset completion left the user on the reset form instead of handing
+  them back to login with a clear completion message.
+
+FILES CHANGED:
+- apps/web/app/api/auth/signup/route.ts
+- apps/web/app/api/users/me/profile/route.ts
+- apps/web/auth.ts
+- apps/web/components/auth/login-panel.tsx
+- apps/web/components/auth/reset-password-panel.tsx
+- apps/web/components/settings/profile-settings-form.tsx
+- apps/web/lib/server/active-normal-user-session-governance.ts
+- apps/web/lib/server/auth-admission-governance.ts
+- apps/web/lib/server/session.ts
+- packages/shared-types/src/user.ts
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+TECHNICAL DETAILS:
+1. Capacity now starts only after required profile completion
+   - Added `shouldApplyActiveNormalUserCapacity(...)` in
+     `apps/web/lib/server/active-normal-user-session-governance.ts`.
+   - Auth.js credential authorization in `apps/web/auth.ts` now consults the
+     normalized profile-completion truth before reserving the decisive active
+     lease.
+   - Session rehydration in `apps/web/lib/server/session.ts` now releases any
+     stale lease for profile-incomplete, admin, or exempt identities instead of
+     renewing occupancy.
+   - Result: signup success and early login remain distinct from later active
+     capacity admission, and pre-completion users stay outside queue counting.
+
+2. Profile completion is now the exact server-owned admission transition point
+   - `apps/web/app/api/users/me/profile/route.ts` now detects the transition from
+     `profileCompleted=false` to `profileCompleted=true`.
+   - On that transition, the route evaluates active-capacity admission by email
+     and returns a new `completionTransition` payload describing:
+     - whether the user just became queue-eligible,
+     - whether capacity is available, full, or temporarily unavailable,
+     - and the current capacity snapshot when available.
+   - `packages/shared-types/src/user.ts` now exposes the typed response contract
+     for that transition payload.
+
+3. Settings/profile UX now explains the admission transition clearly
+   - `apps/web/components/settings/profile-settings-form.tsx` now treats profile
+     completion as the moment the user enters normal admission control.
+   - After a successful completion transition:
+     - capacity available: show a success message, then redirect normally;
+     - capacity full: show a warning message, then return the user to login with
+       `profileTransition=1&profileTransitionState=capacity_full`;
+     - admission unavailable: show a warning message, then return the user to
+       login with `profileTransition=1&profileTransitionState=admission_unavailable`.
+   - The form continues to write only through `/api/users/me/profile` and never
+     sends a user id from the client.
+
+4. Login no longer confuses fresh onboarding with active-seat blocking
+   - `apps/web/components/auth/login-panel.tsx` still uses login admission
+     preflight for pacing and shaping, but it no longer hard-blocks on
+     `AUTH_ACTIVE_USER_CAPACITY_FULL` or
+     `AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE`.
+   - Those two outcomes are now deferred to the decisive Auth.js/session
+     authority so incomplete-profile users are not blocked before they ever
+     become queue-eligible.
+   - The login screen now also displays localized EN/AR status messaging for:
+     - password reset completion,
+     - post-profile-completion queue transition,
+     - sign-up rate limiting,
+     - and temporary sign-up unavailability.
+
+5. Sign-up admission reservations now roll back on downstream failure
+   - Added `rollbackAuthAdmissionAttempt(...)` in
+     `apps/web/lib/server/auth-admission-governance.ts`.
+   - `apps/web/app/api/auth/signup/route.ts` now rolls back the accepted sign-up
+     admission reservation when:
+     - the sign-up Supabase client is unavailable, or
+     - Supabase sign-up returns a duplicate/provider failure.
+   - This reduces false pressure on account/IP shaping windows during retries and
+     makes burst handling more truthful under contention.
+
+6. Password reset now returns the user cleanly to login
+   - `apps/web/components/auth/reset-password-panel.tsx` now redirects to login
+     after a successful reset with `passwordReset=1` and prefilled email when
+     available.
+   - `apps/web/components/auth/login-panel.tsx` consumes that query state and
+     shows a clear success message before sign-in.
+
+7. Owner-scoped behavior remains strict
+   - Profile persistence still flows through the authenticated self route only.
+   - Queue eligibility now keys off server-owned profile completion truth rather
+     than client timing.
+   - Auth.js remains the trust boundary for decisive sign-in/session authority.
+   - No client-side fake queue truth was introduced.
+
+CONCURRENCY / 3000+ SIGN-UP ASSESSMENT:
+- Code-traced proof:
+  - Public auth shaping is already backed by
+    `apps/web/lib/server/auth-admission-governance.ts`, which uses durable
+    Postgres governance rows plus row-level update flow to coordinate attempt
+    windows across concurrent requests.
+  - The new rollback path prevents post-reservation provider failures from
+    artificially exhausting those shaping windows during heavy retry storms.
+  - Queue/capacity counting is now deferred until profile completion, so first
+    sign-up/login bursts do not consume active-user seats prematurely.
+- Remaining live-scale gap:
+  - I did not run a true 3000+ concurrent sign-up load test in this environment.
+  - Therefore 3000+ tolerance is partially proven by code trace and build
+    verification, not fully validated by live traffic simulation.
+
+VERIFICATION:
+Code-trace verification:
+✓ Confirmed Auth.js authorization now checks profile completion before active
+  lease reservation and releases stale leases for non-counted identities.
+✓ Confirmed session rehydration now mirrors the same profile-gated capacity rule.
+✓ Confirmed profile completion is now the server-owned transition point that
+  emits admission-state feedback to the client.
+✓ Confirmed login preflight no longer hard-blocks on capacity-full/admission-
+  unavailable outcomes before decisive server auth.
+✓ Confirmed sign-up reservations now have a rollback path after downstream
+  provider/configuration failure.
+✓ Confirmed reset success now returns the user to login with explicit status
+  messaging.
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS
+✓ `npm run typecheck --workspace @zootopia/web` — PASS
+✓ `npm run build:web` — PASS
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS
+
+Runtime verification:
+✓ `GET /login` on the local production server returned `200`.
+✓ `GET /forgot-password` returned `200`.
+✓ `GET /reset-password` returned `200`.
+✓ `GET /confirm-email` returned `200`.
+✓ Anonymous `GET /settings` redirected to `/login`.
+✓ Invalid signup payload returned
+  `400 SIGNUP_EMAIL_INVALID`.
+✓ Invalid login-admission payload returned
+  `400 LOGIN_EMAIL_INVALID`.
+✓ Anonymous profile update returned
+  `401 UNAUTHENTICATED`.
+~ Local production runtime could not fully exercise live auth/session mail flows
+  because the standalone server reported missing runtime requirements:
+  - Auth.js `secret`
+  - Supabase admin runtime / database persistence requirements
+~ Local password-reset request runtime proof therefore stopped at the truthful
+  environment failure response:
+  `503 PASSWORD_RESET_UNAVAILABLE`.
+
+RISKS / FOLLOW-UPS:
+~ `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is still unset in build/runtime logs, so
+  account/IP governance buckets may not stay stable across deploys.
+~ Live verification of duplicate sign-up handling, confirm-email token flows,
+  password-reset token expiry, and true 3000+ concurrent sign-up traffic still
+  requires an environment with production auth secrets, mail delivery, and a
+  controlled load harness.

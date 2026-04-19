@@ -4,6 +4,7 @@ import { APP_ROUTES } from "@zootopia/shared-config";
 import type { ApiResult, Locale } from "@zootopia/shared-types";
 import { ArrowLeft, LoaderCircle, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AuthStatusDescriptor } from "@/components/auth/auth-feedback";
@@ -444,10 +445,12 @@ export function ResetPasswordPanel({
   supabaseAuthReady,
   initialFinalize,
 }: ResetPasswordPanelProps) {
+  const router = useRouter();
   const text = useMemo(() => buildLocalText(locale), [locale]);
   const supabaseConfigured = isSupabaseWebConfigured();
   const passwordHint = getPasswordPolicyHint(locale);
   const verifiedTokenRef = useRef<string | null>(null);
+  const redirectTimerRef = useRef<number | null>(null);
 
   const [status, setStatus] = useState<AuthStatusDescriptor>({
     tone: "info",
@@ -464,6 +467,14 @@ export function ResetPasswordPanel({
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const passwordMinLength = getPasswordPolicyMinLength();
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current !== null) {
+        window.clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -704,6 +715,15 @@ export function ResetPasswordPanel({
         title: text.successTitle,
         body: metadataRecorded ? text.successBody : text.successWithWarningBody,
       });
+
+      const loginUrl = new URL(APP_ROUTES.login, window.location.origin);
+      if (email.trim().length > 0) {
+        loginUrl.searchParams.set("email", email.trim());
+      }
+      loginUrl.searchParams.set("passwordReset", "1");
+      redirectTimerRef.current = window.setTimeout(() => {
+        router.replace(`${loginUrl.pathname}${loginUrl.search}`);
+      }, 1_500);
     } catch {
       setStatus({
         tone: "danger",

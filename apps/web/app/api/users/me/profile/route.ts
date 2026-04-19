@@ -6,6 +6,7 @@ import {
 
 import { getAuthenticatedUserRedirectPath, sanitizeUserReturnTo } from "@/lib/return-to";
 import { apiError, apiSuccess } from "@/lib/server/api";
+import { evaluateActiveNormalUserAdmissionByEmail } from "@/lib/server/active-normal-user-session-governance";
 import { updateUserProfile } from "@/lib/server/repository";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
 
@@ -75,8 +76,46 @@ export async function PATCH(request: Request) {
     new URL(request.url).searchParams.get("returnTo"),
   );
 
+  let completionTransition = null;
+  if (
+    user.role !== "admin"
+    && !user.profileCompleted
+    && updatedUser.profileCompleted
+  ) {
+    /* Profile completion is the exact server-owned moment when a normal user becomes
+       eligible for active-capacity governance. Compute that transition here so the
+       client can explain the new admission state before redirecting. */
+    if (updatedUser.email) {
+      try {
+        const capacityDecision = await evaluateActiveNormalUserAdmissionByEmail({
+          email: updatedUser.email,
+        });
+        completionTransition = {
+          becameEligible: true,
+          admissionState: capacityDecision.allowed
+            ? "capacity_available"
+            : "capacity_full",
+          capacity: capacityDecision.snapshot,
+        } as const;
+      } catch {
+        completionTransition = {
+          becameEligible: true,
+          admissionState: "admission_unavailable",
+          capacity: null,
+        } as const;
+      }
+    } else {
+      completionTransition = {
+        becameEligible: true,
+        admissionState: "admission_unavailable",
+        capacity: null,
+      } as const;
+    }
+  }
+
   return apiSuccess({
     user: updatedUser,
     redirectTo: requestedReturnTo || getAuthenticatedUserRedirectPath(updatedUser),
+    completionTransition,
   });
 }

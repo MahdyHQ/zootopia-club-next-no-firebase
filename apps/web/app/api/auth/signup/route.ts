@@ -6,6 +6,7 @@ import { validateUserPasswordPolicy } from "@/lib/password-policy";
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import {
   getAuthAdmissionConfig,
+  rollbackAuthAdmissionAttempt,
   reserveAuthAdmissionAttempt,
   type AuthAdmissionSnapshot,
 } from "@/lib/server/auth-admission-governance";
@@ -134,6 +135,30 @@ function withAdmissionHeaders(response: Response, snapshot: AuthAdmissionSnapsho
   return response;
 }
 
+async function rollbackSignupAdmissionReservation(input: {
+  request: Request;
+  email: string;
+  admission: AuthAdmissionSnapshot;
+}) {
+  if (input.admission.reservationAccepted !== true) {
+    return input.admission;
+  }
+
+  try {
+    return await rollbackAuthAdmissionAttempt({
+      request: input.request,
+      email: input.email,
+      kind: "sign_up",
+    });
+  } catch (error) {
+    console.warn("[auth-signup] failed to roll back admission reservation", {
+      routePath: APP_ROUTES.login,
+      error,
+    });
+    return input.admission;
+  }
+}
+
 export async function POST(request: Request) {
   let body: SignupRequestBody;
 
@@ -203,6 +228,12 @@ export async function POST(request: Request) {
 
   const supabase = createSignupSupabaseClient();
   if (!supabase) {
+    const rolledBackAdmission = await rollbackSignupAdmissionReservation({
+      request,
+      email,
+      admission,
+    });
+
     return withAdmissionHeaders(
       applyNoStore(
         apiError(
@@ -211,7 +242,7 @@ export async function POST(request: Request) {
           503,
         ),
       ),
-      admission,
+      rolledBackAdmission,
     );
   }
 
@@ -224,6 +255,12 @@ export async function POST(request: Request) {
   });
 
   if (error) {
+    const rolledBackAdmission = await rollbackSignupAdmissionReservation({
+      request,
+      email,
+      admission,
+    });
+
     if (isDuplicateSignupFailure(error)) {
       return withAdmissionHeaders(
         applyNoStore(
@@ -233,7 +270,7 @@ export async function POST(request: Request) {
             409,
           ),
         ),
-        admission,
+        rolledBackAdmission,
       );
     }
 
@@ -265,7 +302,7 @@ export async function POST(request: Request) {
       applyNoStore(
         apiError(failure.normalizedCode, message, status),
       ),
-      admission,
+      rolledBackAdmission,
     );
   }
 

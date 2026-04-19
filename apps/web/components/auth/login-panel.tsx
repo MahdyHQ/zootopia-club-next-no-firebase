@@ -6,7 +6,7 @@ import { LoaderCircle, LogIn, Mail, Shield, UserPlus } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createAuthFlowError,
@@ -103,6 +103,21 @@ function buildLocalText(locale: Locale) {
       passwordPolicyTitle: "كلمة المرور الجديدة لا تحقق سياسة الأمان.",
       emailVerificationRequired:
         "تم إنشاء الحساب. راجع بريدك الإلكتروني لتأكيد الحساب ثم عد لتسجيل الدخول.",
+      signUpRateLimitedTitle: "إنشاء الحساب مزدحم حالياً",
+      signUpRateLimitedBody:
+        "ننظم طلبات إنشاء الحساب حالياً لحماية الاستقرار. انتظر قليلاً ثم حاول مرة أخرى.",
+      signUpUnavailableTitle: "إنشاء الحساب غير متاح مؤقتاً",
+      signUpUnavailableBody:
+        "تعذر إكمال إنشاء الحساب الآن بسبب حالة مؤقتة في الخدمة. حاول مرة أخرى بعد قليل.",
+      passwordResetCompletedTitle: "تم تحديث كلمة المرور",
+      passwordResetCompletedBody:
+        "تم حفظ كلمة المرور الجديدة بنجاح. يمكنك الآن تسجيل الدخول مرة أخرى.",
+      profileTransitionCapacityFullTitle: "اكتمل ملفك الشخصي ودخلت الآن إلى نظام الإتاحة",
+      profileTransitionCapacityFullBody:
+        "أصبح حسابك الآن خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة، لكن السعة ممتلئة حالياً. يمكنك المحاولة مجدداً عند توفر مقعد.",
+      profileTransitionAdmissionUnavailableTitle: "اكتمل ملفك الشخصي",
+      profileTransitionAdmissionUnavailableBody:
+        "أصبح حسابك الآن خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة، لكن تعذر تأكيد حالة الإتاحة حالياً. حاول تسجيل الدخول مرة أخرى بعد قليل.",
       forgotPasswordAction: "نسيت كلمة المرور؟",
       showPasswordAction: "إظهار كلمة المرور",
       hidePasswordAction: "إخفاء كلمة المرور",
@@ -123,6 +138,21 @@ function buildLocalText(locale: Locale) {
     passwordPolicyTitle: "New password does not meet policy requirements.",
     emailVerificationRequired:
       "Account created. Verify your email, then return to sign in.",
+    signUpRateLimitedTitle: "Account creation is busy right now",
+    signUpRateLimitedBody:
+      "We are pacing account-creation requests to protect platform stability. Please try again in a moment.",
+    signUpUnavailableTitle: "Account creation is temporarily unavailable",
+    signUpUnavailableBody:
+      "We could not complete account creation right now because of a temporary service issue. Please try again shortly.",
+    passwordResetCompletedTitle: "Password updated",
+    passwordResetCompletedBody:
+      "Your new password was saved successfully. You can sign in again now.",
+    profileTransitionCapacityFullTitle: "Your profile is complete and now enters admission control",
+    profileTransitionCapacityFullBody:
+      "Your account now follows the platform's normal admission and capacity rules, but capacity is currently full. Please try signing in again when a slot opens.",
+    profileTransitionAdmissionUnavailableTitle: "Your profile is complete",
+    profileTransitionAdmissionUnavailableBody:
+      "Your account now follows the platform's normal admission and capacity rules, but we could not confirm availability right now. Please try signing in again in a moment.",
     forgotPasswordAction: "Forgot password?",
     showPasswordAction: "Show password",
     hidePasswordAction: "Hide password",
@@ -603,7 +633,7 @@ export function LoginPanel({
   const [onboardingSignupEmail, setOnboardingSignupEmail] = useState<string | null>(null);
   const supabaseConfigured = isSupabaseWebConfigured();
   const isBusy = phase !== "idle";
-  const localText = buildLocalText(locale);
+  const localText = useMemo(() => buildLocalText(locale), [locale]);
   const passwordMinLength = getPasswordPolicyMinLength();
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -656,6 +686,49 @@ export function LoginPanel({
       body: messages.loginStatusEmailConfirmedBody,
     });
   }, [messages, searchParams]);
+
+  useEffect(() => {
+    const resetCompleted =
+      searchParams.get("passwordReset") === "1"
+      || searchParams.get("passwordChanged") === "1";
+    const profileTransition = searchParams.get("profileTransition") === "1";
+    const transitionState = searchParams.get("profileTransitionState")?.trim().toLowerCase() ?? "";
+    const nextEmail = searchParams.get("email")?.trim() ?? "";
+
+    if (!resetCompleted && !profileTransition) {
+      return;
+    }
+
+    setMode("sign_in");
+    if (nextEmail) {
+      setEmail(nextEmail);
+    }
+    setPassword("");
+    setConfirmPassword("");
+
+    if (resetCompleted) {
+      setStatus({
+        tone: "success",
+        icon: "success",
+        title: localText.passwordResetCompletedTitle,
+        body: localText.passwordResetCompletedBody,
+      });
+      return;
+    }
+
+    setStatus({
+      tone: transitionState === "capacity_full" ? "warning" : "info",
+      icon: transitionState === "capacity_full" ? "warning" : "info",
+      title:
+        transitionState === "capacity_full"
+          ? localText.profileTransitionCapacityFullTitle
+          : localText.profileTransitionAdmissionUnavailableTitle,
+      body:
+        transitionState === "capacity_full"
+          ? localText.profileTransitionCapacityFullBody
+          : localText.profileTransitionAdmissionUnavailableBody,
+    });
+  }, [localText, searchParams]);
 
   useEffect(() => {
     if (!capacityBlockedEmail) {
@@ -1039,31 +1112,23 @@ export function LoginPanel({
         return;
       }
 
-      const loginAdmission = await requestLoginAdmission(email.trim());
+      try {
+        await requestLoginAdmission(email.trim());
+      } catch (admissionError) {
+        const admissionCode =
+          readRawFailureCode(admissionError)
+          ?? getAuthFlowErrorCode(admissionError);
 
-      if (loginAdmission.capacity && !loginAdmission.capacity.allowed) {
-        const blockedEmail = email.trim().toLowerCase();
-        const isOnboardingBlockedEmail =
-          onboardingSignupEmail !== null
-          && blockedEmail.length > 0
-          && onboardingSignupEmail === blockedEmail;
-        setPhase("idle");
-        setCapacityBlockedEmail(blockedEmail);
-        setCapacityBlockedSnapshot(loginAdmission.capacity.snapshot);
-        setStatus(
-          isOnboardingBlockedEmail
-            ? buildOnboardingCapacityFullStatus({
-                messages,
-                locale,
-                snapshot: loginAdmission.capacity.snapshot,
-              })
-            : buildCapacityFullStatus({
-                messages,
-                locale,
-                snapshot: loginAdmission.capacity.snapshot,
-              }),
-        );
-        return;
+        if (
+          admissionCode !== "AUTH_ACTIVE_USER_CAPACITY_FULL"
+          && admissionCode !== "AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE"
+        ) {
+          throw admissionError;
+        }
+
+        /* Public login admission remains useful for pacing, but active-capacity truth now
+           belongs to the decisive Auth.js/session path because profile-incomplete users must
+           stay outside queue counting until the backend confirms completion. */
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -1200,6 +1265,51 @@ export function LoginPanel({
         setPhase("idle");
         router.push(confirmRoute);
         return;
+      }
+
+      if (mode === "sign_up") {
+        await clearClientSession();
+        if (failure.normalizedCode === "AUTH_ACCOUNT_ALREADY_EXISTS") {
+          setMode("sign_in");
+          setConfirmPassword("");
+        }
+        setPhase("idle");
+
+        if (rawAuthCode === "PASSWORD_POLICY_FAILED") {
+          setStatus({
+            tone: "warning",
+            icon: "warning",
+            title: localText.passwordPolicyTitle,
+            body: nextError instanceof Error
+              ? nextError.message
+              : localText.passwordPolicyTitle,
+          });
+          return;
+        }
+
+        if (failure.normalizedCode === "AUTH_RATE_LIMITED") {
+          setStatus({
+            tone: "warning",
+            icon: "warning",
+            title: localText.signUpRateLimitedTitle,
+            body: localText.signUpRateLimitedBody,
+          });
+          return;
+        }
+
+        if (
+          failure.normalizedCode === "AUTH_ENV_MISCONFIGURED"
+          || failure.normalizedCode === "AUTH_PROVIDER_MISCONFIGURED"
+          || failure.normalizedCode === "AUTH_UNKNOWN_UPSTREAM_FAILURE"
+        ) {
+          setStatus({
+            tone: "danger",
+            icon: "config",
+            title: localText.signUpUnavailableTitle,
+            body: localText.signUpUnavailableBody,
+          });
+          return;
+        }
       }
 
       logAuthDiagnosis({
