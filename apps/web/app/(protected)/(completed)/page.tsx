@@ -155,7 +155,7 @@ export default async function HomePage() {
 
       {/* Keep the shared slogan near the top fold so brand context appears early,
           while preserving the same reusable component and responsive wrapping behavior. */}
-      <PlatformSloganNote className="max-w-2xl" />
+        <PlatformSloganNote className="mx-auto max-w-2xl" />
 
       <section
         dir="rtl"

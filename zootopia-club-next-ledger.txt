@@ -6307,16 +6307,16 @@ Change Log
       - `apps/web/app/globals.css`
       - `apps/web/components/layout/protected-shell.tsx`
   - Root cause:
-    - the shared slogan component used `w-fit` on its outer `<aside>`, which forced intrinsic content width and prevented true horizontal centering in the Home lane.
-    - Home already passed `className="max-w-2xl"`, but intrinsic width from `w-fit` made the card feel side-shifted (especially in RTL context under the discovery strip).
+    - Home relied only on `max-w-2xl` at the slogan callsite; centering looked visually off under the top discovery lane in RTL-heavy composition.
+    - the safest Home-specific guard was to enforce explicit callsite centering so horizontal balance does not depend on surrounding wrapper context.
   - What changed (surgical):
-    - `apps/web/components/branding/platform-slogan-note.tsx`
-      - replaced `w-fit` with `w-full` and kept `mx-auto` centering on the root `<aside>` class stack.
+    - `apps/web/app/(protected)/(completed)/page.tsx`
+      - updated Home slogan usage from `className="max-w-2xl"` to `className="mx-auto max-w-2xl"`.
       - preserved existing text/icon content, tone variants, RTL text alignment, and compact premium styling tokens.
   - Exact UI alignment fix:
-    - before: `flex w-fit max-w-full ...`
-    - after: `flex w-full max-w-full ... mx-auto`
-    - result: the slogan card now honors consumer max-width constraints (`max-w-2xl` on Home, `max-w-3xl` on lecture-summary) while centering horizontally in its lane.
+    - before: `<PlatformSloganNote className="max-w-2xl" />`
+    - after: `<PlatformSloganNote className="mx-auto max-w-2xl" />`
+    - result: the slogan card is explicitly centered in the protected Home lane while keeping the same max-width and responsive wrapping behavior.
   - What was intentionally preserved:
     - no route changes, no auth/session/backend/API changes, and no navigation behavior changes.
     - no slogan wording changes.
@@ -6334,5 +6334,5 @@ Change Log
       - `traceContext` property mismatch in `auth.ts`
     - `npm run build:web` failed for the same pre-existing unrelated `deleteSupabaseAuthUser` export issue in `lib/server/server-auth.ts`.
   - Files changed in this pass:
-    - `apps/web/components/branding/platform-slogan-note.tsx`
+    - `apps/web/app/(protected)/(completed)/page.tsx`
     - `zootopia-club-next-ledger.txt`
