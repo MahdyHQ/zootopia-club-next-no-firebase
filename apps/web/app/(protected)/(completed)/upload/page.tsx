@@ -8,6 +8,7 @@ import {
   getAssessmentDailyCreditsSummaryForUser,
   listDocumentsForUser,
 } from "@/lib/server/repository";
+import { isActiveNormalUserExemptEmail } from "@/lib/server/active-normal-user-session-governance";
 import { requireCompletedUser } from "@/lib/server/session";
 
 const uploadQuickActionCardClassName =
@@ -54,6 +55,11 @@ export default async function UploadPage() {
   }
 
   const canAccessInfographic = user.role === "admin";
+  /* The platform-wide daily lock is UI-only by current product policy, but its bypass still has
+     to be derived on the server so exempt/admin identities do not depend on client heuristics
+     when the shared capacity summary is still loading or temporarily unavailable. */
+  const platformLockUiExempt =
+    user.role === "admin" || isActiveNormalUserExemptEmail(user.email);
 
   return (
     <div className="min-w-0 space-y-12 pb-8">
@@ -76,6 +82,7 @@ export default async function UploadPage() {
             initialDocuments={documents}
             canAccessInfographic={canAccessInfographic}
             initialCreditSummary={initialCreditSummary}
+            platformLockUiExempt={platformLockUiExempt}
           />
         </div>
       </section>

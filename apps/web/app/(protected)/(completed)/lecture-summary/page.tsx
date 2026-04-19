@@ -5,6 +5,7 @@ import {
   BookOpen,
   ChevronRight,
   Eye,
+  FileImage,
   Gift,
   HandCoins,
   Lightbulb,
@@ -62,6 +63,34 @@ const LECTURE_SUMMARY_SUPPORT_POINTS = [
   "توسيع البنية الإنتاجية لتقديم أداء أسرع عند ضغط الاستخدام.",
   "تجهيز موارد المعالجة المطلوبة لضمان جودة أعلى في المخرجات.",
   "رفع جاهزية التكامل مع بقية أدوات زوتوبيا كلوب داخل المسار المحمي.",
+] as const;
+
+const LECTURE_SUMMARY_ADDITIONAL_DOWNLOADS = [
+  {
+    href: "/physiology-lecture-1-dr-hanan.png",
+    downloadName: "physiology-lecture-1-dr-hanan.png",
+    label: "تحميل ملخص الفسيولوجي 1 - د. حنان",
+  },
+  {
+    href: "/physiology-lecture-1-dr-shimaa.png",
+    downloadName: "physiology-lecture-1-dr-shimaa.png",
+    label: "تحميل ملخص الفسيولوجي 1 - د. شيماء",
+  },
+  {
+    href: "/physiology-lecture-2-dr-shimaa.png",
+    downloadName: "physiology-lecture-2-dr-shimaa.png",
+    label: "تحميل ملخص الفسيولوجي 2 - د. شيماء",
+  },
+  {
+    href: "/physiology-lecture-3-dr-shimaa.png",
+    downloadName: "physiology-lecture-3-dr-shimaa.png",
+    label: "تحميل ملخص الفسيولوجي 3 - د. شيماء",
+  },
+  {
+    href: "/instru-lecture-1-dr-raafat-ali.png",
+    downloadName: "instru-lecture-1-dr-raafat-ali.png",
+    label: "تحميل ملخص الإنسترومنتيشن 1 - د. رأفت علي",
+  },
 ] as const;
 
 export default async function LectureSummaryComingSoonPage() {
@@ -350,6 +379,42 @@ export default async function LectureSummaryComingSoonPage() {
               تنزيل هدية المعاينة
             </a>
           </Button>
+        </div>
+      </section>
+
+      {/* Keep this section download-only by design: it exposes direct file delivery
+          for extra lecture summaries without adding previews or duplicate image surfaces. */}
+      <section className="rounded-[2rem] border border-white/15 bg-white/44 p-5 backdrop-blur-2xl dark:border-white/8 dark:bg-zinc-950/36 sm:p-6">
+        <div className="space-y-2">
+          <p className="inline-flex w-fit items-center gap-2 rounded-full border border-cyan-300/35 bg-cyan-500/10 px-3 py-1 text-[10px] font-black tracking-[0.12em] text-cyan-800 dark:border-cyan-300/30 dark:bg-cyan-400/10 dark:text-cyan-200">
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+            تحميل مباشر
+          </p>
+          <h2 className="font-[family-name:var(--font-display)] text-2xl font-black tracking-tight text-zinc-900 dark:text-white">
+            مكتبة تنزيل الملخصات الإضافية
+          </h2>
+          <p className="text-sm leading-7 text-zinc-600 dark:text-zinc-300">
+            اختر الملخص المطلوب وسيبدأ تنزيل الصورة مباشرة بدون أي معاينات داخل الصفحة.
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {LECTURE_SUMMARY_ADDITIONAL_DOWNLOADS.map((item) => (
+            <Button
+              key={item.href}
+              asChild
+              variant="outline"
+              className="h-auto min-h-12 w-full justify-between gap-2.5 rounded-xl border-cyan-300/35 bg-white/70 px-3.5 py-3 text-right text-zinc-800 hover:bg-cyan-500/10 hover:text-cyan-900 dark:border-cyan-300/24 dark:bg-zinc-900/55 dark:text-cyan-100 dark:hover:bg-cyan-400/12 dark:hover:text-cyan-50 whitespace-normal"
+            >
+              <a href={item.href} download={item.downloadName}>
+                <span className="inline-flex min-w-0 items-start gap-2.5 text-sm font-bold leading-6 [overflow-wrap:anywhere]">
+                  <FileImage className="mt-0.5 h-4.5 w-4.5 shrink-0 text-cyan-700 dark:text-cyan-300" />
+                  <span className="min-w-0 break-words">{item.label}</span>
+                </span>
+                <ArrowDownToLine className="h-4.5 w-4.5 shrink-0 text-cyan-700 dark:text-cyan-300" />
+              </a>
+            </Button>
+          ))}
         </div>
       </section>
 

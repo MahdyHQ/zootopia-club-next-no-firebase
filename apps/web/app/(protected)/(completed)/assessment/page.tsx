@@ -4,6 +4,7 @@ import { BrainCircuit } from "lucide-react";
 import { AssessmentPlatformInfoNote } from "@/components/assessment/assessment-platform-info-note";
 import { AssessmentStudio } from "@/components/assessment/assessment-studio";
 import { getAssessmentUiLockConfig } from "@/lib/assessment-ui-lock-config";
+import { isActiveNormalUserExemptEmail } from "@/lib/server/active-normal-user-session-governance";
 import { resolveDefaultModelIdForTool } from "@/lib/server/ai/default-models";
 import { getAssessmentPromptAccessStateForUser } from "@/lib/server/assessment-prompt-lock";
 import { getRequestUiContext } from "@/lib/server/request-context";
@@ -27,6 +28,11 @@ export default async function AssessmentPage() {
     uid: user.uid,
     role: user.role,
   });
+  /* Assessment Studio must know whether this signed-in identity is exempt before hydration so
+     the UI can fail closed for standard users when shared capacity truth is missing, without
+     accidentally blocking admin or configured exempt-email identities. */
+  const platformLockUiExempt =
+    user.role === "admin" || isActiveNormalUserExemptEmail(user.email);
 
   let documents = [] as Awaited<ReturnType<typeof listDocumentsForUser>>;
   let generations = [] as Awaited<ReturnType<typeof listAssessmentGenerationsForUser>>;
@@ -100,6 +106,7 @@ export default async function AssessmentPage() {
         locale={uiContext.locale}
         messages={uiContext.messages}
         uiLockConfig={assessmentUiLockConfig}
+        platformLockUiExempt={platformLockUiExempt}
         initialPromptAccess={promptAccess}
         defaultModelId={resolveDefaultModelIdForTool("assessment")}
         models={getModelsForTool("assessment")}

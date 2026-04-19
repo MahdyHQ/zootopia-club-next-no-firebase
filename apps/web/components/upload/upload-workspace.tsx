@@ -35,6 +35,7 @@ type UploadWorkspaceProps = {
   description?: string;
   canAccessInfographic?: boolean;
   initialCreditSummary?: AssessmentDailyCreditsSummary | null;
+  platformLockUiExempt: boolean;
 };
 
 type UploadPrepareResponse = {
@@ -245,6 +246,7 @@ export function UploadWorkspace({
   description,
   canAccessInfographic = false,
   initialCreditSummary = null,
+  platformLockUiExempt,
 }: UploadWorkspaceProps) {
   const fileInputId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -269,9 +271,16 @@ export function UploadWorkspace({
   const latestDocument = documents[0] ?? null;
   const activeDocument =
     documents.find((document) => document.isActive) ?? latestDocument;
-  const isPlatformUploadLocked = platformDailyUsage?.locked === true;
+  /* `/upload` is intentionally UI-only for the shared daily-capacity lock, but normal-user
+     upload entry must still fail closed when the canonical summary is unavailable. Otherwise the
+     surface would reopen under uncertainty and drift away from the server-owned lock truth. */
+  const isPlatformLockStatusUnavailable =
+    !platformLockUiExempt && creditSummary === null;
+  const isPlatformUploadLocked =
+    !isPlatformLockStatusUnavailable && platformDailyUsage?.locked === true;
   const isBusy = pending || removingDocumentId !== null;
-  const isUploadEntryDisabled = isBusy || isPlatformUploadLocked;
+  const isUploadEntryDisabled =
+    isBusy || isPlatformUploadLocked || isPlatformLockStatusUnavailable;
 
   useEffect(() => {
     setDocuments(initialDocuments);
@@ -659,6 +668,22 @@ export function UploadWorkspace({
 
         {/* ── Status states — rendered below the dropzone content ── */}
         <div className="relative z-30 w-full space-y-5" onClick={(e) => e.stopPropagation()}>
+          {isPlatformLockStatusUnavailable ? (
+            <div
+              role="alert"
+              className="rounded-[1.25rem] border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-100"
+            >
+              <div className="space-y-1">
+                <p className="font-semibold">
+                  {messages.uploadPlatformDailyCapacityStatusUnavailableTitle}
+                </p>
+                <p className="leading-6 text-amber-700/90 dark:text-amber-100/90">
+                  {messages.uploadPlatformDailyCapacityStatusUnavailableBody}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           {isPlatformUploadLocked ? (
             <div
               role="alert"

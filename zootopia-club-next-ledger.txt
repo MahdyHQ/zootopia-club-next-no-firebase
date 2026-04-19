@@ -4675,3 +4675,142 @@ Runtime notes:
 ~ Build logs still include the pre-existing operational warning:
   `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
 ~ Warning is unchanged by this render-order-only UI adjustment.
+
+2026-04-19: PROTECTED HOME SLOGAN TOP-AREA REORDER (DIRECTLY AFTER SCROLL-GUIDANCE STRIP)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE / LAYOUT REQUEST:
+- The shared platform slogan component already existed on protected Home, but it
+  was rendered inside the hero title stack, lower in the page hierarchy.
+- Requested composition required the slogan to appear near the very beginning
+  of Home, immediately after the top scroll-guidance strip.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/page.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+TECHNICAL DETAILS:
+1. Existing slogan block moved (no rebuild)
+   - Reused the same existing `PlatformSloganNote` component instance.
+   - Rendered it directly after the top strip section:
+     `aria-label="دعوة للتمرير لأسفل"`.
+
+2. Previous lower mount removed
+   - Removed the old `PlatformSloganNote` render from the hero header/title
+     stack to keep a single source of truth and avoid duplicate slogan output.
+
+3. Styling/content safety preserved
+   - Preserved exact Arabic wording:
+     `شعارنا: زوتوبيا كلوب - السبق لنا، والتميّز عنواننا`
+   - Preserved shared component behavior and classes (premium tone, dark/light
+     compatibility, wrap-safe Arabic text handling).
+   - Kept `className="max-w-2xl"` to maintain responsive width discipline.
+
+4. Scope containment
+   - Layout-only reorder in protected Home composition.
+   - No backend/auth/session/permissions/routing-authority/business-logic
+     changes.
+   - No unrelated Home section redesign.
+
+BEFORE VS NOW:
+- Before: slogan rendered inside Zone 1 hero title stack (under `homeTitle`).
+- Now: slogan renders immediately after the top scroll-guidance strip and
+  before the narrative vision section.
+
+VERIFICATION:
+Code-trace verification:
+✓ Protected Home now contains one slogan mount directly after the strip.
+✓ Slogan mount is no longer present inside the hero title stack.
+✓ Narrative vision section and other Home sections remain in place.
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS.
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS.
+
+Runtime notes:
+~ Build logs still include the pre-existing operational warning:
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
+~ Warning is unchanged by this protected Home layout-only reorder.
+
+2026-04-19: PROTECTED LECTURE-SUMMARY DOWNLOAD-ONLY IMAGE LIBRARY (FIVE FILES)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE / UI REQUEST:
+- The protected `/lecture-summary` page already included premium preview areas,
+  but it did not provide a dedicated lower-page library for direct download of
+  the five newly requested physiology/instrumentation image files.
+- The requirement explicitly needed download-only actions (no preview cards,
+  no thumbnail rendering, and no separate view buttons) for those five files.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/lecture-summary/page.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+TECHNICAL DETAILS:
+1. Added a download-only dataset for five public assets
+   - Introduced `LECTURE_SUMMARY_ADDITIONAL_DOWNLOADS` with exact file mapping:
+     - `/physiology-lecture-1-dr-hanan.png`
+     - `/physiology-lecture-1-dr-shimaa.png`
+     - `/physiology-lecture-2-dr-shimaa.png`
+     - `/physiology-lecture-3-dr-shimaa.png`
+     - `/instru-lecture-1-dr-raafat-ali.png`
+   - Added clean Arabic labels tied to each file.
+
+2. Added a new lower-page premium section (download-only)
+   - Placed the new section near the bottom of `/lecture-summary`, after the
+     support/funding section and before the final contact return panel.
+   - Rendered buttons via mapped `Button asChild` anchors in a responsive grid
+     (`sm:grid-cols-2`) with wrap-safe text and balanced spacing.
+
+3. Direct-download implementation
+   - Each action uses the established Next.js public-asset anchor pattern:
+     `<a href={item.href} download={item.downloadName}>...`.
+   - This keeps delivery same-origin, deterministic, and production-safe for
+     static files under `apps/web/public`.
+
+4. Scope/safety preservation
+   - No backend/auth/session/permission/business-logic changes.
+   - No route ownership changes.
+   - No unrelated section redesign.
+
+LABELS ADDED:
+- `تحميل ملخص الفسيولوجي 1 - د. حنان`
+- `تحميل ملخص الفسيولوجي 1 - د. شيماء`
+- `تحميل ملخص الفسيولوجي 2 - د. شيماء`
+- `تحميل ملخص الفسيولوجي 3 - د. شيماء`
+- `تحميل ملخص الإنسترومنتيشن 1 - د. رأفت علي`
+
+INTENTIONALLY NOT DISPLAYED:
+- No rendered `<Image />` elements for the five new download files.
+- No preview thumbnails/cards for those five files.
+- No new `target="_blank"`/view-only actions for those five files.
+
+VERIFICATION:
+Code-trace verification:
+✓ Confirmed `LECTURE_SUMMARY_ADDITIONAL_DOWNLOADS` exists and maps all five
+  required file paths.
+✓ Confirmed section renders mapped buttons with
+  `download={item.downloadName}` on anchors.
+✓ Confirmed all five Arabic labels are present in source.
+✓ Confirmed no `<Image src={...}>` usage for the five requested file paths.
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS.
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS.
+
+Runtime notes:
+~ Build logs still include the pre-existing operational warning:
+  `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT is unset`.
+~ Warning is unchanged by this UI-only lecture-summary enhancement.

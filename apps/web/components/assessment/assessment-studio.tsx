@@ -76,6 +76,7 @@ type AssessmentStudioProps = {
   locale: Locale;
   messages: AppMessages;
   uiLockConfig: AssessmentUiLockConfig;
+  platformLockUiExempt: boolean;
   initialPromptAccess: AssessmentPromptAccess;
   defaultModelId: string;
   models: AiModelDescriptor[];
@@ -959,6 +960,7 @@ export function AssessmentStudio({
   locale,
   messages,
   uiLockConfig,
+  platformLockUiExempt,
   initialPromptAccess,
   defaultModelId,
   models,
@@ -980,6 +982,11 @@ export function AssessmentStudio({
      Assessment Studio only reflects that lock in the UI; admin and exempt-email bypass remain
      encoded in the backend summary so this client never re-implements exemption policy. */
   const platformDailyUsage = creditSummary?.platformDailyUsage ?? null;
+  /* Standard users should not generate while the canonical shared-capacity summary is missing,
+     but admin/configured exempt identities must remain outside this UI-only lock path. The page
+     computes the bypass on the server and passes it in so the client never guesses by email. */
+  const platformLockStatusUnavailable =
+    !platformLockUiExempt && creditSummary === null;
   const creditDisplay = creditSummary
     ? resolveAssessmentCreditDisplayModel(creditSummary)
     : null;
@@ -1140,7 +1147,8 @@ export function AssessmentStudio({
   const creditsExhausted = creditSummary
     ? isAssessmentDailyCreditsExhausted(creditSummary)
     : false;
-  const platformUsageLocked = platformDailyUsage?.locked === true;
+  const platformUsageLocked =
+    !platformLockStatusUnavailable && platformDailyUsage?.locked === true;
   const creditSummaryHeading = !creditDisplay
     ? messages.loading
     : buildAssessmentCreditPanelHeading({
@@ -1562,8 +1570,13 @@ export function AssessmentStudio({
       /* Block submits until the canonical shared credit query has resolved. This keeps the studio
          from acting on a stale server-rendered seed or a local mutation response before the same
          `/api/assessment/credits` read model used by the header is available. */
-      if (!creditSummary) {
-        setError(createOperationalUiError(messages.loading, false));
+      if (platformLockStatusUnavailable) {
+        setError(
+          createOperationalUiError(
+            messages.assessmentPlatformDailyCapacityStatusUnavailableBody,
+            false,
+          ),
+        );
         return;
       }
 
@@ -1838,7 +1851,11 @@ export function AssessmentStudio({
 
             <form
               className={`space-y-6 ${platformUsageLocked ? "opacity-95" : ""}`}
-              aria-describedby={platformUsageLocked ? "assessment-platform-capacity-lock-message" : undefined}
+              aria-describedby={
+                platformUsageLocked || platformLockStatusUnavailable
+                  ? "assessment-platform-capacity-lock-message"
+                  : undefined
+              }
               onSubmit={handleSubmit}
             >
               {/* Daily credit UI mirrors the latest server summary for the signed-in owner.
@@ -1853,6 +1870,19 @@ export function AssessmentStudio({
                     <h3 className="mt-2 text-lg font-semibold text-foreground">
                       {creditSummaryHeading}
                     </h3>
+                    {platformLockStatusUnavailable ? (
+                      <div className="mt-3 rounded-[1rem] border border-amber-500/25 bg-amber-500/10 px-3.5 py-3 text-sm text-amber-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:text-amber-100">
+                        <p className="font-semibold">
+                          {messages.assessmentPlatformDailyCapacityStatusUnavailableTitle}
+                        </p>
+                        <p
+                          id="assessment-platform-capacity-lock-message"
+                          className="mt-1 leading-6 text-amber-800/90 dark:text-amber-100/90"
+                        >
+                          {messages.assessmentPlatformDailyCapacityStatusUnavailableBody}
+                        </p>
+                      </div>
+                    ) : null}
                     {platformUsageLocked ? (
                       <div className="mt-3 rounded-[1rem] border border-amber-500/25 bg-amber-500/10 px-3.5 py-3 text-sm text-amber-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:text-amber-100">
                         <p className="font-semibold">
@@ -2389,7 +2419,7 @@ export function AssessmentStudio({
                 type="submit"
                 disabled={
                   pending ||
-                  !creditSummary ||
+                  platformLockStatusUnavailable ||
                   platformUsageLocked ||
                   creditsExhausted ||
                   (!request.prompt.trim() && !request.documentId) ||

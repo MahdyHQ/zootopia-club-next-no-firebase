@@ -35,8 +35,16 @@ function parsePositiveInteger(value: unknown) {
     return null;
   }
 
-  const parsed = Number.parseInt(value.trim(), 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  const normalized = value.trim();
+  /* Credit/runtime env keys must reject partial numeric strings such as `33abc` or `33.7`.
+     This parser feeds platform daily-capacity, per-user daily-limit, and renewal-window
+     governance, so accepting truncated values would make `.env` drift harder to spot. */
+  if (!/^\d+$/.test(normalized)) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(normalized, 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     return null;
   }
 

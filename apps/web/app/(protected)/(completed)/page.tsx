@@ -153,6 +153,10 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* Keep the shared slogan near the top fold so brand context appears early,
+          while preserving the same reusable component and responsive wrapping behavior. */}
+      <PlatformSloganNote className="max-w-2xl" />
+
       <section
         dir="rtl"
         className="relative overflow-hidden rounded-[2rem] border border-white/15 bg-white/44 p-5 backdrop-blur-2xl dark:border-white/5 dark:bg-zinc-950/34 md:p-8"
@@ -225,9 +229,6 @@ export default async function HomePage() {
             <h1 className="max-w-2xl font-[family-name:var(--font-display)] text-3xl font-black tracking-tight text-zinc-900 md:text-4xl dark:text-white">
               {uiContext.messages.homeTitle}
             </h1>
-            {/* Keep the slogan inside the title stack so Home gains a refined brand cue
-                without adding another full-width surface or disturbing the hero card rhythm. */}
-            <PlatformSloganNote className="max-w-2xl" />
           </div>
         </div>
 
