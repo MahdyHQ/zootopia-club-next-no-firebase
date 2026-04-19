@@ -42,7 +42,7 @@ export function PlatformSloganNote({
       dir="rtl"
       role="note"
       className={cn(
-        "flex w-fit max-w-full items-start gap-2.5 rounded-[1.15rem] border px-3 py-2.5 text-right backdrop-blur-sm sm:px-3.5 sm:py-3",
+        "flex w-full max-w-full items-start gap-2.5 rounded-[1.15rem] border px-3 py-2.5 text-right backdrop-blur-sm sm:px-3.5 sm:py-3 mx-auto",
         toneClasses.container,
         className,
       )}

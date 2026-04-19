@@ -1,69 +1,22 @@
 import "server-only";
 
+import { createHash, timingSafeEqual } from "node:crypto";
+
 import {
   buildAdminUsernameLookup,
 } from "@zootopia/shared-config";
 import type { AdminIdentifierResolution } from "@zootopia/shared-types";
 import type { DecodedAuthToken } from "@/lib/server/auth-types";
-import {
-  AUTH_STAGE_ADMIN_ALLOWLIST,
-  AUTH_STAGE_ADMIN_CLAIM,
-  createAuthTraceContext,
-  logAuthStageFailure,
-  logAuthStageStart,
-  logAuthStageSuccess,
-  type AuthTraceContext,
-} from "@/lib/server/auth-tracing";
 
 function normalizeIdentifier(value: string) {
   return value.trim().toLowerCase();
 }
 
-function unwrapSingleQuotedEnvValue(value: string) {
-  const normalized = value.trim();
-  if (normalized.length < 2) {
-    return normalized;
-  }
-
-  const startsWithDoubleQuote = normalized.startsWith("\"");
-  const endsWithDoubleQuote = normalized.endsWith("\"");
-  if (startsWithDoubleQuote && endsWithDoubleQuote) {
-    return normalized.slice(1, -1).trim();
-  }
-
-  const startsWithSingleQuote = normalized.startsWith("'");
-  const endsWithSingleQuote = normalized.endsWith("'");
-  if (startsWithSingleQuote && endsWithSingleQuote) {
-    return normalized.slice(1, -1).trim();
-  }
-
-  return normalized;
-}
-
-const ADMIN_EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 function readConfiguredAdminEmailsFromEnv() {
-  const normalizedEnvValue = unwrapSingleQuotedEnvValue(
-    process.env.ZOOTOPIA_ADMIN_EMAILS ?? "",
-  );
-
-  /* Admin allowlist parsing feeds both admin auth and admin-implied active-capacity exemption.
-     Keep delimiter/quote tolerance and validation aligned with the exempt-email parser so a
-     routine env edit cannot silently break admin access or cause admin identities to lose their
-     bypass. Invalid-format entries are dropped with a warning, not silently accepted. */
-  return normalizedEnvValue
-    .split(/[,\n;]+/g)
+  return (process.env.ZOOTOPIA_ADMIN_EMAILS ?? "")
+    .split(",")
     .map((value) => normalizeIdentifier(value))
-    .filter(Boolean)
-    .flatMap((value) => {
-      if (!ADMIN_EMAIL_FORMAT_REGEX.test(value)) {
-        console.warn(
-          `[admin-auth] Ignoring malformed ZOOTOPIA_ADMIN_EMAILS entry "${value.slice(0, 30)}".`,
-        );
-        return [];
-      }
-      return [value];
-    });
+    .filter(Boolean);
 }
 
 export function getAllowlistedAdminEmails() {
@@ -73,6 +26,59 @@ export function getAllowlistedAdminEmails() {
 
 export function hasConfiguredAdminAllowlist() {
   return getAllowlistedAdminEmails().length > 0;
+}
+
+function readConfiguredAdminLoginPasswordFromEnv() {
+  return (process.env.ZOOTOPIA_ADMIN_LOGIN_PASSWORD ?? "").trim();
+}
+
+export function hasConfiguredAdminLoginPasswordGate() {
+  return readConfiguredAdminLoginPasswordFromEnv().length > 0;
+}
+
+function hashAdminLoginPasswordGateValue(value: string) {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
+export function verifyAdminLoginPasswordGate(inputPassword: string | null | undefined):
+  | { ok: true }
+  | { ok: false; code: string; message: string; status: number } {
+  const configuredPassword = readConfiguredAdminLoginPasswordFromEnv();
+  if (!configuredPassword) {
+    return {
+      ok: false,
+      code: "ADMIN_LOGIN_PASSWORD_UNCONFIGURED",
+      message:
+        "Admin access is temporarily unavailable because the runtime admin password gate is not configured.",
+      status: 503,
+    };
+  }
+
+  const providedPassword = String(inputPassword ?? "").trim();
+  if (!providedPassword) {
+    return {
+      ok: false,
+      code: "ADMIN_LOGIN_PASSWORD_REQUIRED",
+      message: "Enter the environment admin access password to continue.",
+      status: 400,
+    };
+  }
+
+  /* Keep this gate constant-time by comparing fixed-size hashes instead of
+     branching on raw string length/content. This avoids turning the additional
+     admin password factor into an accidental timing side-channel. */
+  const configuredHash = hashAdminLoginPasswordGateValue(configuredPassword);
+  const providedHash = hashAdminLoginPasswordGateValue(providedPassword);
+  if (!timingSafeEqual(configuredHash, providedHash)) {
+    return {
+      ok: false,
+      code: "ADMIN_LOGIN_PASSWORD_INVALID",
+      message: "The environment admin access password is invalid.",
+      status: 403,
+    };
+  }
+
+  return { ok: true };
 }
 
 function getAdminEmailSet() {
@@ -109,20 +115,7 @@ export function resolveAdminIdentifier(
 ):
   | { ok: true; value: AdminIdentifierResolution }
   | { ok: false; code: string; message: string; status: number } {
-  const traceContext = createAuthTraceContext({
-    flow: "admin",
-    provider: "admin-auth",
-  });
-  logAuthStageStart(traceContext, AUTH_STAGE_ADMIN_ALLOWLIST, {
-    source: "resolveAdminIdentifier",
-  });
-
   if (!hasConfiguredAdminAllowlist()) {
-    logAuthStageFailure(
-      traceContext,
-      AUTH_STAGE_ADMIN_ALLOWLIST,
-      new Error("ADMIN_ALLOWLIST_UNCONFIGURED"),
-    );
     return {
       ok: false,
       code: "ADMIN_ALLOWLIST_UNCONFIGURED",
@@ -135,11 +128,6 @@ export function resolveAdminIdentifier(
   const normalized = normalizeIdentifier(identifier);
 
   if (!normalized) {
-    logAuthStageFailure(
-      traceContext,
-      AUTH_STAGE_ADMIN_ALLOWLIST,
-      new Error("IDENTIFIER_REQUIRED"),
-    );
     return {
       ok: false,
       code: "IDENTIFIER_REQUIRED",
@@ -150,11 +138,6 @@ export function resolveAdminIdentifier(
 
   if (normalized.includes("@")) {
     if (!isAllowlistedAdminEmail(normalized)) {
-      logAuthStageFailure(
-        traceContext,
-        AUTH_STAGE_ADMIN_ALLOWLIST,
-        new Error("ADMIN_ACCOUNT_UNAUTHORIZED"),
-      );
       return {
         ok: false,
         code: "ADMIN_ACCOUNT_UNAUTHORIZED",
@@ -162,11 +145,6 @@ export function resolveAdminIdentifier(
         status: 403,
       };
     }
-
-    logAuthStageSuccess(traceContext, AUTH_STAGE_ADMIN_ALLOWLIST, {
-      identifierType: "email",
-      resolutionSource: "allowlisted_email",
-    });
 
     return {
       ok: true,
@@ -183,11 +161,6 @@ export function resolveAdminIdentifier(
   /* Keep unknown usernames on the same authorization failure surface as non-allowlisted
      identifiers so the resolver does not leak a stronger account-existence signal. */
   if (!mappedEmail) {
-    logAuthStageFailure(
-      traceContext,
-      AUTH_STAGE_ADMIN_ALLOWLIST,
-      new Error("ADMIN_USERNAME_NOT_FOUND"),
-    );
     return {
       ok: false,
       code: "ADMIN_USERNAME_NOT_FOUND",
@@ -195,11 +168,6 @@ export function resolveAdminIdentifier(
       status: 403,
     };
   }
-
-  logAuthStageSuccess(traceContext, AUTH_STAGE_ADMIN_ALLOWLIST, {
-    identifierType: "username",
-    resolutionSource: "username_alias",
-  });
 
   return {
     ok: true,
@@ -232,21 +200,20 @@ function normalizeSupabaseProviderForAuthChecks(provider: string) {
 }
 
 export function getDecodedSignInProvider(
-  decodedToken: Pick<DecodedAuthToken, "app_metadata" | "auth_provider">,
+  decodedToken: Pick<DecodedAuthToken, "app_metadata" | "firebase">,
 ) {
   const metadataProvider = decodedToken.app_metadata?.provider;
   if (typeof metadataProvider === "string" && metadataProvider.trim().length > 0) {
     return normalizeSupabaseProviderForAuthChecks(metadataProvider.trim());
   }
 
-  const providerClaims = decodedToken.auth_provider as
-    | { signInProvider?: unknown }
+  const legacyProviderClaims = decodedToken.firebase as
+    | { sign_in_provider?: unknown }
     | undefined;
-  if (typeof providerClaims?.signInProvider === "string") {
-    return normalizeSupabaseProviderForAuthChecks(providerClaims.signInProvider);
-  }
 
-  return null;
+  return typeof legacyProviderClaims?.sign_in_provider === "string"
+    ? legacyProviderClaims.sign_in_provider
+    : null;
 }
 
 export function hasRecentSignIn(decodedToken: Pick<DecodedAuthToken, "auth_time">) {
@@ -273,77 +240,41 @@ export async function verifyAdminClaimActivation(
     uid: string;
     email: string | null | undefined;
     admin: unknown;
-    traceContext?: AuthTraceContext;
   },
 ): Promise<
   | { ok: true }
   | { ok: false; code: string; message: string; status: number }
 > {
-  const traceContext = input.traceContext ?? createAuthTraceContext({
-    flow: "admin",
-    provider: "admin-auth",
-    uid: input.uid,
-    email: input.email ?? null,
-  });
-  logAuthStageStart(traceContext, AUTH_STAGE_ADMIN_CLAIM);
-
-  /* Admin identity remains server-authoritative by allowlist.
-     Claims are optional at this stage: allow claims can continue to permit access, while
-     an explicit `admin: false` deny claim blocks access for an allowlisted account. */
   if (
     hasAdminAccessFromClaims({
       email: input.email,
       admin: input.admin,
     })
   ) {
-    logAuthStageSuccess(traceContext, AUTH_STAGE_ADMIN_CLAIM, {
-      claimSource: "token",
-      result: "allow",
-    });
     return { ok: true };
   }
 
-  let userRecord: {
-    email?: string | null;
-    customClaims?: Record<string, unknown> | null;
-  };
-  try {
-    userRecord = await auth.getUser(input.uid);
-  } catch (error) {
-    logAuthStageFailure(traceContext, AUTH_STAGE_ADMIN_CLAIM, error, {
-      claimSource: "auth-user-record",
-    });
-    throw error;
-  }
-
+  const userRecord = await auth.getUser(input.uid);
   if (
     hasAdminAccessFromClaims({
       email: userRecord.email ?? input.email,
       admin: userRecord.customClaims?.admin,
     })
   ) {
-    logAuthStageSuccess(traceContext, AUTH_STAGE_ADMIN_CLAIM, {
-      claimSource: "auth-user-record",
-      result: "allow",
-    });
-    return { ok: true };
+    return {
+      ok: false,
+      code: "ADMIN_TOKEN_REFRESH_REQUIRED",
+      message:
+        "The `admin: true` claim is already assigned on this account, but this sign-in token has not refreshed yet. Sign out, wait a few seconds, and sign back in through /admin/login so a fresh token can pick up the claim.",
+      status: 403,
+    };
   }
-
-  logAuthStageFailure(
-    traceContext,
-    AUTH_STAGE_ADMIN_CLAIM,
-    new Error("ADMIN_CLAIM_DENIED"),
-    {
-      claimSource: "auth-user-record",
-      result: "deny",
-    },
-  );
 
   return {
     ok: false,
-    code: "ADMIN_CLAIM_DENIED",
+    code: "ADMIN_CLAIM_REQUIRED",
     message:
-      "This allowlisted account is explicitly denied by admin claim policy (`admin: false`).",
+      "This allowlisted account does not yet have the required `admin: true` app metadata claim. Ask the owner to assign that claim in Supabase Auth, then sign out and sign back in through /admin/login.",
     status: 403,
   };
 }

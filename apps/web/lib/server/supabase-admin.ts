@@ -185,21 +185,6 @@ function normalizeSupabaseTimestamp(value: unknown) {
   return new Date(parsed).toISOString();
 }
 
-/**
- * Converts a Supabase timestamp field into UNIX seconds for auth recency checks.
- * Returns `undefined` when input is missing/invalid so callers can continue with
- * other fallback sources without throwing.
- */
-function normalizeSupabaseTimestampToUnixSeconds(value: unknown) {
-  const iso = normalizeSupabaseTimestamp(value);
-  if (!iso) {
-    return undefined;
-  }
-
-  const seconds = Math.floor(Date.parse(iso) / 1000);
-  return Number.isFinite(seconds) ? seconds : undefined;
-}
-
 function mapSupabaseUserToAuthRecord(user: User): AuthUserRecord {
   const userRecord = toLooseUserRecord(user);
   const provider = mapProviderToAuthProvider(readSupabaseProvider(user));
@@ -284,20 +269,6 @@ function buildSupabaseDecodedToken(input: {
   user: User;
 }) {
   const payload = decodeJwtPayload(input.token) ?? {};
-  const userRecord = toLooseUserRecord(input.user);
-  const emailConfirmedAt = normalizeSupabaseTimestamp(userRecord.email_confirmed_at);
-  const fallbackAuthTimeSeconds =
-    normalizeSupabaseTimestampToUnixSeconds(userRecord.last_sign_in_at) ??
-    normalizeSupabaseTimestampToUnixSeconds(userRecord.updated_at) ??
-    normalizeSupabaseTimestampToUnixSeconds(userRecord.created_at);
-  const resolvedAuthTimeSeconds =
-    typeof payload.auth_time === "number"
-      ? payload.auth_time
-      : typeof payload.iat === "number"
-        ? payload.iat
-        : fallbackAuthTimeSeconds;
-  const resolvedIatSeconds =
-    typeof payload.iat === "number" ? payload.iat : resolvedAuthTimeSeconds;
   /* Provider is resolved from the current JWT payload first so admin password-only
      checks reflect this sign-in token, not only account-level identity metadata. */
   const provider = mapProviderToAuthProvider(
@@ -308,23 +279,15 @@ function buildSupabaseDecodedToken(input: {
       ? (input.user.app_metadata as Record<string, unknown>)
       : null;
 
-  const hasAdminAllowClaim =
+  const adminClaim =
     appMetadata?.admin === true ||
     appMetadata?.role === "admin" ||
-    payload.admin === true ||
-    payload.role === "admin";
-  const hasAdminDenyClaim = appMetadata?.admin === false || payload.admin === false;
-  const adminClaim = hasAdminAllowClaim ? true : hasAdminDenyClaim ? false : undefined;
+    (payload.admin === true || payload.role === "admin");
 
   const decodedToken = {
     ...payload,
     uid: input.user.id,
     email: input.user.email ?? undefined,
-    /* Auth bootstrap must trust live Supabase user confirmation state so downstream
-       session creation can fail closed when email verification has not completed. */
-    email_verified: Boolean(emailConfirmedAt),
-    email_confirmed_at: emailConfirmedAt ?? null,
-    emailVerified: Boolean(emailConfirmedAt),
     name:
       typeof input.user.user_metadata?.name === "string"
         ? input.user.user_metadata.name
@@ -338,12 +301,16 @@ function buildSupabaseDecodedToken(input: {
           ? input.user.user_metadata.avatar_url
           : undefined,
     admin: adminClaim,
-    role: adminClaim === true ? "admin" : "user",
-    auth_time: resolvedAuthTimeSeconds,
-    iat: resolvedIatSeconds,
-    // Active claim shape is architecture-neutral and maps to Supabase/Auth.js provider truth.
-    auth_provider: {
-      signInProvider: provider,
+    role: adminClaim ? "admin" : "user",
+    auth_time:
+      typeof payload.auth_time === "number"
+        ? payload.auth_time
+        : typeof payload.iat === "number"
+          ? payload.iat
+          : undefined,
+    // Legacy claim shape is retained so older provider readers keep working during cleanup.
+    firebase: {
+      sign_in_provider: provider,
     },
   };
 
@@ -506,32 +473,5 @@ export async function revokeSupabaseRefreshTokens(uid: string) {
         code: "auth/internal-error",
       });
     }
-  }
-}
-
-export async function deleteSupabaseAuthUser(uid: string) {
-  if (!hasSupabaseAdminRuntime()) {
-    return;
-  }
-
-  const adminClient = getSupabaseAdminClient();
-  const authAdmin = adminClient.auth.admin as unknown as {
-    deleteUser?: (
-      userId: string,
-      shouldSoftDelete?: boolean,
-    ) => Promise<{ error: { message?: string } | null }>;
-  };
-
-  if (typeof authAdmin.deleteUser !== "function") {
-    throw Object.assign(new Error("Supabase deleteUser API is unavailable"), {
-      code: "auth/internal-error",
-    });
-  }
-
-  const { error } = await authAdmin.deleteUser(uid, false);
-  if (error) {
-    throw Object.assign(new Error(error.message || "Unable to delete auth user"), {
-      code: "auth/internal-error",
-    });
   }
 }

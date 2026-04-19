@@ -36,9 +36,6 @@ export type AuthUserRecord = {
 export type DecodedAuthToken = {
   uid: string;
   email?: string | null;
-  email_verified?: boolean;
-  email_confirmed_at?: string | null;
-  emailVerified?: boolean;
   name?: string;
   picture?: string;
   admin?: unknown;
@@ -50,6 +47,6 @@ export type DecodedAuthToken = {
     role?: string | null;
     admin?: unknown;
   };
-  // Active provider claim shape for Supabase/Auth.js runtime paths.
-  auth_provider?: { signInProvider?: string | null };
+  // Legacy compatibility while older claim readers finish migrating to app_metadata.
+  firebase?: { sign_in_provider?: string | null };
 } & Record<string, unknown>;
