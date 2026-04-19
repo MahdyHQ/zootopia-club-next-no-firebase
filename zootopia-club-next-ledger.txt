@@ -6297,3 +6297,42 @@ Change Log
     - `scripts/firebase/set-apphosting-secrets-firebase-only.ps1`
     - `docs/app-hosting-env-secrets-beginner-guide.md`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-19 20:35:00 | Protected Home slogan card horizontal-centering fix (UI-only)
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before implementation.
+    - launched a read-only `Explore` subagent first, then directly verified target files before editing:
+      - `apps/web/app/(protected)/(completed)/page.tsx`
+      - `apps/web/components/branding/platform-slogan-note.tsx`
+      - `apps/web/app/globals.css`
+      - `apps/web/components/layout/protected-shell.tsx`
+  - Root cause:
+    - the shared slogan component used `w-fit` on its outer `<aside>`, which forced intrinsic content width and prevented true horizontal centering in the Home lane.
+    - Home already passed `className="max-w-2xl"`, but intrinsic width from `w-fit` made the card feel side-shifted (especially in RTL context under the discovery strip).
+  - What changed (surgical):
+    - `apps/web/components/branding/platform-slogan-note.tsx`
+      - replaced `w-fit` with `w-full` and kept `mx-auto` centering on the root `<aside>` class stack.
+      - preserved existing text/icon content, tone variants, RTL text alignment, and compact premium styling tokens.
+  - Exact UI alignment fix:
+    - before: `flex w-fit max-w-full ...`
+    - after: `flex w-full max-w-full ... mx-auto`
+    - result: the slogan card now honors consumer max-width constraints (`max-w-2xl` on Home, `max-w-3xl` on lecture-summary) while centering horizontally in its lane.
+  - What was intentionally preserved:
+    - no route changes, no auth/session/backend/API changes, and no navigation behavior changes.
+    - no slogan wording changes.
+    - no redesign of other Home sections/cards.
+    - dark/light styling, iconography, and existing premium visual language preserved.
+  - Runtime/deployment-path impact (explicit):
+    - Local integrated development (`apps/web`): frontend class-only change; backend unchanged; shared behavior unchanged; no env dependency.
+    - Vercel production: same frontend class-only change after build; backend unchanged; shared behavior unchanged; no env dependency.
+    - Firebase App Hosting path: same frontend class-only change after build; backend unchanged; shared behavior unchanged; no env dependency.
+  - Verification in this pass:
+    - `npm run lint:web` passed.
+    - `npm run typecheck:web` failed due pre-existing unrelated errors in auth/server migration surfaces (not introduced by this UI patch):
+      - missing `createSessionCookie` in `app/api/auth/bootstrap/route.ts` and `app/api/auth/admin/bootstrap/route.ts`
+      - missing `deleteSupabaseAuthUser` export in `lib/server/server-auth.ts`
+      - `traceContext` property mismatch in `auth.ts`
+    - `npm run build:web` failed for the same pre-existing unrelated `deleteSupabaseAuthUser` export issue in `lib/server/server-auth.ts`.
+  - Files changed in this pass:
+    - `apps/web/components/branding/platform-slogan-note.tsx`
+    - `zootopia-club-next-ledger.txt`
