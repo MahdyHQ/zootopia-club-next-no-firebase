@@ -130,6 +130,29 @@ export default async function HomePage() {
 
   return (
     <div className="min-w-0 max-w-full space-y-5 animate-in fade-in duration-700 md:space-y-6">
+      <section
+        dir="rtl"
+        aria-label="دعوة للتمرير لأسفل"
+        className="relative overflow-hidden rounded-[1.2rem] border border-emerald-300/30 bg-white/58 px-4 py-2.5 shadow-[0_10px_30px_rgba(16,185,129,0.08)] backdrop-blur-xl dark:border-emerald-300/15 dark:bg-zinc-900/52 sm:px-5"
+      >
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-emerald-300/20 to-transparent dark:from-emerald-400/12" aria-hidden />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-cyan-300/20 to-transparent dark:from-cyan-400/12" aria-hidden />
+
+        <div className="relative z-10 flex flex-wrap items-center justify-center gap-2.5 text-center sm:gap-3">
+          <span
+            aria-hidden
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/10 text-sm text-emerald-700 dark:border-emerald-300/30 dark:bg-emerald-400/10 dark:text-emerald-200"
+          >
+            👇
+          </span>
+          <p className="text-[12px] font-bold leading-6 text-zinc-700 dark:text-zinc-100 sm:text-[13px]">
+            لا تفوّت أي تفصيل — مرّر لأسفل واكتشف كل ما يميز المنصة
+          </p>
+          {/* Keep motion gentle and hint-like so the strip invites scrolling without creating noisy movement pressure. */}
+          <ChevronDown className="h-4 w-4 text-emerald-600 animate-[bounce_2.3s_ease-in-out_infinite] motion-reduce:animate-none dark:text-emerald-300" />
+        </div>
+      </section>
+
       {/* ═══════════════════════════════════════════════════════════════════
           ZONE 1 — UNIFIED HERO SURFACE
           Merges: title, stats, workspace nav, Hall of Honor, platform story,

@@ -1825,6 +1825,80 @@ Sensitive Areas Requiring Extra Care:
 29. HISTORICAL CHANGE LOG
 ================================================================================
 
+2026-04-19: PROTECTED HOME TOP SCROLL-GUIDANCE STRIP (ARABIC-ONLY, PREMIUM)
+────────────────────────────────────────────────────────────────────────────
+
+ROOT CAUSE:
+1. Protected Home already had rich sections, but the primary scroll invitation
+   appeared lower inside the hero/status lane and was easy to miss on first view.
+2. The requested UX needed an early, elegant, non-intrusive top-level cue that
+   encourages users to continue downward and discover the full page.
+
+FILES CHANGED:
+- apps/web/app/(protected)/(completed)/page.tsx
+- zootopia-club-next-ledger.txt
+
+MIGRATIONS:
+- No migration added.
+- No migration changed.
+
+REASON:
+- Deliver a minimal, protected Home UI-only enhancement that adds a premium
+  top scroll-invitation strip without touching backend/auth/session/permissions/
+  routing authority/business logic.
+
+TECHNICAL DETAILS:
+1. Placement and hierarchy
+   - Added a new RTL guidance strip at the very top of the Home page container,
+     immediately before the existing Zone 1 hero section.
+   - Kept the element lightweight and non-blocking so current Home structure,
+     cards, and flow remain intact.
+
+2. Arabic-only copy
+   - Added polished Arabic guidance text:
+     `لا تفوّت أي تفصيل — مرّر لأسفل واكتشف كل ما يميز المنصة`
+   - No English text was introduced inside this new guidance element.
+
+3. Downward cue + motion
+   - Used a downward hand emoji indicator (`👇`) plus `ChevronDown` icon.
+   - Applied subtle hint motion on the chevron only:
+     `animate-[bounce_2.3s_ease-in-out_infinite] motion-reduce:animate-none`.
+   - Motion remains lightweight and respects reduced-motion preferences.
+
+4. Theme and responsiveness
+   - Matched existing premium translucent/glow language with light/dark-safe
+     border/background/text tokens.
+   - Used wrap-safe centered layout (`flex-wrap`, `text-center`, adaptive
+     small-text sizing) to keep readability stable across mobile/tablet/desktop/
+     ultrawide widths.
+
+PRESERVED INTENTIONALLY:
+- No backend/API/auth/session/permissions/routing-authority/business-logic
+  modifications.
+- No popups, no scroll hijacking, no blocking behavior.
+- Existing Home sections and interaction patterns remain unchanged.
+
+VERIFICATION:
+Diagnostics:
+✓ `get_errors` on changed file — PASS.
+
+Command verification:
+✓ `npm run lint --workspace @zootopia/web` — PASS.
+✓ `npm run typecheck --workspace @zootopia/web` — PASS.
+✓ `npm run build --workspace @zootopia/web` — PASS.
+✓ `npm run build:vercel --workspace @zootopia/web` — PASS.
+
+Code-trace UI verification:
+✓ New top strip exists before Home hero section and renders Arabic-only copy.
+✓ Downward cue uses `👇` + animated `ChevronDown` with reduced-motion fallback.
+✓ Theme classes provide readable light/dark contrast.
+✓ Layout classes maintain responsive wrapping/alignment on narrow and wide viewports.
+
+Runtime note:
+~ No authenticated browser screenshot session was available in this environment,
+  so visual confirmation is code-trace based plus successful lint/type/build/
+  build:vercel passes.
+
 2026-04-19: HOME PAGE TEASER CTA DARK MODE FIX
 ────────────────────────────────────────────────────────────────────────────
 
