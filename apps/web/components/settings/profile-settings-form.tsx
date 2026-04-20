@@ -1,6 +1,5 @@
 "use client";
 
-import { APP_ROUTES } from "@zootopia/shared-config";
 import type {
   ApiResult,
   Locale,
@@ -73,9 +72,9 @@ function buildProfileTransitionText(locale: Locale) {
       capacityAvailable:
         "اكتمل ملفك الشخصي الآن، وأصبح حسابك خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة.",
       capacityFull:
-        "اكتمل ملفك الشخصي الآن، وأصبح حسابك خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة. السعة ممتلئة حالياً، وسنعيدك إلى تسجيل الدخول لتجربة الدخول عند توفر مقعد.",
+        "اكتمل ملفك الشخصي الآن، وأصبح حسابك خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة. السعة ممتلئة حالياً، وقد تنتظر بعض الإجراءات المحمية حتى يتوفر مقعد.",
       admissionUnavailable:
-        "اكتمل ملفك الشخصي الآن، وأصبح حسابك خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة. تعذر تأكيد حالة الإتاحة حالياً، لذا سجّل الدخول مرة أخرى بعد قليل.",
+        "اكتمل ملفك الشخصي الآن، وأصبح حسابك خاضعاً لنظام الإتاحة والسعة المعتاد في المنصة. تعذر تأكيد حالة الإتاحة حالياً، وقد تطلب بعض الإجراءات المحمية إعادة المحاولة بعد قليل.",
     };
   }
 
@@ -83,9 +82,9 @@ function buildProfileTransitionText(locale: Locale) {
     capacityAvailable:
       "Your profile is now complete, and your account now follows the platform's normal admission and capacity rules.",
     capacityFull:
-      "Your profile is now complete, and your account now follows the platform's normal admission and capacity rules. Capacity is full right now, so we'll return you to login to try again when a slot opens.",
+      "Your profile is now complete, and your account now follows the platform's normal admission and capacity rules. Capacity is currently full, so some protected actions may wait until a slot opens.",
     admissionUnavailable:
-      "Your profile is now complete, and your account now follows the platform's normal admission and capacity rules. We could not confirm availability right now, so please sign in again in a moment.",
+      "Your profile is now complete, and your account now follows the platform's normal admission and capacity rules. Availability could not be confirmed right now, so protected actions may ask you to retry shortly.",
   };
 }
 
@@ -603,41 +602,24 @@ export function ProfileSettingsForm({
 
       const completionTransition = payload.data.completionTransition;
       if (completionTransition?.becameEligible) {
+        /* Completion transition messaging should explain admission state without changing
+           the canonical post-save destination returned by the server. This keeps redirect
+           ownership backend-authoritative and avoids client-only route forks. */
         if (completionTransition.admissionState === "capacity_full") {
-          const loginUrl = new URL(APP_ROUTES.login, window.location.origin);
-          if (payload.data.user.email) {
-            loginUrl.searchParams.set("email", payload.data.user.email);
-          }
-          loginUrl.searchParams.set("profileTransition", "1");
-          loginUrl.searchParams.set("profileTransitionState", "capacity_full");
-
           setSaveFeedback({
             tone: "warning",
             message: transitionText.capacityFull,
           });
-          scheduleRedirect(
-            `${loginUrl.pathname}${loginUrl.search}`,
-            false,
-          );
+          scheduleRedirect(payload.data.redirectTo, true);
           return;
         }
 
         if (completionTransition.admissionState === "admission_unavailable") {
-          const loginUrl = new URL(APP_ROUTES.login, window.location.origin);
-          if (payload.data.user.email) {
-            loginUrl.searchParams.set("email", payload.data.user.email);
-          }
-          loginUrl.searchParams.set("profileTransition", "1");
-          loginUrl.searchParams.set("profileTransitionState", "admission_unavailable");
-
           setSaveFeedback({
             tone: "warning",
             message: transitionText.admissionUnavailable,
           });
-          scheduleRedirect(
-            `${loginUrl.pathname}${loginUrl.search}`,
-            false,
-          );
+          scheduleRedirect(payload.data.redirectTo, true);
           return;
         }
 
