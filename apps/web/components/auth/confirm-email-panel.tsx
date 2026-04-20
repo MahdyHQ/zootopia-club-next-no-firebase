@@ -152,6 +152,30 @@ function resolveReturnRoute(flow: ConfirmEmailFlow, fromRoute: string) {
   return APP_ROUTES.login;
 }
 
+function resolveConfirmationPurposeContent(
+  flow: ConfirmEmailFlow,
+  messages: AppMessages,
+) {
+  if (flow === "sign_up") {
+    return {
+      title: messages.confirmEmailPurposeSignupTitle,
+      body: messages.confirmEmailPurposeSignupBody,
+    };
+  }
+
+  if (flow === "admin") {
+    return {
+      title: messages.confirmEmailPurposeAdminTitle,
+      body: messages.confirmEmailPurposeAdminBody,
+    };
+  }
+
+  return {
+    title: messages.confirmEmailPurposeSigninTitle,
+    body: messages.confirmEmailPurposeSigninBody,
+  };
+}
+
 function toOptionalString(value: string | null | undefined) {
   const normalized = value?.trim() ?? "";
   return normalized.length > 0 ? normalized : null;
@@ -772,6 +796,10 @@ export function ConfirmEmailPanel({
 
   const returnRoute = useMemo(() => resolveReturnRoute(flow, fromRoute), [flow, fromRoute]);
   const flowKind = flow === "admin" ? "admin" : "user";
+  const purposeContent = useMemo(
+    () => resolveConfirmationPurposeContent(flow, messages),
+    [flow, messages],
+  );
 
   const syncGovernanceState = useCallback(async (
     targetEmail: string,
@@ -1231,6 +1259,18 @@ export function ConfirmEmailPanel({
     <div className="relative mx-auto flex w-full max-w-[480px] flex-col gap-3 animate-in fade-in zoom-in-95 duration-700">
       <div className="relative isolate overflow-hidden rounded-[2rem] border border-border bg-background-elevated/90 p-5 shadow-2xl shadow-black/16 backdrop-blur-2xl sm:p-6">
         <div className="relative z-10 flex flex-col gap-4">
+          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+            {/* This page-level purpose block explains why confirmation exists for this
+               specific auth lane (signup vs sign-in recovery vs admin lane). Keep this
+               explicit so users do not confuse lifecycle verification with credential failure. */}
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
+              {purposeContent.title}
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              {purposeContent.body}
+            </p>
+          </div>
+
           {/* Keep confirmation UX explicit and recovery-focused so unverified accounts are not misdiagnosed as session refresh failures. */}
           <AuthStatus status={visibleStatus} />
 

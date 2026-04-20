@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
+import { APP_ROUTES } from "@zootopia/shared-config";
 
+import { describeAuthFailure, normalizeAuthFailure } from "@/lib/auth-failure";
 import { validateUserPasswordPolicy } from "@/lib/password-policy";
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import { isAllowlistedAdminEmail } from "@/lib/server/admin-auth";
@@ -45,6 +47,14 @@ function createPasswordFlowSupabaseClient() {
 function mapPasswordChangeUpdateError(error: { code?: string; message?: string; status?: number }) {
   const normalizedCode = String(error.code || "").trim().toLowerCase();
   const normalizedMessage = String(error.message || "").trim().toLowerCase();
+  const normalizedFailure = normalizeAuthFailure({
+    error,
+    flow: "user",
+    stage: "AUTH_STAGE_C_PROVIDER_RESPONSE",
+    routePath: APP_ROUTES.settings,
+    sessionCreationAttempted: false,
+  });
+  const authCatalog = describeAuthFailure(normalizedFailure);
 
   if (normalizedCode.includes("same") || normalizedMessage.includes("same password")) {
     return {
@@ -75,6 +85,25 @@ function mapPasswordChangeUpdateError(error: { code?: string; message?: string; 
       code: "PASSWORD_CHANGE_REAUTH_REQUIRED",
       message: "Please sign in again before changing the password.",
       status: 401,
+    };
+  }
+
+  if (
+    authCatalog.code === "AUTH_PROVIDER_MISCONFIGURED"
+    || authCatalog.code === "AUTH_ENV_MISCONFIGURED"
+  ) {
+    return {
+      code: "PASSWORD_CHANGE_UNAVAILABLE",
+      message: "Password change runtime is unavailable right now.",
+      status: 503,
+    };
+  }
+
+  if (authCatalog.code === "AUTH_NETWORK_FAILURE") {
+    return {
+      code: "PASSWORD_CHANGE_PROVIDER_NETWORK_FAILURE",
+      message: "Password change could not be completed due to an upstream network issue.",
+      status: 502,
     };
   }
 
