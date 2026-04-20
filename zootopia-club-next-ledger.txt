@@ -6567,3 +6567,32 @@ Change Log
     - `npm run supabase:check` passed and listed 23 migration files including `20260420093000_tool_accounting_generation_aggregation_backfill.sql`.
     - Remaining live-runtime note:
       - build output still warns that `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is unset. This remains an operator env concern, not a compile failure.
+
+- 2026-04-20 18:25:10 | Build blocker fix: restore missing runtime deps in apps/web manifest
+  - Context:
+    - `next build` failed with repeated `module-not-found` traces from:
+      - `apps/web/components/layout/protected-workspace-query-provider.tsx`
+      - `apps/web/lib/assessment-credit-query.ts`
+      - `apps/web/app/layout.tsx`
+      - `apps/web/auth.ts`
+      - `apps/web/components/auth/admin-login-panel.tsx`
+      - `apps/web/components/auth/login-panel.tsx`
+      - `apps/web/components/auth/sign-out-button.tsx`
+      - `apps/web/components/settings/password-change-panel.tsx`
+    - Those files import `@tanstack/react-query`, `next-auth`, `@vercel/analytics`, and `@vercel/speed-insights`.
+  - Root cause:
+    - `apps/web/package.json` had drifted and was missing these runtime dependencies even though the source code still imports them.
+    - This causes clean installs (for example CI/Vercel builds) to omit required packages and fail during module resolution.
+  - Change made:
+    - Updated `apps/web/package.json` dependencies to restore:
+      - `@tanstack/react-query@^5.99.0`
+      - `@vercel/analytics@^2.0.1`
+      - `@vercel/speed-insights@^2.0.0`
+      - `next-auth@^5.0.0-beta.30`
+  - Verification:
+    - `npm run build --workspace @zootopia/web` passed locally.
+    - Build completed all compile/type/page-data/static-generation steps successfully.
+    - Remaining warning is unchanged and unrelated to module resolution: `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` unset.
+  - Files changed in this pass:
+    - `apps/web/package.json`
+    - `zootopia-club-next-ledger.txt`
