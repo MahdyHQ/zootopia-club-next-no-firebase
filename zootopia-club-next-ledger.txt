@@ -1,5 +1,5 @@
 Zootopia Club Next Master Ledger
-Last refreshed: 2026-04-20 17:33:04
+Last refreshed: 2026-04-20 18:52:40
 
 Project Identity
 - Name: Zootopia Club Next
@@ -6570,6 +6570,48 @@ Change Log
 
 - 2026-04-20 18:25:10 | Build blocker fix: restore missing runtime deps in apps/web manifest
   - Context:
+
+
+- 2026-04-20 18:52:40 | Infographic central-accounting hardening: add durable tool-accounting deduction writes
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before editing.
+    - traced current architecture against real code (not ledger-only) including:
+      - `apps/web/auth.ts`
+      - `apps/web/lib/server/session.ts`
+      - `apps/web/lib/server/repository.ts`
+      - `apps/web/lib/server/tool-accounting.ts`
+      - `apps/web/lib/server/assessment-tool-accounting.ts`
+      - `apps/web/lib/server/infographic-tool-accounting.ts`
+      - `apps/web/lib/server/platform-usage-aggregation.ts`
+      - `apps/web/app/api/auth/**`
+      - `apps/web/app/api/assessment/**`
+      - `apps/web/app/api/infographic/route.ts`
+      - `supabase/migrations/**`
+    - ran parallel subagent-style tracing passes for ledger/architecture, wallet-accounting, auth lifecycle, owner-scope paths, admin authority/allowlist, schema truth, write-paths, storage ownership, and admin mutation/realtime governance.
+  - What was already correct:
+    - Auth.js is still the live trust boundary and admin/user session lanes are separate.
+    - owner-scoped uploads/results/exports/settings/storage guards are server-enforced and route/session bound.
+    - central shared accounting tables (`tool_accounting_accounts`, `tool_accounting_entries`, `tool_usage_events`) are present and already populated by assessment flows/admin mutations.
+    - platform aggregation reads shared accounting/event tables (not assessment daily-ledger rows as hidden truth).
+  - Root gap found:
+    - infographic success flow wrote central `tool_usage_events` only, but did not also write a durable infographic `tool_accounting_entries` generation deduction row.
+    - this left infographic with a weaker central mutation-history lane than assessment and reduced resilience if usage-event writes degrade.
+  - Surgical fix shipped:
+    - `apps/web/app/api/infographic/route.ts` now records `recordInfographicGenerationAccountingDeduction(...)` after durable generation save, with deterministic ids and actor/owner metadata.
+    - kept the existing usage-event write and added explicit explanatory comments preserving tool isolation + central accounting dual-lane intent.
+    - new accounting write remains best-effort non-fatal (same reliability contract as existing usage-event mirror).
+  - Schema/migration impact:
+    - no new migration required in this pass.
+    - latest canonical schema remains unchanged; write-path hardening used existing central tables.
+  - Verification in this pass:
+    - `npm run lint:web` passed.
+    - `npm run typecheck:web` passed.
+    - `npm run build:web` failed due environment network inability to fetch Google Fonts (`fonts.googleapis.com`) during Next build; not caused by this code change.
+    - `npm run build:vercel` failed for the same external-font fetch limitation.
+    - `npm run supabase:check` passed (migration order/list validation succeeded).
+  - Files changed in this pass:
+    - `apps/web/app/api/infographic/route.ts`
+    - `zootopia-club-next-ledger.txt`
     - `next build` failed with repeated `module-not-found` traces from:
       - `apps/web/components/layout/protected-workspace-query-provider.tsx`
       - `apps/web/lib/assessment-credit-query.ts`
