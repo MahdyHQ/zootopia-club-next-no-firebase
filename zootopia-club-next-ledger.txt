@@ -1,5 +1,4 @@
 Zootopia Club Next Master Ledger
-Last refreshed: 2026-04-20 19:10:00
 
 Project Identity
 - Name: Zootopia Club Next
@@ -6615,15 +6614,6 @@ lex: 1 1 10.25rem) from unifying the JSON/Markdown/DOCX formats in preview mode.
     - `apps/web/app/api/infographic/route.ts`
     - `zootopia-club-next-ledger.txt`
 
-- 2026-04-20 19:10:00 | Ledger refresh housekeeping pass (no runtime code changes)
-  - Re-read the full ledger and root `AGENTS.md` instructions for workflow compliance.
-  - Confirmed repository working tree had no pending source edits before this pass.
-  - Refreshed `Last refreshed` timestamp and recorded this maintenance-only entry so project memory matches current task activity.
-  - Runtime/backend/schema behavior remains unchanged in this pass; no migrations, route logic, or dependency edits were introduced.
-  - Verification in this pass:
-    - `git status -sb` (clean before ledger refresh; dirty only from ledger update after edit).
-  - Files changed in this pass:
-    - `zootopia-club-next-ledger.txt`
     - `next build` failed with repeated `module-not-found` traces from:
       - `apps/web/components/layout/protected-workspace-query-provider.tsx`
       - `apps/web/lib/assessment-credit-query.ts`
