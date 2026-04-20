@@ -6638,3 +6638,59 @@ Change Log
   - Files changed in this pass:
     - `apps/web/package.json`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-20 20:35:00 | Centralized auth-error catalog hardening + confirm-email purpose UX clarification
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before editing.
+    - traced actual code paths first (ledger treated as history only) across auth routes, Auth.js callbacks, Supabase server adapters, session trust boundary, and auth UI panels.
+    - ran focused parallel tracing passes for:
+      1) auth route ownership
+      2) auth UI/message mapping
+      3) Auth.js + Supabase lifecycle handoff
+      4) owner-scope + session authority
+      5) auth normalization/error mapping
+      6) confirm-email UX behavior
+      7) admin/user auth boundary separation
+  - What was true before this pass:
+    - `apps/web/lib/auth-failure.ts` already normalized many auth/provider error codes.
+    - auth UI used normalization but lacked one explicit central metadata catalog describing category/severity/dev meaning/expected behavior.
+    - confirm-email page copy was helpful but mostly generic; it did not explicitly explain why confirmation is required per flow (signup vs sign-in recovery vs admin lane).
+    - password-change provider/update error mapping still used a local ad-hoc string parser without central auth-domain classification context.
+  - Changes shipped in this pass:
+    - Hardened centralized auth error domain in `apps/web/lib/auth-failure.ts`:
+      - added explicit auth-domain category model (`validation`, `authentication`, `authorization`, `lifecycle_state`, `capacity_or_rate_limit`, `provider_or_upstream`, `misconfiguration`, `network`, `unknown`).
+      - added severity model and central `AUTH_ERROR_CATALOG` entries with user-safe meaning, developer meaning, expected behavior, and affected flows.
+      - added central helpers:
+        - `getAuthErrorCatalogEntry(...)`
+        - `describeAuthFailure(...)`
+      - extended raw-code normalization map to cover auth boundary/lifecycle/security-relevant codes such as `UNAUTHENTICATED`, `FORBIDDEN`, owner-scope mismatch tokens, admin allowlist/password-gate failures, and password-change reauth lifecycle signals.
+      - preserved existing normalized-code behavior for backward compatibility.
+    - Improved confirm-email UX intent clarity in `apps/web/components/auth/confirm-email-panel.tsx`:
+      - added a dedicated purpose block rendered above status feedback.
+      - purpose messaging now changes by flow (`sign_up`, `sign_in`, `admin`) to explain:
+        - why confirmation is required in this lane,
+        - what it unlocks,
+        - and that admin allowlist/claim/gate checks remain separate from email confirmation.
+      - kept Auth.js trust-boundary design unchanged.
+    - Added new localized confirm-email purpose strings:
+      - `apps/web/messages/en.json`
+      - `apps/web/messages/ar.json`
+    - Reduced local auth-error drift in password-change route (`apps/web/app/api/auth/password/change/route.ts`):
+      - route now imports `normalizeAuthFailure` + `describeAuthFailure` and uses centralized auth classification for provider misconfiguration/network fallbacks in password update failure mapping.
+      - retained existing specific password-policy/reused-password/re-auth mappings.
+  - Security/ownership/admin-boundary notes after this pass:
+    - owner-scope violation and session/authz failures now have explicit central catalog entries (`AUTH_OWNER_SCOPE_VIOLATION`, `AUTH_UNAUTHENTICATED`, `AUTH_UNAUTHORIZED`, `AUTH_FORBIDDEN`) to make future tracing/remediation safer.
+    - admin failures remain distinct via explicit catalog semantics (allowlist vs claim vs runtime gate) and existing admin lane checks were preserved.
+    - no client-side trust shift; Auth.js/session + backend authority paths remain server-owned.
+  - Files changed in this pass:
+    - `apps/web/lib/auth-failure.ts`
+    - `apps/web/components/auth/confirm-email-panel.tsx`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `apps/web/app/api/auth/password/change/route.ts`
+    - `zootopia-club-next-ledger.txt`
+  - Verification in this pass:
+    - `npm run lint:web` passed.
+    - `npm run typecheck:web` passed.
+    - `npm run build:web` failed in this environment because Next.js could not fetch Google Fonts from `fonts.googleapis.com` (`Alexandria`, `Amiri`, `Geist`, `JetBrains Mono`, `Plus Jakarta Sans`).
+    - `npm run build:vercel` failed for the same external Google Fonts connectivity limitation.

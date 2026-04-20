@@ -31,6 +31,29 @@ export type AuthFailureUxAction =
   | "retry"
   | "refresh_session";
 
+export type AuthFailureCategory =
+  | "validation"
+  | "authentication"
+  | "authorization"
+  | "lifecycle_state"
+  | "capacity_or_rate_limit"
+  | "provider_or_upstream"
+  | "misconfiguration"
+  | "network"
+  | "unknown";
+
+export type AuthFailureSeverity = "info" | "warning" | "error" | "critical";
+
+export type AuthErrorCatalogEntry = {
+  code: string;
+  category: AuthFailureCategory;
+  severity: AuthFailureSeverity;
+  userMessage: string;
+  developerMeaning: string;
+  expectedBehavior: string;
+  affectedFlows: readonly string[];
+};
+
 export type NormalizedAuthFailure = {
   normalizedCode: AuthFailureCode;
   flow: AuthFlowKind;
@@ -42,6 +65,203 @@ export type NormalizedAuthFailure = {
   sessionCreationAttempted: boolean;
   confirmationStatusImplicated: boolean;
   envValidationFailed: boolean;
+};
+
+/* Central auth error catalog.
+   This is the single source of truth for auth-domain classification (validation vs
+   authentication vs authorization vs lifecycle) across UI messaging, API route handling,
+   and future observability/reporting work. Future agents should add new auth-domain error
+   codes here first, then wire call sites, instead of scattering local string switches. */
+const AUTH_ERROR_CATALOG: Record<string, AuthErrorCatalogEntry> = {
+  AUTH_INVALID_INPUT: {
+    code: "AUTH_INVALID_INPUT",
+    category: "validation",
+    severity: "warning",
+    userMessage: "Some submitted values are invalid. Please review and retry.",
+    developerMeaning: "Auth request payload failed schema/format validation before authentication.",
+    expectedBehavior: "Return 400 with field-level hints when possible.",
+    affectedFlows: ["signup", "login", "admin_login", "forgot_password", "reset_password", "change_password"],
+  },
+  AUTH_INVALID_CREDENTIALS: {
+    code: "AUTH_INVALID_CREDENTIALS",
+    category: "authentication",
+    severity: "warning",
+    userMessage: "Email or password is incorrect.",
+    developerMeaning: "Credential verification failed with provider/auth adapter.",
+    expectedBehavior: "Return 401 without leaking whether account exists.",
+    affectedFlows: ["login", "admin_login"],
+  },
+  AUTH_EMAIL_NOT_CONFIRMED: {
+    code: "AUTH_EMAIL_NOT_CONFIRMED",
+    category: "lifecycle_state",
+    severity: "warning",
+    userMessage: "This account must confirm email before login can continue.",
+    developerMeaning: "Identity exists but provider marks email verification pending.",
+    expectedBehavior: "Send user to confirm-email recovery lane.",
+    affectedFlows: ["signup", "login", "admin_login", "confirm_email", "resend_confirmation"],
+  },
+  AUTH_ACCOUNT_ALREADY_EXISTS: {
+    code: "AUTH_ACCOUNT_ALREADY_EXISTS",
+    category: "lifecycle_state",
+    severity: "warning",
+    userMessage: "An account with this email already exists.",
+    developerMeaning: "Signup attempted against an existing identity.",
+    expectedBehavior: "Guide user toward sign-in or confirm-email.",
+    affectedFlows: ["signup"],
+  },
+  AUTH_ACCOUNT_SUSPENDED: {
+    code: "AUTH_ACCOUNT_SUSPENDED",
+    category: "authorization",
+    severity: "error",
+    userMessage: "This account is suspended.",
+    developerMeaning: "Session bootstrap found blocked/suspended account status.",
+    expectedBehavior: "Fail closed and deny session creation.",
+    affectedFlows: ["login", "admin_login", "session_bootstrap"],
+  },
+  AUTH_UNAUTHENTICATED: {
+    code: "AUTH_UNAUTHENTICATED",
+    category: "authentication",
+    severity: "warning",
+    userMessage: "Please sign in first.",
+    developerMeaning: "Protected route hit without a valid authenticated session.",
+    expectedBehavior: "Return 401 or redirect to login.",
+    affectedFlows: ["session_bootstrap", "logout", "owner_scope", "admin_boundary"],
+  },
+  AUTH_UNAUTHORIZED: {
+    code: "AUTH_UNAUTHORIZED",
+    category: "authorization",
+    severity: "error",
+    userMessage: "You are not authorized for this action.",
+    developerMeaning: "Identity is authenticated but lacks required permission for the route/resource.",
+    expectedBehavior: "Fail closed and audit if sensitive.",
+    affectedFlows: ["owner_scope", "admin_boundary"],
+  },
+  AUTH_FORBIDDEN: {
+    code: "AUTH_FORBIDDEN",
+    category: "authorization",
+    severity: "error",
+    userMessage: "Access to this resource is forbidden.",
+    developerMeaning: "Explicit policy denied access despite known identity.",
+    expectedBehavior: "Return 403 with no privileged detail leakage.",
+    affectedFlows: ["owner_scope", "admin_boundary"],
+  },
+  AUTH_OWNER_SCOPE_VIOLATION: {
+    code: "AUTH_OWNER_SCOPE_VIOLATION",
+    category: "authorization",
+    severity: "critical",
+    userMessage: "This request does not match your account scope.",
+    developerMeaning: "Cross-owner path/record mismatch detected (ownerUid or storage namespace mismatch).",
+    expectedBehavior: "Fail closed, log trace, never fallback to client identifiers.",
+    affectedFlows: ["owner_scope", "session_bootstrap"],
+  },
+  AUTH_ADMIN_NOT_ALLOWLISTED: {
+    code: "AUTH_ADMIN_NOT_ALLOWLISTED",
+    category: "authorization",
+    severity: "error",
+    userMessage: "This account is not approved for admin login.",
+    developerMeaning: "Admin identifier or email is not on allowlist.",
+    expectedBehavior: "Deny admin session and keep user lane separate.",
+    affectedFlows: ["admin_login", "admin_boundary"],
+  },
+  AUTH_ADMIN_CLAIM_REQUIRED: {
+    code: "AUTH_ADMIN_CLAIM_REQUIRED",
+    category: "authorization",
+    severity: "error",
+    userMessage: "Admin claim is missing for this allowlisted account.",
+    developerMeaning: "Allowlisted admin identity does not carry required Supabase app-metadata admin claim.",
+    expectedBehavior: "Deny admin session until claim is provisioned and refreshed.",
+    affectedFlows: ["admin_login", "admin_boundary"],
+  },
+  AUTH_ACTIVE_USER_CAPACITY_FULL: {
+    code: "AUTH_ACTIVE_USER_CAPACITY_FULL",
+    category: "capacity_or_rate_limit",
+    severity: "warning",
+    userMessage: "Capacity is full right now. Please retry shortly.",
+    developerMeaning: "Active normal-user governance denied admission at cap.",
+    expectedBehavior: "Deny new session until slot is available.",
+    affectedFlows: ["login", "signup", "session_bootstrap"],
+  },
+  AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE: {
+    code: "AUTH_ACTIVE_USER_ADMISSION_UNAVAILABLE",
+    category: "capacity_or_rate_limit",
+    severity: "warning",
+    userMessage: "Admission service is temporarily unavailable.",
+    developerMeaning: "Capacity governance persistence/check path temporarily degraded.",
+    expectedBehavior: "Fail closed for protected admission decisions.",
+    affectedFlows: ["login", "signup"],
+  },
+  AUTH_RATE_LIMITED: {
+    code: "AUTH_RATE_LIMITED",
+    category: "capacity_or_rate_limit",
+    severity: "warning",
+    userMessage: "Too many requests. Please retry shortly.",
+    developerMeaning: "Rate limiter rejected request (account/IP/provider lane).",
+    expectedBehavior: "Return 429 with retry hints.",
+    affectedFlows: ["signup", "login", "admin_login", "confirm_email", "resend_confirmation", "forgot_password"],
+  },
+  AUTH_SESSION_CREATION_FAILED: {
+    code: "AUTH_SESSION_CREATION_FAILED",
+    category: "lifecycle_state",
+    severity: "error",
+    userMessage: "Could not establish a secure session.",
+    developerMeaning: "Auth.js handoff/bootstrap failed after provider auth step.",
+    expectedBehavior: "Block navigation to protected routes, allow retry.",
+    affectedFlows: ["login", "admin_login", "session_bootstrap"],
+  },
+  AUTH_SESSION_REFRESH_REQUIRED: {
+    code: "AUTH_SESSION_REFRESH_REQUIRED",
+    category: "lifecycle_state",
+    severity: "warning",
+    userMessage: "Please refresh or sign in again to continue.",
+    developerMeaning: "Token freshness/rehydration window expired or token invalidated.",
+    expectedBehavior: "Prompt session refresh/re-auth.",
+    affectedFlows: ["login", "admin_login", "session_bootstrap", "reset_password"],
+  },
+  AUTH_PROVIDER_MISCONFIGURED: {
+    code: "AUTH_PROVIDER_MISCONFIGURED",
+    category: "misconfiguration",
+    severity: "critical",
+    userMessage: "Authentication provider is not configured correctly right now.",
+    developerMeaning: "Supabase/Auth provider setup mismatch or disabled provider lane.",
+    expectedBehavior: "Fail closed and surface operational support path.",
+    affectedFlows: ["signup", "login", "admin_login", "confirm_email", "forgot_password", "reset_password"],
+  },
+  AUTH_ENV_MISCONFIGURED: {
+    code: "AUTH_ENV_MISCONFIGURED",
+    category: "misconfiguration",
+    severity: "critical",
+    userMessage: "Authentication runtime is not configured correctly.",
+    developerMeaning: "Server env/runtime prerequisites missing (keys, allowlist, admin runtime).",
+    expectedBehavior: "Fail closed and alert operators.",
+    affectedFlows: ["signup", "login", "admin_login", "confirm_email", "forgot_password", "session_bootstrap"],
+  },
+  AUTH_PROVIDER_LIFECYCLE_MISMATCH: {
+    code: "AUTH_PROVIDER_LIFECYCLE_MISMATCH",
+    category: "lifecycle_state",
+    severity: "error",
+    userMessage: "Authentication session state is out of sync. Please retry.",
+    developerMeaning: "Supabase/Auth.js lifecycle disagreement (token/session/user-state mismatch).",
+    expectedBehavior: "Force refresh/re-auth and keep Auth.js as final trust boundary.",
+    affectedFlows: ["login", "admin_login", "confirm_email", "session_bootstrap", "rehydration"],
+  },
+  AUTH_NETWORK_FAILURE: {
+    code: "AUTH_NETWORK_FAILURE",
+    category: "network",
+    severity: "error",
+    userMessage: "Network issue interrupted authentication.",
+    developerMeaning: "Transient upstream connectivity failure to auth provider or persistence dependency.",
+    expectedBehavior: "Return transient failure and allow retry.",
+    affectedFlows: ["all_auth_flows"],
+  },
+  AUTH_UNKNOWN_UPSTREAM_FAILURE: {
+    code: "AUTH_UNKNOWN_UPSTREAM_FAILURE",
+    category: "unknown",
+    severity: "error",
+    userMessage: "Authentication could not be completed right now.",
+    developerMeaning: "Unhandled or ambiguous provider/runtime auth failure.",
+    expectedBehavior: "Use safe generic messaging and log normalized diagnostics.",
+    affectedFlows: ["all_auth_flows"],
+  },
 };
 
 const RAW_CODE_TO_NORMALIZED: Record<string, AuthFailureCode> = {
@@ -137,6 +357,15 @@ const RAW_CODE_TO_NORMALIZED: Record<string, AuthFailureCode> = {
   ADMIN_CLAIM_DENIED: "AUTH_ACCESS_DENIED",
   ADMIN_LOGIN_REQUIRED: "AUTH_ACCESS_DENIED",
   GOOGLE_SIGN_IN_REQUIRED: "AUTH_ACCESS_DENIED",
+  ADMIN_LOGIN_PASSWORD_UNCONFIGURED: "AUTH_ENV_MISCONFIGURED",
+  ADMIN_USERNAME_NOT_FOUND: "AUTH_ACCESS_DENIED",
+  ADMIN_LOGIN_PASSWORD_INVALID: "AUTH_ACCESS_DENIED",
+  ADMIN_LOGIN_PASSWORD_REQUIRED: "AUTH_ACCESS_DENIED",
+  OWNER_STORAGE_SCOPE_MISMATCH: "AUTH_ACCESS_DENIED",
+  OWNER_UID_MISMATCH: "AUTH_ACCESS_DENIED",
+  FORBIDDEN: "AUTH_ACCESS_DENIED",
+  UNAUTHENTICATED: "AUTH_SESSION_REFRESH_REQUIRED",
+  PASSWORD_CHANGE_REAUTH_REQUIRED: "AUTH_SESSION_REFRESH_REQUIRED",
 };
 
 const PROVIDER_MISCONFIGURED_PATTERNS = [
@@ -458,6 +687,72 @@ export function normalizeAuthFailure(input: {
 
 export function isEmailConfirmationFailure(failure: NormalizedAuthFailure) {
   return failure.normalizedCode === "AUTH_EMAIL_NOT_CONFIRMED";
+}
+
+function mapNormalizedCodeToCatalogKey(code: AuthFailureCode): string {
+  if (code === "AUTH_ACCESS_DENIED") {
+    return "AUTH_UNAUTHORIZED";
+  }
+
+  return code;
+}
+
+function mapRawCodeToCatalogKey(rawCode: string | null): string | null {
+  const token = toToken(rawCode);
+  if (!token) {
+    return null;
+  }
+
+  if (token === "FORBIDDEN") {
+    return "AUTH_FORBIDDEN";
+  }
+
+  if (token === "UNAUTHENTICATED") {
+    return "AUTH_UNAUTHENTICATED";
+  }
+
+  if (token === "OWNER_STORAGE_SCOPE_MISMATCH" || token === "OWNER_UID_MISMATCH") {
+    return "AUTH_OWNER_SCOPE_VIOLATION";
+  }
+
+  if (token === "ADMIN_ACCOUNT_UNAUTHORIZED" || token === "ADMIN_USERNAME_NOT_FOUND") {
+    return "AUTH_ADMIN_NOT_ALLOWLISTED";
+  }
+
+  if (token === "ADMIN_CLAIM_REQUIRED" || token === "ADMIN_CLAIM_DENIED") {
+    return "AUTH_ADMIN_CLAIM_REQUIRED";
+  }
+
+  if (token === "PASSWORD_CHANGE_REAUTH_REQUIRED") {
+    return "AUTH_PROVIDER_LIFECYCLE_MISMATCH";
+  }
+
+  return null;
+}
+
+export function getAuthErrorCatalogEntry(input: {
+  normalizedCode?: AuthFailureCode | null;
+  rawCode?: string | null;
+}) {
+  const rawCatalogKey = mapRawCodeToCatalogKey(input.rawCode ?? null);
+  if (rawCatalogKey && rawCatalogKey in AUTH_ERROR_CATALOG) {
+    return AUTH_ERROR_CATALOG[rawCatalogKey];
+  }
+
+  const normalizedCode = input.normalizedCode ?? null;
+  if (!normalizedCode) {
+    return AUTH_ERROR_CATALOG.AUTH_UNKNOWN_UPSTREAM_FAILURE;
+  }
+
+  const normalizedCatalogKey = mapNormalizedCodeToCatalogKey(normalizedCode);
+  return AUTH_ERROR_CATALOG[normalizedCatalogKey] ?? AUTH_ERROR_CATALOG.AUTH_UNKNOWN_UPSTREAM_FAILURE;
+}
+
+export function describeAuthFailure(failure: NormalizedAuthFailure) {
+  return getAuthErrorCatalogEntry({
+    normalizedCode: failure.normalizedCode,
+    rawCode: failure.rawCode,
+  });
 }
 
 export function buildConfirmEmailRoute(input: {
