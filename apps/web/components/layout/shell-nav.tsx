@@ -9,6 +9,7 @@ import {
   UploadCloud,
   FileText,
   PieChart,
+  BarChart3,
   Crown,
   Info,
   MessagesSquare,
@@ -80,6 +81,8 @@ export function ShellNav({
         return ShieldCheck;
       case APP_ROUTES.adminUsers:
         return Users;
+      case APP_ROUTES.adminPlatformUsage:
+        return BarChart3;
       default:
         return Activity;
     }
@@ -122,8 +125,14 @@ export function ShellNav({
     { href: APP_ROUTES.contact, label: messages.navContact || "Contact" },
     ...(user.role === "admin"
       ? [
+          /* Keep admin-only platform observability in the same canonical admin nav group so
+             desktop/mobile/collapsed sidebar states all inherit one route-owned source of truth. */
           { href: APP_ROUTES.admin, label: messages.navAdmin || "Admin Portal" },
           { href: APP_ROUTES.adminUsers, label: messages.navAdminUsers || "User Directory" },
+          {
+            href: APP_ROUTES.adminPlatformUsage,
+            label: messages.navAdminPlatformUsage || "Platform Usage",
+          },
         ]
       : []),
   ];
