@@ -6924,3 +6924,68 @@ Change Log
     - `apps/web/app/api/users/me/profile/route.ts`
     - `apps/web/components/settings/profile-settings-form.tsx`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-20 23:59:30 | Profile-completion redirect env-alignment hardening + owner-scope audit proof (no ownership drift)
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before any edits.
+    - traced live code first (ledger used as historical context only), including:
+      - `.env.example`
+      - `apps/web/app/api/users/me/profile/route.ts`
+      - `apps/web/components/settings/profile-settings-form.tsx`
+      - `apps/web/auth.ts`
+      - `apps/web/lib/server/session.ts`
+      - `apps/web/lib/return-to.ts`
+      - `apps/web/app/(public)/confirm-email/page.tsx`
+      - `apps/web/components/auth/confirm-email-panel.tsx`
+      - `apps/web/components/auth/login-panel.tsx`
+      - `apps/web/components/auth/admin-login-panel.tsx`
+      - owner-scope file/result routes and helpers (`/api/uploads*`, `/api/assessment*`, `/api/infographic*`, owner-scope storage/runtime helpers).
+    - rechecked local Next.js App Router docs at `node_modules/next/dist/docs/01-app/index.md` before edits.
+  - Exact root redirect problem found:
+    - `PATCH /api/users/me/profile` still contained a completion-specific hardcoded redirect branch:
+      - `completionTransition?.becameEligible ? APP_ROUTES.home : getAuthenticatedUserRedirectPath(updatedUser)`
+    - this forced `/` after first successful non-admin completion, which could override configured env defaults and drift from the canonical login/bootstrap/confirm-email redirect policy.
+  - Surgical redirect fix shipped:
+    - `apps/web/app/api/users/me/profile/route.ts`
+      - removed the completion-time `APP_ROUTES.home` override.
+      - server now resolves redirect as:
+        - safe `returnTo` (sanitized user-owned route) when present, else
+        - `getAuthenticatedUserRedirectPath(updatedUser)`.
+      - this keeps redirect ownership server-authoritative and aligned with shared auth finalization rules.
+  - Env contract hardening shipped:
+    - `.env.example`
+      - added explicit redirect config keys with safe defaults:
+        - `NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT=/`
+        - `NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT=/admin`
+      - documented that values are sanitized server-side and invalid/missing values fail closed to `/`.
+  - Redirect truth after this pass:
+    - canonical resolver remains `apps/web/lib/return-to.ts` (`resolveAuthenticatedUserRedirectPath` / `getAuthenticatedUserRedirectPath`).
+    - same resolver is now consistently used by:
+      - user login bootstrap handoff,
+      - admin login bootstrap handoff,
+      - public auth-entry page guards,
+      - session/admin guards,
+      - and profile completion post-save redirect.
+    - fallback behavior remains safe and unchanged: invalid/missing env redirect config falls back to `APP_ROUTES.home` (`/`).
+  - Admin/user separation in redirect enforcement:
+    - admin lane reads `NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT` and is constrained to admin-safe matcher set.
+    - user lane reads `NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT` and is constrained to user-safe matcher set.
+    - login/admin-login routes are explicitly blocked as configured redirect targets by sanitizer guards.
+  - Mandatory owner-scope audit result (upload/document/result/export end-to-end):
+    - upload prepare/complete and multipart finalize remain owner-bound to `session.user.uid` only (`/api/uploads`).
+    - document download route (`/api/uploads/[id]`) fetches via owner-scoped repo helper (`getDocumentByIdForOwner(id, user.uid)`).
+    - assessment result/export read paths remain owner-scoped (`getAssessmentGenerationForOwner(id, user.uid)`), including shared export context.
+    - storage path enforcement remains fail-closed through `assertOwnerScopedStoragePath(...)` for document and assessment artifact reads/writes/deletes.
+    - canonical storage layout remains `users/{ownerUid}/...` namespaces for documents/temp/results/exports.
+    - admin-only privileged operations remain explicitly separated (`getAdminSessionUser` / `requireAdminUser` and dedicated admin routes).
+    - no cross-owner read/write widening was found in audited paths; no ownership code changes were required in this pass.
+  - What was intentionally preserved:
+    - Auth.js remains the trust boundary.
+    - backend/session authority remains server-owned.
+    - profile-completion gating rules and admission diagnostics messaging remain intact.
+    - owner-scoped storage/repository isolation and admin separation contracts remain unchanged.
+    - no schema/migration changes and no dependency changes.
+  - Files changed in this pass:
+    - `apps/web/app/api/users/me/profile/route.ts`
+    - `.env.example`
+    - `zootopia-club-next-ledger.txt`
