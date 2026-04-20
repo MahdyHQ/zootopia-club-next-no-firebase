@@ -6989,3 +6989,20 @@ Change Log
     - `apps/web/app/api/users/me/profile/route.ts`
     - `.env.example`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-20 22:47:27 | Protected home copy refresh for platform build-journey card (Arabic)
+  - Context-first workflow followed:
+    - read `zootopia-club-next-ledger.txt` at task start as historical context.
+    - traced live home route ownership and related localization/shared-home sources before editing.
+  - Canonical source check result:
+    - the targeted sentence lives directly in `apps/web/app/(protected)/(completed)/page.tsx` inside `homeVisionCards` (`key: "platform-build-journey"`).
+    - this text is not sourced from `apps/web/messages/*.json` or `apps/web/lib/site-content.ts` for the protected home card.
+  - Change made:
+    - replaced only the existing Arabic body sentence for the platform build-journey home card with the new provided exact text.
+    - no routing, logic, component behavior, styling, spacing, typography, or localization structure was modified.
+  - Verification:
+    - confirmed a single source edit for the real protected home-page card text.
+    - confirmed no unrelated files changed beyond this ledger refresh record.
+  - Files changed in this pass:
+    - `apps/web/app/(protected)/(completed)/page.tsx`
+    - `zootopia-club-next-ledger.txt`
