@@ -399,6 +399,51 @@ export async function getSupabaseAuthUser(uid: string) {
   return mapSupabaseUserToAuthRecord(data.user);
 }
 
+export async function findSupabaseAuthUserByEmail(email: string) {
+  if (!hasSupabaseAdminRuntime()) {
+    return null;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  /* Signup hardening relies on provider truth for duplicate-email checks.
+     Supabase Admin does not expose a direct getUserByEmail() call, so we page
+     through admin users on the trusted server and stop at the first exact
+     normalized-email match. Keep this lookup server-only and bounded. */
+  const perPage = 200;
+  const maxPages = 20;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const { data, error } = await getSupabaseAdminClient().auth.admin.listUsers({
+      page,
+      perPage,
+    });
+
+    if (error) {
+      throw Object.assign(new Error(error.message), {
+        code: "auth/internal-error",
+      });
+    }
+
+    const users = data.users ?? [];
+    const matchedUser = users.find(
+      (user) => typeof user.email === "string" && user.email.trim().toLowerCase() === normalizedEmail,
+    );
+    if (matchedUser) {
+      return mapSupabaseUserToAuthRecord(matchedUser);
+    }
+
+    if (users.length < perPage) {
+      break;
+    }
+  }
+
+  return null;
+}
+
 export async function setSupabaseUserClaims(
   uid: string,
   claims: Record<string, unknown>,

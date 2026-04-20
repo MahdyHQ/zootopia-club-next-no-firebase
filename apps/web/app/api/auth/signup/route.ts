@@ -12,6 +12,10 @@ import {
 } from "@/lib/server/auth-admission-governance";
 import { getServerRuntimeOrigin } from "@/lib/server/runtime-base-url";
 import {
+  findSupabaseAuthUserByEmail,
+  hasSupabaseAdminRuntime,
+} from "@/lib/server/supabase-admin";
+import {
   getSupabasePublishableKey,
   getSupabaseUrl,
 } from "@/lib/supabase/public-config";
@@ -104,6 +108,41 @@ function buildConfirmEmailRoute(email: string) {
   params.set("flow", "sign_up");
   params.set("from", APP_ROUTES.login);
   return `${APP_ROUTES.confirmEmail}?${params.toString()}`;
+}
+
+function isSupabaseObfuscatedExistingSignupResult(user: unknown) {
+  if (!user || typeof user !== "object") {
+    return false;
+  }
+
+  const userRecord = user as Record<string, unknown>;
+  const identities = Array.isArray(userRecord.identities) ? userRecord.identities : [];
+  if (identities.length > 0) {
+    return false;
+  }
+
+  /* Supabase docs note that `signUp()` may return an obfuscated/fake user object
+     for existing confirmed accounts (anti-enumeration behavior). Those payloads do
+     not include real linked identities, so treat them as duplicate-account truth. */
+  return true;
+}
+
+function buildExistingEmailSignupFailure(input: {
+  emailVerified: boolean;
+}) {
+  if (!input.emailVerified) {
+    return apiError(
+      "AUTH_EMAIL_NOT_CONFIRMED",
+      "This email is already registered, but confirmation is still pending. Open the confirmation page to verify the account before signing in.",
+      409,
+    );
+  }
+
+  return apiError(
+    "AUTH_ACCOUNT_ALREADY_EXISTS",
+    "An account with this email already exists. Sign in instead, or finish email confirmation if it is still pending.",
+    409,
+  );
 }
 
 function buildConfirmationRedirectUrl(email: string) {
@@ -246,6 +285,53 @@ export async function POST(request: Request) {
     );
   }
 
+  if (hasSupabaseAdminRuntime()) {
+    try {
+      /* Duplicate-email prevention must be backend/provider authoritative.
+         Check current provider truth before signUp so existing addresses fail fast
+         with clear UX rather than ambiguous anti-enumeration success payloads. */
+      const existingAuthUser = await findSupabaseAuthUserByEmail(email);
+      if (existingAuthUser) {
+        const rolledBackAdmission = await rollbackSignupAdmissionReservation({
+          request,
+          email,
+          admission,
+        });
+
+        return withAdmissionHeaders(
+          applyNoStore(
+            buildExistingEmailSignupFailure({
+              emailVerified: Boolean(existingAuthUser.emailVerified),
+            }),
+          ),
+          rolledBackAdmission,
+        );
+      }
+    } catch (error) {
+      const rolledBackAdmission = await rollbackSignupAdmissionReservation({
+        request,
+        email,
+        admission,
+      });
+
+      console.error("[auth-signup] duplicate-email provider preflight failed", {
+        routePath: APP_ROUTES.login,
+        error,
+      });
+
+      return withAdmissionHeaders(
+        applyNoStore(
+          apiError(
+            "AUTH_PROVIDER_MISCONFIGURED",
+            "Secure sign-up could not be completed right now.",
+            503,
+          ),
+        ),
+        rolledBackAdmission,
+      );
+    }
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -264,11 +350,9 @@ export async function POST(request: Request) {
     if (isDuplicateSignupFailure(error)) {
       return withAdmissionHeaders(
         applyNoStore(
-          apiError(
-            "AUTH_ACCOUNT_ALREADY_EXISTS",
-            "An account with this email already exists. Sign in instead, or finish email confirmation if it is still pending.",
-            409,
-          ),
+          buildExistingEmailSignupFailure({
+            emailVerified: true,
+          }),
         ),
         rolledBackAdmission,
       );
@@ -301,6 +385,23 @@ export async function POST(request: Request) {
     return withAdmissionHeaders(
       applyNoStore(
         apiError(failure.normalizedCode, message, status),
+      ),
+      rolledBackAdmission,
+    );
+  }
+
+  if (isSupabaseObfuscatedExistingSignupResult(data.user)) {
+    const rolledBackAdmission = await rollbackSignupAdmissionReservation({
+      request,
+      email,
+      admission,
+    });
+
+    return withAdmissionHeaders(
+      applyNoStore(
+        buildExistingEmailSignupFailure({
+          emailVerified: true,
+        }),
       ),
       rolledBackAdmission,
     );

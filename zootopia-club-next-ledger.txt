@@ -6761,3 +6761,79 @@ Change Log
     - `npm run typecheck` passed.
     - `npm run build` failed due environment inability to fetch Google Fonts from `fonts.googleapis.com` during Next.js build.
     - `npm run build:vercel` failed for the same external-font connectivity limitation.
+
+- 2026-04-20 20:24:36 | Signup duplicate-email hardening + provider-truth duplicate detection + signup error-clarity tightening
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` completely before edits.
+    - performed focused parallel subagent-style tracing before implementation across:
+      1) ledger + auth history
+      2) signup/create-account route + login UI flow
+      3) Auth.js + Supabase trust-boundary handoff
+      4) canonical schema/migrations + identity uniqueness constraints
+      5) repository/backend write paths
+      6) owner-scope + session isolation
+      7) auth UI/status messaging
+      8) concurrent duplicate-registration risk analysis
+    - confirmed the live trust boundary remains Auth.js server session plus same-origin route handlers.
+    - checked Supabase official signup behavior docs (existing confirmed users can produce obfuscated signup payloads under certain confirmation settings) and treated codebase as final truth.
+    - reviewed local Next.js docs under `node_modules/next/dist/docs/` before editing route-handler code.
+  - Root problem found:
+    - `POST /api/auth/signup` only treated duplicate registration as duplicate when Supabase returned an explicit error text/code.
+    - Supabase can return a successful-looking signup response with an obfuscated/fake user object for an already-registered address (anti-enumeration behavior), which bypassed this duplicate detector.
+    - result: the UI could incorrectly treat a duplicate signup attempt as a new pending-confirmation signup path instead of a truthful "email already exists" rejection.
+  - Why duplicate signup looked possible:
+    - backend duplicate detection relied on provider error strings only.
+    - provider can return non-error obfuscated payloads for existing emails, so the route emitted `accepted: true` instead of duplicate failure in that branch.
+    - this was a server-side classification bug, not a pure frontend validation issue.
+  - Surgical fix implemented:
+    - Added provider-admin email lookup helper in `apps/web/lib/server/supabase-admin.ts`:
+      - new `findSupabaseAuthUserByEmail(email)` server-only helper.
+      - bounded paged search over Supabase Admin users to resolve canonical provider identity by normalized email.
+    - Hardened `apps/web/app/api/auth/signup/route.ts`:
+      - added provider-authoritative preflight duplicate check (when admin runtime exists) before calling `signUp`.
+      - if email already exists:
+        - returns `AUTH_ACCOUNT_ALREADY_EXISTS` (confirmed account) or
+        - returns `AUTH_EMAIL_NOT_CONFIRMED` (existing but unconfirmed account),
+        both with truthful, user-safe messaging and `409`.
+      - added obfuscated-signup payload detection (`identities` absent/empty) and now classifies that result as duplicate-account failure instead of signup success.
+      - preserved admission-governance reservation rollback semantics on non-accepted signup outcomes.
+    - Tightened signup UI error clarity in `apps/web/components/auth/login-panel.tsx`:
+      - explicit handling for `SIGNUP_EMAIL_INVALID`.
+      - explicit handling for `SIGNUP_PASSWORD_REQUIRED`.
+      - existing password-policy handling preserved (`PASSWORD_POLICY_FAILED`) for weak-password distinction.
+  - Concurrency-safety reasoning after this pass:
+    - canonical uniqueness remains enforced at the auth provider layer (Supabase Auth identity truth).
+    - preflight check gives deterministic truthful UX for already-existing addresses before provider call.
+    - if concurrent attempts race past preflight, post-signup obfuscated-result detection still fails closed as duplicate.
+    - explicit provider duplicate errors continue to fail closed.
+  - Owner-scope/session isolation verification outcome:
+    - verified `apps/web/lib/server/session.ts` still rehydrates every protected request from persisted user truth keyed by Auth.js session uid.
+    - verified no ownership scope widening in signup patch:
+      - no client-authoritative uid/email trust introduced,
+      - no admin bypass introduced,
+      - no repository/storage ownership mutation paths changed.
+    - Auth.js remains trust boundary; backend authority remains server-owned.
+  - Schema / migration truth:
+    - latest canonical migrations rechecked; no schema migration needed for this fix.
+    - identity uniqueness enforcement remains provider-auth canonical for signup email registration.
+    - no DB tables/constraints were changed in this pass.
+  - What was intentionally preserved:
+    - existing Auth.js credentials flow and session issuance.
+    - auth admission governance model and headers.
+    - admin/user boundary enforcement.
+    - owner-scoped repository/storage isolation contracts.
+    - existing route ownership and UI architecture.
+  - Files changed in this pass:
+    - `apps/web/lib/server/supabase-admin.ts`
+    - `apps/web/app/api/auth/signup/route.ts`
+    - `apps/web/components/auth/login-panel.tsx`
+    - `zootopia-club-next-ledger.txt`
+  - Verification in this pass:
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` failed due environment inability to fetch Google Fonts from `fonts.googleapis.com` (not caused by this auth patch).
+    - `npm run build:vercel` failed for the same external Google Fonts connectivity limitation.
+    - `npm run supabase:check` passed (`supabase:migrations:validate` + migration list succeeded; no new migration added).
+  - Remaining live-runtime gaps:
+    - no authenticated multi-user load test was executed against a live Supabase project in this environment.
+    - duplicate-signup concurrency behavior is code-traced and provider-contract grounded, but not fully runtime load-tested here.
