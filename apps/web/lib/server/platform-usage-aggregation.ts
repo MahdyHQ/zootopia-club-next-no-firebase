@@ -9,6 +9,35 @@ import {
 import { hasZootopiaPostgresPersistence } from "@/lib/server/zootopia-entity-store";
 import { readToolAccountingMemoryAggregationSnapshot } from "@/lib/server/tool-accounting";
 
+export type AdminPlatformToolUsageRow = {
+  toolId: ToolId;
+  totalUsedCount: number;
+  todayUsedCount: number;
+};
+
+export type AdminPlatformUserUsageRow = {
+  ownerUid: string;
+  ownerEmail: string | null;
+  ownerRole: UserRole;
+  totalUsedCount: number;
+  todayUsedCount: number;
+  exemptFromPlatformCap: boolean;
+};
+
+export type AdminPlatformUsageSnapshot = {
+  dayKey: string;
+  generatedAt: string;
+  platformLimit: number;
+  totalPlatformUsage: number;
+  todayPlatformUsage: number;
+  todayPlatformRemaining: number;
+  todayPlatformReached: boolean;
+  exemptUsageTotal: number;
+  exemptUsageToday: number;
+  usageByTool: AdminPlatformToolUsageRow[];
+  usageByUser: AdminPlatformUserUsageRow[];
+};
+
 export const PLATFORM_GLOBAL_DAILY_USAGE_LIMIT_ENV_KEY =
   "ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT";
 
@@ -277,5 +306,228 @@ export async function buildPlatformDailyUsageForUser(input: {
     limit: getPlatformGlobalDailyCreditLimit(),
     isAdminExempt,
     isEmailExempt: !isAdminExempt && isActiveNormalUserExemptEmail(resolvedEmail),
+  });
+}
+
+function buildAdminPlatformUsageSnapshotFromOwnerRows(input: {
+  dayKey: string;
+  generatedAt: string;
+  ownerRows: Array<{
+    ownerUid: string;
+    ownerEmail: string | null;
+    ownerRole: UserRole | string | null | undefined;
+    toolId: ToolId;
+    totalUsedCount: number;
+    todayUsedCount: number;
+  }>;
+  topUsersLimit: number;
+}) {
+  const platformLimit = getPlatformGlobalDailyCreditLimit();
+  const byTool = new Map<ToolId, { totalUsedCount: number; todayUsedCount: number }>();
+  const byUser = new Map<string, AdminPlatformUserUsageRow>();
+  let totalPlatformUsage = 0;
+  let todayPlatformUsage = 0;
+  let exemptUsageTotal = 0;
+  let exemptUsageToday = 0;
+
+  /* Admin usage visibility follows the same exemption truth used by server-side platform-cap
+     enforcement. Keep exemption filtering centralized so dashboard numbers stay aligned with the
+     authoritative gate and never drift into a second interpretation of "counted usage". */
+  for (const row of input.ownerRows) {
+    const normalizedRole = normalizePlatformOwnerRole(row.ownerRole);
+    const exemptFromPlatformCap = isPlatformDailyUsageExemptIdentity({
+      role: normalizedRole,
+      email: row.ownerEmail ?? null,
+    });
+    const totalUsedCount = Math.max(0, Math.trunc(row.totalUsedCount));
+    const todayUsedCount = Math.max(0, Math.trunc(row.todayUsedCount));
+
+    const toolUsage = byTool.get(row.toolId) ?? { totalUsedCount: 0, todayUsedCount: 0 };
+    toolUsage.totalUsedCount += totalUsedCount;
+    toolUsage.todayUsedCount += todayUsedCount;
+    byTool.set(row.toolId, toolUsage);
+
+    const userUsage = byUser.get(row.ownerUid) ?? {
+      ownerUid: row.ownerUid,
+      ownerEmail: row.ownerEmail ?? null,
+      ownerRole: normalizedRole,
+      totalUsedCount: 0,
+      todayUsedCount: 0,
+      exemptFromPlatformCap,
+    };
+    userUsage.totalUsedCount += totalUsedCount;
+    userUsage.todayUsedCount += todayUsedCount;
+    byUser.set(row.ownerUid, userUsage);
+
+    if (exemptFromPlatformCap) {
+      exemptUsageTotal += totalUsedCount;
+      exemptUsageToday += todayUsedCount;
+      continue;
+    }
+
+    totalPlatformUsage += totalUsedCount;
+    todayPlatformUsage += todayUsedCount;
+  }
+
+  const usageByTool = [...byTool.entries()]
+    .map(([toolId, usage]) => ({
+      toolId,
+      totalUsedCount: usage.totalUsedCount,
+      todayUsedCount: usage.todayUsedCount,
+    }))
+    .sort((left, right) => right.totalUsedCount - left.totalUsedCount);
+
+  const usageByUser = [...byUser.values()]
+    .sort((left, right) => {
+      if (right.todayUsedCount !== left.todayUsedCount) {
+        return right.todayUsedCount - left.todayUsedCount;
+      }
+      return right.totalUsedCount - left.totalUsedCount;
+    })
+    .slice(0, input.topUsersLimit);
+
+  return {
+    dayKey: input.dayKey,
+    generatedAt: input.generatedAt,
+    platformLimit,
+    totalPlatformUsage,
+    todayPlatformUsage,
+    todayPlatformRemaining: Math.max(platformLimit - todayPlatformUsage, 0),
+    todayPlatformReached: todayPlatformUsage >= platformLimit,
+    exemptUsageTotal,
+    exemptUsageToday,
+    usageByTool,
+    usageByUser,
+  } satisfies AdminPlatformUsageSnapshot;
+}
+
+export async function getAdminPlatformUsageSnapshot(input?: {
+  dayKey?: string;
+  topUsersLimit?: number;
+}) {
+  const generatedAt = new Date().toISOString();
+  const dayKey = input?.dayKey ?? generatedAt.slice(0, 10);
+  const topUsersLimit = Math.min(50, Math.max(5, Math.trunc(input?.topUsersLimit ?? 20)));
+
+  if (!hasZootopiaPostgresPersistence()) {
+    const snapshot = readToolAccountingMemoryAggregationSnapshot();
+    const ownerToolUsage = new Map<string, {
+      ownerUid: string;
+      ownerEmail: string | null;
+      ownerRole: UserRole | null;
+      toolId: ToolId;
+      totalKeys: Set<string>;
+      todayKeys: Set<string>;
+    }>();
+
+    const addUsage = (entry: {
+      ownerUid: string;
+      toolId: ToolId;
+      id: string;
+      generationId: string | null;
+      dayKey: string | null;
+    }) => {
+      const key = `${entry.ownerUid}:${entry.toolId}`;
+      const ownerAccount = snapshot.accounts.get(entry.ownerUid);
+      const aggregate = ownerToolUsage.get(key) ?? {
+        ownerUid: entry.ownerUid,
+        ownerEmail: ownerAccount?.ownerEmail ?? null,
+        ownerRole: ownerAccount?.ownerRole ?? "user",
+        toolId: entry.toolId,
+        totalKeys: new Set<string>(),
+        todayKeys: new Set<string>(),
+      };
+      const usageKey = `${entry.toolId}:${entry.generationId ?? entry.id}`;
+      aggregate.totalKeys.add(usageKey);
+      if (entry.dayKey === dayKey) {
+        aggregate.todayKeys.add(usageKey);
+      }
+      ownerToolUsage.set(key, aggregate);
+    };
+
+    for (const entry of snapshot.entries) {
+      if (entry.entryKind !== "deduction" || entry.eventKind !== "generation") {
+        continue;
+      }
+      addUsage(entry);
+    }
+
+    for (const event of snapshot.usageEvents) {
+      if (event.eventKind !== "generation") {
+        continue;
+      }
+      addUsage(event);
+    }
+
+    return buildAdminPlatformUsageSnapshotFromOwnerRows({
+      dayKey,
+      generatedAt,
+      topUsersLimit,
+      ownerRows: [...ownerToolUsage.values()].map((row) => ({
+        ownerUid: row.ownerUid,
+        ownerEmail: row.ownerEmail,
+        ownerRole: row.ownerRole,
+        toolId: row.toolId,
+        totalUsedCount: row.totalKeys.size,
+        todayUsedCount: row.todayKeys.size,
+      })),
+    });
+  }
+
+  type AdminPlatformUsageOwnerRow = {
+    owner_uid: string;
+    owner_email: string | null;
+    owner_role: UserRole | null;
+    tool_id: ToolId;
+    total_used_count: string;
+    today_used_count: string;
+  };
+
+  const rows = await getZootopiaDatabase().sql<AdminPlatformUsageOwnerRow[]>`
+    WITH generation_usage AS (
+      SELECT DISTINCT
+        owner_uid,
+        tool_id,
+        day_key,
+        COALESCE(NULLIF(trim(generation_id), ''), id) AS usage_key
+      FROM public.tool_accounting_entries
+      WHERE entry_kind = 'deduction'
+        AND event_kind = 'generation'
+
+      UNION
+
+      SELECT DISTINCT
+        owner_uid,
+        tool_id,
+        day_key,
+        COALESCE(NULLIF(trim(generation_id), ''), id) AS usage_key
+      FROM public.tool_usage_events
+      WHERE event_kind = 'generation'
+    )
+    SELECT
+      gu.owner_uid,
+      taa.owner_email,
+      taa.owner_role,
+      gu.tool_id,
+      COUNT(*) AS total_used_count,
+      COUNT(*) FILTER (WHERE gu.day_key = ${dayKey}) AS today_used_count
+    FROM generation_usage AS gu
+    LEFT JOIN public.tool_accounting_accounts AS taa
+      ON taa.owner_uid = gu.owner_uid
+    GROUP BY gu.owner_uid, taa.owner_email, taa.owner_role, gu.tool_id
+  `;
+
+  return buildAdminPlatformUsageSnapshotFromOwnerRows({
+    dayKey,
+    generatedAt,
+    topUsersLimit,
+    ownerRows: rows.map((row) => ({
+      ownerUid: row.owner_uid,
+      ownerEmail: row.owner_email,
+      ownerRole: row.owner_role,
+      toolId: row.tool_id,
+      totalUsedCount: Number(row.total_used_count ?? 0),
+      todayUsedCount: Number(row.today_used_count ?? 0),
+    })),
   });
 }

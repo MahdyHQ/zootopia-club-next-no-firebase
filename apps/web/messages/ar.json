@@ -89,7 +89,7 @@
   "adminLoginIdentifierLabel": "بريد المسؤول أو اسم المستخدم",
   "adminLoginIdentifierPlaceholder": "elmahdy developer admin gateway only",
   "adminLoginAccountPasswordLabel": "كلمة مرور الحساب",
-  "adminLoginAccountPasswordPlaceholder": "أدخل كلمة مرور حساب Supabase",
+  "adminLoginAccountPasswordPlaceholder": "أدخل كلمة مرور الحساب",
   "adminLoginGatePasswordLabel": "بوابة وصول الإدارة",
   "adminLoginGatePasswordPlaceholder": "أدخل كلمة مرور الوصول الإداري من جهة الخادم",
   "adminLoginSupportLabel": "وصول إداري مقيّد",

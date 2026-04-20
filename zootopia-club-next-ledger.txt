@@ -6695,3 +6695,69 @@ Change Log
     - `npm run typecheck:web` passed.
     - `npm run build:web` failed in this environment because Next.js could not fetch Google Fonts from `fonts.googleapis.com` (`Alexandria`, `Amiri`, `Geist`, `JetBrains Mono`, `Plus Jakarta Sans`).
     - `npm run build:vercel` failed for the same external Google Fonts connectivity limitation.
+
+- 2026-04-20 22:40:00 | Admin login placeholder cleanup + new admin-only platform usage page
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` completely before making changes.
+    - traced live code first (ledger treated as context, not final truth) using focused parallel passes for:
+      1) ledger + architecture
+      2) admin auth/login UI
+      3) admin-only route protection
+      4) cross-tool accounting + platform aggregation
+      5) owner-scope/auth/session trust boundary
+      6) backend repository + API read-model ownership
+    - rechecked canonical accounting migrations before implementation:
+      - `20260419200000_tool_usage_accounting_foundation.sql`
+      - `20260420093000_tool_accounting_generation_aggregation_backfill.sql`
+    - reviewed local Next.js docs under `node_modules/next/dist/docs/` prior to edits.
+  - Change A (admin login placeholder cleanup):
+    - removed backend/provider branding from admin account password placeholder.
+    - updated copy only (no behavior/auth flow changes):
+      - en: `Enter your account password`
+      - ar: `أدخل كلمة مرور الحساب`
+  - Change B (new admin-only platform usage page):
+    - added route: `/admin/platform-usage` at `apps/web/app/(protected)/admin/platform-usage/page.tsx`.
+    - page is server-rendered and calls `requireAdminUser()` immediately; non-admin sessions fail closed and redirect through existing admin guard behavior.
+    - page data source is backend-authoritative only via new server aggregator function:
+      - `getAdminPlatformUsageSnapshot(...)` in `apps/web/lib/server/platform-usage-aggregation.ts`.
+    - no client-side truth computation was introduced.
+  - New backend aggregation read model details:
+    - `getAdminPlatformUsageSnapshot(...)` now aggregates canonical shared accounting tables:
+      - `public.tool_accounting_entries` (`deduction` + `generation` rows)
+      - `public.tool_usage_events` (`generation` rows)
+      - optional identity metadata from `public.tool_accounting_accounts`
+    - combines both sources using deduplicated generation usage keys so one generation is not double-counted when both entry/event rows exist.
+    - applies the same exemption policy used by platform-cap enforcement:
+      - admin role exempt
+      - configured exempt-email identities exempt
+    - includes durable in-memory fallback aggregation for DB-less local/dev mode, preserving existing architecture contracts.
+  - Platform usage metrics now visible on the new page:
+    - total platform usage (counted / non-exempt)
+    - usage today (UTC day key)
+    - platform daily limit, remaining capacity, reached status
+    - usage by tool (total + today)
+    - top users by usage (total + today + exempt/count status)
+    - exempt usage totals (all-time + today)
+    - snapshot generation timestamp
+  - Admin area navigation:
+    - added `APP_ROUTES.adminPlatformUsage` (`/admin/platform-usage`).
+    - added a dedicated admin dashboard quick-access card linking to the new page.
+  - What was intentionally preserved:
+    - Auth.js remains the trust boundary.
+    - backend authority remained server-only.
+    - strict owner-scope isolation and admin/user separation were not widened.
+    - no changes to assessment generation, repository mutation semantics, or existing owner-scoped routes.
+    - no dependency changes and no schema/migration changes in this pass.
+  - Files changed in this pass:
+    - `apps/web/lib/server/platform-usage-aggregation.ts`
+    - `apps/web/app/(protected)/admin/platform-usage/page.tsx`
+    - `apps/web/app/(protected)/admin/page.tsx`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `packages/shared-config/src/routes.ts`
+    - `zootopia-club-next-ledger.txt`
+  - Verification in this pass:
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` failed due environment inability to fetch Google Fonts from `fonts.googleapis.com` during Next.js build.
+    - `npm run build:vercel` failed for the same external-font connectivity limitation.
