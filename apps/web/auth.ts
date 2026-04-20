@@ -927,18 +927,14 @@ async function authorizeAdminCredentials(
     const emailVerified = resolveDecodedTokenEmailVerified(
       decodedToken as Record<string, unknown>,
     );
-    if (!emailVerified) {
-      logAuthStageFailure(
-        traceContext,
-        AUTH_STAGE_EMAIL_CONFIRMATION,
-        new Error("AUTH_EMAIL_NOT_CONFIRMED"),
-      );
-      throwAuthCode(
-        "AUTH_EMAIL_NOT_CONFIRMED",
-        "This admin account must confirm its email before admin sign-in.",
-      );
-    }
-    logAuthStageSuccess(traceContext, AUTH_STAGE_EMAIL_CONFIRMATION);
+    /* Admin lane policy: allowlisted + claim-validated admins must never be re-routed
+       into the normal-user confirm-email lifecycle. We still compute and preserve the
+       verification signal for observability/session projection, but gating authority for
+       admin sign-in is allowlist + server claim activation, not user confirmation UX. */
+    logAuthStageSuccess(traceContext, AUTH_STAGE_EMAIL_CONFIRMATION, {
+      bypassedForAdminLane: true,
+      emailVerified,
+    });
 
     const tokenClaims = decodedToken as Record<string, unknown>;
     logAuthStageStart(traceContext, AUTH_STAGE_ADMIN_CLAIM);

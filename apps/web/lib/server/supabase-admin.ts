@@ -278,6 +278,12 @@ function buildSupabaseDecodedToken(input: {
     input.user.app_metadata && typeof input.user.app_metadata === "object"
       ? (input.user.app_metadata as Record<string, unknown>)
       : null;
+  const userRecord = toLooseUserRecord(input.user);
+  const emailConfirmedAt =
+    typeof userRecord.email_confirmed_at === "string"
+      ? userRecord.email_confirmed_at
+      : null;
+  const emailVerified = Boolean(emailConfirmedAt);
 
   const adminClaim =
     appMetadata?.admin === true ||
@@ -302,6 +308,13 @@ function buildSupabaseDecodedToken(input: {
           : undefined,
     admin: adminClaim,
     role: adminClaim ? "admin" : "user",
+    /* Keep verification claims explicit in the server-decoded token so Auth.js credential
+       authorize checks do not depend on provider JWT shape drift. This prevents confirmed
+       normal users from being misclassified as unconfirmed when JWT payloads omit legacy
+       `email_verified` markers while auth admin user metadata still holds confirmation truth. */
+    email_verified: emailVerified,
+    emailVerified: emailVerified,
+    email_confirmed_at: emailConfirmedAt ?? undefined,
     auth_time:
       typeof payload.auth_time === "number"
         ? payload.auth_time

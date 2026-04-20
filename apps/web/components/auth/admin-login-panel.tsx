@@ -21,8 +21,6 @@ import {
 import { AuthStatus } from "@/components/auth/auth-status";
 import type { AppMessages } from "@/lib/messages";
 import {
-  buildConfirmEmailRoute,
-  isEmailConfirmationFailure,
   logAuthDiagnosis,
   normalizeAuthFailure,
 } from "@/lib/auth-failure";
@@ -79,7 +77,7 @@ function mapSupabaseAdminError(input: {
   } else if (providerCode === "over_request_rate_limit") {
     code = "auth/too-many-requests";
   } else if (providerCode === "email_not_confirmed" || providerCode === "email_not_verified") {
-    code = "AUTH_EMAIL_NOT_CONFIRMED";
+    code = "ADMIN_ACCOUNT_UNAUTHORIZED";
   } else if (providerCode === "user_suspended") {
     code = "AUTH_ACCOUNT_SUSPENDED";
   }
@@ -367,8 +365,6 @@ export function AdminLoginPanel({
       return;
     }
 
-    let resolvedEmail: string | null = null;
-
     setPhase("resolving");
     setStatus({
       tone: "info",
@@ -379,7 +375,6 @@ export function AdminLoginPanel({
 
     try {
       const resolution = await resolveIdentifier();
-      resolvedEmail = resolution.email;
       setPhase("signing_in");
       setStatus({
         tone: "info",
@@ -454,28 +449,6 @@ export function AdminLoginPanel({
         routePath: APP_ROUTES.adminLogin,
         sessionCreationAttempted: true,
       });
-
-      const confirmationEmail = resolvedEmail ?? (identifier.includes("@") ? identifier.trim() : "");
-      if (isEmailConfirmationFailure(failure) && confirmationEmail.length > 0) {
-        /* Admin identities can also be email-unconfirmed; direct them to the same confirmation
-           workflow while preserving admin return routing after verification. */
-        const confirmRoute = buildConfirmEmailRoute({
-          email: confirmationEmail,
-          flow: "admin",
-          fromRoute: APP_ROUTES.adminLogin,
-        });
-
-        logAuthDiagnosis({
-          failure,
-          uxAction: "redirect_confirm_email",
-          redirectedToConfirmation: true,
-        });
-
-        await clearClientSession();
-        setPhase("idle");
-        router.push(confirmRoute);
-        return;
-      }
 
       logAuthDiagnosis({
         failure,

@@ -6612,6 +6612,7 @@ Change Log
     - `apps/web/app/api/infographic/route.ts`
     - `zootopia-club-next-ledger.txt`
 
+
     - `next build` failed with repeated `module-not-found` traces from:
       - `apps/web/components/layout/protected-workspace-query-provider.tsx`
       - `apps/web/lib/assessment-credit-query.ts`
