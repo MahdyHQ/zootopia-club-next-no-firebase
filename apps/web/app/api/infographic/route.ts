@@ -8,7 +8,10 @@ import { isProfileCompletionRequired } from "@/lib/return-to";
 import { apiError, apiSuccess } from "@/lib/server/api";
 import { resolveDefaultModelForTool } from "@/lib/server/ai/default-models";
 import { generateInfographic } from "@/lib/server/ai/execution";
-import { recordInfographicGenerationUsageEvent } from "@/lib/server/infographic-tool-accounting";
+import {
+  recordInfographicGenerationAccountingDeduction,
+  recordInfographicGenerationUsageEvent,
+} from "@/lib/server/infographic-tool-accounting";
 import {
   appendAdminLog,
   getDocumentByIdForOwner,
@@ -120,6 +123,32 @@ export async function POST(request: Request) {
   });
 
   await saveInfographicGeneration(generation);
+  /* Keep infographic writes dual-laned into the central accounting foundation:
+     - usage event lane (operational feed)
+     - accounting-entry lane (durable deduction/mutation history)
+     This keeps global aggregation resilient if one lane is temporarily degraded and ensures
+     infographic remains isolated to its own adapter without reusing assessment semantics. */
+  try {
+    await recordInfographicGenerationAccountingDeduction({
+      ownerUid: user.uid,
+      ownerEmail: user.email ?? null,
+      ownerRole: user.role,
+      generation,
+      documentId: normalized.documentId ?? null,
+      actorUid: user.uid,
+      actorEmail: user.email ?? null,
+      actorRole: user.role,
+    });
+  } catch (toolAccountingError) {
+    console.warn("Infographic tool-accounting entry write failed (non-fatal).", {
+      ownerUid: user.uid,
+      generationId: generation.id,
+      error:
+        toolAccountingError instanceof Error
+          ? toolAccountingError.message
+          : String(toolAccountingError),
+    });
+  }
   try {
     await recordInfographicGenerationUsageEvent({
       ownerUid: user.uid,
