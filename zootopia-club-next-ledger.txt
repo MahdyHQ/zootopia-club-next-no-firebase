@@ -6837,3 +6837,34 @@ Change Log
   - Remaining live-runtime gaps:
     - no authenticated multi-user load test was executed against a live Supabase project in this environment.
     - duplicate-signup concurrency behavior is code-traced and provider-contract grounded, but not fully runtime load-tested here.
+
+- 2026-04-20 23:15:00 | Admin sidebar navigation: add admin-only Platform Usage entry
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` completely before edits.
+    - analyzed current codebase first (ledger as context, not final truth), with focused inspection of:
+      - `packages/shared-config/src/routes.ts`
+      - `apps/web/app/(protected)/admin/page.tsx`
+      - `apps/web/app/(protected)/admin/platform-usage/page.tsx`
+      - `apps/web/components/layout/shell-nav.tsx`
+      - `apps/web/messages/en.json`
+      - `apps/web/messages/ar.json`
+    - reviewed local Next.js App Router guidance from `node_modules/next/dist/docs/01-app/index.md` before modifying protected navigation.
+  - Change shipped:
+    - Added a new admin-only sidebar entry for `/admin/platform-usage` in the canonical protected-sidebar menu source (`shell-nav`), instead of hardcoding a one-off button in a route page.
+    - Added icon mapping for the new route (`BarChart3`) so the entry matches the current admin/sidebar icon language.
+    - Added localized nav labels used by the shared sidebar messages contract:
+      - en: `Platform Usage`
+      - ar: `استهلاك المنصة`
+  - Admin-only separation / active-state behavior:
+    - The new entry is injected only inside the existing `user.role === "admin"` menu-items branch, so normal users never receive or render this nav target.
+    - Active highlighting is preserved automatically through the existing canonical nav matcher (`pathname === link.href || pathname.startsWith(`${link.href}/`)`), which now covers `/admin/platform-usage` and any nested subpaths.
+    - Desktop, mobile, and collapsed sidebar states inherit this update automatically because all states render from the same `menuItems` source.
+  - Files changed in this pass:
+    - `apps/web/components/layout/shell-nav.tsx`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `zootopia-club-next-ledger.txt`
+  - Verification in this pass:
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` failed due environment inability to fetch Google Fonts from `fonts.googleapis.com` during Next.js build (Alexandria, Amiri, Geist, JetBrains Mono, Plus Jakarta Sans).

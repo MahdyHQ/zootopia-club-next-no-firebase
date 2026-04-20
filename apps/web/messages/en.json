@@ -437,6 +437,7 @@
   "navContact": "Contact",
   "navAdmin": "Admin",
   "navAdminUsers": "Users",
+  "navAdminPlatformUsage": "Platform Usage",
   "uploadLabel": "Upload support file",
   "uploadHint": "Supported: PDF, DOCX, XLSX, XLS, TXT, CSV, PNG, JPG, JPEG, WEBP up to 50MB.",
   "uploadButton": "Upload file",

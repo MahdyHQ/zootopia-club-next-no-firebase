@@ -437,6 +437,7 @@
   "navContact": "تواصل معنا",
   "navAdmin": "الإدارة",
   "navAdminUsers": "المستخدمون",
+  "navAdminPlatformUsage": "استهلاك المنصة",
   "uploadLabel": "رفع ملف داعم",
   "uploadHint": "الأنواع المدعومة: PDF و DOCX و XLSX و XLS و TXT و CSV و PNG و JPG و JPEG و WEBP حتى 50MB.",
   "uploadButton": "رفع الملف",
