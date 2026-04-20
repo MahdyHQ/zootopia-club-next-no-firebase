@@ -26,4 +26,5 @@ export const APP_ROUTES = {
   settings: "/settings",
   admin: "/admin",
   adminUsers: "/admin/users",
+  adminPlatformUsage: "/admin/platform-usage",
 } as const;

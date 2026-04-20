@@ -89,7 +89,7 @@
   "adminLoginIdentifierLabel": "Admin email or username",
   "adminLoginIdentifierPlaceholder": "elmahdy developer admin gateway only",
   "adminLoginAccountPasswordLabel": "Account password",
-  "adminLoginAccountPasswordPlaceholder": "Enter your Supabase account password",
+  "adminLoginAccountPasswordPlaceholder": "Enter your account password",
   "adminLoginGatePasswordLabel": "Admin access gate",
   "adminLoginGatePasswordPlaceholder": "Enter the server-side admin access password",
   "adminLoginSupportLabel": "Restricted admin access",
