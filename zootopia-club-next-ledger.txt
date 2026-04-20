@@ -6868,3 +6868,59 @@ Change Log
     - `npm run lint` passed.
     - `npm run typecheck` passed.
     - `npm run build` failed due environment inability to fetch Google Fonts from `fonts.googleapis.com` during Next.js build (Alexandria, Amiri, Geist, JetBrains Mono, Plus Jakarta Sans).
+
+- 2026-04-20 23:58:00 | Email-confirmation lifecycle clarity + profile-completion finish redirect hardening
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` completely first and treated it as historical context only.
+    - traced live code before edits across confirm-email UI/API, signup/login redirects, Auth.js/session trust boundary, settings/profile completion route/form, owner-scope helpers, and localization catalogs.
+    - executed exploration-first parallel tracing passes (subagent-style) for:
+      1) ledger + auth history
+      2) signup/confirm-email/resend lifecycle
+      3) login + post-confirm redirect handling
+      4) settings/profile completion UX and redirect logic
+      5) auth UI copy + error-state mapping
+      6) Auth.js + Supabase session lifecycle
+      7) owner-scope/session boundary enforcement
+      8) user-isolation/locked-feature unlock behavior (`profileCompleted` gating)
+  - Root UX/flow gaps found before this pass:
+    - confirm-email CTA labeling still behaved as page-local send history (`hasAcceptedSendOnPage`) and could remain on “Send verification email” even when server governance already knew a send had been accepted.
+    - confirm-email send copy did not match requested concise UX wording (`Send email`/`Resend email`) and success feedback did not distinguish first-send vs resend outcomes.
+    - profile completion transition had a branch that redirected users back to login for capacity/admission diagnostics, which conflicted with a clean “completion finished” handoff.
+  - Auto-send truth audited:
+    - signup flow uses Supabase `auth.signUp(...)` with `emailRedirectTo` and therefore auto-requests confirmation email when signup succeeds.
+    - confirm-email UI now reflects that already-sent state via server governance `hasAcceptedSend` instead of relying on static/page-only assumptions.
+  - Changes shipped in this pass:
+    - `apps/web/components/auth/confirm-email-panel.tsx`
+      - CTA state now uses server governance truth (`governance.hasAcceptedSend`) plus current-page accepted sends.
+      - priming/poll sync now promotes accepted server state so button text is truthful on reload/revisit.
+      - idle status now surfaces an explicit “already sent” guidance state when send truth already exists.
+      - success messaging now differentiates first send vs resend outcomes.
+    - `apps/web/messages/en.json` + `apps/web/messages/ar.json`
+      - updated CTA copy to requested concise labels:
+        - EN: `Send email` / `Resend email`
+        - AR: `إرسال البريد الإلكتروني` / `إعادة إرسال البريد الإلكتروني`
+      - added localized “already sent” notice copy and separate resent success copy.
+    - `apps/web/app/api/users/me/profile/route.ts`
+      - completion redirect now resolves to home (`/`) when profile completion just became eligible and no explicit safe `returnTo` is provided.
+      - kept `returnTo` sanitization and server-authoritative redirect ownership.
+    - `apps/web/components/settings/profile-settings-form.tsx`
+      - completion-transition UX now keeps warning/info diagnostics without forcing login redirect branches.
+      - transition branches now redirect through server-provided `redirectTo` consistently (backend-authoritative destination).
+      - updated EN/AR transition helper text to match the new non-login handoff semantics.
+  - Owner-scope/user-isolation outcome after this pass:
+    - no ownership model changes were made.
+    - self-profile writes remain session-bound self-only via `/api/users/me/profile` and `getAuthenticatedSessionUser()`.
+    - Auth.js remains trust boundary; no client-side authority shift; admin/user separation unchanged.
+    - feature unlock remains tied to persisted owner profile truth (`profileCompleted`) and route/session guards.
+  - What was intentionally preserved:
+    - Auth.js credential/session architecture and Supabase provider lifecycle.
+    - confirm-email finalize flow (verify callback, confirm server state, cleanup helper session, return to login lane).
+    - owner-scoped isolation, admin boundary checks, and existing admission/capacity governance contracts.
+    - no schema/migration changes and no dependency changes.
+  - Files changed in this pass:
+    - `apps/web/components/auth/confirm-email-panel.tsx`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `apps/web/app/api/users/me/profile/route.ts`
+    - `apps/web/components/settings/profile-settings-form.tsx`
+    - `zootopia-club-next-ledger.txt`

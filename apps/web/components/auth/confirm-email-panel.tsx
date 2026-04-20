@@ -782,9 +782,9 @@ export function ConfirmEmailPanel({
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [governance, setGovernance] = useState<VerificationResendGovernanceSnapshot | null>(null);
   const [isGovernanceLoading, setIsGovernanceLoading] = useState(false);
-  /* Confirm-email action copy is page-instance scoped.
-    Keep this false until this page successfully sends once so governance polling
-    from older sessions/devices cannot pre-flip the CTA to "Resend". */
+  /* Confirm-email CTA truth is driven by server governance state (`hasAcceptedSend`)
+     plus current-page successful sends. This keeps "Send email" vs "Resend email"
+     aligned with real lifecycle state instead of static copy. */
   const [hasAcceptedSendOnPage, setHasAcceptedSendOnPage] = useState(false);
   const [governancePrimedEmail, setGovernancePrimedEmail] = useState<string | null>(null);
   const governanceRequestTokenRef = useRef(0);
@@ -816,6 +816,9 @@ export function ConfirmEmailPanel({
 
       setGovernance(nextGovernance);
       setCooldownSeconds(nextGovernance.cooldownRemainingSeconds);
+      if (nextGovernance.hasAcceptedSend) {
+        setHasAcceptedSendOnPage(true);
+      }
       return nextGovernance;
     } catch (nextError) {
       if (requestToken !== governanceRequestTokenRef.current) {
@@ -1072,6 +1075,8 @@ export function ConfirmEmailPanel({
 
   const isGovernanceBlocked = Boolean(governance && !governance.allowed);
   const isCooldownActive = cooldownSeconds > 0;
+  const hasServerAcceptedSend = governance?.hasAcceptedSend === true;
+  const hasSentEmailForCurrentFlow = hasAcceptedSendOnPage || hasServerAcceptedSend;
   const isGovernancePriming =
     supabaseConfigured
     && supabaseAuthReady
@@ -1113,8 +1118,12 @@ export function ConfirmEmailPanel({
   const idleStatus: AuthStatusDescriptor = {
     tone: "neutral",
     icon: "info",
-    title: messages.confirmEmailIdleTitle,
-    body: messages.confirmEmailIdleBody,
+    title: hasSentEmailForCurrentFlow
+      ? messages.confirmEmailAutoSentTitle
+      : messages.confirmEmailIdleTitle,
+    body: hasSentEmailForCurrentFlow
+      ? messages.confirmEmailAutoSentBody
+      : messages.confirmEmailIdleBody,
     live: "off",
   };
 
@@ -1127,7 +1136,7 @@ export function ConfirmEmailPanel({
         ? messages.confirmEmailResendWorking
         : governance?.governanceCode === "VERIFICATION_RESEND_COOLDOWN_ACTIVE" && cooldownSeconds > 0
           ? `${messages.confirmEmailResendCooldownPrefix} ${cooldownSeconds}s`
-          : hasAcceptedSendOnPage
+          : hasSentEmailForCurrentFlow
             ? messages.confirmEmailResendAction
             : messages.confirmEmailSendAction;
 
@@ -1204,6 +1213,7 @@ export function ConfirmEmailPanel({
     });
 
     try {
+      const hadAcceptedSendBeforeSubmit = hasSentEmailForCurrentFlow;
       const resendResult = await submitVerificationResend({
         email: normalizedEmail,
         flow,
@@ -1227,8 +1237,12 @@ export function ConfirmEmailPanel({
       setStatus({
         tone: "success",
         icon: "success",
-        title: messages.confirmEmailSentTitle,
-        body: messages.confirmEmailSentBody,
+        title: hadAcceptedSendBeforeSubmit
+          ? messages.confirmEmailResentTitle
+          : messages.confirmEmailSentTitle,
+        body: hadAcceptedSendBeforeSubmit
+          ? messages.confirmEmailResentBody
+          : messages.confirmEmailSentBody,
       });
     } catch (nextError) {
       const failure = normalizeAuthFailure({

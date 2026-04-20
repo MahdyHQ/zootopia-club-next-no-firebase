@@ -1,3 +1,4 @@
+import { APP_ROUTES } from "@zootopia/shared-config";
 import type { UpdateUserProfileInput } from "@zootopia/shared-types";
 import {
   validatePhoneNumberE164,
@@ -113,9 +114,15 @@ export async function PATCH(request: Request) {
     }
   }
 
+  /* Profile completion should finish with one deterministic post-save destination.
+     Even when admission/capacity diagnostics report temporary pressure, this self-owned
+     completion path now lands on home so the user sees a clear "finished" outcome. */
+  const redirectTo = requestedReturnTo
+    || (completionTransition?.becameEligible ? APP_ROUTES.home : getAuthenticatedUserRedirectPath(updatedUser));
+
   return apiSuccess({
     user: updatedUser,
-    redirectTo: requestedReturnTo || getAuthenticatedUserRedirectPath(updatedUser),
+    redirectTo,
     completionTransition,
   });
 }
