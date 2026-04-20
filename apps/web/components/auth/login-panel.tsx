@@ -1278,6 +1278,28 @@ export function LoginPanel({
         }
         setPhase("idle");
 
+        if (rawAuthCode === "SIGNUP_EMAIL_INVALID") {
+          setStatus({
+            tone: "warning",
+            icon: "warning",
+            title: messages.confirmEmailInvalidEmailTitle,
+            body: messages.confirmEmailInvalidEmailBody,
+          });
+          return;
+        }
+
+        if (rawAuthCode === "SIGNUP_PASSWORD_REQUIRED") {
+          setStatus({
+            tone: "warning",
+            icon: "warning",
+            title: localText.passwordLabel,
+            body: locale === "ar"
+              ? "كلمة المرور مطلوبة لإنشاء الحساب."
+              : "A password is required to create an account.",
+          });
+          return;
+        }
+
         if (rawAuthCode === "PASSWORD_POLICY_FAILED") {
           setStatus({
             tone: "warning",
