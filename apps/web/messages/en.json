@@ -181,6 +181,7 @@
   "confirmEmailResentBody": "A fresh verification email was requested. Check inbox and spam for the newest message.",
   "confirmEmailConfirmedTitle": "Email confirmed",
   "confirmEmailConfirmedBody": "Email confirmation is complete. We’re taking you back to sign in now.",
+  "confirmEmailAlreadyConfirmedBody": "This email is already confirmed. Continue by signing in.",
   "confirmEmailInvalidEmailTitle": "Enter a valid email address",
   "confirmEmailInvalidEmailBody": "Use the full account email used during sign-up, then resend verification.",
   "confirmEmailLinkExpiredTitle": "This confirmation link has expired",

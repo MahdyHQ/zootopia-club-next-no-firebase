@@ -15,6 +15,7 @@ import {
   findSupabaseAuthUserByEmail,
   hasSupabaseAdminRuntime,
 } from "@/lib/server/supabase-admin";
+import { markVerificationResendProviderAccepted } from "@/lib/server/verification-resend-governance";
 import {
   getSupabasePublishableKey,
   getSupabaseUrl,
@@ -419,6 +420,19 @@ export async function POST(request: Request) {
     accessToken,
     refreshToken,
   };
+
+  if (requiresEmailConfirmation) {
+    /* Supabase signup already triggers the initial confirmation email send.
+       Record that provider-accepted send in governance so confirm-email CTA state
+       starts at "Resend email" instead of incorrectly showing "Send email". */
+    await markVerificationResendProviderAccepted({ email }).catch((markError) => {
+      console.warn("[auth-signup] failed to mark initial confirmation email acceptance", {
+        routePath: APP_ROUTES.login,
+        email,
+        error: markError,
+      });
+    });
+  }
 
   return withAdmissionHeaders(
     applyNoStore(apiSuccess(payload)),

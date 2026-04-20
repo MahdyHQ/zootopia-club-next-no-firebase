@@ -181,6 +181,7 @@
   "confirmEmailResentBody": "تم طلب رسالة تحقق جديدة. افحص البريد الوارد والرسائل غير المرغوب فيها لأحدث رسالة.",
   "confirmEmailConfirmedTitle": "تم تأكيد البريد الإلكتروني",
   "confirmEmailConfirmedBody": "اكتمل تأكيد البريد. نعيدك الآن إلى صفحة تسجيل الدخول.",
+  "confirmEmailAlreadyConfirmedBody": "تم تأكيد هذا البريد بالفعل. تابع الآن بتسجيل الدخول.",
   "confirmEmailInvalidEmailTitle": "أدخل بريداً إلكترونياً صحيحاً",
   "confirmEmailInvalidEmailBody": "استخدم بريد الحساب الكامل المستخدم عند التسجيل ثم أعد الإرسال.",
   "confirmEmailLinkExpiredTitle": "انتهت صلاحية رابط التأكيد",

@@ -7006,3 +7006,75 @@ Change Log
   - Files changed in this pass:
     - `apps/web/app/(protected)/(completed)/page.tsx`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-20 23:58:00 | Confirm-email lifecycle hardening (server/provider truth sync + deterministic post-confirm login redirect)
+  - Mandatory workflow followed before edits:
+    - read `zootopia-club-next-ledger.txt` fully as project history, then traced current codebase as runtime truth.
+    - inspected targeted auth lifecycle files end-to-end:
+      - `apps/web/components/auth/confirm-email-panel.tsx`
+      - `apps/web/app/(public)/confirm-email/page.tsx`
+      - `apps/web/app/api/auth/confirm-email/resend/route.ts`
+      - `apps/web/app/api/auth/signup/route.ts`
+      - `apps/web/components/auth/login-panel.tsx`
+      - `apps/web/auth.ts`
+      - `apps/web/lib/server/session.ts`
+      - `apps/web/components/settings/profile-settings-form.tsx`
+      - `apps/web/app/api/users/me/profile/route.ts`
+      - `apps/web/lib/return-to.ts`
+      - `apps/web/lib/auth-failure.ts`
+      - `apps/web/messages/en.json`
+      - `apps/web/messages/ar.json`
+    - verified Supabase behavior against current official docs (signUp auto-email semantics, resend constraints, verifyOtp/token-hash callback/session behavior).
+  - Root issues found in live code (before this fix):
+    1. confirm-email CTA state drift:
+       - signup auto-sends confirmation through Supabase, but resend governance `hasAcceptedSend` was not being marked on successful signup.
+       - result: first visit to `/confirm-email` after signup could still show `Send email` instead of truthful `Resend email`.
+    2. provider/UI lifecycle drift around “already confirmed”:
+       - resend API had no provider-confirmation precheck, so already-confirmed accounts could still hit resend flow and show ambiguous feedback.
+    3. post-confirm redirect inconsistency risk:
+       - finalize flow required `getSession().access_token` after callback verification; when callback verification succeeded but session token hydration was inconsistent, redirect could fail despite successful provider-side confirmation.
+  - Changes shipped (minimal/surgical):
+    - `apps/web/app/api/auth/signup/route.ts`
+      - after successful signup that still requires email confirmation, now calls `markVerificationResendProviderAccepted({ email })`.
+      - this records Supabase auto-send acceptance in server governance so confirm-email CTA starts from truthful resend state.
+    - `apps/web/app/api/auth/confirm-email/resend/route.ts`
+      - added provider-state probe using `findSupabaseAuthUserByEmail(...)`.
+      - GET now includes `accountState.emailConfirmed` alongside governance snapshot for client-side lifecycle sync.
+      - POST now short-circuits with `VERIFICATION_ALREADY_CONFIRMED` (409) when provider says email is already confirmed.
+      - keeps governance headers and existing rate-limit/cooldown authority unchanged.
+    - `apps/web/components/auth/confirm-email-panel.tsx`
+      - resend/get payload parsing now reads `accountState.emailConfirmed` and tracks `isEmailConfirmed` in UI state.
+      - disabled/blocked state now includes `isEmailConfirmed` and shows confirmed status instead of allowing misleading sends.
+      - added explicit mapping for `VERIFICATION_ALREADY_CONFIRMED` and already-confirmed provider failures.
+      - finalize flow now uses authoritative confirmation data from callback result + fallback `getSession/getUser` path instead of depending only on post-callback session-token availability.
+      - on confirmed success, uses router replace/refresh plus deterministic `window.location.replace(...)` fallback to ensure landing on login lane.
+      - if callback reports already-confirmed lifecycle, shows success status and redirects to login.
+      - preserved Auth.js trust boundary by still clearing helper Supabase session and returning to login instead of entering protected routes directly.
+    - `apps/web/messages/en.json` + `apps/web/messages/ar.json`
+      - added `confirmEmailAlreadyConfirmedBody` for truthful already-confirmed lifecycle messaging.
+  - Lifecycle truth after this pass:
+    - no-send-yet: CTA is `Send email`.
+    - accepted-send exists (including signup auto-send): CTA is `Resend email`.
+    - cooldown active / governance blocked: CTA disabled with cooldown/rate-limit status.
+    - already confirmed: CTA disabled and user guided to sign in.
+    - callback success: redirected back to login with confirmation marker.
+  - Redirect and profile-completion contract check:
+    - verified existing first-login/profile-completion flow remained intact and unchanged in architecture:
+      - login resolves destination through `resolveAuthenticatedUserRedirectPath(...)`.
+      - profile completion redirect remains server-authored in `/api/users/me/profile` and env-driven via `getAuthenticatedUserRedirectPath(...)` with safe fallback behavior.
+  - Owner-scope and authority preservation:
+    - no owner-scope/storage/admin-boundary code paths were loosened.
+    - Auth.js remains session trust boundary.
+    - backend/server routes remain authority for profile completion and redirect resolution.
+  - Verification run (final sweep):
+    - `npm run lint` ✅
+    - `npm run typecheck` ✅
+    - `npm run build` ⚠️ (fails in this environment due Google Fonts fetch/network at Next.js build time; unrelated to auth lifecycle edits)
+    - `npm run build:vercel` ⚠️ (same Google Fonts fetch/network limitation)
+  - Files changed in this pass:
+    - `apps/web/app/api/auth/signup/route.ts`
+    - `apps/web/app/api/auth/confirm-email/resend/route.ts`
+    - `apps/web/components/auth/confirm-email-panel.tsx`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `zootopia-club-next-ledger.txt`
