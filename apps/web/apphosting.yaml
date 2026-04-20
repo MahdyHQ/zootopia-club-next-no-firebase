@@ -83,6 +83,36 @@ env:
     availability:
       - RUNTIME
 
+  - variable: ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS
+    value: "24"
+    availability:
+      - RUNTIME
+
+  - variable: ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT
+    value: "500"
+    availability:
+      - RUNTIME
+
+  - variable: ZOOTOPIA_ACTIVE_NORMAL_USER_LIMIT
+    value: "500"
+    availability:
+      - RUNTIME
+
+  - variable: ZOOTOPIA_ACTIVE_NORMAL_USER_SESSION_MINUTES
+    value: "60"
+    availability:
+      - RUNTIME
+
+  - variable: ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS
+    value: ""
+    availability:
+      - RUNTIME
+
+  - variable: ZOOTOPIA_REQUIRED_EXEMPT_EMAILS
+    value: ""
+    availability:
+      - RUNTIME
+
   - variable: DASHSCOPE_BASE_URL
     value: "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
     availability:

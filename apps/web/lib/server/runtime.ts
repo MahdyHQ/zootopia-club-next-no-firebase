@@ -1,6 +1,9 @@
 import "server-only";
 
-import { hasConfiguredAdminAllowlist } from "@/lib/server/admin-auth";
+import {
+  hasConfiguredAdminAllowlist,
+  hasConfiguredAdminLoginPasswordGate,
+} from "@/lib/server/admin-auth";
 import { getZootopiaPersistenceRuntimeState } from "@/lib/server/zootopia-postgres-adapter";
 
 function hasAuthSecretRuntime() {
@@ -38,9 +41,9 @@ export function getRuntimeFlags() {
   return {
     // Canonical auth-runtime flag for all UI status surfaces and auth panels.
     supabaseAuth: supabaseAuthReady,
-    // Admin login uses the same readiness gates as regular Supabase auth.
-    // Additional security checks (allowlist, claims, request recency) are enforced server-side.
-    adminSupabaseAuth: supabaseAuthReady,
+    // Admin login has one additional runtime gate beyond regular auth: the server-only
+    // environment password factor must be configured before the live Auth.js admin path opens.
+    adminSupabaseAuth: supabaseAuthReady && hasConfiguredAdminLoginPasswordGate(),
     googleAi: hasGoogleAiRuntime(),
     qwen: hasQwenRuntime(),
   };

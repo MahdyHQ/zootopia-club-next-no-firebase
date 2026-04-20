@@ -14,6 +14,7 @@ import {
   saveInfographicGeneration,
 } from "@/lib/server/repository";
 import { getAuthenticatedSessionContext } from "@/lib/server/session";
+import { recordToolUsageEvent } from "@/lib/server/tool-accounting";
 
 export const runtime = "nodejs";
 
@@ -119,6 +120,27 @@ export async function POST(request: Request) {
   });
 
   await saveInfographicGeneration(generation);
+  try {
+    await recordToolUsageEvent({
+      ownerUid: user.uid,
+      ownerEmail: user.email ?? null,
+      ownerRole: user.role,
+      toolId: "infographic",
+      eventKind: "generation",
+      dayKey: generation.createdAt.slice(0, 10),
+      generationId: generation.id,
+      metadata: {
+        modelId: generation.modelId,
+        documentId: normalized.documentId ?? null,
+      },
+    });
+  } catch (toolUsageError) {
+    console.warn("Infographic tool-usage event write failed (non-fatal).", {
+      ownerUid: user.uid,
+      generationId: generation.id,
+      error: toolUsageError instanceof Error ? toolUsageError.message : String(toolUsageError),
+    });
+  }
   await appendAdminLog({
     actorUid: user.uid,
     actorRole: user.role,

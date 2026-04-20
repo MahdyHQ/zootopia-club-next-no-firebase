@@ -1,5 +1,5 @@
 Zootopia Club Next Master Ledger
-Last refreshed: 2026-04-11 00:20:00
+Last refreshed: 2026-04-20 02:05:00
 
 Project Identity
 - Name: Zootopia Club Next
@@ -36,7 +36,7 @@ Current Truth Snapshot
 - Assessment preview/result pages plus both PDF lanes now share a narrow file-surface composition helper that keeps the first-page-only logo/brand rail, the compact `https://linktr.ee/ebnabdallah` QR card, the Arabic-only final support-page descriptor, the light/dark circular seal asset mapping, and the light/dark file-background asset mapping explicit instead of scattering that logic across separate renderers.
 - `/assessment` now uses a single-column configuration studio with Assessment-scoped custom dropdown panels, history-driven preview/result quick actions, and an optional steering prompt that can be left blank when a linked document is selected.
 - `/assessment` now also shows a post-success retention reminder only after a real saved generation commit, explaining the 3-day history window plus auto-delete behavior and linking to `/history`; the reminder auto-dismisses after exactly 60 seconds and is keyed by generation id to prevent duplicate rerender spam.
-- Assessment generation now uses a server-authoritative daily credit contract for normal users only: 3 successful generations per UTC day, short-lived pre-model reservations to prevent realistic duplicate-click oversubscription, an atomic durable save plus credit-consume commit after the canonical result artifact is persisted, and admin exemption that is enforced on the server instead of in client UI.
+- Assessment generation now uses a server-authoritative daily credit contract for normal users only: 3 successful generations per UTC day, short-lived pre-model reservations to prevent realistic duplicate-click oversubscription, an atomic durable save plus credit-consume commit after the canonical result artifact is persisted, and platform-cap enforcement that is enforced on the server instead of in client UI.
 - Assessment generations now persist a canonical owner-scoped result artifact in Storage, and JSON/Markdown/DOCX/print-HTML export artifacts are now cached under owner-scoped Storage paths when generated through the server routes.
 - Legacy assessment and document records no longer default a missing `ownerRole` to `"user"` during normalization or persistence. Shared repository reads/writes now resolve missing owner roles from authoritative owner context only (stored role, same-owner session role when available, or the owner's user/Auth metadata), best-effort backfill resolved legacy records, and omit unresolved `ownerRole` fields from Firestore merge writes instead of silently reclassifying ambiguous admin-owned history.
 - `apps/web/lib/server/repository.ts` now also exposes `backfillLegacyOwnerRolesForOwner(ownerUid)` as the explicit owner-scoped migration helper for intentionally repairing older document/assessment histories once the server can prove the real owner role.
@@ -65,10 +65,11 @@ Current Truth Snapshot
 - Assessment and document retention now share one 3-day lifecycle contract with lazy cleanup: expired uploads, assessment records, canonical result files, and persisted export artifacts are removed on server read/list access instead of only being hidden in UI state.
 - `POST /api/internal/maintenance/expired-uploads` now validates the bearer secret with a timing-safe comparison, reducing token-probing signal leakage while preserving the existing secret-gated scheduler contract.
 - Regular user login and admin login are intentionally separate.
-- Both auth bootstrap edges (`/api/auth/bootstrap` and `/api/auth/admin/bootstrap`) are now server-throttled with route-scoped limits, while preserving independent regular-user versus admin sign-in contracts.
-- Admin auth bootstrap now also requires a configured server-only `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` gate as an additional factor before session issuance, and admin-login UI readiness is exposed through `runtimeFlags.adminSupabaseAuth`.
+- The current live sign-in trust boundary is Auth.js credentials in `apps/web/auth.ts`. `/api/auth/bootstrap` and `/api/auth/admin/bootstrap` are retired compatibility stubs that now return 410 and are not part of the live UI/session flow.
+- The live Auth.js admin credentials path now enforces a configured server-only `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` gate in addition to allowlist, recent-sign-in, email-confirmation, password-provider, and admin-claim checks, and admin-login UI readiness is exposed through `runtimeFlags.adminSupabaseAuth`.
 - Admin authority is claims-first: allowlisted email plus Supabase app-metadata claim semantics (`admin` or admin role markers).
-- Session and route isolation remain request-bound on the server: `verifySessionCookie(..., true)` revalidates the session cookie on every request, admin routes and APIs still resolve through explicit admin-session helpers, and owner-facing assessment/export/history reads remain bound to `ownerUid` instead of shared mutable session state.
+- Session and route isolation remain request-bound on the server: Auth.js `auth()` plus `getAuthenticatedSessionUser()` revalidate the session/user on every protected request, admin routes and APIs still resolve through explicit admin-session helpers, and owner-facing assessment/export/history reads remain bound to `ownerUid` instead of shared mutable session state.
+- The shared cross-tool accounting foundation now includes `public.tool_accounting_accounts`, `public.tool_accounting_entries`, and `public.tool_usage_events`. Assessment generation/admin mutation flows sync owner accounting identity and shared accounting entries, while platform-wide assessment aggregation now reads `public.assessment_daily_credits` plus `public.tool_accounting_accounts` only.
 - The admin dashboard now includes a server-rendered recent platform activity feed sourced from `adminActivityLogs`, and the app now records login/session, upload, assessment, export, download, and cleanup activity there for admin-safe observability.
 - `/admin` and `/admin/users` now merge the full Supabase Auth account inventory with stored server-side user metadata, so admin user visibility is no longer capped at small hydrated subsets.
 - `/admin/users` now uses compact per-user entry cards with inline expansion panels for role/status/access/credit management, replacing the previous cramped right-rail table-actions pattern while preserving the same admin-only APIs and server authority.
@@ -6336,3 +6337,128 @@ Change Log
   - Files changed in this pass:
     - `apps/web/app/(protected)/(completed)/page.tsx`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-20 02:05:00 | Resume-mode completion: structured platform aggregation + cross-tool accounting foundation + Auth.js cutover cleanup
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before resuming.
+    - inspected resume state before edits:
+      - `git status --short --branch`
+      - `git diff --stat`
+      - `git diff --name-status`
+      - latest migrations under `supabase/migrations/**`
+      - in-flight diffs for `repository.ts`, `assessment-daily-credits.ts`, `assessment/route.ts`, `auth.ts`, shared types, and the new untracked migration/module files.
+    - launched/used focused subagents for:
+      - ledger + architecture tracing
+      - Supabase schema + latest migrations + table ownership tracing
+      - assessment credit engine + repository tracing
+      - cross-tool execution / generation / usage tracing
+      - auth / signup / login / session / owner-scope tracing
+      - admin governance / grants / mutations / realtime tracing
+      - storage / uploads / results / artifacts / ownership tracing
+      - naming / contracts / route semantics tracing
+  - What was already complete before resume:
+    - owner-scoped upload/result/export/infographic read paths were already solid and server-enforced.
+    - assessment credit reservation/commit flow was already mature and server-authoritative.
+    - the first partial shared-accounting tranche already existed locally:
+      - `packages/shared-types/src/platform.ts`
+      - `apps/web/lib/server/tool-accounting.ts`
+      - `supabase/migrations/20260419200000_tool_usage_accounting_foundation.sql`
+    - assessment route had already started best-effort `tool_usage_events` writes.
+    - server-side assessment platform lock had already started in `reserveAssessmentDailyCreditAttempt(...)`.
+  - What was partial / broken when resumed:
+    - platform aggregation still depended on legacy-style owner lookups through repository user reads, plus a 2000-row limiter and temporary `platform_successful_generation_ids` compatibility fallbacks.
+    - the shared accounting foundation had usage events only; it still lacked a canonical per-owner accounting identity and a shared grants/adjustments/deductions ledger.
+    - only assessment generation wrote shared usage events; infographic did not.
+    - live Auth.js admin login did not actually enforce the extra `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` gate even though helper/env work existed.
+    - `/api/auth/bootstrap` and `/api/auth/admin/bootstrap` were stale and broken compile-time remnants, not live trust-boundary routes.
+    - `server-auth.ts` expected `deleteSupabaseAuthUser`, but `supabase-admin.ts` did not export it.
+    - root `build:vercel` existed, but `apps/web/package.json` had no matching workspace script.
+    - admin overview counts had been switched to structured parity tables even though the live write path for documents/assessments/infographics still runs through `zc_entities`.
+  - Root contradictions resolved in this pass:
+    - platform aggregation is now structured-table-only for its live read path:
+      - reads `public.assessment_daily_credits`
+      - joins `public.tool_accounting_accounts`
+      - no longer re-enters legacy user lookup helpers to resolve owner email/role
+      - no longer carries runtime compatibility fallbacks for missing `platform_successful_generation_ids`
+    - Auth.js is now the sole live session trust boundary:
+      - `/api/auth/bootstrap` and `/api/auth/admin/bootstrap` remain present only as explicit 410 compatibility stubs
+      - live sign-in stays in `apps/web/auth.ts` + `/api/auth/[...nextauth]`
+    - admin overview counts are truthful again by reading `public.zc_entities` directly for `documents`, `assessmentGenerations`, and `infographicGenerations` until those domains receive a real structured write cutover.
+  - Schema / migration truth after this pass:
+    - `20260419200000_tool_usage_accounting_foundation.sql` is now the canonical migration for the shared accounting tranche and creates:
+      - `public.tool_accounting_accounts`
+      - `public.tool_usage_events`
+      - `public.tool_accounting_entries`
+    - The migration also backfills:
+      - `tool_accounting_accounts` from live `zc_entities` user records
+      - `tool_accounting_entries` from structured `assessment_credit_mutations`
+    - Assessment-specific quota tables remain canonical for assessment balance/enforcement:
+      - `public.assessment_credit_accounts`
+      - `public.assessment_credit_grants`
+      - `public.assessment_daily_credits`
+      - `public.assessment_credit_mutations`
+  - Shared accounting foundation after this pass:
+    - `apps/web/lib/server/tool-accounting.ts` now owns:
+      - `syncToolAccountingAccount(...)`
+      - `recordToolUsageEvent(...)`
+      - `recordToolAccountingEntry(...)`
+      - shared per-day usage count helpers
+    - `packages/shared-types/src/platform.ts` now owns the canonical shared contracts:
+      - `ToolAccountingAccount`
+      - `ToolAccountingEntry`
+      - `ToolAccountingEntryKind`
+      - `ToolUsageEvent`
+      - `PlatformDailyUsageSummary`
+    - `persistAuthCriticalUserClaims(...)` now syncs `tool_accounting_accounts` from the same auth-critical owner truth that powers session callbacks.
+  - Tool-specific usage / accounting wiring after this pass:
+    - assessment:
+      - successful generation commit writes a shared accounting `deduction` entry inside the same commit path
+      - successful generation route keeps writing a best-effort `tool_usage_events` `generation` row
+    - assessment admin mutations:
+      - `applyAdminAssessmentCreditMutation(...)` now writes shared accounting entries classified as `grant`, `adjustment`, or `deduction` based on the assessment mutation action
+    - infographic:
+      - successful generation now writes a best-effort `tool_usage_events` `generation` row with `toolId = "infographic"`
+  - Auth / owner-scope hardening after this pass:
+    - live Auth.js admin credentials flow now enforces the extra server-only `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` gate.
+    - `runtimeFlags.adminSupabaseAuth` now includes that gate, so readiness truth matches the live server path.
+    - `/api/auth/admin/resolve-identifier` now also fails closed when the admin password gate is unconfigured.
+    - stale bootstrap APIs are no longer misleading, broken alternate session issuers.
+    - owner-scoped upload/result/export/document/infographic read/write surfaces were preserved; no new cross-owner bypass was introduced.
+  - Naming / contract cleanup after this pass:
+    - repository now imports/uses `buildPlatformDailyUsageSummary` for the shared platform-cap shape instead of reintroducing the assessment-prefixed builder name.
+    - `AssessmentDailyCreditsSummary.platformDailyUsage` now points directly at `PlatformDailyUsageSummary`.
+    - admin login copy now distinguishes:
+      - Supabase account password
+      - extra server-side admin access gate password
+    - `apps/web/package.json` now exposes `build:vercel` / `start:vercel` aliases so the root scripts match the workspace contract they advertise.
+  - Files changed in this pass:
+    - `.env.example`
+    - `apps/web/app/api/assessment/route.ts`
+    - `apps/web/app/api/auth/admin/bootstrap/route.ts`
+    - `apps/web/app/api/auth/admin/resolve-identifier/route.ts`
+    - `apps/web/app/api/auth/bootstrap/route.ts`
+    - `apps/web/app/api/infographic/route.ts`
+    - `apps/web/apphosting.yaml`
+    - `apps/web/auth.ts`
+    - `apps/web/components/auth/admin-login-panel.tsx`
+    - `apps/web/components/auth/auth-feedback.ts`
+    - `apps/web/lib/server/assessment-daily-credits.ts`
+    - `apps/web/lib/server/repository.ts`
+    - `apps/web/lib/server/runtime.ts`
+    - `apps/web/lib/server/supabase-admin.ts`
+    - `apps/web/lib/server/tool-accounting.ts`
+    - `apps/web/messages/ar.json`
+    - `apps/web/messages/en.json`
+    - `apps/web/package.json`
+    - `packages/shared-types/src/assessment.ts`
+    - `packages/shared-types/src/platform.ts`
+    - `supabase/migrations/20260419200000_tool_usage_accounting_foundation.sql`
+    - `zootopia-club-next-ledger.txt`
+  - Verification in this pass:
+    - `npm run lint:web` passed.
+    - `npm run typecheck:web` passed.
+    - `npm run supabase:check` passed.
+    - `npm run build:web` passed.
+    - `npm run build:vercel` passed after adding the missing workspace alias script.
+    - Remaining live-runtime note:
+      - build output still warns that `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is unset. This did not fail the build, but operators should set it for stable hashed governance buckets across deploys.

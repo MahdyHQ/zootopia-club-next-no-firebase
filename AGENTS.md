@@ -93,4 +93,126 @@ Ledger refresh rule:
 - Record all meaningful changes, decisions, risks, files changed, and verification results in the ledger.
 - Never let the ledger overwrite reality in your reasoning.
 - The ledger should be updated to reflect the code — not the other way around.
+DATABASE / MIGRATION DISCIPLINE RULES — NON-NEGOTIABLE (2026)
+
+You must always treat the latest valid database schema and latest applied migrations as the canonical source of truth.
+
+Core rule:
+- New backend/database work must read from and write to the newest canonical tables/columns only.
+- Do not keep old and new tables active together unless there is a clearly justified, explicitly documented, temporary migration bridge.
+- Do not leave legacy bridges, fallback reads, dual writes, or mixed truth paths behind as permanent architecture.
+
+Before starting any task that touches backend, data, auth, storage, usage, wallet, credits, documents, results, or admin flows, you must first do a schema audit:
+
+1. Read the latest migrations carefully.
+2. Identify the newest canonical tables and columns.
+3. Identify any old tables, old columns, fallback reads, bridge logic, or stale compatibility code.
+4. Verify which tables the backend currently reads from.
+5. Verify which tables the backend currently writes to.
+6. Verify relations, foreign keys, unique constraints, indexes, RLS/security assumptions, and ownership boundaries.
+7. Verify that repository/service/backend code is aligned with the newest schema.
+8. Verify that no old table is still being treated as hidden truth by mistake.
+
+Canonical schema policy:
+- Always prefer the newest schema.
+- Always prefer the newest migrations.
+- Always prefer the modern structured tables over legacy storage or compatibility layers.
+- Never assume old tables should remain active just because they still exist.
+- Existing old tables must be treated as migration debt to be eliminated safely, not preserved casually.
+
+Read/write policy:
+- Backend must read from canonical latest tables.
+- Backend must write to canonical latest tables.
+- Do not introduce new logic that writes to old tables.
+- Do not introduce new logic that depends on old fallback reads.
+- Do not keep dual-write or dual-read behavior unless absolutely required for a controlled migration rollout.
+- If temporary compatibility is required, document it clearly and remove it after cutover.
+
+Migration policy:
+- If the task needs new backend data structures, create a proper migration.
+- Do not hack around missing schema using ad-hoc code-only workarounds.
+- Add new tables/columns/indexes/constraints only through migrations.
+- Migrations must be minimal, safe, precise, and professionally named.
+- Migrations must preserve data unless explicit removal is intended and proven safe.
+- If a migration replaces older structures, also plan the cutover and cleanup path.
+
+Legacy cleanup policy:
+- If old tables/columns are no longer needed and safe removal is justified, remove them carefully and explicitly.
+- Do not leave dead schema behind without reason.
+- Do not keep ambiguous old structures that make future maintenance harder.
+- However, never delete old schema blindly.
+- First prove:
+  1. no runtime reads depend on it
+  2. no runtime writes depend on it
+  3. needed data has been backfilled or migrated
+  4. rollback implications are understood
+
+Pre-change database checklist:
+- What are the newest canonical tables?
+- What old tables still exist?
+- What code still touches old tables?
+- Are reads and writes aligned to the same truth source?
+- Are relations and ownership boundaries correct?
+- Are indexes sufficient?
+- Are columns semantically clear and enough for the feature?
+- Is owner-scope preserved?
+- Is admin scope preserved?
+- Does this backend task require a new migration?
+
+Owner-scope and backend truth:
+- Always ensure owner-scoped data remains owner-scoped in the database and backend.
+- Verify that user A cannot read/write user B’s data.
+- Verify backend repository methods are scoped correctly.
+- Verify admin-only flows are explicitly gated.
+- Verify storage/document/result/accounting linkage matches authenticated owner identity.
+
+Backend connection discipline:
+- Always verify that the backend is actually connected to the intended latest schema path.
+- Always verify repository/service methods align with the newest migrations.
+- Always verify route handlers call the correct canonical repository methods.
+- Never leave misleading names or dead repository paths that point to old schema shapes.
+
+Naming discipline:
+- Table names, column names, repository methods, and service functions must reflect real current architecture.
+- Rename misleading legacy-specific or outdated names when needed.
+- Do not let old naming hide new truth.
+- Keep the schema/domain understandable for future scaling.
+
+When doing any backend task:
+- First inspect migrations and current canonical schema.
+- Then inspect repository/service/route ownership.
+- Then implement schema changes if needed.
+- Then cut code over to the newest schema.
+- Then remove or isolate old dependencies.
+- Only after the system is coherent, run final verification.
+
+Verification requirements after DB/backend work:
+- Verify reads use newest canonical tables.
+- Verify writes use newest canonical tables.
+- Verify no accidental legacy dependency remains.
+- Verify migrations are valid.
+- Verify owner scope.
+- Verify admin scope.
+- Verify auth/data/storage integration still works.
+- Verify the ledger is updated with exact schema truth.
+
+Documentation rule:
+- Always record:
+  - which tables are canonical now
+  - which legacy tables remain
+  - which legacy paths were removed
+  - which migrations were added
+  - whether cutover is complete or partial
+  - what still needs future cleanup
+
+Never do these:
+- never trust old tables by default
+- never add new backend features without checking migrations first
+- never write to stale tables just because they still exist
+- never keep mixed truth sources without explicit reason
+- never leave migration debt undocumented
+- never create database chaos that makes future search and maintenance harder
+
+Goal:
+Keep the database fresh, canonical, understandable, scalable, owner-safe, and aligned with the newest backend architecture at all times.
 <!-- END:nextjs-agent-rules -->

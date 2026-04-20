@@ -524,6 +524,7 @@ export function mapAdminLoginError(
       );
     case "SUPABASE_ADMIN_UNAVAILABLE":
     case "ADMIN_ALLOWLIST_UNCONFIGURED":
+    case "ADMIN_LOGIN_PASSWORD_UNCONFIGURED":
       return withOperationalSupport(
         status(
           "danger",
@@ -568,6 +569,21 @@ export function mapAdminLoginError(
         "permission",
         messages.adminLoginStatusUnauthorizedTitle,
         messages.adminLoginStatusUnauthorizedBody,
+        "assertive",
+      );
+    case "ADMIN_LOGIN_PASSWORD_REQUIRED":
+      return status(
+        "warning",
+        "warning",
+        messages.adminLoginStatusGateRequiredTitle,
+        messages.adminLoginStatusGateRequiredBody,
+      );
+    case "ADMIN_LOGIN_PASSWORD_INVALID":
+      return status(
+        "danger",
+        "permission",
+        messages.adminLoginStatusGateInvalidTitle,
+        messages.adminLoginStatusGateInvalidBody,
         "assertive",
       );
     case "ADMIN_CLAIM_REQUIRED":

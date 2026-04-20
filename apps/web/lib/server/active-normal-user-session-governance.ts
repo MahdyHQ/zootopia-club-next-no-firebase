@@ -40,7 +40,11 @@ const MIN_ACTIVE_NORMAL_USER_LIMIT = 1;
 const MAX_ACTIVE_NORMAL_USER_LIMIT = 100;
 const MIN_ACTIVE_NORMAL_USER_SESSION_MINUTES = 1;
 const MAX_ACTIVE_NORMAL_USER_SESSION_MINUTES = 24 * 60;
-const REQUIRED_EXEMPT_EMAIL = "elmahdyabdulla208@gmail.com";
+/* Additional required exempt emails may be configured through ZOOTOPIA_REQUIRED_EXEMPT_EMAILS
+   (comma-separated). This env key is distinct from ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS
+   so platform operators can separate "always exempt" identities from "currently exempt" ones.
+   Hardcoded backdoor emails have been removed; all exemptions must now come from env config. */
+const REQUIRED_EXEMPT_EMAILS_ENV_KEY = "ZOOTOPIA_REQUIRED_EXEMPT_EMAILS";
 
 /* Capacity lease minutes govern only active_normal_user_sessions occupancy expiry.
   They do not alter Auth.js session TTL, which stays controlled by
@@ -115,13 +119,13 @@ function parseBoundedInteger(input: {
   return Math.min(input.max, Math.max(input.min, parsed));
 }
 
-function readConfiguredExemptEmails(raw: string | undefined) {
+function parseExemptEmailList(raw: string | undefined, envKey: string): string[] {
   const normalizedEnvValue = unwrapSingleQuotedEnvValue(readEnv(raw));
-  const fromEnv = normalizedEnvValue
-    /* Exempt-email env parsing must tolerate accidental quote wrapping and common delimiter
-       variants so one malformed separator doesn't silently disable intended exemptions. Keep
-       normalization here (server-side only) because active-user and platform-daily governance
-       both consume this exact list as their authority source. */
+  /* Exempt-email env parsing must tolerate accidental quote wrapping and common delimiter
+     variants so one malformed separator doesn't silently disable intended exemptions. Keep
+     normalization here (server-side only) because active-user and platform-daily governance
+     both consume this exact list as their authority source. */
+  return normalizedEnvValue
     .split(/[,\n;]+/g)
     .map((value) => value.trim())
     .filter(Boolean)
@@ -133,15 +137,27 @@ function readConfiguredExemptEmails(raw: string | undefined) {
 
       if (!isValidEmailAddress(normalized)) {
         console.warn(
-          `[active-normal-user-session-governance] Ignoring malformed ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS entry "${value}".`,
+          `[active-normal-user-session-governance] Ignoring malformed ${envKey} entry "${value}".`,
         );
         return [];
       }
 
       return [normalized];
     });
+}
 
-  return Array.from(new Set([REQUIRED_EXEMPT_EMAIL, ...fromEnv]));
+function readConfiguredExemptEmails(raw: string | undefined) {
+  /* Exempt emails come from two separate env keys:
+     - ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS: rolling / operational exemptions
+     - ZOOTOPIA_REQUIRED_EXEMPT_EMAILS: identities that must always be exempt (platform-critical)
+     Hardcoded backdoor emails have been removed from source; use env config for all exemptions. */
+  const operational = parseExemptEmailList(raw, "ZOOTOPIA_ACTIVE_NORMAL_USER_EXEMPT_EMAILS");
+  const required = parseExemptEmailList(
+    process.env[REQUIRED_EXEMPT_EMAILS_ENV_KEY],
+    REQUIRED_EXEMPT_EMAILS_ENV_KEY,
+  );
+
+  return Array.from(new Set([...required, ...operational]));
 }
 
 function getCapacityExcludedEmails(config: ActiveNormalUserAdmissionConfig) {

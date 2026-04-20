@@ -3,6 +3,7 @@ import type { AdminIdentifierResolution } from "@zootopia/shared-types";
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
 import {
   hasConfiguredAdminAllowlist,
+  hasConfiguredAdminLoginPasswordGate,
   resolveAdminIdentifier,
 } from "@/lib/server/admin-auth";
 import { checkRequestRateLimit } from "@/lib/server/request-rate-limit";
@@ -26,6 +27,14 @@ export async function POST(request: Request) {
     return applyNoStore(apiError(
       "ADMIN_ALLOWLIST_UNCONFIGURED",
       "Admin access is temporarily unavailable because the allowlist is not configured.",
+      503,
+    ));
+  }
+
+  if (!hasConfiguredAdminLoginPasswordGate()) {
+    return applyNoStore(apiError(
+      "ADMIN_LOGIN_PASSWORD_UNCONFIGURED",
+      "Admin access is temporarily unavailable because the runtime admin password gate is not configured.",
       503,
     ));
   }

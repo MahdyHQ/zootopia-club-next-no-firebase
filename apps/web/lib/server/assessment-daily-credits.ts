@@ -3,7 +3,7 @@ import "server-only";
 import type {
   AssessmentCreditAccountAccess,
   AssessmentDailyCreditsSummary,
-  AssessmentPlatformDailyUsageSummary,
+  PlatformDailyUsageSummary,
   UserRole,
 } from "@zootopia/shared-types";
 
@@ -409,7 +409,7 @@ export function buildAssessmentPlatformDailyUsageSummary(input: {
     reached,
     locked: applies && reached,
     resetsAt: input.resetsAt,
-  } satisfies AssessmentPlatformDailyUsageSummary;
+  } satisfies PlatformDailyUsageSummary;
 }
 
 export function buildAssessmentDailyCreditsSummary(input: {
@@ -426,7 +426,7 @@ export function buildAssessmentDailyCreditsSummary(input: {
   grantCreditsAvailable?: number;
   extraReservationCount?: number;
   activeGrantCount?: number;
-  platformDailyUsage: AssessmentPlatformDailyUsageSummary;
+  platformDailyUsage: PlatformDailyUsageSummary;
 }) {
   const dailyDefaultLimit =
     normalizeAssessmentDailyLimitOverride(input.dailyDefaultLimit)
@@ -493,3 +493,9 @@ export function buildAssessmentDailyCreditsSummary(input: {
     platformDailyUsage: input.platformDailyUsage,
   } satisfies AssessmentDailyCreditsSummary;
 }
+
+/* Cross-tool canonical alias for buildAssessmentPlatformDailyUsageSummary.
+   New code (including future tools) should call buildPlatformDailyUsageSummary.
+   The assessment-prefixed name is kept for backward-compatibility with existing
+   call sites in repository.ts and the assessment credit engine. */
+export const buildPlatformDailyUsageSummary = buildAssessmentPlatformDailyUsageSummary;

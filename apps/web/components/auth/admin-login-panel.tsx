@@ -104,6 +104,7 @@ function mapSupabaseAdminError(input: {
 
 async function completeAdminAuthJsSignIn(input: {
   idToken: string;
+  adminLoginPassword: string;
   deviceLabel: string | null;
   deviceLabelSource: string | null;
   deviceLabelConfidence: number | null;
@@ -113,6 +114,7 @@ async function completeAdminAuthJsSignIn(input: {
   const signInResult = await signIn("admin-credentials", {
     redirect: false,
     idToken: input.idToken,
+    adminLoginPassword: input.adminLoginPassword,
     deviceLabel: input.deviceLabel ?? "",
     deviceLabelSource: input.deviceLabelSource ?? "",
     deviceLabelConfidence:
@@ -248,6 +250,7 @@ export function AdminLoginPanel({
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [adminLoginPassword, setAdminLoginPassword] = useState("");
   const [phase, setPhase] = useState<AdminLoginPhase>("idle");
   const [status, setStatus] = useState<AuthStatusDescriptor | null>(null);
   const supabaseConfigured = isSupabaseWebConfigured();
@@ -311,6 +314,7 @@ export function AdminLoginPanel({
 
   async function bootstrapAdminSession(input: {
     idToken: string;
+    adminLoginPassword: string;
     deviceLabel: string | null;
     deviceLabelSource: string | null;
     deviceLabelConfidence: number | null;
@@ -326,6 +330,7 @@ export function AdminLoginPanel({
 
     const sessionUser = await completeAdminAuthJsSignIn({
       idToken: input.idToken,
+      adminLoginPassword: input.adminLoginPassword,
       deviceLabel: input.deviceLabel,
       deviceLabelSource: input.deviceLabelSource,
       deviceLabelConfidence: input.deviceLabelConfidence,
@@ -358,7 +363,7 @@ export function AdminLoginPanel({
       return;
     }
 
-    if (!identifier.trim() || !password) {
+    if (!identifier.trim() || !password || !adminLoginPassword) {
       return;
     }
 
@@ -424,6 +429,7 @@ export function AdminLoginPanel({
       const deviceMetadata = await buildClientAuthDeviceLabelMetadata();
       const redirectTo = await bootstrapAdminSession({
         idToken: data.session.access_token,
+        adminLoginPassword,
         deviceLabel: deviceMetadata.deviceLabel,
         deviceLabelSource: deviceMetadata.deviceLabelSource,
         deviceLabelConfidence: deviceMetadata.deviceLabelConfidence,
@@ -490,7 +496,8 @@ export function AdminLoginPanel({
     || !supabaseAuthReady
     || isBusy
     || !identifier.trim()
-    || !password;
+    || !password
+    || !adminLoginPassword;
   const blockingStatus =
     !supabaseConfigured
       ? {
@@ -549,7 +556,7 @@ export function AdminLoginPanel({
 
             <label className="flex flex-col gap-2">
               <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
-                {messages.adminLoginPasswordLabel}
+                {messages.adminLoginAccountPasswordLabel}
               </span>
               <PasswordVisibilityInput
                 value={password}
@@ -557,8 +564,26 @@ export function AdminLoginPanel({
                   setPassword(event.target.value);
                   if (phase === "idle") setStatus(null);
                 }}
-                placeholder={messages.adminLoginPasswordPlaceholder}
+                placeholder={messages.adminLoginAccountPasswordPlaceholder}
                 autoComplete="current-password"
+                className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 placeholder:text-foreground-muted/80"
+                showPasswordLabel="Show password"
+                hidePasswordLabel="Hide password"
+              />
+            </label>
+
+            <label className="flex flex-col gap-2">
+              <span className="ms-1 text-[11px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
+                {messages.adminLoginGatePasswordLabel}
+              </span>
+              <PasswordVisibilityInput
+                value={adminLoginPassword}
+                onChange={(event) => {
+                  setAdminLoginPassword(event.target.value);
+                  if (phase === "idle") setStatus(null);
+                }}
+                placeholder={messages.adminLoginGatePasswordPlaceholder}
+                autoComplete="off"
                 className="w-full rounded-2xl border border-border bg-background px-4 py-3.5 text-sm font-medium text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.05)] transition-all focus:border-amber-500 focus:outline-none focus:ring-4 focus:ring-amber-500/10 placeholder:text-foreground-muted/80"
                 showPasswordLabel="Show password"
                 hidePasswordLabel="Hide password"

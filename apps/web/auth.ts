@@ -23,6 +23,7 @@ import {
   hasRecentSignIn,
   isAllowlistedAdminEmail,
   verifyAdminClaimActivation,
+  verifyAdminLoginPasswordGate,
 } from "@/lib/server/admin-auth";
 import {
   AUTH_STAGE_ADMIN_ALLOWLIST,
@@ -854,6 +855,12 @@ async function authorizeAdminCredentials(
       );
     }
 
+    const adminLoginPassword = readCredentialInput(credentials, "adminLoginPassword");
+    const adminPasswordGate = verifyAdminLoginPasswordGate(adminLoginPassword);
+    if (!adminPasswordGate.ok) {
+      throwAuthCode(adminPasswordGate.code, adminPasswordGate.message);
+    }
+
     const idToken = readCredentialInput(credentials, "idToken");
     const deviceMetadata = readCredentialDeviceMetadata(credentials);
     const serverObservedSignInMetadata = buildServerObservedSignInMetadata(request);
@@ -939,7 +946,6 @@ async function authorizeAdminCredentials(
       uid: decodedToken.uid,
       email: decodedToken.email ?? null,
       admin: tokenClaims.admin,
-      traceContext,
     });
 
     if (!claimVerification.ok) {
@@ -1040,6 +1046,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: "Admin credentials",
       credentials: {
         idToken: { label: "ID token", type: "text" },
+        adminLoginPassword: { label: "Admin login password", type: "password" },
         deviceLabel: { label: "Device label", type: "text" },
         deviceLabelSource: { label: "Device label source", type: "text" },
         deviceLabelConfidence: { label: "Device label confidence", type: "text" },

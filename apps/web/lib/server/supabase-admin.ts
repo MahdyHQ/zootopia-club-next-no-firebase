@@ -445,6 +445,19 @@ export async function setSupabaseUserDisabled(uid: string, disabled: boolean) {
   }
 }
 
+export async function deleteSupabaseAuthUser(uid: string) {
+  if (!hasSupabaseAdminRuntime()) {
+    return;
+  }
+
+  const { error } = await getSupabaseAdminClient().auth.admin.deleteUser(uid);
+  if (error) {
+    throw Object.assign(new Error(error.message), {
+      code: "auth/internal-error",
+    });
+  }
+}
+
 export async function revokeSupabaseRefreshTokens(uid: string) {
   if (!hasSupabaseAdminRuntime()) {
     return;

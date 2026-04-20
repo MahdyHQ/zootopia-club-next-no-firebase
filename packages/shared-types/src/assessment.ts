@@ -1,6 +1,7 @@
 import type { AiProviderId } from "./ai";
 import type { Locale, ThemeMode, UserRole } from "./auth";
 import type { DocumentStatus, StorageDataClass, StorageLayoutVersion } from "./document";
+import type { PlatformDailyUsageSummary } from "./platform";
 
 export type AssessmentDifficulty = "easy" | "medium" | "hard";
 export type AssessmentGenerationStatus = "ready" | "expired";
@@ -363,18 +364,15 @@ export interface AssessmentCreditGrantAdminView extends AssessmentCreditGrantRec
   available: number;
 }
 
-export interface AssessmentPlatformDailyUsageSummary {
-  applies: boolean;
-  isAdminExempt: boolean;
-  isEmailExempt: boolean;
-  dayKey: string;
-  limit: number;
-  usedCount: number;
-  remainingCount: number;
-  reached: boolean;
-  locked: boolean;
-  resetsAt: string;
-}
+/**
+ * @deprecated Use `PlatformDailyUsageSummary` from `@zootopia/shared-types` (platform.ts)
+ * which is the canonical cross-tool name. This alias is kept for backward compatibility
+ * across existing assessment credit infrastructure. New code must use PlatformDailyUsageSummary.
+ *
+ * Both types are structurally identical; the assessment-prefixed name reflects the historical
+ * phase where platform-level aggregation was only wired through the assessment credit path.
+ */
+export type AssessmentPlatformDailyUsageSummary = PlatformDailyUsageSummary;
 
 export interface AssessmentDailyCreditsSummary {
   applies: boolean;
@@ -393,7 +391,7 @@ export interface AssessmentDailyCreditsSummary {
   totalRemainingCount: number | null;
   remainingCount: number | null;
   resetsAt: string;
-  platformDailyUsage: AssessmentPlatformDailyUsageSummary;
+  platformDailyUsage: PlatformDailyUsageSummary;
 }
 
 export type AssessmentArtifactKind =

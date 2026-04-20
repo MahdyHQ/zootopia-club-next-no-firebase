@@ -44,6 +44,7 @@ import {
   type AssessmentGenerationIdempotencyToken,
 } from "@/lib/server/repository";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
+import { recordToolUsageEvent } from "@/lib/server/tool-accounting";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -609,9 +610,12 @@ export async function POST(request: Request) {
   /* Daily credits belong to the verified session user only, and only normal users consume them.
      Keep the reservation on the server right before the model call so invalid forms never touch
      quota state while duplicate in-flight requests still cannot oversubscribe the daily limit. */
+  /* Pass email so the reservation layer can resolve platform-exemption identity without a
+     separate user lookup. Admin bypass is already handled before this call site. */
   const creditReservation = await reserveAssessmentDailyCreditAttempt({
     uid: user.uid,
     role: user.role,
+    email: user.email,
   });
   if (!creditReservation.ok) {
     if (idempotencyToken) {
@@ -887,6 +891,7 @@ export async function POST(request: Request) {
       user: {
         uid: user.uid,
         role: user.role,
+        email: user.email ?? null,
       },
       reservation: creditReservation.reservation,
     });
@@ -957,6 +962,39 @@ export async function POST(request: Request) {
         generationId: savedGeneration.generation.id,
         route: ASSESSMENT_ROUTE,
         creditRealtimeBroadcastErrorCode,
+      });
+    }
+
+    /* Cross-tool usage ledger: write a best-effort tool_usage_events row for every successful
+       assessment generation. This is the central cross-tool foundation (tool-accounting.ts) and
+       is intentionally kept non-fatal — a failure here must never undo a committed generation or
+       a committed credit decrement. Future tools plug into the same recordToolUsageEvent call
+       with their own toolId / eventKind without needing changes to the assessment quota engine. */
+    try {
+      await recordToolUsageEvent({
+        ownerUid: user.uid,
+        ownerEmail: user.email ?? null,
+        ownerRole: user.role,
+        toolId: "assessment",
+        eventKind: "generation",
+        dayKey: savedGeneration.credits.dayKey,
+        generationId: savedGeneration.generation.id,
+        metadata: {
+          modelId: savedGeneration.generation.modelId,
+          provider: savedGeneration.generation.meta.provider,
+          inputMode,
+        },
+      });
+    } catch (toolUsageError) {
+      console.warn("Assessment tool-usage event write failed (non-fatal).", {
+        ...baseDiagnosticContext,
+        layer: "tool-accounting",
+        subsystem: "tool-usage-events",
+        generationId: savedGeneration.generation.id,
+        error:
+          toolUsageError instanceof Error
+            ? toolUsageError.message
+            : String(toolUsageError),
       });
     }
 
