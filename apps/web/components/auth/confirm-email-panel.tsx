@@ -72,6 +72,7 @@ type ResendGovernanceCode =
   | "VERIFICATION_RESEND_UNAVAILABLE";
 
 type ResendProviderErrorCode =
+  | "VERIFICATION_ALREADY_CONFIRMED"
   | "VERIFICATION_RESEND_INVALID_EMAIL"
   | "VERIFICATION_RESEND_PROVIDER_DAILY_LIMIT_LIKELY"
   | "VERIFICATION_RESEND_PROVIDER_MONTHLY_LIMIT_LIKELY"
@@ -120,12 +121,18 @@ type ApiSuccessPayload<T> = {
 
 type ConfirmEmailResendStatusPayload = {
   governance: VerificationResendGovernanceSnapshot;
+  accountState?: {
+    emailConfirmed?: boolean;
+  };
 };
 
 type ConfirmEmailResendActionPayload = {
   accepted: boolean;
   providerAccepted: boolean;
   governance: VerificationResendGovernanceSnapshot;
+  accountState?: {
+    emailConfirmed?: boolean;
+  };
 };
 
 type ConfirmEmailFinalizePayload = {
@@ -266,6 +273,16 @@ function hasFinalizePayload(payload: ConfirmEmailFinalizePayload) {
   );
 }
 
+function isAlreadyConfirmedFailure(failure: NormalizedAuthFailure) {
+  const rawCode = (failure.rawCode ?? "").trim().toUpperCase();
+  const providerMessage = (failure.safeProviderMessage ?? "").trim().toLowerCase();
+
+  return rawCode === "VERIFICATION_ALREADY_CONFIRMED"
+    || rawCode.includes("ALREADY_CONFIRMED")
+    || providerMessage.includes("already confirmed")
+    || providerMessage.includes("already been confirmed");
+}
+
 function cleanupConfirmationCallbackUrl() {
   const url = new URL(window.location.href);
 
@@ -294,7 +311,7 @@ async function finalizeEmailConfirmation(input: {
   }
 
   if (input.payload.tokenHash && input.payload.verificationType) {
-    const { error } = await input.supabase.auth.verifyOtp({
+    const { data, error } = await input.supabase.auth.verifyOtp({
       token_hash: input.payload.tokenHash,
       type: input.payload.verificationType as EmailOtpType,
     });
@@ -303,21 +320,29 @@ async function finalizeEmailConfirmation(input: {
       throw error;
     }
 
-    return "token_hash" as const;
+    return {
+      callbackKind: "token_hash" as const,
+      accessToken: data.session?.access_token?.trim() || null,
+      user: data.user ?? null,
+    };
   }
 
   if (input.payload.authCode) {
-    const { error } = await input.supabase.auth.exchangeCodeForSession(input.payload.authCode);
+    const { data, error } = await input.supabase.auth.exchangeCodeForSession(input.payload.authCode);
 
     if (error) {
       throw error;
     }
 
-    return "auth_code" as const;
+    return {
+      callbackKind: "auth_code" as const,
+      accessToken: data.session?.access_token?.trim() || null,
+      user: data.user ?? null,
+    };
   }
 
   if (input.payload.accessToken && input.payload.refreshToken) {
-    const { error } = await input.supabase.auth.setSession({
+    const { data, error } = await input.supabase.auth.setSession({
       access_token: input.payload.accessToken,
       refresh_token: input.payload.refreshToken,
     });
@@ -326,7 +351,11 @@ async function finalizeEmailConfirmation(input: {
       throw error;
     }
 
-    return "session_tokens" as const;
+    return {
+      callbackKind: "session_tokens" as const,
+      accessToken: data.session?.access_token?.trim() || null,
+      user: data.user ?? null,
+    };
   }
 
   throw createAuthFlowError(
@@ -407,6 +436,16 @@ function mapConfirmEmailFailure(
       title: messages.confirmEmailStatusServerTitle,
       body: messages.confirmEmailStatusServerBody,
       live: "assertive",
+    };
+  }
+
+  if (rawCode === "VERIFICATION_ALREADY_CONFIRMED") {
+    return {
+      tone: "success",
+      icon: "success",
+      title: messages.confirmEmailConfirmedTitle,
+      body: messages.confirmEmailAlreadyConfirmedBody,
+      live: "polite",
     };
   }
 
@@ -526,6 +565,15 @@ function mapConfirmEmailFailure(
 
   switch (failure.normalizedCode) {
     case "AUTH_EMAIL_NOT_CONFIRMED":
+      if (isAlreadyConfirmedFailure(failure)) {
+        return {
+          tone: "success",
+          icon: "success",
+          title: messages.confirmEmailConfirmedTitle,
+          body: messages.confirmEmailAlreadyConfirmedBody,
+        };
+      }
+
       return {
         tone: "warning",
         icon: "warning",
@@ -706,7 +754,10 @@ async function readResendGovernanceSnapshot(email: string) {
     );
   }
 
-  return governance;
+  return {
+    governance,
+    accountConfirmed: payload.data.accountState?.emailConfirmed === true,
+  };
 }
 
 async function submitVerificationResend(input: {
@@ -761,6 +812,7 @@ async function submitVerificationResend(input: {
     accepted: payload.data.accepted,
     providerAccepted: payload.data.providerAccepted,
     governance,
+    accountConfirmed: payload.data.accountState?.emailConfirmed === true,
   };
 }
 
@@ -781,6 +833,7 @@ export function ConfirmEmailPanel({
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [governance, setGovernance] = useState<VerificationResendGovernanceSnapshot | null>(null);
+  const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [isGovernanceLoading, setIsGovernanceLoading] = useState(false);
   /* Confirm-email CTA truth is driven by server governance state (`hasAcceptedSend`)
      plus current-page successful sends. This keeps "Send email" vs "Resend email"
@@ -809,12 +862,14 @@ export function ConfirmEmailPanel({
     setIsGovernanceLoading(true);
 
     try {
-      const nextGovernance = await readResendGovernanceSnapshot(targetEmail);
+      const nextSnapshot = await readResendGovernanceSnapshot(targetEmail);
       if (requestToken !== governanceRequestTokenRef.current) {
         return null;
       }
 
+      const nextGovernance = nextSnapshot.governance;
       setGovernance(nextGovernance);
+      setIsEmailConfirmed(nextSnapshot.accountConfirmed);
       setCooldownSeconds(nextGovernance.cooldownRemainingSeconds);
       if (nextGovernance.hasAcceptedSend) {
         setHasAcceptedSendOnPage(true);
@@ -893,32 +948,33 @@ export function ConfirmEmailPanel({
 
       try {
         supabase = await getEphemeralSupabaseClient();
-        callbackKind = await finalizeEmailConfirmation({
+        const finalized = await finalizeEmailConfirmation({
           supabase,
           payload: finalizePayload,
         });
+        callbackKind = finalized.callbackKind;
 
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          throw sessionError;
+        const fallbackSession = await supabase.auth.getSession();
+        if (fallbackSession.error) {
+          throw fallbackSession.error;
         }
 
-        const idToken = sessionData.session?.access_token?.trim();
-        if (!idToken) {
-          throw createAuthFlowError(
-            "AUTH_SESSION_CREATION_FAILED",
-            "Supabase confirmation callback did not produce a session token.",
-          );
+        const idToken =
+          finalized.accessToken
+          || fallbackSession.data.session?.access_token?.trim()
+          || null;
+        const confirmedUserData = idToken
+          ? await supabase.auth.getUser(idToken)
+          : await supabase.auth.getUser();
+        if (confirmedUserData.error) {
+          throw confirmedUserData.error;
         }
 
-        const { data: confirmedUserData, error: confirmedUserError } = await supabase.auth.getUser(idToken);
-        if (confirmedUserError) {
-          throw confirmedUserError;
-        }
+        const authoritativeConfirmedUser = confirmedUserData.data.user ?? finalized.user;
 
         /* Callback token exchange alone is not sufficient for success UI.
            Only continue when Supabase user state confirms email verification. */
-        if (!isSupabaseEmailConfirmed(confirmedUserData.user)) {
+        if (!isSupabaseEmailConfirmed(authoritativeConfirmedUser)) {
           throw createAuthFlowError(
             "AUTH_EMAIL_NOT_CONFIRMED",
             "Supabase still reports this account email as unconfirmed.",
@@ -952,12 +1008,18 @@ export function ConfirmEmailPanel({
         });
 
         setIsFinalizing(false);
-        router.replace(buildPostConfirmationRedirectUrl({
+        const redirectTo = buildPostConfirmationRedirectUrl({
           returnRoute,
           email,
           isSignupFlow: flow === "sign_up",
-        }));
+        });
+        router.replace(redirectTo);
         router.refresh();
+
+        /* App Router replace can occasionally be interrupted by concurrent hydration/state
+           churn after OAuth/hash cleanup. Keep a deterministic full-navigation fallback so
+           successful Supabase confirmations always land on the login lane. */
+        window.location.replace(redirectTo);
       } catch (nextError) {
         const failure = normalizeAuthFailure({
           error: nextError,
@@ -981,7 +1043,20 @@ export function ConfirmEmailPanel({
           rawCode: failure.rawCode,
         });
 
-        setStatus(mapConfirmEmailFailure(failure, messages));
+        const nextStatus = mapConfirmEmailFailure(failure, messages);
+        setStatus(nextStatus);
+
+        if (isAlreadyConfirmedFailure(failure)) {
+          const redirectTo = buildPostConfirmationRedirectUrl({
+            returnRoute,
+            email,
+            isSignupFlow: flow === "sign_up",
+          });
+
+          window.setTimeout(() => {
+            window.location.replace(redirectTo);
+          }, 700);
+        }
       } finally {
         if (supabase && !redirectStartedRef.current) {
           await supabase.auth.signOut({ scope: "local" }).catch(() => {
@@ -1003,6 +1078,7 @@ export function ConfirmEmailPanel({
   useEffect(() => {
     if (!supabaseConfigured || !supabaseAuthReady || !hasValidEmail) {
       setGovernance(null);
+      setIsEmailConfirmed(false);
       setCooldownSeconds(0);
       setHasAcceptedSendOnPage(false);
       setGovernancePrimedEmail(null);
@@ -1090,6 +1166,7 @@ export function ConfirmEmailPanel({
     || isFinalizing
     || isGovernanceLoading
     || isGovernancePriming
+    || isEmailConfirmed
     || isGovernanceBlocked
     || isCooldownActive
     || !hasValidEmail;
@@ -1113,6 +1190,14 @@ export function ConfirmEmailPanel({
               body: messages.confirmEmailStatusServerBody,
               live: "off" as const,
             }
+          : isEmailConfirmed
+            ? {
+                tone: "success" as const,
+                icon: "success" as const,
+                title: messages.confirmEmailConfirmedTitle,
+                body: messages.confirmEmailConfirmedBody,
+                live: "polite" as const,
+              }
           : null;
 
   const idleStatus: AuthStatusDescriptor = {
@@ -1171,6 +1256,13 @@ export function ConfirmEmailPanel({
           title: messages.confirmEmailWorkingTitle,
           body: messages.confirmEmailWorkingBody,
         });
+      } else if (isEmailConfirmed) {
+        setStatus({
+          tone: "success",
+          icon: "success",
+          title: messages.confirmEmailConfirmedTitle,
+          body: messages.confirmEmailAlreadyConfirmedBody,
+        });
       }
       return;
     }
@@ -1223,6 +1315,7 @@ export function ConfirmEmailPanel({
       // Keep governance/cooldown truth anchored to backend snapshots.
       // CTA copy state flips separately only after this page gets an accepted send.
       setGovernance(resendResult.governance);
+      setIsEmailConfirmed(resendResult.accountConfirmed);
       setCooldownSeconds(resendResult.governance.cooldownRemainingSeconds);
 
       if (!resendResult.accepted || !resendResult.providerAccepted) {
@@ -1299,6 +1392,7 @@ export function ConfirmEmailPanel({
                 onChange={(event) => {
                   setEmail(event.target.value);
                   setGovernance(null);
+                  setIsEmailConfirmed(false);
                   setCooldownSeconds(0);
                   setHasAcceptedSendOnPage(false);
                   if (!isSending && !isFinalizing) {

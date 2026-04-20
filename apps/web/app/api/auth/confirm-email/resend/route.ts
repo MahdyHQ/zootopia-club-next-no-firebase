@@ -7,7 +7,11 @@ import {
   type AuthEmailDeliveryDiagnosticClass,
   type AuthEmailDeliveryDiagnosticConfidence,
 } from "@/lib/server/auth-email-delivery-diagnostics";
-import { hasSupabaseAdminRuntime, getSupabaseAdminClient } from "@/lib/server/supabase-admin";
+import {
+  findSupabaseAuthUserByEmail,
+  hasSupabaseAdminRuntime,
+  getSupabaseAdminClient,
+} from "@/lib/server/supabase-admin";
 import { getServerRuntimeOrigin } from "@/lib/server/runtime-base-url";
 import {
   getVerificationResendGovernanceConfig,
@@ -32,6 +36,9 @@ type ResendRequestBody = {
 };
 
 type ConfirmEmailFlow = "sign_in" | "sign_up" | "admin";
+type ConfirmEmailAccountState = {
+  emailConfirmed: boolean;
+};
 
 function resolveFlow(value: unknown): ConfirmEmailFlow {
   if (value === "admin" || value === "sign_up" || value === "sign_in") {
@@ -285,6 +292,26 @@ function ensureRuntimeOrModeDisabled() {
   } as const;
 }
 
+async function readProviderConfirmationState(email: string): Promise<ConfirmEmailAccountState> {
+  if (!hasSupabaseAdminRuntime()) {
+    return {
+      emailConfirmed: false,
+    };
+  }
+
+  try {
+    const authUser = await findSupabaseAuthUserByEmail(email);
+    return {
+      emailConfirmed: Boolean(authUser?.emailVerified),
+    };
+  } catch (error) {
+    console.warn("[confirm-email-resend] failed to read provider confirmation state", error);
+    return {
+      emailConfirmed: false,
+    };
+  }
+}
+
 /**
  * GET /api/auth/confirm-email/resend?email=...
  * Returns the current governance snapshot (cooldown state, attempt counts, etc.)
@@ -339,6 +366,7 @@ export async function GET(request: Request) {
       applyNoStore(
         apiSuccess({
           governance,
+          accountState: await readProviderConfirmationState(email),
         }),
       ),
       governance,
@@ -388,6 +416,28 @@ export async function POST(request: Request) {
 
   const flow = resolveFlow(body.flow);
   const fromRoute = resolveFromRoute(body.fromRoute, flow);
+  const accountState = await readProviderConfirmationState(email);
+
+  if (accountState.emailConfirmed) {
+    const governance = await readVerificationResendGovernanceSnapshot({
+      request,
+      email,
+    }).catch(() => null);
+
+    const response = applyNoStore(
+      apiError(
+        "VERIFICATION_ALREADY_CONFIRMED",
+        "This account email is already confirmed. Sign in instead of requesting another confirmation email.",
+        409,
+      ),
+    );
+
+    if (governance) {
+      return withGovernanceHeaders(response, governance);
+    }
+
+    return response;
+  }
 
   let governance: VerificationResendGovernanceSnapshot;
 
@@ -504,6 +554,7 @@ export async function POST(request: Request) {
         accepted: true,
         providerAccepted: true,
         governance: refreshedGovernance,
+        accountState,
       }),
     ),
     refreshedGovernance,
