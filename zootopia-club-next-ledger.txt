@@ -6612,6 +6612,48 @@ Change Log
   - Files changed in this pass:
     - `apps/web/app/api/infographic/route.ts`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-20 20:35:00 | Auth lifecycle hardening: admin confirm-email decoupling + verified-user false-negative fix
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before code edits.
+    - traced current code (ledger treated as history only) across Auth.js, Supabase admin adapter, auth UI flows, and owner-scope/session boundaries.
+    - ran parallel subagent-style traces for:
+      1) ledger + auth history,
+      2) Auth.js + Supabase lifecycle,
+      3) admin allowlist/authority,
+      4) signup/confirm/login/reset,
+      5) owner-scope/session/storage/results/queue,
+      6) repository identity mapping,
+      7) Supabase compatibility/provider behavior,
+      8) final route + UI error-state routing.
+  - Root problems confirmed in current code:
+    - Admin Auth.js credentials authorize path still had an explicit email-confirmation hard gate (`AUTH_EMAIL_NOT_CONFIRMED`) after allowlist/provider checks, which could block allowlisted admins on the admin lane.
+    - Admin login UI still treated email-confirmation failures as confirm-email redirects, sending admin sign-in into the normal confirm-email UX branch.
+    - Supabase decoded-token normalization did not force-set `email_verified` / `email_confirmed_at` from authoritative auth user metadata. When provider JWT payloads omitted those fields, confirmed users could be misclassified as unconfirmed in Auth.js checks.
+  - Surgical fixes shipped:
+    - `apps/web/auth.ts`
+      - removed admin-lane hard blocking by `AUTH_EMAIL_NOT_CONFIRMED` in `authorizeAdminCredentials(...)`.
+      - preserved verification signal collection for observability/session payload, but explicitly decoupled admin gating from normal confirm-email lifecycle.
+      - admin authorization remains claims-first and server-authoritative (allowlist + admin claim verification + admin gate password + provider + recent sign-in + status).
+    - `apps/web/components/auth/admin-login-panel.tsx`
+      - removed admin confirm-email redirect branch so admin flow no longer routes into `/confirm-email` normal-user lifecycle.
+      - remapped Supabase provider `email_not_confirmed` / `email_not_verified` to admin authorization surface (`ADMIN_ACCOUNT_UNAUTHORIZED`) instead of confirmation UX.
+    - `apps/web/lib/server/supabase-admin.ts`
+      - hardened decoded token shaping by explicitly projecting `email_verified`, `emailVerified`, and `email_confirmed_at` from current Supabase auth user metadata.
+      - this prevents confirmed normal users from false `AUTH_EMAIL_NOT_CONFIRMED` classifications when JWT payload claims are sparse or shape-shifted.
+  - Owner-scope / isolation review outcome in this pass:
+    - no owner-scope widening introduced.
+    - session/user authority still request-bound through Auth.js + `getAuthenticatedSessionContext()` live repository lookup.
+    - protected/user/admin route ownership boundaries unchanged.
+    - storage/result/export ownership paths unchanged (`ownerUid` + asserted storage path).
+  - Database / migration impact:
+    - no schema or migration changes required.
+    - canonical table truth unchanged in this pass.
+  - Files changed in this pass:
+    - `apps/web/auth.ts`
+    - `apps/web/components/auth/admin-login-panel.tsx`
+    - `apps/web/lib/server/supabase-admin.ts`
+    - `zootopia-club-next-ledger.txt`
     - `next build` failed with repeated `module-not-found` traces from:
       - `apps/web/components/layout/protected-workspace-query-provider.tsx`
       - `apps/web/lib/assessment-credit-query.ts`
