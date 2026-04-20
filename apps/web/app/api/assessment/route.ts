@@ -44,7 +44,7 @@ import {
   type AssessmentGenerationIdempotencyToken,
 } from "@/lib/server/repository";
 import { getAuthenticatedSessionUser } from "@/lib/server/session";
-import { recordToolUsageEvent } from "@/lib/server/tool-accounting";
+import { recordAssessmentGenerationUsageEvent } from "@/lib/server/assessment-tool-accounting";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -965,18 +965,14 @@ export async function POST(request: Request) {
       });
     }
 
-    /* Cross-tool usage ledger: write a best-effort tool_usage_events row for every successful
-       assessment generation. This is the central cross-tool foundation (tool-accounting.ts) and
-       is intentionally kept non-fatal — a failure here must never undo a committed generation or
-       a committed credit decrement. Future tools plug into the same recordToolUsageEvent call
-       with their own toolId / eventKind without needing changes to the assessment quota engine. */
+    /* Assessment usage adapter: write a best-effort central tool_usage_events row after the
+       durable assessment commit. The adapter keeps assessment-owned metadata here while the
+       shared accounting layer receives a normalized toolId/eventKind record for aggregation. */
     try {
-      await recordToolUsageEvent({
+      await recordAssessmentGenerationUsageEvent({
         ownerUid: user.uid,
         ownerEmail: user.email ?? null,
         ownerRole: user.role,
-        toolId: "assessment",
-        eventKind: "generation",
         dayKey: savedGeneration.credits.dayKey,
         generationId: savedGeneration.generation.id,
         metadata: {

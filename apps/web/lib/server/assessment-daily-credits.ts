@@ -7,6 +7,12 @@ import type {
   UserRole,
 } from "@zootopia/shared-types";
 
+import {
+  buildPlatformDailyUsageSummary as buildSharedPlatformDailyUsageSummary,
+  getPlatformGlobalDailyCreditLimit,
+  PLATFORM_GLOBAL_DAILY_USAGE_LIMIT_ENV_KEY,
+} from "@/lib/server/platform-usage-aggregation";
+
 export const ASSESSMENT_DAILY_SUCCESS_LIMIT_FALLBACK = 3;
 export const ASSESSMENT_DAILY_SUCCESS_LIMIT = ASSESSMENT_DAILY_SUCCESS_LIMIT_FALLBACK;
 export const ASSESSMENT_DAILY_CREDIT_TIME_ZONE = "UTC";
@@ -15,19 +21,16 @@ export const ASSESSMENT_DAILY_SUCCESS_LIMIT_ENV_KEY =
   "ZOOTOPIA_DEFAULT_DAILY_ASSESSMENT_CREDITS";
 export const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_ENV_KEY =
   "ZOOTOPIA_ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS";
-/* The env key keeps its deployed "platform global" name for compatibility, but the current
-   aggregate is still assessment-scoped: it counts successful assessment generations across
-   all assessment credit sources, not all tools in the product. */
+/* Compatibility export for older assessment imports. The env key now belongs to the shared
+   platform aggregation layer; assessment only consumes the resulting global lock snapshot. */
 export const ASSESSMENT_PLATFORM_DAILY_USAGE_LIMIT_ENV_KEY =
-  "ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT";
+  PLATFORM_GLOBAL_DAILY_USAGE_LIMIT_ENV_KEY;
+export { getPlatformGlobalDailyCreditLimit };
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MIN = 1;
 const ASSESSMENT_DAILY_SUCCESS_LIMIT_MAX = 1000;
 const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_FALLBACK = 24;
 const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MIN = 1;
 const ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MAX = 168;
-const PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_FALLBACK = 33;
-const PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MIN = 1;
-const PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MAX = 10_000;
 const ASSESSMENT_RENEWAL_WINDOW_KEY_PREFIX = "utc";
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
@@ -52,36 +55,6 @@ function parsePositiveInteger(value: unknown) {
   }
 
   return parsed;
-}
-
-function parsePositiveIntegerEnv(input: {
-  raw: string | undefined;
-  fallback: number;
-  min: number;
-  max: number;
-  envKey: string;
-  logPrefix: string;
-}) {
-  const value = String(input.raw ?? "").trim();
-  if (!value) {
-    return input.fallback;
-  }
-
-  const parsed = parsePositiveInteger(value);
-  if (!parsed) {
-    console.warn(
-      `[${input.logPrefix}] Invalid ${input.envKey} value "${value}", using ${input.fallback}.`,
-    );
-    return input.fallback;
-  }
-
-  if (parsed < input.min || parsed > input.max) {
-    console.warn(
-      `[${input.logPrefix}] ${input.envKey}=${parsed} is outside ${input.min}-${input.max}, clamping.`,
-    );
-  }
-
-  return Math.min(input.max, Math.max(input.min, parsed));
 }
 
 export function getDefaultDailyAssessmentCreditsLimit() {
@@ -110,17 +83,6 @@ export function getAssessmentCreditRenewalWindowHours() {
     ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MAX,
     Math.max(ASSESSMENT_CREDIT_RENEWAL_WINDOW_HOURS_MIN, parsed),
   );
-}
-
-export function getPlatformGlobalDailyCreditLimit() {
-  return parsePositiveIntegerEnv({
-    raw: process.env[ASSESSMENT_PLATFORM_DAILY_USAGE_LIMIT_ENV_KEY],
-    fallback: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_FALLBACK,
-    min: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MIN,
-    max: PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MAX,
-    envKey: ASSESSMENT_PLATFORM_DAILY_USAGE_LIMIT_ENV_KEY,
-    logPrefix: "assessment-daily-credits",
-  });
 }
 
 export function normalizeAssessmentDailyLimitOverride(value: unknown) {
@@ -376,41 +338,10 @@ export function filterActiveAssessmentDailyCreditReservations(
   });
 }
 
-export function buildAssessmentPlatformDailyUsageSummary(input: {
-  dayKey: string;
-  usedCount: number;
-  resetsAt: string;
-  limit?: number;
-  isAdminExempt?: boolean;
-  isEmailExempt?: boolean;
-}) {
-  const limit = Math.min(
-    PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MAX,
-    Math.max(
-      PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT_MIN,
-      Math.round(input.limit ?? getPlatformGlobalDailyCreditLimit()),
-    ),
-  );
-  const usedCount = Math.max(0, Math.round(input.usedCount));
-  const isAdminExempt = input.isAdminExempt === true;
-  const isEmailExempt = !isAdminExempt && input.isEmailExempt === true;
-  const applies = !isAdminExempt && !isEmailExempt;
-  const remainingCount = Math.max(limit - usedCount, 0);
-  const reached = usedCount >= limit;
-
-  return {
-    applies,
-    isAdminExempt,
-    isEmailExempt,
-    dayKey: input.dayKey,
-    limit,
-    usedCount,
-    remainingCount,
-    reached,
-    locked: applies && reached,
-    resetsAt: input.resetsAt,
-  } satisfies PlatformDailyUsageSummary;
-}
+/* Backward-compatible assessment export for older imports. The implementation now lives in the
+   shared platform aggregation module so platform-cap math is not hidden in the assessment credit
+   engine. Future code should import buildPlatformDailyUsageSummary from platform-usage-aggregation. */
+export const buildAssessmentPlatformDailyUsageSummary = buildSharedPlatformDailyUsageSummary;
 
 export function buildAssessmentDailyCreditsSummary(input: {
   role: UserRole;
@@ -494,8 +425,4 @@ export function buildAssessmentDailyCreditsSummary(input: {
   } satisfies AssessmentDailyCreditsSummary;
 }
 
-/* Cross-tool canonical alias for buildAssessmentPlatformDailyUsageSummary.
-   New code (including future tools) should call buildPlatformDailyUsageSummary.
-   The assessment-prefixed name is kept for backward-compatibility with existing
-   call sites in repository.ts and the assessment credit engine. */
-export const buildPlatformDailyUsageSummary = buildAssessmentPlatformDailyUsageSummary;
+export const buildPlatformDailyUsageSummary = buildSharedPlatformDailyUsageSummary;

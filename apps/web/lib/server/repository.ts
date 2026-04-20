@@ -17,6 +17,7 @@ import type {
   AssessmentGeneration,
   DocumentRecord,
   InfographicGeneration,
+  PlatformDailyUsageSummary,
   SessionUser,
   StorageLayoutVersion,
   UpdateUserProfileInput,
@@ -50,11 +51,9 @@ import {
 import {
   buildAssessmentDailyCreditDocumentId,
   buildAssessmentDailyCreditsSummary,
-  buildPlatformDailyUsageSummary,
   filterActiveAssessmentDailyCreditReservations,
   getDefaultDailyAssessmentCreditsLimit,
   getAssessmentDailyCreditResetAt,
-  getPlatformGlobalDailyCreditLimit,
   isAssessmentDailyCreditsExempt,
   normalizeAssessmentDailyLimitOverride,
   normalizeAssessmentDailyCreditLedger,
@@ -63,7 +62,12 @@ import {
   type AssessmentDailyCreditLedgerDocument,
   type AssessmentDailyCreditReservation,
 } from "@/lib/server/assessment-daily-credits";
-import { isActiveNormalUserExemptEmail } from "@/lib/server/active-normal-user-session-governance";
+import {
+  buildAssessmentPlatformDailyUsageForUser,
+  recordAssessmentAdminAccountingMutation,
+  recordAssessmentGenerationAccountingDeduction,
+} from "@/lib/server/assessment-tool-accounting";
+import { buildPlatformDailyUsageSummary } from "@/lib/server/platform-usage-aggregation";
 import { deleteAssessmentArtifact } from "@/lib/server/assessment-artifact-storage";
 import { normalizeAssessmentGenerationRecord } from "@/lib/server/assessment-records";
 import {
@@ -98,10 +102,7 @@ import {
   getAssessmentStatus,
   getRetentionExpiryTimestamp,
 } from "@/lib/server/assessment-retention";
-import {
-  recordToolAccountingEntry,
-  syncToolAccountingAccount,
-} from "@/lib/server/tool-accounting";
+import { syncToolAccountingAccount } from "@/lib/server/tool-accounting";
 
 type AdminLogEntry = {
   id: string;
@@ -3105,7 +3106,7 @@ function buildAssessmentCreditComputation(input: {
   grants: AssessmentCreditGrantRecord[];
   dailyReservationCount?: number;
   extraReservationCount?: number;
-  platformDailyUsage?: ReturnType<typeof buildPlatformDailyUsageSummary>;
+  platformDailyUsage?: PlatformDailyUsageSummary;
 }) {
   const nowMs = Date.now();
   const dailyDefaultLimit = getDefaultDailyAssessmentCreditsLimit();
@@ -4626,132 +4627,6 @@ async function readAssessmentDailyCreditLedger(input: {
   });
 }
 
-function countSuccessfulAssessmentGenerationsForLedger(
-  ledger: Partial<AssessmentDailyCreditLedgerDocument> | null | undefined,
-) {
-  return readAssessmentPlatformSuccessfulGenerationIds(ledger).length;
-}
-
-function mapAssessmentCreditMutationToToolAccountingEntryKind(
-  action: AdminAssessmentCreditMutationInput["action"],
-) {
-  switch (action) {
-    case "grant_credits":
-    case "add_manual_credits":
-      return "grant" as const;
-    case "subtract_manual_credits":
-    case "revoke_grant":
-      return "deduction" as const;
-    default:
-      return "adjustment" as const;
-  }
-}
-
-function isAssessmentPlatformDailyUsageExemptIdentity(input: {
-  role: UserRole;
-  email: string | null;
-}) {
-  if (input.role === "admin") {
-    return true;
-  }
-
-  return isActiveNormalUserExemptEmail(input.email);
-}
-
-async function readAssessmentPlatformDailyConsumedCreditCount(input: {
-  dayKey: string;
-}) {
-  if (!shouldUseDatabase()) {
-    return [...getMemoryStore().assessmentDailyCredits.values()]
-      .filter((ledger) => ledger.dayKey === input.dayKey)
-      .reduce(
-        (total, ledger) => total + countSuccessfulAssessmentGenerationsForLedger(ledger),
-        0,
-      );
-  }
-
-  type StructuredAssessmentPlatformUsageAggregationRow = {
-    owner_uid: string;
-    owner_email: string | null;
-    owner_role: UserRole | null;
-    successful_generation_ids: string[] | null;
-    platform_successful_generation_ids: string[] | null;
-  };
-
-  const rows =
-    await getZootopiaDatabase().sql<StructuredAssessmentPlatformUsageAggregationRow[]>`
-      SELECT
-        adc.owner_uid,
-        taa.owner_email,
-        taa.owner_role,
-        adc.successful_generation_ids,
-        adc.platform_successful_generation_ids
-      FROM public.assessment_daily_credits AS adc
-      LEFT JOIN public.tool_accounting_accounts AS taa
-        ON taa.owner_uid = adc.owner_uid
-      WHERE adc.day_key = ${input.dayKey}
-    `;
-
-  let usedCount = 0;
-  for (const row of rows) {
-    const ownerUsedCount = readAssessmentPlatformSuccessfulGenerationIds({
-      successfulGenerationIds: row.successful_generation_ids ?? [],
-      platformSuccessfulGenerationIds: row.platform_successful_generation_ids ?? [],
-    }).length;
-
-    if (ownerUsedCount <= 0) {
-      continue;
-    }
-
-    if (
-      isAssessmentPlatformDailyUsageExemptIdentity({
-        role: row.owner_role ?? "user",
-        email: row.owner_email,
-      })
-    ) {
-      continue;
-    }
-
-    /* Missing structured owner-account rows are counted conservatively. Shared account sync is
-       expected to keep this table warm, but the platform lock must never silently undercount. */
-    usedCount += ownerUsedCount;
-  }
-
-  return usedCount;
-}
-
-async function buildAssessmentPlatformDailyUsageForUser(input: {
-  user: Pick<SessionUser, "uid" | "role"> & {
-    email?: string | null;
-  };
-  creditWindow: ReturnType<typeof resolveAssessmentDailyCreditWindow>;
-  nowIso: string;
-}) {
-  const [persistedUser, usedCount] = await Promise.all([
-    input.user.email !== undefined
-      ? Promise.resolve<Pick<UserDocument, "email" | "role"> | null>({
-          email: input.user.email ?? null,
-          role: input.user.role,
-        })
-      : getUserByUid(input.user.uid),
-    readAssessmentPlatformDailyConsumedCreditCount({
-      dayKey: input.creditWindow.dayKey,
-    }),
-  ]);
-  const resolvedRole = persistedUser?.role ?? input.user.role;
-  const resolvedEmail = persistedUser?.email ?? null;
-  const isAdminExempt = resolvedRole === "admin";
-
-  return buildPlatformDailyUsageSummary({
-    dayKey: input.creditWindow.dayKey,
-    usedCount,
-    resetsAt: input.creditWindow.resetsAt,
-    limit: getPlatformGlobalDailyCreditLimit(),
-    isAdminExempt,
-    isEmailExempt: !isAdminExempt && isActiveNormalUserExemptEmail(resolvedEmail),
-  });
-}
-
 type AssessmentCreditStateSnapshot = {
   account: AssessmentCreditAccountRecord;
   grants: AssessmentCreditGrantRecord[];
@@ -4789,7 +4664,6 @@ async function resolveAssessmentCreditStateForUser(
     buildAssessmentPlatformDailyUsageForUser({
       user,
       creditWindow,
-      nowIso,
     }),
   ]);
   const activeReservations = filterActiveAssessmentDailyCreditReservations(
@@ -5571,20 +5445,19 @@ export async function applyAdminAssessmentCreditMutation(input: {
           ledger: structuredLedger,
           history: historyRecord,
         });
-        await recordToolAccountingEntry({
+        await recordAssessmentAdminAccountingMutation({
           sql: transaction.sql,
+          historyRecordId,
           ownerUid: input.ownerUid,
           ownerEmail: owner.email,
           ownerRole: owner.role,
-          toolId: "assessment",
-          entryKind: mapAssessmentCreditMutationToToolAccountingEntryKind(input.mutation.action),
+          action: input.mutation.action,
           amount: Math.trunc(mutationResult.history.amount ?? 0),
           actorUid: input.admin.uid,
           actorEmail: input.admin.email ?? null,
           actorRole: input.admin.role,
           correlationId: creditTraceId,
           metadata: {
-            sourceAction: input.mutation.action,
             access: mutationResult.history.access,
             dailyLimitOverride: mutationResult.history.dailyLimitOverride,
             grantId: mutationResult.history.grantId,
@@ -5762,19 +5635,18 @@ export async function applyAdminAssessmentCreditMutation(input: {
         commitStatus: "committed",
         createdAt: nowIso,
       });
-      await recordToolAccountingEntry({
+      await recordAssessmentAdminAccountingMutation({
+        historyRecordId,
         ownerUid: input.ownerUid,
         ownerEmail: owner.email,
         ownerRole: owner.role,
-        toolId: "assessment",
-        entryKind: mapAssessmentCreditMutationToToolAccountingEntryKind(input.mutation.action),
+        action: input.mutation.action,
         amount: Math.trunc(mutationResult.history.amount ?? 0),
         actorUid: input.admin.uid,
         actorEmail: input.admin.email ?? null,
         actorRole: input.admin.role,
         correlationId: creditTraceId,
         metadata: {
-          sourceAction: input.mutation.action,
           access: mutationResult.history.access,
           dailyLimitOverride: mutationResult.history.dailyLimitOverride,
           grantId: mutationResult.history.grantId,
@@ -5925,7 +5797,6 @@ export async function reserveAssessmentDailyCreditAttempt(
     const platformDailyUsage = await buildAssessmentPlatformDailyUsageForUser({
       user,
       creditWindow,
-      nowIso,
     });
     return {
       ok: true,
@@ -5944,14 +5815,14 @@ export async function reserveAssessmentDailyCreditAttempt(
      BEFORE entering the per-user credit transaction. Non-exempt normal users are blocked here when
      the platform daily limit is reached, regardless of their individual credit balance. This makes
      the UI-only lock into a real server gate that cannot be bypassed by direct API access.
-     The check runs outside the per-user transaction because platform-wide reads span all user
-     ledgers and must not hold row locks while doing so. A race where the cap is hit between this
-     check and the per-user transaction is acceptable: the user will see the lock on the next
-     attempt while the current attempt succeeds under the slightly stale count. */
+     The check runs outside the per-user transaction because platform-wide reads now aggregate
+     shared tool accounting/event rows across users and must not hold assessment ledger locks while
+     doing so. A race where the cap is hit between this check and the per-user transaction is
+     acceptable: the user will see the lock on the next attempt while the current attempt succeeds
+     under the slightly stale count. */
   const platformDailyUsage = await buildAssessmentPlatformDailyUsageForUser({
     user: { uid: user.uid, role: user.role, email: user.email },
     creditWindow,
-    nowIso,
   });
   if (platformDailyUsage.locked) {
     return {
@@ -6481,7 +6352,6 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
     const platformDailyUsage = await buildAssessmentPlatformDailyUsageForUser({
       user: input.user,
       creditWindow,
-      nowIso: normalizedRecord.updatedAt,
     });
     return {
       generation: normalizedRecord,
@@ -6709,24 +6579,18 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
         grants: nextGrants,
         ledger: nextLedger,
       });
-      await recordToolAccountingEntry({
+      await recordAssessmentGenerationAccountingDeduction({
         sql: transaction.sql,
         ownerUid: input.user.uid,
         ownerEmail: input.user.email ?? null,
         ownerRole: input.user.role,
-        toolId: "assessment",
-        entryKind: "deduction",
-        amount: 1,
-        eventKind: "generation",
-        generationId: normalizedRecord.id,
         dayKey: reservation.dayKey,
+        generationId: normalizedRecord.id,
+        reservationId: reservation.id,
+        reservationSource: reservation.source,
         actorUid: input.user.uid,
         actorEmail: input.user.email ?? null,
         actorRole: input.user.role,
-        metadata: {
-          reservationId: reservation.id,
-          reservationSource: reservation.source,
-        },
       });
 
       credits = buildAssessmentCreditComputation({
@@ -6877,23 +6741,17 @@ export async function saveAssessmentGenerationWithCreditCommit(input: {
     generation: normalizedRecord,
   });
   store.assessmentDailyCredits.set(documentId, nextLedger);
-  await recordToolAccountingEntry({
+  await recordAssessmentGenerationAccountingDeduction({
     ownerUid: input.user.uid,
     ownerEmail: input.user.email ?? null,
     ownerRole: input.user.role,
-    toolId: "assessment",
-    entryKind: "deduction",
-    amount: 1,
-    eventKind: "generation",
-    generationId: normalizedRecord.id,
     dayKey: reservation.dayKey,
+    generationId: normalizedRecord.id,
+    reservationId: reservation.id,
+    reservationSource: reservation.source,
     actorUid: input.user.uid,
     actorEmail: input.user.email ?? null,
     actorRole: input.user.role,
-    metadata: {
-      reservationId: reservation.id,
-      reservationSource: reservation.source,
-    },
   });
   store.assessmentCreditAccounts.set(input.user.uid, {
     ...nextAccount,

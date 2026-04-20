@@ -8,13 +8,13 @@ import { isProfileCompletionRequired } from "@/lib/return-to";
 import { apiError, apiSuccess } from "@/lib/server/api";
 import { resolveDefaultModelForTool } from "@/lib/server/ai/default-models";
 import { generateInfographic } from "@/lib/server/ai/execution";
+import { recordInfographicGenerationUsageEvent } from "@/lib/server/infographic-tool-accounting";
 import {
   appendAdminLog,
   getDocumentByIdForOwner,
   saveInfographicGeneration,
 } from "@/lib/server/repository";
 import { getAuthenticatedSessionContext } from "@/lib/server/session";
-import { recordToolUsageEvent } from "@/lib/server/tool-accounting";
 
 export const runtime = "nodejs";
 
@@ -121,18 +121,12 @@ export async function POST(request: Request) {
 
   await saveInfographicGeneration(generation);
   try {
-    await recordToolUsageEvent({
+    await recordInfographicGenerationUsageEvent({
       ownerUid: user.uid,
       ownerEmail: user.email ?? null,
       ownerRole: user.role,
-      toolId: "infographic",
-      eventKind: "generation",
-      dayKey: generation.createdAt.slice(0, 10),
-      generationId: generation.id,
-      metadata: {
-        modelId: generation.modelId,
-        documentId: normalized.documentId ?? null,
-      },
+      generation,
+      documentId: normalized.documentId ?? null,
     });
   } catch (toolUsageError) {
     console.warn("Infographic tool-usage event write failed (non-fatal).", {

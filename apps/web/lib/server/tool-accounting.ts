@@ -39,7 +39,7 @@ import type {
 import { getZootopiaDatabase } from "@/lib/server/zootopia-postgres-adapter";
 import { hasZootopiaPostgresPersistence } from "@/lib/server/zootopia-entity-store";
 
-type ToolAccountingSqlExecutor = ReturnType<typeof getZootopiaDatabase>["sql"];
+export type ToolAccountingSqlExecutor = ReturnType<typeof getZootopiaDatabase>["sql"];
 
 // ---------------------------------------------------------------------------
 // In-memory fallback (non-production / dev without DB)
@@ -48,6 +48,17 @@ type ToolAccountingSqlExecutor = ReturnType<typeof getZootopiaDatabase>["sql"];
 const memoryToolAccountingAccounts = new Map<string, ToolAccountingAccount>();
 const memoryToolAccountingEntries = new Map<string, ToolAccountingEntry>();
 const memoryToolUsageEvents = new Map<string, ToolUsageEvent>();
+
+/* Non-production aggregation fallback: platform usage aggregation needs the same central
+   accounting/event truth in DB-less tests and local smoke runs. Keep this as a read-only snapshot
+   so callers cannot mutate the in-memory accounting store or invent a second source of truth. */
+export function readToolAccountingMemoryAggregationSnapshot() {
+  return {
+    accounts: new Map(memoryToolAccountingAccounts),
+    entries: [...memoryToolAccountingEntries.values()],
+    usageEvents: [...memoryToolUsageEvents.values()],
+  };
+}
 
 function normalizeToolAccountingRole(role: UserRole | null | undefined): UserRole {
   return role === "admin" ? "admin" : "user";
@@ -138,6 +149,7 @@ export async function syncToolAccountingAccount(input: {
 }
 
 export async function recordToolAccountingEntry(input: {
+  id?: string;
   ownerUid: string;
   ownerEmail?: string | null;
   ownerRole?: UserRole | null;
@@ -155,7 +167,7 @@ export async function recordToolAccountingEntry(input: {
   metadata?: Record<string, unknown> | null;
   sql?: ToolAccountingSqlExecutor;
 }): Promise<ToolAccountingEntry> {
-  const id = randomUUID();
+  const id = input.id ?? randomUUID();
   const createdAt = new Date().toISOString();
 
   await syncToolAccountingAccount({
@@ -236,6 +248,7 @@ export async function recordToolAccountingEntry(input: {
 // ---------------------------------------------------------------------------
 
 export async function recordToolUsageEvent(input: {
+  id?: string;
   ownerUid: string;
   ownerEmail?: string | null;
   ownerRole?: UserRole | null;
@@ -246,7 +259,7 @@ export async function recordToolUsageEvent(input: {
   metadata?: Record<string, unknown> | null;
   sql?: ToolAccountingSqlExecutor;
 }): Promise<ToolUsageEvent> {
-  const id = randomUUID();
+  const id = input.id ?? randomUUID();
   const createdAt = new Date().toISOString();
 
   await syncToolAccountingAccount({

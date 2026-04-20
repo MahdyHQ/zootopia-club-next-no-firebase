@@ -1,5 +1,5 @@
 Zootopia Club Next Master Ledger
-Last refreshed: 2026-04-20 02:05:00
+Last refreshed: 2026-04-20 17:33:04
 
 Project Identity
 - Name: Zootopia Club Next
@@ -6462,3 +6462,108 @@ Change Log
     - `npm run build:vercel` passed after adding the missing workspace alias script.
     - Remaining live-runtime note:
       - build output still warns that `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is unset. This did not fail the build, but operators should set it for stable hashed governance buckets across deploys.
+
+- 2026-04-20 17:33:04 | Follow-on foundation cleanup: explicit per-tool accounting adapters + shared platform aggregation
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before making new changes.
+    - confirmed the current worktree was clean before this pass (`git status --short --branch` showed `## main...origin/main` only).
+    - rechecked latest migrations, current shared accounting files, assessment/infographic tool routes, and the live repository aggregation path before editing.
+    - used the Supabase skill and checked official Supabase RLS / CLI migration documentation plus local Next.js 16 route-handler docs before backend changes.
+    - attempted to use `supabase --version` / CLI migration workflow, but the Supabase CLI is not installed in this workspace shell; the migration file was therefore added manually and validated with the repo migration validators.
+  - What was already correct before this pass:
+    - assessment credit enforcement and balances already remained assessment-specific through:
+      - `public.assessment_credit_accounts`
+      - `public.assessment_credit_grants`
+      - `public.assessment_daily_credits`
+      - `public.assessment_credit_mutations`
+    - assessment successful-generation commits already wrote shared accounting deduction entries.
+    - assessment and infographic generation routes already wrote central `tool_usage_events` generation events.
+    - shared accounting tables already existed through `20260419200000_tool_usage_accounting_foundation.sql`.
+    - owner-scoped upload/result/export/infographic reads remained unchanged and owner-bound.
+  - What was still mixed / confusing:
+    - platform/global daily aggregation still lived inside `repository.ts` and assessment naming even though it was no longer purely an assessment concern.
+    - assessment and infographic routes called the generic central event writer directly, making tool-specific boundaries less obvious.
+    - central platform totals still needed a clean shared aggregation layer that could combine credit-backed deductions and usage-event outputs without reading assessment ledgers as hidden truth.
+    - deterministic ids were not yet available for generation usage/accounting rows, so retry-safe future writes were less explicit.
+  - Architecture changes in this pass:
+    - added `apps/web/lib/server/platform-usage-aggregation.ts` as the shared platform aggregation boundary.
+      - owns `ZOOTOPIA_PLATFORM_GLOBAL_DAILY_CREDIT_LIMIT` parsing and `buildPlatformDailyUsageSummary(...)`.
+      - derives platform generation totals from the shared central tables:
+        - `public.tool_accounting_entries` for credit-backed `deduction` + `generation` rows.
+        - `public.tool_usage_events` for tool usage generation rows.
+      - de-duplicates by `tool_id:generation_id` / usage key so assessment entries and assessment usage events do not double-count the same generation.
+      - excludes admin/exempt identities through `tool_accounting_accounts` plus the server-side exempt-email rules.
+    - added `apps/web/lib/server/assessment-tool-accounting.ts` as the assessment-owned adapter.
+      - owns assessment-specific mapping from admin credit mutation actions to shared entry kinds.
+      - owns assessment generation usage-event writes.
+      - owns assessment generation deduction entry writes with deterministic ids.
+      - owns the assessment-facing call into shared platform aggregation.
+    - added `apps/web/lib/server/infographic-tool-accounting.ts` as the infographic-owned adapter.
+      - owns infographic generation usage-event writes with deterministic ids.
+      - keeps infographic usage separate from assessment credit semantics.
+    - kept `apps/web/lib/server/tool-accounting.ts` as the central low-level shared writer/store.
+      - exported `ToolAccountingSqlExecutor` for tool adapters.
+      - added optional deterministic `id` inputs for accounting entries and usage events.
+      - added a read-only in-memory aggregation snapshot for DB-less local/test fallback without creating a second source of truth.
+    - simplified `apps/web/lib/server/repository.ts`.
+      - removed the repository-local platform aggregation SQL over `assessment_daily_credits`.
+      - removed assessment-specific helper code that was acting as shared platform aggregation.
+      - now calls the assessment adapter for platform usage snapshots and shared accounting writes.
+    - simplified `apps/web/lib/server/assessment-daily-credits.ts`.
+      - assessment daily credit math remains here.
+      - platform summary/env parsing moved to `platform-usage-aggregation.ts`.
+      - compatibility exports remain for older imports.
+  - Migration added:
+    - `supabase/migrations/20260420093000_tool_accounting_generation_aggregation_backfill.sql`
+      - adds central aggregation indexes:
+        - `tool_accounting_entries_generation_aggregation_idx`
+        - `tool_usage_events_generation_aggregation_idx`
+      - backfills assessment successful generation deductions from `assessment_daily_credits.platform_successful_generation_ids` / `successful_generation_ids` into `tool_accounting_entries`.
+      - skips any generation that already has an assessment `deduction` + `generation` accounting entry.
+      - does not alter or remove the assessment credit tables.
+  - Current canonical table truth after this pass:
+    - assessment-specific credit/balance/enforcement remains canonical in:
+      - `public.assessment_credit_accounts`
+      - `public.assessment_credit_grants`
+      - `public.assessment_daily_credits`
+      - `public.assessment_credit_mutations`
+    - shared accounting identity and aggregation now live in:
+      - `public.tool_accounting_accounts`
+      - `public.tool_accounting_entries`
+      - `public.tool_usage_events`
+    - platform/global generation totals are now derived from shared accounting/event tables, not from assessment daily ledgers.
+  - How tools remain separated:
+    - assessment:
+      - keeps quota/reservation/grant/mutation logic in assessment-specific files and existing assessment tables.
+      - emits shared outputs only through `assessment-tool-accounting.ts`.
+    - infographic:
+      - keeps generation/readback logic separate.
+      - emits shared usage only through `infographic-tool-accounting.ts`.
+    - shared platform:
+      - only aggregates normalized central rows and does not import assessment or infographic generation logic.
+  - What was intentionally preserved:
+    - no rewrite of the assessment credit engine.
+    - no removal of working legacy/compatibility paths unrelated to this scoped aggregation cleanup.
+    - no change to owner-scoped upload/result/export/storage enforcement.
+    - no change to admin-only infographic authorization.
+    - no dependency changes.
+  - Files changed in this pass:
+    - `apps/web/app/api/assessment/route.ts`
+    - `apps/web/app/api/infographic/route.ts`
+    - `apps/web/lib/server/assessment-daily-credits.ts`
+    - `apps/web/lib/server/assessment-tool-accounting.ts`
+    - `apps/web/lib/server/infographic-tool-accounting.ts`
+    - `apps/web/lib/server/platform-usage-aggregation.ts`
+    - `apps/web/lib/server/repository.ts`
+    - `apps/web/lib/server/tool-accounting.ts`
+    - `supabase/migrations/20260420093000_tool_accounting_generation_aggregation_backfill.sql`
+    - `zootopia-club-next-ledger.txt`
+  - Verification in this pass:
+    - `npm run lint:web` passed.
+    - `npm run typecheck:web` passed.
+    - `npm run build:web` passed.
+    - `npm run build:vercel` passed after rerunning sequentially; the first parallel attempt collided with the simultaneous `build:web` Next build lock.
+    - `npm run supabase:migrations:validate` passed.
+    - `npm run supabase:check` passed and listed 23 migration files including `20260420093000_tool_accounting_generation_aggregation_backfill.sql`.
+    - Remaining live-runtime note:
+      - build output still warns that `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is unset. This remains an operator env concern, not a compile failure.
