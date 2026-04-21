@@ -65,19 +65,27 @@ type SiteContent = {
     introBody: string;
     methodsTitle: string;
     methodsBody: string;
-    whatsappTitle: string;
-    whatsappBody: string;
-    whatsappCta: string;
+    emailSupportTitle: string;
+    emailSupportBody: string;
+    attachmentsPanelLabel: string;
+    attachmentsPanelBody: string;
     formTitle: string;
     formBody: string;
     privacyNote: string;
     responseTimeNote: string;
+    attachmentChooseAction: string;
+    attachmentHint: string;
+    attachmentEmailOnlyNote: string;
+    attachmentSelectedTitle: string;
+    attachmentEmpty: string;
+    attachmentTotalLabel: string;
     fields: {
       name: string;
       email: string;
       purpose: string;
       subject: string;
       message: string;
+      attachments: string;
     };
     placeholders: {
       name: string;
@@ -96,6 +104,8 @@ type SiteContent = {
     successBody: string;
     unavailableTitle: string;
     unavailableBody: string;
+    rateLimitedTitle: string;
+    rateLimitedBody: string;
     failureTitle: string;
     failureBody: string;
     validation: {
@@ -104,6 +114,9 @@ type SiteContent = {
       emailInvalid: string;
       subjectRequired: string;
       messageRequired: string;
+      attachmentsInvalidType: string;
+      attachmentsTooLarge: string;
+      attachmentsUnreadable: string;
     };
   };
   donation: {
@@ -219,29 +232,39 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
       eyebrow: "Contact",
       title: "Reach the platform team through a calm, direct, and practical support flow.",
       subtitle:
-        "To contact admin Ebn Abdallah, report any issue, or send requests and suggestions, please contact us through the following methods.",
+        "Use the secure email form to contact the platform team, report an issue, send a request, or share a thoughtful suggestion.",
       introBody:
-        "Use WhatsApp for fast conversation, or send a structured message through the form for platform support, issue reports, or thoughtful suggestions.",
-      methodsTitle: "Communication paths",
+        "The email form below is the public contact path for platform support. You can include image or PDF attachments when they help explain the issue clearly.",
+      methodsTitle: "Email-first support",
       methodsBody:
-        "Both routes below are intended for real platform communication, including questions about access, improvement ideas, or technical issues that should reach the admin team safely.",
-      whatsappTitle: "WhatsApp",
-      whatsappBody:
-        "Best for quick follow-up, direct guidance, and fast communication around the platform experience.",
-      whatsappCta: "Chat on WhatsApp",
+        "Messages are relayed server-side so the destination inbox stays private, and optional attachments travel with the email only instead of becoming stored platform files.",
+      emailSupportTitle: "Structured email contact",
+      emailSupportBody:
+        "Best for issue details, screenshots, PDFs, and longer requests that should reach the platform team in one clean message.",
+      attachmentsPanelLabel: "Attachment policy",
+      attachmentsPanelBody:
+        "Accepted: PDF, PNG, JPG, JPEG, and WEBP. The maximum total attachment size is 50 MB, and files are relayed with the outgoing email only.",
       formTitle: "Email contact form",
       formBody:
-        "Use this form when you want to send a more complete message to the platform team. The destination email stays on the server and is never shown publicly in the interface.",
+        "Use this form when you want to send a complete message to the platform team. The destination email stays on the server and is never shown publicly in the interface.",
       privacyNote:
-        "Your message is relayed server-side so the admin destination address remains private.",
+        "Your message and optional attachments are relayed server-side so the admin destination address remains private.",
       responseTimeNote:
-        "Please include enough detail for issue reports, requests, or suggestions so the team can respond clearly.",
+        "Please include enough detail and only the files that are necessary for the team to review the issue clearly.",
+      attachmentChooseAction: "Choose files",
+      attachmentHint: "Accepted: PDF, PNG, JPG, JPEG, WEBP. Maximum total size: 50 MB.",
+      attachmentEmailOnlyNote:
+        "Attachments are sent with the email only and are not stored in the database or a durable file bucket.",
+      attachmentSelectedTitle: "Selected files",
+      attachmentEmpty: "No files selected yet.",
+      attachmentTotalLabel: "Total size",
       fields: {
         name: "Your name",
         email: "Your email",
         purpose: "Purpose",
         subject: "Subject",
         message: "Message",
+        attachments: "Attachments (optional)",
       },
       placeholders: {
         name: "Enter your full name",
@@ -262,16 +285,23 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
         "Your message has been sent to the platform team successfully.",
       unavailableTitle: "Contact email is temporarily unavailable",
       unavailableBody:
-        "The contact email relay is not configured in this environment yet. Please use WhatsApp for now.",
+        "The contact email relay is not configured in this environment yet.",
+      rateLimitedTitle: "Too many contact attempts",
+      rateLimitedBody:
+        "Please wait a few minutes before sending another message from this browser.",
       failureTitle: "Message could not be sent",
       failureBody:
-        "Please try again in a moment, or use WhatsApp if the issue is urgent.",
+        "Please try again in a moment. If the problem continues, send the form again later.",
       validation: {
         nameRequired: "Please enter your name.",
         emailRequired: "Please enter your email address.",
         emailInvalid: "Please enter a valid email address.",
         subjectRequired: "Please enter a subject.",
         messageRequired: "Please enter a message.",
+        attachmentsInvalidType: "Only PDF, PNG, JPG, JPEG, and WEBP files are allowed.",
+        attachmentsTooLarge: "Total attachment size must be 50 MB or less.",
+        attachmentsUnreadable:
+          "One or more selected files could not be prepared safely. Please choose the files again.",
       },
     },
     donation: {
@@ -485,29 +515,39 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
       eyebrow: "تواصل معنا",
       title: "تواصل مع فريق المنصة عبر مسار دعم هادئ ومباشر وعملي.",
       subtitle:
-        "للتواصل مع الأدمن ابن عبدالله، أو الإبلاغ عن أي مشكلة، أو إرسال الطلبات والاقتراحات، يرجى التواصل معنا من خلال الوسائل التالية.",
+        "استخدم نموذج البريد الآمن للتواصل مع فريق المنصة، أو الإبلاغ عن مشكلة، أو إرسال طلب، أو مشاركة اقتراح مدروس.",
       introBody:
-        "استخدم واتساب للمحادثة السريعة، أو أرسل رسالة منظمة عبر النموذج إذا كنت تريد توضيحاً أكبر بخصوص مشكلة أو طلب أو اقتراح.",
-      methodsTitle: "مسارات التواصل",
+        "النموذج البريدي أدناه هو وسيلة التواصل العامة المعتمدة للمنصة، ويمكنك إرفاق صور أو ملفات PDF عندما تساعد على شرح المشكلة بوضوح.",
+      methodsTitle: "تواصل بريدي أولاً",
       methodsBody:
-        "المساران أدناه موجهان للتواصل الحقيقي مع المنصة، سواء للأسئلة، أو أفكار التطوير، أو المشكلات التقنية التي يجب أن تصل إلى فريق الإدارة بشكل آمن.",
-      whatsappTitle: "واتساب",
-      whatsappBody:
-        "الأنسب للمتابعة السريعة، والإرشاد المباشر، والتواصل السريع حول تجربة استخدام المنصة.",
-      whatsappCta: "المحادثة على واتساب",
+        "تنتقل الرسائل عبر الخادم حتى تبقى وجهة البريد الخاصة مخفية، كما تنتقل المرفقات مع البريد فقط من دون أن تصبح ملفات محفوظة داخل المنصة.",
+      emailSupportTitle: "تواصل بريدي منظم",
+      emailSupportBody:
+        "الأنسب لتفاصيل المشكلات، ولقطات الشاشة، وملفات PDF، والطلبات الأطول التي يجب أن تصل إلى فريق المنصة في رسالة واحدة واضحة.",
+      attachmentsPanelLabel: "سياسة المرفقات",
+      attachmentsPanelBody:
+        "الأنواع المقبولة: PDF و PNG و JPG و JPEG و WEBP. الحد الأقصى لإجمالي المرفقات هو 50 ميغابايت، وتُرسل الملفات مع البريد فقط.",
       formTitle: "نموذج التواصل عبر البريد",
       formBody:
-        "استخدم هذا النموذج عندما تريد إرسال رسالة أكثر اكتمالاً إلى فريق المنصة. يظل البريد الوجهة محفوظاً على الخادم ولا يظهر علناً في الواجهة.",
+        "استخدم هذا النموذج عندما تريد إرسال رسالة مكتملة إلى فريق المنصة. يظل البريد الوجهة محفوظاً على الخادم ولا يظهر علناً في الواجهة.",
       privacyNote:
-        "يتم تمرير رسالتك من جهة الخادم حتى تظل وجهة البريد الخاصة بالأدمن مخفية عن الواجهة العامة.",
+        "يتم تمرير رسالتك ومرفقاتك الاختيارية من جهة الخادم حتى تظل وجهة البريد الخاصة بالأدمن مخفية عن الواجهة العامة.",
       responseTimeNote:
-        "يرجى كتابة تفاصيل كافية عند الإبلاغ عن مشكلة أو إرسال طلب أو اقتراح حتى يستطيع الفريق الرد بوضوح.",
+        "يرجى كتابة تفاصيل كافية وإرفاق الملفات الضرورية فقط حتى يستطيع الفريق مراجعة المشكلة والرد بوضوح.",
+      attachmentChooseAction: "اختر الملفات",
+      attachmentHint: "الأنواع المقبولة: PDF و PNG و JPG و JPEG و WEBP. الحد الأقصى للإجمالي: 50 ميغابايت.",
+      attachmentEmailOnlyNote:
+        "تُرسل المرفقات مع البريد فقط ولا يتم حفظها في قاعدة البيانات أو في مسار تخزين دائم.",
+      attachmentSelectedTitle: "الملفات المحددة",
+      attachmentEmpty: "لا توجد ملفات محددة بعد.",
+      attachmentTotalLabel: "إجمالي الحجم",
       fields: {
         name: "الاسم",
         email: "البريد الإلكتروني",
         purpose: "الغرض",
         subject: "الموضوع",
         message: "الرسالة",
+        attachments: "المرفقات (اختياري)",
       },
       placeholders: {
         name: "اكتب اسمك الكامل",
@@ -527,16 +567,25 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
       successBody: "تم إرسال رسالتك إلى فريق المنصة بنجاح.",
       unavailableTitle: "خدمة البريد غير متاحة حالياً",
       unavailableBody:
-        "خدمة تمرير البريد من جهة الخادم غير مهيأة في هذه البيئة بعد. استخدم واتساب حالياً.",
+        "خدمة تمرير البريد من جهة الخادم غير مهيأة في هذه البيئة بعد.",
+      rateLimitedTitle: "محاولات تواصل كثيرة جداً",
+      rateLimitedBody:
+        "يرجى الانتظار بضع دقائق قبل إرسال رسالة أخرى من هذا المتصفح.",
       failureTitle: "تعذر إرسال الرسالة",
       failureBody:
-        "يرجى المحاولة مرة أخرى بعد قليل، أو استخدم واتساب إذا كانت الحالة عاجلة.",
+        "يرجى المحاولة مرة أخرى بعد قليل. وإذا استمرت المشكلة فأعد إرسال النموذج لاحقاً.",
       validation: {
         nameRequired: "يرجى إدخال الاسم.",
         emailRequired: "يرجى إدخال البريد الإلكتروني.",
         emailInvalid: "يرجى إدخال بريد إلكتروني صحيح.",
         subjectRequired: "يرجى إدخال الموضوع.",
         messageRequired: "يرجى كتابة الرسالة.",
+        attachmentsInvalidType:
+          "الأنواع المسموحة للمرفقات هي PDF و PNG و JPG و JPEG و WEBP فقط.",
+        attachmentsTooLarge:
+          "يجب ألا يتجاوز إجمالي حجم المرفقات 50 ميغابايت.",
+        attachmentsUnreadable:
+          "تعذر تجهيز ملف واحد أو أكثر بشكل آمن. يرجى اختيار الملفات مرة أخرى.",
       },
     },
     donation: {

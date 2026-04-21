@@ -1,6 +1,8 @@
 import "server-only";
 import nodemailer from "nodemailer";
 
+import type { ContactMailAttachment } from "@/lib/server/contact-attachments";
+
 type ContactPurpose = "general" | "issue" | "suggestion";
 type ContactMailer = ReturnType<typeof nodemailer.createTransport>;
 
@@ -11,6 +13,7 @@ export type ContactMailInput = {
   purpose: ContactPurpose;
   subject: string;
   message: string;
+  attachments?: ContactMailAttachment[];
 };
 
 type ContactMailConfiguration = {
@@ -146,12 +149,35 @@ function purposeLabel(input: ContactPurpose, locale: "en" | "ar") {
       : "General contact";
 }
 
+function formatAttachmentSize(sizeBytes: number) {
+  const sizeInMegabytes = sizeBytes / (1024 * 1024);
+  if (sizeInMegabytes >= 1) {
+    return `${sizeInMegabytes.toFixed(sizeInMegabytes >= 10 ? 0 : 1)} MB`;
+  }
+
+  const sizeInKilobytes = sizeBytes / 1024;
+  return `${Math.max(1, Math.round(sizeInKilobytes))} KB`;
+}
+
+function buildAttachmentSummary(input: ContactMailInput) {
+  if (!input.attachments?.length) {
+    return null;
+  }
+
+  return input.attachments.map((attachment) => ({
+    fileName: attachment.fileName,
+    contentType: attachment.contentType,
+    sizeLabel: formatAttachmentSize(attachment.sizeBytes),
+  }));
+}
+
 function buildTextBody(input: ContactMailInput) {
   const submittedAt = new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "UTC",
   }).format(new Date());
+  const attachmentSummary = buildAttachmentSummary(input);
 
   return [
     "Zootopia Club contact form submission",
@@ -161,6 +187,15 @@ function buildTextBody(input: ContactMailInput) {
     `Reply email: ${input.email}`,
     `Submitted (UTC): ${submittedAt}`,
     `Subject: ${input.subject}`,
+    ...(attachmentSummary
+      ? [
+          `Attachments (${attachmentSummary.length}):`,
+          ...attachmentSummary.map(
+            (attachment) =>
+              `- ${attachment.fileName} (${attachment.sizeLabel}; ${attachment.contentType})`,
+          ),
+        ]
+      : ["Attachments: None"]),
     "",
     "Message:",
     input.message,
@@ -173,10 +208,32 @@ function buildHtmlBody(input: ContactMailInput) {
     timeStyle: "short",
     timeZone: "UTC",
   }).format(new Date());
+  const attachmentSummary = buildAttachmentSummary(input);
   const messageLines = input.message
     .split(/\r?\n/)
     .map((line) => `<p style="margin:0 0 10px;">${escapeHtml(line)}</p>`)
     .join("");
+  const attachmentMarkup = attachmentSummary
+    ? `
+        <div style="border-top:1px solid rgba(15,23,42,0.08);padding-top:18px;margin-top:18px;">
+          <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#0f766e;">
+            Attachments
+          </p>
+          <ul style="margin:0;padding-inline-start:18px;color:#334155;">
+            ${attachmentSummary
+              .map(
+                (attachment) =>
+                  `<li style="margin:0 0 8px;"><strong>${escapeHtml(
+                    attachment.fileName,
+                  )}</strong> <span style="color:#64748b;">(${escapeHtml(
+                    attachment.sizeLabel,
+                  )}; ${escapeHtml(attachment.contentType)})</span></li>`,
+              )
+              .join("")}
+          </ul>
+        </div>
+      `
+    : "";
 
   return `
     <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:24px;color:#0f172a;">
@@ -196,6 +253,7 @@ function buildHtmlBody(input: ContactMailInput) {
           <div><strong>Locale:</strong> ${escapeHtml(input.locale)}</div>
           <div><strong>Submitted (UTC):</strong> ${escapeHtml(submittedAt)}</div>
         </div>
+        ${attachmentMarkup}
         <div style="border-top:1px solid rgba(15,23,42,0.08);padding-top:18px;">
           ${messageLines}
         </div>
@@ -227,6 +285,11 @@ export async function sendPlatformContactEmail(input: ContactMailInput) {
     },
     html: buildHtmlBody(input),
     text: buildTextBody(input),
+    attachments: input.attachments?.map((attachment) => ({
+      filename: attachment.fileName,
+      content: attachment.content,
+      contentType: attachment.contentType,
+    })),
   });
 
   return {

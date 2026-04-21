@@ -101,6 +101,11 @@ const nextConfig: NextConfig = {
     externalDir: true,
     // Keep build parallelism explicit on high-core servers.
     cpus: buildCpuCount,
+    /* Contact-page attachments are capped at 50 MB of actual file bytes, but multipart
+       framing adds overhead above the raw file total. Keep proxy buffering above the
+       product limit so a valid 50 MB contact email payload is not truncated before the
+       route handler can enforce the real server-side attachment contract. */
+    proxyClientMaxBodySize: "60mb",
     workerThreads: true,
     /* Server Actions reject POSTs when Origin and Host do not match. This app can be
        reached through canonical env domains and localhost/127.0.0.1 variants during

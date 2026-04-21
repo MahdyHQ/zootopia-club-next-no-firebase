@@ -18,6 +18,7 @@ Current Truth Snapshot
 - The App Hosting build path now depends on `apps/web/apphosting.yaml`, `apps/web/package-lock.json`, `apps/web/next.config.ts`, and `apps/web/scripts/normalize-standalone.mjs` as stable architecture files, not one-off deployment fixes; the standalone normalizer must keep copying `@sparticuz/chromium/bin/*` into the standalone bundle so the Pro PDF lane can launch packaged Chromium on Firebase App Hosting/Cloud Run.
 - `apps/web/next.config.ts` now also explicitly allowlists `127.0.0.1` in `allowedDevOrigins` so local Next.js dev assets such as `/_next/webpack-hmr` can be requested safely when the browser reaches the dev server through `127.0.0.1` instead of only `localhost`.
 - `apps/web/next.config.ts` now caps Next build worker parallelism at `min(4, detected CPUs)` by default, with `ZOOTOPIA_NEXT_BUILD_CPUS` as an explicit override, so page-data collection does not over-fork local/Vercel-like constrained builders.
+- `apps/web/next.config.ts` now also keeps `experimental.proxyClientMaxBodySize` at `60mb` so the public Contact page can accept up to 50 MB of real attachment bytes without multipart framing being truncated before the server route applies the true validation contract.
 - The active Firebase App Hosting backend is `zootopia-club-next-backend` at `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`, and it is wired to Firebase web app `1:38079185268:web:adcd16b5e94d3d8c52ec21`; older Firebase web apps/backends still exist in the project but are not the current repo deployment target.
 - `apps/web/next.config.ts` explicitly reloads the repo-root env contract via `@next/env` (`loadEnvConfig(workspaceRoot, ...)`) so local/runtime auth and server config read the same root `.env.local` source.
 - The current font/runtime presentation stack uses Plus Jakarta Sans, Alexandria, Amiri, and JetBrains Mono through `apps/web/app/layout.tsx`; older IBM Plex notes remain historical change-log context only.
@@ -53,7 +54,8 @@ Current Truth Snapshot
 - `/reviews` is the public dynamic User Reviews/Testimonials page. It reads only published sanitized review DTOs from the server, serves photos through `/api/reviews/[id]/image`, supports EN/AR copy plus `dir="auto"` review text, and is reachable from public nav, protected sidebar, and the protected home trust-link cluster.
 - `/admin/reviews` is the admin-only review management workspace. Page access is guarded by `requireAdminUser()`, API mutations are guarded by `getAdminSessionUser()`, and the client editor only compresses images before submitting to server-authoritative review APIs.
 - `/donation` now presents trust-first bilingual support messaging that explicitly covers recurring operating costs, the 2022/2023 legacy angle, continuity risk if monthly costs are not covered, and direct personal WhatsApp contact at `+201124511183`.
-- `/api/contact` now provides a small server-only public contact relay that sends through Gmail SMTP runtime env vars, keeps `CONTACT_FORM_TO` off the client, and applies a silent honeypot guard instead of broad anti-spam infrastructure.
+- `/contact` is now an email-first public support page and no longer exposes the public WhatsApp number or a direct WhatsApp CTA in the Contact-page UI; the page instead explains the secure email relay and the attachment policy in both English and Arabic.
+- `/api/contact` now accepts the existing JSON contract plus multipart form-data, keeps `CONTACT_FORM_TO` off the client, applies a silent honeypot plus a narrow request-rate limit, and server-validates relay-only attachments as PDF, PNG, JPG, JPEG, or WEBP with a 50 MB total-size ceiling before sending them through SMTP without database or durable storage persistence.
 - Assessment preview/result pages, Markdown/DOCX exports, and the print/PDF export surface now share their file-facing Arabic footer through `apps/web/lib/assessment-file-branding.ts`, using the exact export line `تمت برمجة وتطوير وتمويل هذه المنصة بكل شغف وإبداع على يد ابن عبدالله يوسف، دفعة 2022، قسم كيمياء حيوان 💻❤️` without rewriting the broader protected-shell attribution source.
 - Assessment preview/result/export surfaces now use a shared display parser that can split both multiline and inline MCQ options out of the saved `question` string, keep answer choices beneath the stem, prefer a compact 2x2 layout for four-choice sets when width allows, resolve marker-only answers into human-readable labels like `B) Ecosystem`, and annotate correct choices once so preview/result/PDF cards can share the same premium highlight treatment without rewriting the persisted assessment record.
 - The shared Assessment pipeline now supports mixed question-type composition (MCQ, True/False, Essay, Fill blanks, Short answer, Matching, Multiple response) with per-question difficulty metadata, content-language direction derivation, and type-aware rendering across detached preview/result plus print/PDF/DOCX/Markdown/text export surfaces.
@@ -123,7 +125,7 @@ Monorepo Structure
 - `packages/shared-types`
   - Shared auth, user, API, document, assessment, infographic, and admin contracts
 - `packages/shared-utils`
-  - Validation, upload policy, RTL helpers, date helpers, and small pure utilities
+  - Validation, upload policy, contact-attachment policy, RTL helpers, date helpers, and small pure utilities
 - `firebase`
   - `firestore.rules`
   - `firestore.indexes.json`
@@ -241,6 +243,7 @@ Important Folders And Files
   - `server/assessment-linked-document.ts`
   - `server/assessment-artifact-storage.ts`
   - `server/assessment-file-qr.ts`
+  - `server/contact-attachments.ts`
   - `server/contact-mail.ts`
   - `server/assessment-records.ts`
   - `server/assessment-retention.ts`
@@ -291,6 +294,7 @@ Important Folders And Files
   - `packages/shared-types/src/auth.ts`
   - `packages/shared-types/src/user.ts`
   - `packages/shared-types/src/api.ts`
+  - `packages/shared-utils/src/contact-attachment-policy.ts`
   - `packages/shared-utils/src/validation.ts`
 - Historical/reference docs
   - `docs/architecture.md`
@@ -349,6 +353,9 @@ API Map
   - `GET /api/health`
 - Public contact/support
   - `POST /api/contact`
+    - accepts the older JSON payload plus multipart form-data for the public Contact page
+    - keeps the destination inbox server-only, enforces a silent honeypot and request pacing, and relays validated attachments through SMTP only
+    - rejects non-PDF/non-image attachments and rejects multipart payloads whose total attachment bytes exceed 50 MB
 - Session/auth
   - `GET /api/auth/me`
   - `POST /api/auth/bootstrap`
@@ -390,7 +397,8 @@ Backend Runtime And Service Ownership
   - `apps/web/lib/server/document-markdown.ts`: current local document snapshot helper for upload normalization and text-context fallback continuity
   - `apps/web/lib/server/assessment-linked-document.ts`: Assessment-only linked-document resolution that prefers direct PDF input when the selected provider supports it
   - `apps/web/lib/server/assessment-file-qr.ts`: server-side QR data URL generation for the branded Assessment file surfaces
-  - `apps/web/lib/server/contact-mail.ts`: server-only Gmail SMTP relay for the public Contact page that reads runtime env vars in local dev and Firebase App Hosting without exposing the admin destination or credentials to the client
+  - `apps/web/lib/server/contact-attachments.ts`: server-only Contact-page attachment validator/reader that sanitizes filenames, enforces the shared 50 MB relay-only policy, verifies allowed MIME-plus-extension combinations, and checks PDF/PNG/JPEG/WEBP magic bytes without introducing database or storage writes
+  - `apps/web/lib/server/contact-mail.ts`: server-only Gmail SMTP relay for the public Contact page that reads runtime env vars in local dev and Firebase App Hosting without exposing the admin destination or credentials to the client, and now forwards validated attachments with the outgoing email only
   - `apps/web/lib/server/assessment-retention.ts`: 3-day Assessment expiry window and route/lifecycle helpers
   - `apps/web/lib/server/assessment-preview.ts`: normalized bilingual Assessment preview/result model generation
   - `apps/web/lib/server/assessment-exporter.ts`: JSON, Markdown, and DOCX artifact generation from one normalized preview model
@@ -7376,4 +7384,72 @@ Change Log
     - `packages/shared-types/src/index.ts`
     - `packages/shared-types/src/reviews.ts`
     - `supabase/migrations/20260421120000_user_reviews.sql`
+    - `zootopia-club-next-ledger.txt`
+
+- 2026-04-21 21:04:35 Z | Public Contact page email-first UX + relay-only attachment support
+  - Mandatory-first-step and exploration compliance:
+    - reread `zootopia-club-next-ledger.txt` before touching code and treated it as project context/history only, not final truth.
+    - used the requested parallel subagent lanes for ledger/architecture tracing, contact page + form UI tracing, contact API/mail relay tracing, file-upload validation tracing, auth/security/server-authority tracing, i18n/theme/design-system tracing, and final verification tracing before implementation.
+    - compared every tracing lane against the live repo before editing, and checked the current local Next.js docs plus official Nodemailer attachment docs before extending the contact flow.
+  - Root cause and scope:
+    - the public Contact page still exposed the WhatsApp number directly and routed public support attention toward that number instead of the existing secure email form.
+    - the public contact flow only supported JSON text fields, so users could not send screenshots, photos, or PDFs through the existing server-only email relay.
+    - the requested feature needed a small extension of the existing contact architecture, not a redesign, and it explicitly required no database or durable file-storage persistence for attachments.
+  - What changed in the public Contact UI:
+    - `apps/web/app/(site)/contact/page.tsx` no longer renders the public WhatsApp card, number, or WhatsApp CTA on `/contact`.
+    - the left support rail is now email-first: it presents structured email-contact guidance plus a compact attachment-policy callout instead of exposing the phone number.
+    - `apps/web/components/site/contact-form.tsx` now includes a premium attachment picker with selected-file chips, total-size feedback, and localized validation/status handling while preserving the existing form layout, honeypot wiring, and submit flow.
+    - bilingual EN/AR copy for the Contact page remains sourced from `apps/web/lib/site-content.ts`; no unrelated message-catalog architecture was introduced.
+  - Attachment contract after this pass:
+    - allowed file families: image files and PDFs only.
+    - allowed extensions: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`.
+    - allowed MIME families: `application/pdf`, `image/png`, `image/jpeg`, and `image/webp` (with normalization for browser variants such as `application/x-pdf` and `image/jpg`).
+    - total attachment limit: 50 MB across the full submission, not per file.
+    - client-side UX uses the shared contact-attachment policy to block unsupported types and oversized selections early.
+    - server-side authority uses the same shared policy plus filename sanitization, canonical MIME resolution, and magic-byte checks for PDF/PNG/JPEG/WEBP before mail delivery.
+  - Server/mail architecture after this pass:
+    - `packages/shared-utils/src/contact-attachment-policy.ts` now defines the shared Contact attachment contract used by both client and server.
+    - `apps/web/lib/server/contact-attachments.ts` reads multipart `File` inputs, validates them, and converts them into in-memory Nodemailer-ready buffers only for the lifetime of the request.
+    - `apps/web/app/api/contact/route.ts` still remains the single public Contact authority. It now:
+      - accepts JSON for backward compatibility and multipart form-data for attachment-capable submissions.
+      - preserves the silent `website` honeypot behavior.
+      - adds a narrow server-side request-rate limit for unauthenticated contact submissions.
+      - classifies body-parser failures such as oversized multipart requests into Contact-specific API errors.
+      - rejects unsupported, oversized, or malformed attachments before SMTP delivery.
+    - `apps/web/lib/server/contact-mail.ts` now forwards validated attachments through the existing SMTP relay only and still keeps the destination inbox plus SMTP credentials server-only.
+  - Explicit non-persistence guarantees:
+    - no new database table was added.
+    - no migration was added.
+    - no attachment rows, blob metadata rows, or storage-bucket writes were introduced for Contact submissions.
+    - attachment buffers exist only in-memory during request handling and are passed directly to the outgoing email relay.
+  - Config/runtime notes:
+    - `apps/web/next.config.ts` now sets `experimental.proxyClientMaxBodySize` to `60mb` so a valid 50 MB attachment batch is not rejected early by multipart framing overhead before the route can enforce the real 50 MB product limit.
+    - the Contact relay still depends on the existing server-only SMTP env contract (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `CONTACT_FORM_TO`).
+    - build output still warns that `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is unset; this is a pre-existing warning unrelated to the Contact feature.
+  - What was preserved intentionally:
+    - `/contact` still routes through one same-origin public page and one same-origin server route.
+    - the hidden honeypot path remains intact and silent.
+    - the private destination inbox is still never rendered into public UI or client payloads.
+    - existing Contact text-field validation and mail-relay ownership stayed server-authoritative.
+    - donation-page WhatsApp support messaging was not changed; only the public Contact page stopped exposing the number.
+  - Verification results for this pass:
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` passed.
+    - `npm run build:vercel` passed; in this repo it delegates to the web workspace build rather than the Vercel CLI.
+    - runtime smoke on a local `apps/web` server at `http://127.0.0.1:3056` passed:
+      - `GET /contact` returned `200` and the rendered page contained the structured email-contact heading plus attachment-policy copy, while not containing the public WhatsApp number or `wa.me` link.
+      - `POST /api/contact` with invalid JSON returned `400` and `INVALID_JSON`.
+      - `POST /api/contact` with the honeypot field populated returned `202`, preserving the silent anti-bot behavior.
+      - multipart `POST /api/contact` with a `text/plain` attachment returned `400` and `CONTACT_ATTACHMENT_TYPE_INVALID`.
+  - Files changed in this pass:
+    - `apps/web/app/(site)/contact/page.tsx`
+    - `apps/web/app/api/contact/route.ts`
+    - `apps/web/components/site/contact-form.tsx`
+    - `apps/web/lib/server/contact-attachments.ts`
+    - `apps/web/lib/server/contact-mail.ts`
+    - `apps/web/lib/site-content.ts`
+    - `apps/web/next.config.ts`
+    - `packages/shared-utils/src/contact-attachment-policy.ts`
+    - `packages/shared-utils/src/index.ts`
     - `zootopia-club-next-ledger.txt`

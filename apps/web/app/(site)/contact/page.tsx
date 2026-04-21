@@ -1,9 +1,7 @@
-import { MessageCircleMore, MessagesSquare, ShieldCheck, Sparkles } from "lucide-react";
-import Link from "next/link";
+import { Mail, MessagesSquare, Paperclip, ShieldCheck } from "lucide-react";
 
 import { ContactForm } from "@/components/site/contact-form";
-import { Button } from "@/components/ui/button";
-import { SITE_WHATSAPP_LINK, SITE_WHATSAPP_NUMBER, getSiteContent } from "@/lib/site-content";
+import { getSiteContent } from "@/lib/site-content";
 import { getRequestUiContext } from "@/lib/server/request-context";
 
 export default async function ContactPage() {
@@ -35,24 +33,21 @@ export default async function ContactPage() {
         <div className="space-y-5">
           <article className="surface-card p-6 sm:p-7">
             <div className="flex items-center gap-3">
-              <MessageCircleMore className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">{content.whatsappTitle}</h2>
+              <Mail className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                {content.emailSupportTitle}
+              </h2>
             </div>
-            <p className="mt-4 text-base leading-8 text-foreground-muted">{content.whatsappBody}</p>
+            <p className="mt-4 text-base leading-8 text-foreground-muted">{content.emailSupportBody}</p>
             <div className="mt-6 rounded-[1.7rem] border border-emerald-500/25 bg-emerald-500/10 p-5">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
-                WhatsApp
-              </p>
-              <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-                {SITE_WHATSAPP_NUMBER}
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
+                <Paperclip className="h-3.5 w-3.5" />
+                <span>{content.attachmentsPanelLabel}</span>
+              </div>
+              <p className="mt-3 text-sm leading-7 text-foreground">
+                {content.attachmentsPanelBody}
               </p>
             </div>
-            <Button asChild className="mt-6 w-full sm:w-auto">
-              <Link href={SITE_WHATSAPP_LINK} target="_blank" rel="noreferrer">
-                <Sparkles className="h-4 w-4" />
-                {content.whatsappCta}
-              </Link>
-            </Button>
           </article>
 
           <article className="surface-card p-6 sm:p-7">

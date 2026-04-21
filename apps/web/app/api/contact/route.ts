@@ -1,10 +1,19 @@
+import { checkRequestRateLimit } from "@/lib/server/request-rate-limit";
 import { apiError, apiSuccess } from "@/lib/server/api";
+import {
+  ContactAttachmentValidationError,
+  extractContactAttachmentFiles,
+  readValidatedContactAttachments,
+} from "@/lib/server/contact-attachments";
 import {
   hasContactMailConfiguration,
   sendPlatformContactEmail,
 } from "@/lib/server/contact-mail";
 
 export const runtime = "nodejs";
+
+const CONTACT_RATE_LIMIT_MAX_REQUESTS = 5;
+const CONTACT_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
 type ContactRouteBody = {
   locale?: unknown;
@@ -14,6 +23,17 @@ type ContactRouteBody = {
   subject?: unknown;
   message?: unknown;
   website?: unknown;
+};
+
+type ParsedContactRequest = {
+  locale: "en" | "ar";
+  purpose: "general" | "issue" | "suggestion";
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  website: string;
+  attachmentFiles: File[];
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,25 +55,108 @@ function normalizeMessage(value: unknown) {
     .trim();
 }
 
-export async function POST(request: Request) {
-  let body: ContactRouteBody;
+function readFormValue(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" ? value : "";
+}
 
-  try {
-    body = (await request.json()) as ContactRouteBody;
-  } catch {
-    return apiError("INVALID_JSON", "Request body must be valid JSON.", 400);
+function classifyContactBodyParseFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/too large|entity too large|payload too large|body exceeded/i.test(message)) {
+    return {
+      code: "CONTACT_REQUEST_TOO_LARGE",
+      message:
+        "The contact form payload exceeded the server body limit before it could be processed.",
+      status: 413,
+    } as const;
   }
 
-  const locale = body.locale === "ar" ? "ar" : "en";
+  return {
+    code: "CONTACT_FORM_INVALID",
+    message: "The contact form payload could not be processed.",
+    status: 400,
+  } as const;
+}
+
+async function parseContactRequest(request: Request): Promise<ParsedContactRequest> {
+  const contentType = request.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    let body: ContactRouteBody;
+
+    try {
+      body = (await request.json()) as ContactRouteBody;
+    } catch {
+      throw apiError("INVALID_JSON", "Request body must be valid JSON.", 400);
+    }
+
+    return {
+      locale: body.locale === "ar" ? "ar" : "en",
+      purpose:
+        body.purpose === "issue" || body.purpose === "suggestion"
+          ? body.purpose
+          : "general",
+      name: normalizeSingleLine(body.name),
+      email: normalizeSingleLine(body.email).toLowerCase(),
+      subject: normalizeSingleLine(body.subject),
+      message: normalizeMessage(body.message),
+      website: normalizeSingleLine(body.website),
+      attachmentFiles: [] as File[],
+    };
+  }
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch (error) {
+    const classified = classifyContactBodyParseFailure(error);
+    throw apiError(classified.code, classified.message, classified.status);
+  }
+
+  const locale = readFormValue(formData, "locale") === "ar" ? "ar" : "en";
+  const rawPurpose = readFormValue(formData, "purpose");
   const purpose =
-    body.purpose === "issue" || body.purpose === "suggestion"
-      ? body.purpose
-      : "general";
-  const name = normalizeSingleLine(body.name);
-  const email = normalizeSingleLine(body.email).toLowerCase();
-  const subject = normalizeSingleLine(body.subject);
-  const message = normalizeMessage(body.message);
-  const website = normalizeSingleLine(body.website);
+    rawPurpose === "issue" || rawPurpose === "suggestion" ? rawPurpose : "general";
+
+  return {
+    locale,
+    purpose,
+    name: normalizeSingleLine(readFormValue(formData, "name")),
+    email: normalizeSingleLine(readFormValue(formData, "email")).toLowerCase(),
+    subject: normalizeSingleLine(readFormValue(formData, "subject")),
+    message: normalizeMessage(readFormValue(formData, "message")),
+    website: normalizeSingleLine(readFormValue(formData, "website")),
+    attachmentFiles: extractContactAttachmentFiles(formData),
+  };
+}
+
+export async function POST(request: Request) {
+  let parsedRequest: ParsedContactRequest;
+
+  try {
+    parsedRequest = await parseContactRequest(request);
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    if (error instanceof ContactAttachmentValidationError) {
+      return apiError(error.code, error.message, error.status, {
+        attachments: error.message,
+      });
+    }
+
+    throw error;
+  }
+
+  const locale = parsedRequest.locale;
+  const purpose = parsedRequest.purpose;
+  const name = parsedRequest.name;
+  const email = parsedRequest.email;
+  const subject = parsedRequest.subject;
+  const message = parsedRequest.message;
+  const website = parsedRequest.website;
 
   if (name.length < 2) {
     return apiError("NAME_REQUIRED", "A contact name is required.", 400);
@@ -103,6 +206,38 @@ export async function POST(request: Request) {
     );
   }
 
+  // Public contact submissions remain unauthenticated, so the route itself must add a
+  // small server-side pacing guard. Keep this after the silent honeypot but before the
+  // mail relay so attachment-enabled spam cannot hammer SMTP delivery unchecked.
+  const rateLimit = checkRequestRateLimit({
+    request,
+    scope: "public-contact",
+    maxRequests: CONTACT_RATE_LIMIT_MAX_REQUESTS,
+    windowMs: CONTACT_RATE_LIMIT_WINDOW_MS,
+  });
+  if (!rateLimit.allowed) {
+    const response = apiError(
+      "CONTACT_RATE_LIMITED",
+      "Too many contact submissions were sent from this client. Please try again shortly.",
+      429,
+    );
+    response.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));
+    return response;
+  }
+
+  let attachments;
+  try {
+    attachments = await readValidatedContactAttachments(parsedRequest.attachmentFiles);
+  } catch (error) {
+    if (error instanceof ContactAttachmentValidationError) {
+      return apiError(error.code, error.message, error.status, {
+        attachments: error.message,
+      });
+    }
+
+    throw error;
+  }
+
   try {
     // This route is intentionally tiny and server-only.
     // It exists so the public Contact page can submit messages without exposing the private destination email or provider credentials in the browser.
@@ -113,6 +248,7 @@ export async function POST(request: Request) {
       purpose,
       subject,
       message,
+      attachments,
     });
 
     return apiSuccess(
