@@ -88,12 +88,12 @@ export default async function LoginPage() {
 
       {/* Login Stage Container */}
       {/* Keep a dedicated top offset so absolute controls stay independent from the centered title/panel stack. */}
-      <div className="z-10 flex w-full max-w-lg min-h-[calc(100vh-2rem)] flex-col px-4 pb-6 pt-20 sm:min-h-[calc(100vh-3rem)] sm:px-6 sm:pb-8 sm:pt-24 md:pt-10">
+      <div className="z-10 flex w-full max-w-lg min-h-[calc(100vh-2rem)] flex-col px-4 pb-6 pt-16 sm:min-h-[calc(100vh-3rem)] sm:px-6 sm:pb-8 sm:pt-20 md:pt-10">
         {/* Keep title and primary auth panel centered while reserving a stable footer rail for the signature line. */}
         <div className="flex flex-1 flex-col justify-center">
-          <div className="mb-10 text-center">
+          <div className="mb-7 text-center sm:mb-8">
             {/* Engraved style Bismillah */}
-            <h2 dir="rtl" className="mb-6 font-[family-name:var(--font-amiri)] text-xl text-foreground/80 font-bold tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)] opacity-90 transition-all duration-300">
+            <h2 dir="rtl" className="mb-4 font-[family-name:var(--font-amiri)] text-xl text-foreground/80 font-bold tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)] opacity-90 transition-all duration-300 sm:mb-5">
               بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
             </h2>
             <div className="inline-flex flex-col items-center justify-center">
@@ -106,27 +106,30 @@ export default async function LoginPage() {
             </div>
           </div>
 
-          <div className="animate-in fade-in zoom-in-95 fill-mode-both duration-700 ease-out">
+          <div className="relative animate-in fade-in zoom-in-95 fill-mode-both duration-700 ease-out">
             <LoginPanel
               messages={uiContext.messages}
               locale={uiContext.locale}
               supabaseAuthReady={runtimeFlags.supabaseAuth}
             />
+
+            {/* Keep this branded attribution attached to the login card edge so it is noticeable on first view. */}
+            <div className="pointer-events-none absolute left-1/2 top-full z-10 w-fit max-w-[calc(100%-1rem)] -translate-x-1/2 -translate-y-[35%] rounded-full border border-amber-300/35 bg-background-elevated/78 px-4 py-2 text-center shadow-[0_10px_26px_rgba(15,23,42,0.18)] backdrop-blur-[2px] sm:px-5 [@media(max-height:820px)]:top-0 [@media(max-height:820px)]:-translate-y-[125%]">
+              <p
+                dir="rtl"
+                className="font-[family-name:var(--font-amiri)] text-[0.88rem] font-semibold leading-relaxed text-foreground/85 drop-shadow-sm sm:text-[0.92rem]"
+              >
+                من تصميم وتطوير ابن عبدالله 2026
+              </p>
+            </div>
           </div>
         </div>
 
         {/* Copyright Footer */}
         {/* Keep this footer in-flow (not fixed) so short screens can still scroll without clipping text. */}
-        <div className="mt-6 border-t border-border pt-4 text-center sm:mt-8 sm:pt-5">
+        <div className="mt-5 border-t border-border pt-4 text-center sm:mt-6 sm:pt-4">
           <p className="text-xs font-medium text-foreground-muted/70 drop-shadow-sm">
             © {currentYear} Zootopia Club. All rights reserved.
-          </p>
-          {/* Keep this subtle designer credit scoped to the regular login page so admin login stays strictly operational. */}
-          <p
-            dir="rtl"
-            className="public-login-signature mx-auto mt-2 max-w-[20rem] px-2 font-[family-name:var(--font-amiri)] text-[0.8rem] leading-relaxed text-foreground-muted/75 drop-shadow-sm"
-          >
-            من تصميم ابن عبدالله يوسف
           </p>
         </div>
       </div>

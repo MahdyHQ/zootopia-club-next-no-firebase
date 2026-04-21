@@ -7220,3 +7220,38 @@ Change Log
     - `apps/web/lib/server/verification-resend-governance.ts`
     - `apps/web/messages/en.json`
     - `apps/web/messages/ar.json`
+
+- 2026-04-21 01:12:00 | Public login attribution visibility refinement (UI-only, auth-safe)
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` fully before implementation.
+    - ran an Explore subagent read-only mapping for `/login` attribution ownership and visibility root cause before editing.
+    - traced current login composition directly in:
+      - `apps/web/app/(public)/login/page.tsx`
+      - `apps/web/components/auth/login-panel.tsx`
+      - `apps/web/components/auth/auth-top-controls.tsx`
+  - Root cause addressed:
+    - attribution text was hard to notice because it lived in the bottom in-flow footer under the login card and used very subtle sizing/contrast (`0.8rem` + muted foreground), which made it easy to miss in normal viewport usage and short-screen scroll contexts.
+  - What changed (surgical):
+    - `apps/web/app/(public)/login/page.tsx`
+      - moved attribution out of the low-visibility footer rail and placed it directly under the login card inside the centered login stack.
+      - updated text from:
+        - `من تصميم ابن عبدالله يوسف`
+        to:
+        - `من تصميم وتطوير ابن عبدالله 2026`
+      - styled it as a compact premium glass-like rounded badge with centered alignment and stronger readability while keeping it subtle.
+      - kept copyright footer intact and removed only the old footer attribution line.
+  - Responsive/overlap behavior after change:
+    - badge remains in normal document flow below the login card, so it does not overlap the form, password field, buttons, or admin entry area.
+    - centered placement is deterministic via `mx-auto` + `w-fit` + bounded max width.
+    - short screens still scroll cleanly; attribution is promoted near the card instead of being buried in the footer.
+  - What was preserved intentionally:
+    - no auth/session/redirect/backend logic changes.
+    - no changes to `/admin/login` composition.
+    - no dependency/config/env changes.
+  - Verification in this pass:
+    - `shell: web-lint-post-polish` passed (`npm run lint --workspace @zootopia/web`).
+    - `shell: web-typecheck-post-polish` passed (`npm run typecheck --workspace @zootopia/web`).
+    - `shell: web-build-post-polish` passed (`npm run build --workspace @zootopia/web`).
+  - Files changed in this pass:
+    - `apps/web/app/(public)/login/page.tsx`
+    - `zootopia-club-next-ledger.txt`

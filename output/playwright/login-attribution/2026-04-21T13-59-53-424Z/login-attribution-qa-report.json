@@ -1,0 +1,117 @@
+{
+  "baseUrl": "http://127.0.0.1:3025",
+  "route": "/login",
+  "generatedAt": "2026-04-21T14:00:07.348Z",
+  "results": [
+    {
+      "theme": "light",
+      "viewport": "small-mobile",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": false,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "light-small-mobile.png"
+    },
+    {
+      "theme": "light",
+      "viewport": "mobile",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": false,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "light-mobile.png"
+    },
+    {
+      "theme": "light",
+      "viewport": "tablet",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": true,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "light-tablet.png"
+    },
+    {
+      "theme": "light",
+      "viewport": "laptop",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": false,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "light-laptop.png"
+    },
+    {
+      "theme": "light",
+      "viewport": "desktop",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": true,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "light-desktop.png"
+    },
+    {
+      "theme": "dark",
+      "viewport": "small-mobile",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": false,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "dark-small-mobile.png"
+    },
+    {
+      "theme": "dark",
+      "viewport": "mobile",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": false,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "dark-mobile.png"
+    },
+    {
+      "theme": "dark",
+      "viewport": "tablet",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": true,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "dark-tablet.png"
+    },
+    {
+      "theme": "dark",
+      "viewport": "laptop",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": false,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "dark-laptop.png"
+    },
+    {
+      "theme": "dark",
+      "viewport": "desktop",
+      "route": "http://127.0.0.1:3025/login",
+      "badgeVisible": true,
+      "centered": true,
+      "inViewport": true,
+      "overlapsForm": false,
+      "overlapsAdmin": false,
+      "screenshot": "dark-desktop.png"
+    }
+  ]
+}
