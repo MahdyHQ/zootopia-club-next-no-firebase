@@ -11,7 +11,7 @@ Current Truth Snapshot
 - `apps/api` exists as a future extraction boundary only and does not serve production traffic.
 - The repo uses npm workspaces, not pnpm workspaces or Turborepo.
 - `packages/ui` does not exist in the current repo even though the guide’s target structure leaves room for it.
-- Root `firebase.json` and `.firebaserc` are removed from the active runtime contract; deployment/runtime config is currently defined by `apps/web/apphosting.yaml` (App Hosting) and `vercel.json` (Vercel target).
+- Root `firebase.json`, `.firebaserc`, and root `vercel.json` are not active in the current repo; deployment/runtime config currently lives in `apps/web/apphosting.yaml`, with root npm scripts providing local/build command entrypoints.
 - Target Supabase Postgres schema now lives in `supabase/migrations/`, and the active repository path persists to Supabase-backed storage/contracts with server authority.
 - `apps/web/app/api/**/route.ts` is the only live backend surface today; there is no separate active root `server.ts` or root `src/*` application tree.
 - The actual architecture guide lives at `Guide-Files/Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md`; the repo-root copy referenced in some prompts and older notes is not present.
@@ -22,6 +22,9 @@ Current Truth Snapshot
 - The current font/runtime presentation stack uses Plus Jakarta Sans, Alexandria, Amiri, and JetBrains Mono through `apps/web/app/layout.tsx`; older IBM Plex notes remain historical change-log context only.
 - Browser-side auth uses Supabase public config while server-side session, auth, and persistence authority stays in same-origin App Router Route Handlers.
 - Same-origin App Router Route Handlers plus Supabase server/admin adapters are the real server-authoritative data path.
+- Post-login/post-admin-login handoff now comes from `GET /api/auth/me`, which returns the live Auth.js/Supabase-backed session plus a server-authored `redirectTo` resolved by `apps/web/lib/return-to.ts`.
+- The canonical post-auth env keys are `NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT` and `NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT`; values are sanitized to internal allowlisted routes only, and missing/invalid/out-of-scope values fall back to `/`.
+- `apps/web/proxy.ts` protects unauthenticated owner/admin surfaces and coarse admin boundaries, but authenticated public auth-entry pages now rely on their Server Component guards for live session revalidation so stale JWT claims cannot bounce users away from `/login`, `/confirm-email`, or `/admin/login`.
 - `/upload` is the only tool page that renders the full `apps/web/components/upload/upload-workspace.tsx` document-intake surface.
 - `/upload` now captures a stable submitted form element reference before async upload awaits so post-success cleanup cannot throw `Cannot read properties of null (reading 'reset')` after a real durable save.
 - `/assessment` and `/infographic` now consume shared document continuity through page-specific selectors plus a compact shared document handoff card, not by embedding the full upload UI.
@@ -396,32 +399,32 @@ Backend Runtime And Service Ownership
 
 Auth And Session Architecture
 - Session model
-  - One secure httpOnly session cookie: `zc_session`
+  - Auth.js uses `strategy: "jwt"` in `apps/web/auth.ts`; the signed HTTP-only Auth.js session cookie is the live browser trust boundary.
   - Preference cookies: `zc_theme`, `zc_locale`
-  - Cookie names are defined in `packages/shared-config/src/env.ts`
+  - `ZOOTOPIA_SESSION_TTL_SECONDS` controls the Auth.js session max age through `apps/web/lib/server/session-config.ts`.
 - User login flow
   - Public entry point: `/login`
-  - Firebase Web SDK Google sign-in happens client-side
-  - Client auth persistence is intentionally in-memory only during bootstrap
-  - `POST /api/auth/bootstrap` verifies the Google ID token server-side, creates the session cookie, mirrors/upserts the user document, and returns the correct redirect target
-  - Client signs out its Firebase Web state after bootstrap so the session cookie remains the authoritative long-lived session
+  - Supabase browser password auth obtains a provider access token client-side, then Auth.js `user-credentials` verifies that token server-side before issuing the session.
+  - `GET /api/auth/me` is the current post-login handoff surface and returns the server-authored redirect target after Auth.js can read the new cookie.
+  - `POST /api/auth/bootstrap` is a retired compatibility stub and is not the live login path.
 - Admin login flow
   - Public entry point: `/admin/login`
-  - Separate UI and separate bootstrap path
+  - Separate UI and separate Auth.js credentials provider: `admin-credentials`
   - Admin identifier resolution happens server-side first
-  - Real credential step is Firebase Email/Password
-  - `POST /api/auth/admin/bootstrap` verifies recent sign-in, provider `password`, the additional server-only `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` gate, allowlisted email, and `admin: true` claim before issuing the same session cookie type
+  - Real credential step is Supabase password auth plus the additional server-only `ZOOTOPIA_ADMIN_LOGIN_PASSWORD` gate.
+  - `POST /api/auth/admin/bootstrap` is a retired compatibility stub and is not the live admin login path.
 - Route protection
-  - `apps/web/proxy.ts` only checks cookie presence and redirects unauthenticated requests optimistically
+  - `apps/web/proxy.ts` handles coarse unauthenticated redirects and non-admin access to admin routes.
+  - Auth-entry pages (`/login`, `/confirm-email`, `/admin/login`) intentionally revalidate live sessions in Server Components instead of being redirected by proxy JWT claims.
   - Real authorization stays in server code through:
     - `getSessionSnapshot()`
     - `requireAuthenticatedUser()`
     - `requireCompletedUser()`
     - `requireAdminUser()`
 - Session user source of truth
-  - `apps/web/lib/server/session.ts` verifies the session cookie through Firebase Admin Auth
-  - The decoded token is combined with the Firestore user record through `upsertUserFromAuth()`
-  - Active/suspended state comes from the Firestore mirror
+  - `apps/web/lib/server/session.ts` calls Auth.js `auth()`, extracts the session uid, and reloads live user truth through `getUserByUid(uid)`.
+  - `getUserByUid(uid)` reads Supabase Auth/Admin metadata; profile/role/status writes persist through `persistAuthCriticalUserClaims(...)`.
+  - `public.user_profiles` still exists as schema debt, but it is not the runtime user truth in the traced repository path.
 
 Admin Login Architecture
 - Only these emails may hold admin authority:
@@ -433,14 +436,14 @@ Admin Login Architecture
   - `alahlyeagle`
 - Admin authority rule
   - allowlisted email
-  - plus Firebase custom claim `admin === true`
-- Firestore `role` and `status` remain mirrored for UI/admin management, but they are not sufficient by themselves for privileged access
+  - plus Supabase Auth app/custom claim semantics for admin role markers
+- Supabase Auth app metadata `role` and `status` are the live user/admin management truth; a client-side role value is never sufficient by itself for privileged access
 - Key files
-  - `apps/web/lib/server/admin-auth.ts`
+  - `apps/web/auth.ts`
+  - `apps/web/lib/server/session.ts`
+  - `apps/web/lib/server/repository.ts`
   - `apps/web/app/api/auth/admin/resolve-identifier/route.ts`
-  - `apps/web/app/api/auth/admin/bootstrap/route.ts`
-  - `scripts/firebase/set-admin-claims.mjs`
-  - `scripts/firebase/set-admin-passwords.mjs`
+  - `apps/web/components/auth/admin-login-panel.tsx`
 
 Mandatory Profile Completion Architecture
 - Applies to authenticated non-admin users only
@@ -470,11 +473,11 @@ Mandatory Profile Completion Architecture
     - normalized length 2 through 80 characters
     - Arabic/English letters with spaces, apostrophes, periods, or hyphens only
 - Persistence model
-  - stored on `users/{uid}`
+  - stored in Supabase Auth app/custom metadata through server repository helpers
   - server recomputes `profileCompleted` from stored fields instead of trusting client input
   - phone persistence is server-authoritative through self-only profile updates
 - Enforcement points
-  - bootstrap redirect shaping in `POST /api/auth/bootstrap`
+  - post-login handoff shaping in `GET /api/auth/me`
   - session helper checks in `apps/web/lib/server/session.ts`
   - completion-only protected pages under `apps/web/app/(protected)/(completed)`
   - protected user APIs return `PROFILE_INCOMPLETE` if the user is still gated
@@ -7078,3 +7081,142 @@ Change Log
     - `apps/web/messages/en.json`
     - `apps/web/messages/ar.json`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-21 00:02:34 | Confirm-email lifecycle state-machine fix (signup auto-send governance seeding + callback redirect hardening)
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` completely first and treated it as historical context only.
+    - traced live code first across signup, confirm-email, resend governance, Auth.js/session guards, profile completion, env-driven redirect helpers, and owner-scope route/session helpers before editing.
+    - verified Supabase lifecycle behavior against current official docs for `signUp()`, resend, and callback verification/token-hash flows before changing code.
+  - Canonical auth truth after the live re-trace:
+    - Supabase `auth.signUp(...)` still auto-sends the initial confirmation email when the created account requires confirmation.
+    - canonical resend-governance storage remains `public.email_verification_resend_governance`; no schema or migration changes were required in this pass.
+    - Auth.js remains the trust boundary for protected sessions, and post-login/post-completion redirect ownership remains server-authored through `getAuthenticatedUserRedirectPath(...)`.
+  - Exact root problems proven in code before this fix:
+    1. `apps/web/app/api/auth/signup/route.ts` already called `markVerificationResendProviderAccepted({ email })`, but `apps/web/lib/server/verification-resend-governance.ts` only ran an `UPDATE`. Fresh signup accounts usually had no governance row yet, so that write was a no-op and the first confirm-email visit could still start on the false `Send email` branch.
+    2. signup was not reserving resend governance for the initial provider auto-send, so accepted-send truth, cooldown, and attempt-window state were not being seeded from the real first email that Supabase had already accepted.
+    3. `apps/web/components/auth/confirm-email-panel.tsx` still treated `supabase.auth.getSession()` / `getUser()` hydration as a hard requirement after callback verification. When Supabase had already confirmed the account but the helper-session refresh lagged, post-confirm redirect to login could fail even though provider-side confirmation had succeeded.
+    4. confirm-email idle copy still described a resend-first action instead of the true no-send-yet lane, and the signup handoff message under-described the fact that the confirmation email had already been sent automatically.
+  - Changes shipped in this pass:
+    - `apps/web/app/api/auth/signup/route.ts`
+      - successful confirmation-required signups now best-effort call `reserveVerificationResendAttempt({ request, email })` before marking provider acceptance.
+      - this seeds the real initial cooldown/attempt state from the first provider-accepted email instead of leaving confirm-email to infer that history locally.
+    - `apps/web/lib/server/verification-resend-governance.ts`
+      - `markVerificationResendProviderAccepted(...)` now upserts the account-scope governance row when it does not exist yet, instead of silently no-oping on fresh signups.
+      - conflict updates preserve existing counters/windows and only stamp durable provider-accepted send truth.
+    - `apps/web/components/auth/confirm-email-panel.tsx`
+      - callback finalization now trusts the confirmed user returned by Supabase callback helpers as the primary provider truth.
+      - browser helper `getSession()` / `getUser()` refresh stays best-effort only when the callback payload alone cannot yet prove confirmation.
+      - successful confirmation now derives the login redirect email from authoritative provider user data when available, then deterministically returns to the login lane.
+    - `apps/web/components/auth/login-panel.tsx`
+      - signup-confirmation handoff copy now explicitly says that the confirmation email was already sent.
+      - signup success status title now uses the real confirmation-send lifecycle title instead of the generic `Create account` tab label.
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+      - confirm-email idle copy now accurately describes the true first-send lane instead of instructing users to resend before any accepted send exists.
+  - Confirm-email lifecycle truth after this fix:
+    - no accepted send yet: CTA is `Send email` / `إرسال البريد الإلكتروني`.
+    - signup auto-send accepted or any later provider-accepted send exists: CTA is `Resend email` / `إعادة إرسال البريد الإلكتروني`.
+    - cooldown active: CTA stays disabled and countdown remains anchored to server governance truth.
+    - already confirmed: confirmation status remains success-oriented and users are returned to login instead of being invited to keep sending mail.
+    - invalid/expired callback: existing explicit invalid/expired link mappings remain preserved.
+    - confirmation success: the flow cleans up the helper Supabase session and returns to login with `confirmed=1` and the signup onboarding marker when applicable.
+  - First-login, settings completion, and env redirect truth after this pass:
+    - no redirect contract redesign was made.
+    - verified live code still routes incomplete normal users to `/settings` through server-owned Auth.js/session/profile-completion guards.
+    - verified profile completion still finishes through `/api/users/me/profile`, which returns `requestedReturnTo || getAuthenticatedUserRedirectPath(updatedUser)`.
+    - verified final redirects still respect:
+      - `NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT`
+      - `NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT`
+      - with `/` remaining only as the safe fallback when env input is missing or invalid.
+  - Owner-scope, session boundary, and unlock truth preserved:
+    - no client-side trust was introduced.
+    - self-profile writes remain bound to `getAuthenticatedSessionUser()` and repository-owned persistence.
+    - `profileCompleted` remains the server-persisted source of truth for unlocking non-admin protected routes and related user-only feature surfaces.
+    - admin/user separation and owner-scoped isolation were rechecked and left unchanged.
+  - What was intentionally preserved:
+    - Auth.js session issuance and server guard architecture.
+    - backend authority for redirect resolution, profile completion, and protected-route admission.
+    - Supabase as provider truth for email-confirmation state.
+    - existing resend governance table and rate-limit model.
+    - no dependency changes and no migrations.
+  - Verification in this pass:
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` passed.
+    - `npm run build:vercel` passed.
+    - build output still warns that `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is unset; this is a pre-existing environment/configuration warning and was not changed in this pass.
+    - this entry supersedes earlier same-day ledger notes that still described the signup governance mark as sufficient on its own or reported a transient build failure state.
+  - Files changed in this pass:
+    - `apps/web/app/api/auth/signup/route.ts`
+    - `apps/web/lib/server/verification-resend-governance.ts`
+    - `apps/web/components/auth/confirm-email-panel.tsx`
+    - `apps/web/components/auth/login-panel.tsx`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `zootopia-club-next-ledger.txt`
+
+- 2026-04-21 00:39:01 +00:00 | Post-confirm/login/profile redirect authority hardening + owner-scope audit refresh
+  - Mandatory-first-step compliance:
+    - reread `zootopia-club-next-ledger.txt` before editing and treated it as historical context only.
+    - used eight read-only subagent exploration lanes for ledger/auth redirect history, confirm-email/callback flow, login/signup/session/bootstrap flow, settings/profile-completion flow, env/config contract, owner-scope artifacts/storage, repository/route ownership, and final verification tracing.
+    - compared subagent findings against the live code before editing; official Next.js/Supabase docs were checked for redirect/event-handler/env and confirmation callback behavior.
+  - Root redirect gap proven in live code:
+    - `apps/web/app/(protected)/settings/page.tsx` converted a missing explicit `returnTo` into `APP_ROUTES.settings`.
+    - `apps/web/components/settings/profile-settings-form.tsx` then sent `?returnTo=/settings` to `PATCH /api/users/me/profile`.
+    - `apps/web/app/api/users/me/profile/route.ts` correctly prioritizes explicit sanitized `returnTo` before `getAuthenticatedUserRedirectPath(updatedUser)`, so the fabricated value forced first-time completion back to `/settings` and bypassed the canonical env/default redirect resolver.
+  - Redirect contract after this fix:
+    - Direct `/settings` visits now pass `returnTo={null}` into `ProfileSettingsForm`; only an explicit sanitized query value is forwarded.
+    - Profile completion still uses `requestedReturnTo || getAuthenticatedUserRedirectPath(updatedUser)`, but missing `returnTo` now falls through to the canonical resolver instead of self-looping on settings.
+    - `GET /api/auth/me` now returns `redirectTo` from `getAuthenticatedUserRedirectPath(session.user)`, making normal and admin login handoff server-authored after Auth.js observes the session cookie.
+    - `apps/web/components/auth/login-panel.tsx` and `apps/web/components/auth/admin-login-panel.tsx` now navigate to that server-returned `redirectTo` instead of importing the resolver into client components.
+    - `apps/web/lib/return-to.ts` now allowlists `/credits` and `/lecture-summary` for user env defaults and explicit attempted-return preservation.
+    - `apps/web/proxy.ts` now covers `/credits/:path*` and `/lecture-summary/:path*` as user-protected route roots.
+    - `apps/web/proxy.ts` no longer redirects authenticated users away from `/login`, `/confirm-email`, or `/admin/login` based only on proxy-visible JWT claims; those public auth pages already revalidate live session/user truth server-side and redirect from the Server Component if valid.
+  - Confirm-email redirect hardening added in this pass:
+    - `apps/web/components/auth/confirm-email-panel.tsx` now adds a final provider-state fallback through the existing same-origin resend-governance GET path when callback/helper user metadata cannot yet prove confirmation.
+    - The fallback is scoped to the provider email returned by the Supabase callback/user object and is used only after a successful confirmation callback exchange path, preserving Auth.js as the trust boundary for protected routes.
+    - Confirm-email still cleans up the helper Supabase session and redirects to the correct login lane with `confirmed=1`; it does not create a protected app session directly.
+  - Env/config truth:
+    - Existing canonical keys remain:
+      - `NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT`
+      - `NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT`
+    - `.env.example` already contained both keys with `/` and `/admin` defaults.
+    - `apps/web/apphosting.yaml` now declares both keys with BUILD and RUNTIME availability because the server resolver reads them dynamically and invalid/missing/out-of-scope values must fail closed to `/`.
+    - No new redirect env key was introduced.
+  - Safe fallback and open-redirect posture:
+    - `/` remains the safe fallback for missing, empty, external, protocol-relative, login/admin-login, or disallowed configured redirect values.
+    - User return/default routes are restricted to owner-facing roots; admin defaults are restricted to `/`, `/admin`, and `/admin/users`.
+    - User `returnTo` still rejects admin routes.
+  - Owner-scope audit result after redirect:
+    - No live cross-user route bypass was found for uploads, documents, assessment generations/results/exports, infographic readback, history, settings profile writes, or admin-only routes.
+    - Normal user artifact reads still bind to `getAuthenticatedSessionUser()` / `getCompletedSessionUser()` and owner-only helpers such as `getDocumentByIdForOwner(...)`, `getAssessmentGenerationForOwner(...)`, and `getInfographicGenerationForOwner(...)`.
+    - Storage paths remain under canonical user-bound roots such as `users/{uid}/documents`, `users/{uid}/assessment-results`, `users/{uid}/assessment-exports`, and upload/temp namespaces enforced by server helpers and Supabase storage policies.
+    - Admin cross-owner routes still require `getAdminSessionUser()` / `requireAdminUser()` before target-user or cleanup operations.
+  - Schema/canonical data truth:
+    - No migration was required.
+    - Latest migration remains `20260420093000_tool_accounting_generation_aggregation_backfill.sql`.
+    - Core artifact live truth remains `public.zc_entities` plus owner-scoped Supabase Storage paths through the Postgres adapter; structured parity tables such as `documents`, `assessment_generations`, `infographic_generations`, and `user_profiles` remain migration/cutover debt unless a future task completes that cutover.
+    - User/profile runtime truth remains Supabase Auth/app/custom metadata through repository helpers, not `public.user_profiles`.
+  - Verification run:
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` passed.
+    - `npm run build:vercel` passed; live script is a web workspace build alias, not a Vercel CLI build.
+    - `npm run supabase:check` passed and validated 23 migration files.
+    - In-memory redirect resolver probe passed for incomplete user `/settings`, complete user fallback `/`, admin fallback `/`, safe `/credits` and `/lecture-summary` returns, user-admin route blocking, accepted user/admin env values, and protocol-relative external blocking.
+    - Build output still warns that `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is unset; this is a pre-existing environment warning and not a redirect regression.
+  - Files changed in this redirect hardening pass:
+    - `apps/web/app/(protected)/settings/page.tsx`
+    - `apps/web/app/api/auth/me/route.ts`
+    - `apps/web/apphosting.yaml`
+    - `apps/web/components/auth/admin-login-panel.tsx`
+    - `apps/web/components/auth/confirm-email-panel.tsx`
+    - `apps/web/components/auth/login-panel.tsx`
+    - `apps/web/lib/return-to.ts`
+    - `apps/web/proxy.ts`
+    - `zootopia-club-next-ledger.txt`
+  - Existing same-day dirty worktree changes preserved, not reverted:
+    - `apps/web/app/api/auth/signup/route.ts`
+    - `apps/web/lib/server/verification-resend-governance.ts`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`

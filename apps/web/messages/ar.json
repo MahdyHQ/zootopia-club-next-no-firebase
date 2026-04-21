@@ -157,7 +157,7 @@
   "confirmEmailPurposeAdminTitle": "لماذا يحتاج حساب المشرف إلى التأكيد أيضاً",
   "confirmEmailPurposeAdminBody": "التحقق من القائمة المسموح بها وادعاء المشرف منفصل عن تأكيد الهوية. يجب تأكيد البريد أولاً ثم العودة إلى دخول المشرف لإتمام فحوصات الصلاحية وكلمة مرور البوابة.",
   "confirmEmailIdleTitle": "تحقق من بريد الحساب",
-  "confirmEmailIdleBody": "أدخل البريد نفسه، ثم أعد إرسال رسالة التحقق وافتح أحدث رسالة من Supabase Auth.",
+  "confirmEmailIdleBody": "أدخل بريد الحساب نفسه، ثم أرسل رسالة التحقق وافتح أحدث رسالة من Supabase Auth.",
   "confirmEmailAutoSentTitle": "تم إرسال رسالة التحقق مسبقاً",
   "confirmEmailAutoSentBody": "تم إرسال رسالة تحقق بالفعل لهذا الحساب. افحص البريد الوارد لأحدث رسالة أو أعد الإرسال عند الحاجة.",
   "confirmEmailStatusConfigTitle": "تأكيد البريد غير متاح هنا بعد",

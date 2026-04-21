@@ -1,4 +1,3 @@
-import { APP_ROUTES } from "@zootopia/shared-config";
 import { Settings2, ShieldCheck } from "lucide-react";
 
 import { LocaleToggle } from "@/components/preferences/locale-toggle";
@@ -82,6 +81,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       {/* Settings hierarchy: keep the profile workflow as the single dominant full-width hero,
           then place all informational/support cards below in a lighter secondary grid. */}
       <section>
+        {/* Settings completion only forwards an explicit, sanitized return target.
+            Direct /settings visits belong to the profile-completion scope itself, so
+            a null returnTo lets the server resolver choose the env-driven default. */}
         <ProfileSettingsForm
           messages={uiContext.messages}
           initialFullName={user.fullName ?? ""}
@@ -91,7 +93,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           initialGender={user.gender ?? ""}
           initialNationality={user.nationality ?? ""}
           locale={uiContext.locale}
-          returnTo={returnTo ?? APP_ROUTES.settings}
+          returnTo={returnTo}
           profileCompleted={user.role === "admin" || user.profileCompleted}
           isAdmin={user.role === "admin"}
         />

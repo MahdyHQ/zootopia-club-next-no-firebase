@@ -13,6 +13,8 @@ const USER_PROTECTED_MATCHERS = [
   APP_ROUTES.upload,
   APP_ROUTES.history,
   APP_ROUTES.assessment,
+  APP_ROUTES.assessmentCreditDetails,
+  APP_ROUTES.lectureSummary,
   APP_ROUTES.infographic,
   APP_ROUTES.settings,
 ];
@@ -149,21 +151,10 @@ function proxyHandler(request: NextRequest) {
     return NextResponse.redirect(new URL(APP_ROUTES.login, request.url));
   }
 
-  // Profile completion is enforced by server route ownership (`requireCompletedUser`) using
-  // persisted session-backed user data. Keeping this out of proxy prevents false redirects
-  // when JWT claims lag right after settings updates.
-
-  if (hasActiveSession && matchesRoute(pathname, USER_AUTH_ENTRY_MATCHERS)) {
-    return NextResponse.redirect(new URL(redirectDecision.path, request.url));
-  }
-
-  if (hasActiveSession && pathname === APP_ROUTES.adminLogin && role === "admin") {
-    return NextResponse.redirect(new URL(redirectDecision.path, request.url));
-  }
-
-  if (hasActiveSession && pathname === APP_ROUTES.adminLogin && role !== "admin") {
-    return NextResponse.redirect(new URL(redirectDecision.path, request.url));
-  }
+  /* Auth-entry pages intentionally own their live session revalidation in Server Components.
+     Do not proxy-redirect /login, /confirm-email, or /admin/login from JWT claims here:
+     stale/suspended cookies must reach the Auth.js-backed page guard instead of bouncing
+     users away before the backend can prove current account truth. */
 
   if (hasActiveSession && matchesRoute(pathname, ADMIN_PROTECTED_MATCHERS) && role !== "admin") {
     return NextResponse.redirect(new URL(redirectDecision.path, request.url));
@@ -192,6 +183,8 @@ export const config = {
     "/upload/:path*",
     "/history/:path*",
     "/assessment/:path*",
+    "/credits/:path*",
+    "/lecture-summary/:path*",
     "/infographic/:path*",
     "/settings/:path*",
     "/admin/:path*",

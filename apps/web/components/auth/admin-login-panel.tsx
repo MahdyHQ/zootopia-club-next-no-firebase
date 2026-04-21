@@ -24,7 +24,6 @@ import {
   logAuthDiagnosis,
   normalizeAuthFailure,
 } from "@/lib/auth-failure";
-import { resolveAuthenticatedUserRedirectPath } from "@/lib/return-to";
 
 import {
   getEphemeralSupabaseClient,
@@ -50,6 +49,19 @@ type AdminLoginPhase =
 
 const ADMIN_SESSION_BOOTSTRAP_MAX_ATTEMPTS = 40;
 const ADMIN_SESSION_BOOTSTRAP_RETRY_MS = 200;
+
+type AdminAuthMePayload = {
+  session: {
+    authenticated: boolean;
+    user: SessionUser | null;
+  };
+  redirectTo: string;
+};
+
+type AdminSessionHandoff = {
+  user: SessionUser;
+  redirectTo: string;
+};
 
 async function readApiResult<T>(response: Response, invalidCode: string) {
   try {
@@ -173,12 +185,10 @@ async function completeAdminAuthJsSignIn(input: {
       cache: "no-store",
     });
 
-    const mePayload = await readApiResult<{
-      session: {
-        authenticated: boolean;
-        user: SessionUser | null;
-      };
-    }>(meResponse, "ADMIN_BOOTSTRAP_RESPONSE_INVALID");
+    const mePayload = await readApiResult<AdminAuthMePayload>(
+      meResponse,
+      "ADMIN_BOOTSTRAP_RESPONSE_INVALID",
+    );
 
     if (meResponse.ok && mePayload.ok && mePayload.data.session.authenticated && mePayload.data.session.user) {
       if (mePayload.data.session.user.role !== "admin") {
@@ -197,7 +207,10 @@ async function completeAdminAuthJsSignIn(input: {
           failure,
         });
       }
-      return mePayload.data.session.user;
+      return {
+        user: mePayload.data.session.user,
+        redirectTo: mePayload.data.redirectTo,
+      } satisfies AdminSessionHandoff;
     }
 
     const responseErrorCode = mePayload.ok ? null : mePayload.error.code;
@@ -326,7 +339,7 @@ export function AdminLoginPanel({
       body: messages.adminLoginStatusOpeningBody,
     });
 
-    const sessionUser = await completeAdminAuthJsSignIn({
+    const session = await completeAdminAuthJsSignIn({
       idToken: input.idToken,
       adminLoginPassword: input.adminLoginPassword,
       deviceLabel: input.deviceLabel,
@@ -336,12 +349,9 @@ export function AdminLoginPanel({
       routePath: APP_ROUTES.adminLogin,
     });
 
-    /* Route admin handoff through the shared redirect resolver so env-driven admin defaults
-       stay consistent with proxy and server-side auth entrypoints. */
-    return resolveAuthenticatedUserRedirectPath({
-      role: sessionUser.role,
-      profileCompleted: sessionUser.profileCompleted,
-    }).path;
+    /* Route admin handoff through the server-authored /api/auth/me redirect contract,
+       keeping env-driven admin defaults and role checks owned by Auth.js-backed code. */
+    return session.redirectTo;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

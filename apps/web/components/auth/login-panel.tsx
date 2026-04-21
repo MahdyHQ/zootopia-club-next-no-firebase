@@ -28,7 +28,6 @@ import {
   logAuthDiagnosis,
   normalizeAuthFailure,
 } from "@/lib/auth-failure";
-import { resolveAuthenticatedUserRedirectPath } from "@/lib/return-to";
 import {
   getEphemeralSupabaseClient,
   getSupabaseClient,
@@ -102,7 +101,7 @@ function buildLocalText(locale: Locale) {
       passwordsMismatch: "كلمتا المرور غير متطابقتين.",
       passwordPolicyTitle: "كلمة المرور الجديدة لا تحقق سياسة الأمان.",
       emailVerificationRequired:
-        "تم إنشاء الحساب. راجع بريدك الإلكتروني لتأكيد الحساب ثم عد لتسجيل الدخول.",
+        "تم إنشاء الحساب. أُرسلت رسالة تأكيد إلى بريدك الإلكتروني. راجع البريد لتأكيد الحساب ثم عد لتسجيل الدخول.",
       signUpRateLimitedTitle: "إنشاء الحساب مزدحم حالياً",
       signUpRateLimitedBody:
         "ننظم طلبات إنشاء الحساب حالياً لحماية الاستقرار. انتظر قليلاً ثم حاول مرة أخرى.",
@@ -137,7 +136,7 @@ function buildLocalText(locale: Locale) {
     passwordsMismatch: "Passwords do not match.",
     passwordPolicyTitle: "New password does not meet policy requirements.",
     emailVerificationRequired:
-      "Account created. Verify your email, then return to sign in.",
+      "Account created. A confirmation email was sent. Verify your email, then return to sign in.",
     signUpRateLimitedTitle: "Account creation is busy right now",
     signUpRateLimitedBody:
       "We are pacing account-creation requests to protect platform stability. Please try again in a moment.",
@@ -211,6 +210,19 @@ type SignupPayload = {
   confirmRoute: string;
   accessToken: string | null;
   refreshToken: string | null;
+};
+
+type AuthMePayload = {
+  session: {
+    authenticated: boolean;
+    user: SessionUser | null;
+  };
+  redirectTo: string;
+};
+
+type AuthSessionHandoff = {
+  user: SessionUser;
+  redirectTo: string;
 };
 
 function parseHeaderNumber(value: string | null) {
@@ -556,15 +568,13 @@ async function completeAuthJsCredentialsSignIn(input: {
       cache: "no-store",
     });
 
-    const mePayload = await readApiResult<{
-      session: {
-        authenticated: boolean;
-        user: SessionUser | null;
-      };
-    }>(meResponse, "BOOTSTRAP_RESPONSE_INVALID");
+    const mePayload = await readApiResult<AuthMePayload>(meResponse, "BOOTSTRAP_RESPONSE_INVALID");
 
     if (meResponse.ok && mePayload.ok && mePayload.data.session.authenticated && mePayload.data.session.user) {
-      return mePayload.data.session.user;
+      return {
+        user: mePayload.data.session.user,
+        redirectTo: mePayload.data.redirectTo,
+      } satisfies AuthSessionHandoff;
     }
 
     const responseErrorCode = mePayload.ok ? null : mePayload.error.code;
@@ -911,7 +921,7 @@ export function LoginPanel({
             clientBestEffortSignInMetadataJson: input.clientBestEffortSignInMetadataJson,
             routePath: APP_ROUTES.login,
           }),
-          new Promise<SessionUser>((_, reject) => {
+          new Promise<AuthSessionHandoff>((_, reject) => {
             controller.signal.addEventListener(
               "abort",
               () => reject(new DOMException("Aborted", "AbortError")),
@@ -932,14 +942,10 @@ export function LoginPanel({
             authorize private Realtime channel subscriptions. App route/data authority remains owned
             by Auth.js server session checks, not by this browser session. */
 
-        /* Keep post-bootstrap handoff aligned with centralized role/profile redirect policy
-           so NEXT_PUBLIC_ZOOTOPIA_AUTH_* defaults remain authoritative for login completion. */
-        const redirectDecision = resolveAuthenticatedUserRedirectPath({
-          role: settled.role,
-          profileCompleted: settled.profileCompleted,
-        });
-        const redirectTo = redirectDecision.path;
-        router.replace(redirectTo);
+        /* Redirect to the server-authored handoff returned by /api/auth/me.
+           This keeps env-driven defaults and profile-completion gates owned by the
+           backend while the client only performs the navigation. */
+        router.replace(settled.redirectTo);
         router.refresh();
       } catch (nextError) {
         if (nextError instanceof DOMException && nextError.name === "AbortError") {
@@ -1081,7 +1087,7 @@ export function LoginPanel({
           setStatus({
             tone: "success",
             icon: "success",
-            title: localText.signUpTab,
+            title: messages.confirmEmailSentTitle,
             body: localText.emailVerificationRequired,
           });
           setOnboardingSignupEmail(submittedEmail);

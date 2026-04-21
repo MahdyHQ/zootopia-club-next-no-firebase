@@ -1,11 +1,16 @@
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { SessionUser } from "@zootopia/shared-types";
 
+/* User redirect allowlist covers only owner-facing app route roots.
+   Keep protected completed-user surfaces here so settings/profile completion can
+   preserve an explicit attempted destination without ever admitting admin paths. */
 const USER_RETURN_MATCHERS = [
   APP_ROUTES.home,
   APP_ROUTES.upload,
   APP_ROUTES.history,
   APP_ROUTES.assessment,
+  APP_ROUTES.assessmentCreditDetails,
+  APP_ROUTES.lectureSummary,
   APP_ROUTES.infographic,
   APP_ROUTES.settings,
 ] as const;

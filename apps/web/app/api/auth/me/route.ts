@@ -1,4 +1,5 @@
 import { apiError, apiSuccess, applyNoStore } from "@/lib/server/api";
+import { getAuthenticatedUserRedirectPath } from "@/lib/return-to";
 import { getRuntimeFlags } from "@/lib/server/runtime";
 import { getSessionSnapshot } from "@/lib/server/session";
 
@@ -19,8 +20,12 @@ export async function GET() {
     );
   }
 
+  /* This endpoint is the server-owned post-login handoff contract.
+     Keep redirect resolution here so login clients do not duplicate env/default policy
+     or depend on browser-bundled process.env behavior for protected route admission. */
   return applyNoStore(apiSuccess({
     session,
+    redirectTo: getAuthenticatedUserRedirectPath(session.user),
     runtimeFlags: getRuntimeFlags(),
   }));
 }

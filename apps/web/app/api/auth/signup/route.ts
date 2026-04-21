@@ -15,7 +15,10 @@ import {
   findSupabaseAuthUserByEmail,
   hasSupabaseAdminRuntime,
 } from "@/lib/server/supabase-admin";
-import { markVerificationResendProviderAccepted } from "@/lib/server/verification-resend-governance";
+import {
+  markVerificationResendProviderAccepted,
+  reserveVerificationResendAttempt,
+} from "@/lib/server/verification-resend-governance";
 import {
   getSupabasePublishableKey,
   getSupabaseUrl,
@@ -423,8 +426,20 @@ export async function POST(request: Request) {
 
   if (requiresEmailConfirmation) {
     /* Supabase signup already triggers the initial confirmation email send.
-       Record that provider-accepted send in governance so confirm-email CTA state
-       starts at "Resend email" instead of incorrectly showing "Send email". */
+       Seed the resend-governance window first so cooldown and button-label truth
+       start from the same accepted send that Supabase already queued for this
+       account, then stamp provider acceptance on the durable account row. */
+    await reserveVerificationResendAttempt({
+      request,
+      email,
+    }).catch((reserveError) => {
+      console.warn("[auth-signup] failed to seed initial confirmation email governance", {
+        routePath: APP_ROUTES.login,
+        email,
+        error: reserveError,
+      });
+    });
+
     await markVerificationResendProviderAccepted({ email }).catch((markError) => {
       console.warn("[auth-signup] failed to mark initial confirmation email acceptance", {
         routePath: APP_ROUTES.login,

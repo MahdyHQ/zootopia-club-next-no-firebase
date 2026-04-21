@@ -1031,14 +1031,41 @@ export async function markVerificationResendProviderAccepted(input: {
   }
 
   const accountKeyHash = buildAccountKeyHash(input.email, config);
+  const nowMs = Date.now();
+  const windowStartsAtIso = new Date(nowMs).toISOString();
+  const windowExpiresAtIso = new Date(nowMs + (config.accountWindowSeconds * 1000)).toISOString();
 
   const sql = getZootopiaSql();
+  /* Provider acceptance must remain durable even when callers could not seed the
+     row earlier. Keep existing counters/window on conflict and stamp only the
+     accepted-send truth so CTA state does not drift back to "Send email". */
   await sql`
-    UPDATE public.email_verification_resend_governance
-    SET
+    INSERT INTO public.email_verification_resend_governance (
+      key_scope,
+      key_hash,
+      window_starts_at,
+      window_expires_at,
+      attempt_count,
+      cooldown_until,
+      last_provider_accepted_at,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'account',
+      ${accountKeyHash},
+      ${windowStartsAtIso},
+      ${windowExpiresAtIso},
+      0,
+      NULL,
+      NOW(),
+      NOW(),
+      NOW()
+    )
+    ON CONFLICT (key_scope, key_hash)
+    DO UPDATE SET
       last_provider_accepted_at = NOW(),
       updated_at                = NOW()
-    WHERE key_scope = 'account' AND key_hash = ${accountKeyHash}
   `;
 }
 

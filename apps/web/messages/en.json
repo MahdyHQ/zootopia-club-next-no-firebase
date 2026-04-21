@@ -157,7 +157,7 @@
   "confirmEmailPurposeAdminTitle": "Why this admin account still needs confirmation",
   "confirmEmailPurposeAdminBody": "Allowlist and admin claim checks are separate from identity verification. This account must confirm email first, then return to admin login for allowlist, claim, and gate-password checks.",
   "confirmEmailIdleTitle": "Verify your email address",
-  "confirmEmailIdleBody": "Enter the same account email, resend verification, and open the latest email from Supabase Auth.",
+  "confirmEmailIdleBody": "Enter the same account email, send the verification email, and open the newest message from Supabase Auth.",
   "confirmEmailAutoSentTitle": "Verification email already sent",
   "confirmEmailAutoSentBody": "A verification email was already sent for this account. Check your inbox for the latest message or resend when needed.",
   "confirmEmailStatusConfigTitle": "Email confirmation isn’t available yet",

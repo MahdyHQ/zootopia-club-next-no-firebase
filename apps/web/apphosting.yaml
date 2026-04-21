@@ -42,6 +42,21 @@ env:
     availability:
       - BUILD
 
+  # Public post-auth defaults are sanitized again by apps/web/lib/return-to.ts.
+  # Expose them at build and runtime because server redirect resolution reads env dynamically,
+  # and invalid or out-of-scope values must keep falling back to "/" instead of auth pages.
+  - variable: NEXT_PUBLIC_ZOOTOPIA_AUTH_USER_DEFAULT_REDIRECT
+    value: "/"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_ZOOTOPIA_AUTH_ADMIN_DEFAULT_REDIRECT
+    value: "/admin"
+    availability:
+      - BUILD
+      - RUNTIME
+
   # Server auth runtime config.
   - variable: SUPABASE_URL
     value: "https://REPLACE_WITH_PROJECT_REF.supabase.co"

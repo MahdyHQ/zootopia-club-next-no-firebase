@@ -232,6 +232,20 @@ function isSupabaseEmailConfirmed(user: unknown) {
   return explicitConfirmation === true;
 }
 
+function resolveSupabaseUserEmail(user: unknown) {
+  if (!user || typeof user !== "object") {
+    return null;
+  }
+
+  const userRecord = user as Record<string, unknown>;
+  const email =
+    typeof userRecord.email === "string"
+      ? toOptionalString(userRecord.email)
+      : null;
+
+  return email?.toLowerCase() ?? null;
+}
+
 function readHashFinalizePayload(hash: string): ConfirmEmailFinalizePayload {
   const normalizedHash = hash.startsWith("#") ? hash.slice(1) : hash;
   const params = new URLSearchParams(normalizedHash);
@@ -953,28 +967,67 @@ export function ConfirmEmailPanel({
           payload: finalizePayload,
         });
         callbackKind = finalized.callbackKind;
+        let authoritativeConfirmedUser = finalized.user;
+        let idToken = finalized.accessToken;
 
-        const fallbackSession = await supabase.auth.getSession();
-        if (fallbackSession.error) {
-          throw fallbackSession.error;
+        /* Supabase callback helpers already represent provider-authoritative progress.
+           Refresh helper session/user best-effort only when the callback payload alone
+           still cannot prove confirmation, so a real provider success is not stranded
+           by transient browser-session hydration lag before control returns to Auth.js. */
+        if (!isSupabaseEmailConfirmed(authoritativeConfirmedUser)) {
+          const fallbackSession = await supabase.auth.getSession();
+          if (fallbackSession.error) {
+            console.warn("[auth-confirmation] failed to read helper session after callback", {
+              routePath: APP_ROUTES.confirmEmail,
+              flow: flowKind,
+              callbackKind,
+              error: fallbackSession.error,
+            });
+          } else {
+            authoritativeConfirmedUser = fallbackSession.data.session?.user ?? authoritativeConfirmedUser;
+            idToken = idToken || fallbackSession.data.session?.access_token?.trim() || null;
+          }
+
+          const confirmedUserData = idToken
+            ? await supabase.auth.getUser(idToken)
+            : await supabase.auth.getUser();
+          if (confirmedUserData.error) {
+            console.warn("[auth-confirmation] failed to refresh confirmed user after callback", {
+              routePath: APP_ROUTES.confirmEmail,
+              flow: flowKind,
+              callbackKind,
+              hasIdToken: Boolean(idToken),
+              error: confirmedUserData.error,
+            });
+          } else {
+            authoritativeConfirmedUser = confirmedUserData.data.user ?? authoritativeConfirmedUser;
+          }
         }
 
-        const idToken =
-          finalized.accessToken
-          || fallbackSession.data.session?.access_token?.trim()
-          || null;
-        const confirmedUserData = idToken
-          ? await supabase.auth.getUser(idToken)
-          : await supabase.auth.getUser();
-        if (confirmedUserData.error) {
-          throw confirmedUserData.error;
+        let providerConfirmed = isSupabaseEmailConfirmed(authoritativeConfirmedUser);
+        if (!providerConfirmed) {
+          const providerEmail = resolveSupabaseUserEmail(authoritativeConfirmedUser);
+          if (providerEmail) {
+            try {
+              const providerSnapshot = await readResendGovernanceSnapshot(providerEmail);
+              providerConfirmed = providerSnapshot.accountConfirmed;
+            } catch (providerStateError) {
+              console.warn("[auth-confirmation] failed to read server provider confirmation state", {
+                routePath: APP_ROUTES.confirmEmail,
+                flow: flowKind,
+                callbackKind,
+                providerEmail,
+                error: providerStateError,
+              });
+            }
+          }
         }
-
-        const authoritativeConfirmedUser = confirmedUserData.data.user ?? finalized.user;
 
         /* Callback token exchange alone is not sufficient for success UI.
-           Only continue when Supabase user state confirms email verification. */
-        if (!isSupabaseEmailConfirmed(authoritativeConfirmedUser)) {
+           Use callback/user metadata first, then the same server provider-state read used by
+           resend governance for this verified provider email so confirmed accounts do not
+           strand on /confirm-email when browser helper-session fields lag. */
+        if (!providerConfirmed) {
           throw createAuthFlowError(
             "AUTH_EMAIL_NOT_CONFIRMED",
             "Supabase still reports this account email as unconfirmed.",
@@ -1008,9 +1061,10 @@ export function ConfirmEmailPanel({
         });
 
         setIsFinalizing(false);
+        const confirmedEmail = resolveSupabaseUserEmail(authoritativeConfirmedUser) ?? email;
         const redirectTo = buildPostConfirmationRedirectUrl({
           returnRoute,
-          email,
+          email: confirmedEmail,
           isSignupFlow: flow === "sign_up",
         });
         router.replace(redirectTo);
