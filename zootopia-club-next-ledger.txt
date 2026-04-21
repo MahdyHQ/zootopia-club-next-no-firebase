@@ -17,6 +17,7 @@ Current Truth Snapshot
 - The actual architecture guide lives at `Guide-Files/Zootopia_Club_Next_16_2_2_Simplified_Monorepo_Guide_2026_WORKSPACE_UPDATED.md`; the repo-root copy referenced in some prompts and older notes is not present.
 - The App Hosting build path now depends on `apps/web/apphosting.yaml`, `apps/web/package-lock.json`, `apps/web/next.config.ts`, and `apps/web/scripts/normalize-standalone.mjs` as stable architecture files, not one-off deployment fixes; the standalone normalizer must keep copying `@sparticuz/chromium/bin/*` into the standalone bundle so the Pro PDF lane can launch packaged Chromium on Firebase App Hosting/Cloud Run.
 - `apps/web/next.config.ts` now also explicitly allowlists `127.0.0.1` in `allowedDevOrigins` so local Next.js dev assets such as `/_next/webpack-hmr` can be requested safely when the browser reaches the dev server through `127.0.0.1` instead of only `localhost`.
+- `apps/web/next.config.ts` now caps Next build worker parallelism at `min(4, detected CPUs)` by default, with `ZOOTOPIA_NEXT_BUILD_CPUS` as an explicit override, so page-data collection does not over-fork local/Vercel-like constrained builders.
 - The active Firebase App Hosting backend is `zootopia-club-next-backend` at `zootopia-club-next-backend--zootopia2026.us-central1.hosted.app`, and it is wired to Firebase web app `1:38079185268:web:adcd16b5e94d3d8c52ec21`; older Firebase web apps/backends still exist in the project but are not the current repo deployment target.
 - `apps/web/next.config.ts` explicitly reloads the repo-root env contract via `@next/env` (`loadEnvConfig(workspaceRoot, ...)`) so local/runtime auth and server config read the same root `.env.local` source.
 - The current font/runtime presentation stack uses Plus Jakarta Sans, Alexandria, Amiri, and JetBrains Mono through `apps/web/app/layout.tsx`; older IBM Plex notes remain historical change-log context only.
@@ -47,8 +48,10 @@ Current Truth Snapshot
 - `/upload` now keeps a visible active-document continuation card with a direct Assessment CTA and a safe owner-scoped active-file removal path through `DELETE /api/uploads?documentId=...`.
 - `/api/uploads/[id]` now provides an owner-validated server download path for uploaded source files so History and other protected surfaces can retrieve the original binary without exposing Storage directly.
 - Infographic is now intentionally UI-locked for non-admin users across protected nav and tool entry cards; admins retain the real Infographic studio, while non-admin users see a polished coming-soon surface on `/infographic`.
-- Public informational routes now exist at `/about`, `/contact`, `/donation`, and `/hall-of-honor`, and they share a dedicated public-site layout instead of borrowing the protected workspace shell or the login-page composition.
+- Public informational routes now exist at `/about`, `/contact`, `/donation`, `/hall-of-honor`, and `/reviews`, and they share a dedicated public-site layout instead of borrowing the protected workspace shell or the login-page composition.
 - The new `/hall-of-honor` tribute page is intentionally hierarchical by design (Elmahdy as the primary featured hero, Adham as a respectful secondary honoree), and discovery is wired through both public/protected navigation plus a dedicated protected-home entry card.
+- `/reviews` is the public dynamic User Reviews/Testimonials page. It reads only published sanitized review DTOs from the server, serves photos through `/api/reviews/[id]/image`, supports EN/AR copy plus `dir="auto"` review text, and is reachable from public nav, protected sidebar, and the protected home trust-link cluster.
+- `/admin/reviews` is the admin-only review management workspace. Page access is guarded by `requireAdminUser()`, API mutations are guarded by `getAdminSessionUser()`, and the client editor only compresses images before submitting to server-authoritative review APIs.
 - `/donation` now presents trust-first bilingual support messaging that explicitly covers recurring operating costs, the 2022/2023 legacy angle, continuity risk if monthly costs are not covered, and direct personal WhatsApp contact at `+201124511183`.
 - `/api/contact` now provides a small server-only public contact relay that sends through Gmail SMTP runtime env vars, keeps `CONTACT_FORM_TO` off the client, and applies a silent honeypot guard instead of broad anti-spam infrastructure.
 - Assessment preview/result pages, Markdown/DOCX exports, and the print/PDF export surface now share their file-facing Arabic footer through `apps/web/lib/assessment-file-branding.ts`, using the exact export line `تمت برمجة وتطوير وتمويل هذه المنصة بكل شغف وإبداع على يد ابن عبدالله يوسف، دفعة 2022، قسم كيمياء حيوان 💻❤️` without rewriting the broader protected-shell attribution source.
@@ -72,6 +75,7 @@ Current Truth Snapshot
 - Admin authority is claims-first: allowlisted email plus Supabase app-metadata claim semantics (`admin` or admin role markers).
 - Session and route isolation remain request-bound on the server: Auth.js `auth()` plus `getAuthenticatedSessionUser()` revalidate the session/user on every protected request, admin routes and APIs still resolve through explicit admin-session helpers, and owner-facing assessment/export/history reads remain bound to `ownerUid` instead of shared mutable session state.
 - The shared cross-tool accounting foundation now includes `public.tool_accounting_accounts`, `public.tool_accounting_entries`, and `public.tool_usage_events`. Assessment generation/admin mutation flows sync owner accounting identity and shared accounting entries, while platform-wide assessment aggregation now reads `public.assessment_daily_credits` plus `public.tool_accounting_accounts` only.
+- The dedicated reviews/testimonials schema now lives in `public.user_reviews` from migration `20260421120000_user_reviews.sql`. Review photo truth lives in the existing private bucket `zootopia-private` under `reviews/{reviewId}/photo.{jpg|png|webp}`; direct public bucket reads are not granted, and public display is mediated by the Next.js backend.
 - The admin dashboard now includes a server-rendered recent platform activity feed sourced from `adminActivityLogs`, and the app now records login/session, upload, assessment, export, download, and cleanup activity there for admin-safe observability.
 - `/admin` and `/admin/users` now merge the full Supabase Auth account inventory with stored server-side user metadata, so admin user visibility is no longer capped at small hydrated subsets.
 - `/admin/users` now uses compact per-user entry cards with inline expansion panels for role/status/access/credit management, replacing the previous cramped right-rail table-actions pattern while preserving the same admin-only APIs and server authority.
@@ -7254,4 +7258,122 @@ Change Log
     - `shell: web-build-post-polish` passed (`npm run build --workspace @zootopia/web`).
   - Files changed in this pass:
     - `apps/web/app/(public)/login/page.tsx`
+    - `zootopia-club-next-ledger.txt`
+
+- 2026-04-21 18:45:00 +00:00 | Dynamic public User Reviews/Testimonial feature (public read, admin-only write)
+  - Mandatory-first-step and exploration compliance:
+    - read `zootopia-club-next-ledger.txt` first and treated it as project history/context only.
+    - spawned the requested broad repo explorer plus separate specialist lanes for ledger/architecture, public routing/home/sidebar, admin auth/owner-scope/admin routes, Supabase schema/storage/migrations, i18n/theme/shared UI, image upload/compression/storage, and final verification.
+    - compared all subagent findings against live code before editing; official/local Next.js 16.2.2 docs and official Supabase RLS/storage docs were checked before implementation.
+  - Previous architecture before this change:
+    - no real reviews/testimonials domain, table, route, storage namespace, public page, or admin management workspace existed.
+    - the closest public community/story surfaces were static `/journey` and `/hall-of-honor` pages.
+    - public shell and protected sidebar had no reviews link.
+    - image uploads existed for owner-scoped document intake, but no dedicated testimonial image pipeline existed.
+  - Root decisions made:
+    - created a dedicated structured table `public.user_reviews` instead of using legacy `zc_entities`, because the task required a dedicated database table/domain and future-safe review persistence.
+    - kept review photos in the existing private bucket `zootopia-private` under a dedicated global reviews prefix instead of mixing them with owner-scoped document uploads.
+    - kept public reads server-mediated: visitors can see `/reviews` and `/api/reviews/[id]/image` for published reviews only, but they do not receive raw private bucket paths or admin actor metadata.
+    - kept all writes server-authoritative and admin-only through Auth.js-backed `getAdminSessionUser()` route handlers.
+    - added browser-side WebP compression for admin UX/transfer efficiency, while the backend still validates MIME/size/path and owns storage/DB truth.
+    - capped Next build worker parallelism at 4 by default with `ZOOTOPIA_NEXT_BUILD_CPUS` override after build verification proved the previous 8-worker setting could native-OOM during page-data collection.
+  - Schema/storage design:
+    - migration added: `supabase/migrations/20260421120000_user_reviews.sql`.
+    - canonical table: `public.user_reviews`.
+    - fields: `id`, `person_name`, `review_text`, `photo_storage_path`, `photo_mime_type`, `photo_size_bytes`, `photo_width`, `photo_height`, `is_published`, `sort_order`, `created_by_uid`, `updated_by_uid`, `created_at`, `updated_at`, `published_at`.
+    - constraints validate nonempty IDs, name/text length, review photo path prefix, supported image MIME types, positive image size, and positive optional dimensions.
+    - indexes: published/sort/created ordering plus created/updated timestamp indexes.
+    - RLS enabled; no anon/authenticated table policies were added, intentionally keeping browser table access closed while the Next.js backend uses server-side authority.
+    - storage path: `reviews/{reviewId}/photo.{jpg|png|webp}` in `zootopia-private`.
+    - public image route: `GET /api/reviews/[id]/image`, published-only, no raw storage path exposure, `nosniff`, and controlled public cache headers.
+  - Public reviews page:
+    - new route: `apps/web/app/(site)/reviews/page.tsx`.
+    - reads `listPublishedUserReviews()` and renders only published sanitized DTOs.
+    - supports Arabic/English shell copy via `getSiteContent(locale)` and message keys.
+    - review text/person names render with `dir="auto"` for mixed Arabic/English/emoji content.
+    - responsive grid uses stable auto-fit columns and no horizontal overflow in the tested viewport matrix.
+    - empty state renders safely when the new migration is not applied yet or no reviews are published.
+  - Admin management page:
+    - new route: `apps/web/app/(protected)/admin/reviews/page.tsx`.
+    - page guard: `requireAdminUser()`.
+    - client workspace: `apps/web/components/admin/user-review-admin-workspace.tsx`.
+    - supports create, edit, publish/unpublish, delete, image selection/preview, sort order, and existing review listing.
+    - all mutations call `/api/admin/reviews` or `/api/admin/reviews/[id]`; no client-side DB/storage writes were introduced.
+  - Backend/API implementation:
+    - `apps/web/lib/server/user-reviews.ts` owns validation, DB reads/writes, public DTO shaping, storage path assertions, photo upload/download/delete, and non-production memory fallback only when durable persistence is not required.
+    - `apps/web/lib/server/user-review-form-data.ts` parses multipart review forms and records optional image dimensions from the compression step.
+    - `apps/web/app/api/admin/reviews/route.ts` provides admin GET/POST.
+    - `apps/web/app/api/admin/reviews/[id]/route.ts` provides admin PATCH/DELETE.
+    - admin review API actions append best-effort admin activity logs with `user-review-created`, `user-review-updated`, and `user-review-deleted`.
+  - Navigation/i18n/theme:
+    - route constants added: `APP_ROUTES.reviews` and `APP_ROUTES.adminReviews`.
+    - `/reviews` added to `PUBLIC_SITE_MATCHERS` and proxy matcher config; it is public, not user-protected.
+    - public shell now links Reviews in header and footer quick links.
+    - protected sidebar now links public Reviews for all signed-in users and admin Reviews for admins.
+    - protected Home trust/footer link cluster now includes public Reviews.
+    - admin dashboard now links to Reviews management.
+    - EN/AR message keys added for nav and admin review workspace.
+    - EN/AR `site-content` copy added for the public reviews page.
+    - no dependency changes were made.
+  - Environment/runtime separation:
+    - Local integrated development:
+      - frontend/backend live together in `apps/web`.
+      - review data truth is `public.user_reviews` when `DATABASE_URL`/`SUPABASE_DATABASE_URL` is configured; otherwise non-production memory fallback can render/admin-smoke without durable truth.
+      - image truth is `zootopia-private/reviews/{reviewId}/...` when Supabase service-role storage config exists; otherwise non-production memory fallback is only for local smoke.
+      - public read: `/reviews` and `/api/reviews/[id]/image`; admin write: Auth.js admin session plus same-origin admin APIs.
+    - Vercel + Supabase current active path:
+      - frontend is Next.js `apps/web`; backend is App Router Route Handlers in the same app.
+      - review data truth is `public.user_reviews`; image truth is `zootopia-private` under `reviews/{reviewId}/...`.
+      - env/config that matters: `DATABASE_URL` or `SUPABASE_DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, Auth.js env, and admin allowlist/gate env.
+      - public read stays server-mediated; admin write stays Auth.js/server-only.
+    - Historical/legacy compatibility path:
+      - `apps/api` remains future/deferred.
+      - old `zc_entities` remains active for many existing domains but is not the reviews truth.
+      - owner-scoped legacy storage paths remain for documents/results/exports cleanup compatibility; reviews use a new global dedicated prefix and do not weaken existing owner-scoped paths.
+  - Owner-scope/admin authority preserved:
+    - Auth.js remains the trust boundary for admin and protected sessions.
+    - no user-owned upload/document/result/export/settings routes were changed except adding a public Reviews link on Home/sidebar.
+    - no browser client receives service-role credentials, database write authority, raw bucket write authority, or owner-scoped path control.
+    - admin review APIs fail closed for non-admins through `getAdminSessionUser()`.
+  - Verification results:
+    - `npm run supabase:check` passed; 24 migration files validated/listed.
+    - `npm run db:apply:dry` passed; it detected `20260421120000_user_reviews.sql` as the one pending migration and applied nothing.
+    - `npm run db:status` passed; it reported the same pending migration and a known legacy history alias.
+    - `npm run lint` passed.
+    - `npm run typecheck` passed across all workspaces.
+    - first `npm run build` and `npm run build:web` attempts compiled but native-OOMed during page-data collection with 8 Next workers.
+    - after adding the build worker cap, `npm run build:web` passed.
+    - after adding the build worker cap, `npm run build` passed.
+    - `npm run build:vercel` passed; this repo’s script delegates to the web workspace build, not the Vercel CLI.
+    - browser smoke: `next start` on `127.0.0.1:3025`, `GET /reviews` returned 200.
+    - Playwright screenshots were captured temporarily for desktop, mobile EN, and mobile AR, then removed from the worktree.
+    - Playwright viewport overflow check passed for 320x640, 390x844, 768x1024, 1280x800, 1440x900, and 1920x1080 (`overflow: false` for all).
+    - local browser console showed only pre-existing Vercel Analytics/Speed Insights 404s for `/_vercel/...` scripts under `next start`; no reviews-specific console errors were observed.
+    - build output still warns that `ZOOTOPIA_AUTH_ADMISSION_HASH_SALT` is unset; this is a pre-existing environment warning.
+  - Remaining rollout notes:
+    - apply the pending migration with `npm run db:apply` before expecting durable review persistence in a live Supabase database.
+    - ensure Supabase service-role storage env is present in deployment so admin review photo writes and public image proxy reads can access `zootopia-private`.
+    - no direct Supabase Storage public policy was added for review images by design.
+  - Files changed in this pass:
+    - `apps/web/app/(protected)/(completed)/page.tsx`
+    - `apps/web/app/(protected)/admin/page.tsx`
+    - `apps/web/app/(protected)/admin/reviews/page.tsx`
+    - `apps/web/app/(site)/reviews/page.tsx`
+    - `apps/web/app/api/admin/reviews/route.ts`
+    - `apps/web/app/api/admin/reviews/[id]/route.ts`
+    - `apps/web/app/api/reviews/[id]/image/route.ts`
+    - `apps/web/components/admin/user-review-admin-workspace.tsx`
+    - `apps/web/components/layout/shell-nav.tsx`
+    - `apps/web/components/site/public-site-shell.tsx`
+    - `apps/web/lib/server/user-review-form-data.ts`
+    - `apps/web/lib/server/user-reviews.ts`
+    - `apps/web/lib/site-content.ts`
+    - `apps/web/messages/en.json`
+    - `apps/web/messages/ar.json`
+    - `apps/web/next.config.ts`
+    - `apps/web/proxy.ts`
+    - `packages/shared-config/src/routes.ts`
+    - `packages/shared-types/src/index.ts`
+    - `packages/shared-types/src/reviews.ts`
+    - `supabase/migrations/20260421120000_user_reviews.sql`
     - `zootopia-club-next-ledger.txt`

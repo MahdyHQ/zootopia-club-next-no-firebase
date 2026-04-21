@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, FileText, BrainCircuit, Activity, ChevronRight, ShieldCheck, User, Shield, TerminalSquare, Settings2, Server, HardDrive } from "lucide-react";
+import { Users, FileText, BrainCircuit, Activity, ChevronRight, ShieldCheck, User, Shield, TerminalSquare, Settings2, Server, HardDrive, MessagesSquare } from "lucide-react";
 import { APP_ROUTES } from "@zootopia/shared-config";
 
 import { getRequestUiContext } from "@/lib/server/request-context";
@@ -99,7 +99,7 @@ export default async function AdminPage() {
       </section>
 
       {/* Storage maintenance quick access */}
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-3">
         <div className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 sm:p-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
             <div>
@@ -114,6 +114,28 @@ export default async function AdminPage() {
             <Button asChild variant="destructive" className="rounded-full">
               <Link href="/admin/storage" className="group">
                 Manage Storage
+                <ChevronRight className="ms-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="relative overflow-hidden rounded-[2.5rem] border border-white/20 dark:border-white/5 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-2xl p-6 sm:p-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+            <div>
+              <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-zinc-900 dark:text-white flex items-center gap-2">
+                <MessagesSquare className="h-6 w-6 text-cyan-500" />
+                {uiContext.messages.adminReviewsTitle}
+              </h2>
+              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mt-1">
+                {uiContext.messages.adminReviewsSubtitle}
+              </p>
+            </div>
+            <Button asChild variant="outline" className="rounded-full bg-white/50 dark:bg-zinc-900/50">
+              {/* Review management is its own admin content surface so public testimonials do not
+                 become mixed into storage cleanup, user management, or platform usage concerns. */}
+              <Link href={APP_ROUTES.adminReviews} className="group">
+                {uiContext.messages.navAdminReviews}
                 <ChevronRight className="ms-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Link>
             </Button>

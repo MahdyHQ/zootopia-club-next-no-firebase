@@ -2,7 +2,7 @@
 
 import { APP_ROUTES } from "@zootopia/shared-config";
 import type { Locale, ThemeMode } from "@zootopia/shared-types";
-import { HandCoins, ArrowUpRight, Sparkles, Crown, Route, ShieldCheck } from "lucide-react";
+import { HandCoins, ArrowUpRight, Sparkles, Crown, Route, ShieldCheck, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -38,6 +38,10 @@ export function PublicSiteShell({
        shared public header nav to keep tribute discovery consistent across site pages. */
     { href: APP_ROUTES.hallOfHonor, label: messages.navHallOfHonor || "Hall of Honor" },
     {
+      href: APP_ROUTES.reviews,
+      label: messages.navReviews || siteContent.navigation.reviews,
+    },
+    {
       href: APP_ROUTES.journey,
       label: siteContent.navigation.journey,
     },
@@ -49,6 +53,7 @@ export function PublicSiteShell({
   /* Keep Privacy in this shared quick-links strip so reviewers can find it even if they land
      near the footer first (for example from search snippets or direct deep links). */
   const footerQuickLinks = [
+    { href: APP_ROUTES.reviews, label: siteContent.navigation.reviews },
     { href: APP_ROUTES.privacy, label: siteContent.navigation.privacy },
     { href: APP_ROUTES.contact, label: siteContent.navigation.contact },
     { href: APP_ROUTES.about, label: siteContent.navigation.about },
@@ -116,10 +121,12 @@ export function PublicSiteShell({
                     >
                       {item.href === APP_ROUTES.donation ? <HandCoins className="h-4 w-4" /> : null}
                       {item.href === APP_ROUTES.hallOfHonor ? <Crown className="h-4 w-4" /> : null}
+                      {item.href === APP_ROUTES.reviews ? <MessagesSquare className="h-4 w-4" /> : null}
                       {item.href === APP_ROUTES.journey ? <Route className="h-4 w-4" /> : null}
                       {item.href === APP_ROUTES.privacy ? <ShieldCheck className="h-4 w-4" /> : null}
                       {item.href !== APP_ROUTES.donation &&
                       item.href !== APP_ROUTES.hallOfHonor &&
+                      item.href !== APP_ROUTES.reviews &&
                       item.href !== APP_ROUTES.journey &&
                       item.href !== APP_ROUTES.privacy ? (
                         <Sparkles className="h-3.5 w-3.5" />
@@ -156,6 +163,7 @@ export function PublicSiteShell({
                   }`}
                 >
                   {item.href === APP_ROUTES.privacy ? <ShieldCheck className="h-3.5 w-3.5" /> : null}
+                  {item.href === APP_ROUTES.reviews ? <MessagesSquare className="h-3.5 w-3.5" /> : null}
                   {item.label}
                 </Link>
               );

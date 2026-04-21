@@ -6,7 +6,27 @@ import { fileURLToPath } from "node:url";
 
 const nextAppRoot = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(nextAppRoot, "../..");
-const buildCpuCount = Math.max(1, cpus().length);
+/* Next build page-data workers can spike native memory on local and Vercel-like
+   constrained builders. Keep worker parallelism capped by default, while allowing
+   deliberate overrides through ZOOTOPIA_NEXT_BUILD_CPUS when a larger builder proves safe. */
+const detectedBuildCpuCount = Math.max(1, cpus().length);
+const defaultBuildCpuCount = Math.min(4, detectedBuildCpuCount);
+
+function readBuildCpuCount() {
+  const rawValue = process.env.ZOOTOPIA_NEXT_BUILD_CPUS?.trim();
+  if (!rawValue) {
+    return defaultBuildCpuCount;
+  }
+
+  const parsedValue = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return defaultBuildCpuCount;
+  }
+
+  return Math.max(1, Math.min(detectedBuildCpuCount, parsedValue));
+}
+
+const buildCpuCount = readBuildCpuCount();
 
 function parseServerActionOriginHost(rawValue: string | undefined) {
   const normalizedValue = rawValue?.trim();

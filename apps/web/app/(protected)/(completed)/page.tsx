@@ -534,6 +534,13 @@ export default async function HomePage() {
               <ShieldCheck className="h-4 w-4" />
               {siteContent.navigation.privacy}
             </Link>
+            <Link
+              href={APP_ROUTES.reviews}
+              className="inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-white/54 px-3 py-1.5 text-sm font-semibold text-cyan-700 transition-colors hover:bg-white/82 dark:border-cyan-300/25 dark:bg-zinc-950/44 dark:text-cyan-200 dark:hover:bg-zinc-900"
+            >
+              <MessageCircleMore className="h-4 w-4" />
+              {siteContent.navigation.reviews}
+            </Link>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700/60 dark:text-emerald-300/50">
               {uiContext.locale === "ar"
                 ? "متاح للعامة بدون تسجيل دخول"

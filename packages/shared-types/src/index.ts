@@ -6,4 +6,5 @@ export * from "./auth";
 export * from "./document";
 export * from "./infographic";
 export * from "./platform";
+export * from "./reviews";
 export * from "./user";

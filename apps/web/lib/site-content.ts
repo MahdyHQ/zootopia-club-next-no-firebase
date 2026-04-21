@@ -22,6 +22,7 @@ type PrivacySection = {
 type SiteContent = {
   navigation: {
     journey: string;
+    reviews: string;
     about: string;
     privacy: string;
     contact: string;
@@ -129,6 +130,18 @@ type SiteContent = {
     trustBody: string;
     contactCta: string;
   };
+  reviews: {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    countLabel: string;
+    publishedBadge: string;
+    emptyTitle: string;
+    emptyBody: string;
+    footerTitle: string;
+    footerBody: string;
+    footerCta: string;
+  };
   privacy: {
     eyebrow: string;
     title: string;
@@ -157,6 +170,7 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
   en: {
     navigation: {
       journey: "Platform Journey",
+      reviews: "User Reviews",
       about: "About",
       privacy: "Privacy Policy",
       contact: "Contact",
@@ -335,6 +349,21 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
         "Support is appreciated, never pressured. The goal is simple: help a sincere student-centered platform continue with dignity, transparency, and room to grow.",
       contactCta: "Chat on WhatsApp",
     },
+    reviews: {
+      eyebrow: "User Reviews",
+      title: "Real voices from the Zootopia Club learning experience.",
+      subtitle:
+        "A public wall of student reflections, friendly notes, and thoughtful testimonials that can grow dynamically as the community grows.",
+      countLabel: "Published review",
+      publishedBadge: "Published",
+      emptyTitle: "No reviews are published yet",
+      emptyBody:
+        "Admin-published testimonials will appear here automatically once they are added from the review management workspace.",
+      footerTitle: "A living wall, not a static showcase",
+      footerBody:
+        "Each review is stored in the database, paired with a private-bucket image, and displayed publicly only after admin publication.",
+      footerCta: "Contact the platform",
+    },
     privacy: {
       eyebrow: "Privacy Policy",
       title: "Privacy Policy for Zootopia Club",
@@ -404,6 +433,7 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
   ar: {
     navigation: {
       journey: "رحلة المنصة",
+      reviews: "آراء المستخدمين",
       about: "من نحن",
       privacy: "سياسة الخصوصية",
       contact: "تواصل معنا",
@@ -579,6 +609,21 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
       trustBody:
         "الدعم محل تقدير كبير، لكنه ليس مطلوباً بإلحاح. الهدف ببساطة هو مساعدة منصة طلابية صادقة على الاستمرار بوضوح وكرامة ومساحة أكبر للنمو.",
       contactCta: "التواصل عبر واتساب",
+    },
+    reviews: {
+      eyebrow: "آراء المستخدمين",
+      title: "أصوات حقيقية من تجربة التعلم داخل زوتوبيا كلوب.",
+      subtitle:
+        "مساحة عامة لعرض انطباعات الطلاب ورسائلهم اللطيفة وتقييماتهم للمنصة، ويمكنها أن تنمو تلقائياً مع نمو المجتمع.",
+      countLabel: "رأي منشور",
+      publishedBadge: "منشور",
+      emptyTitle: "لا توجد آراء منشورة بعد",
+      emptyBody:
+        "ستظهر آراء المستخدمين هنا تلقائياً بعد إضافتها ونشرها من مساحة إدارة الآراء.",
+      footerTitle: "حائط حي وليس عرضاً ثابتاً",
+      footerBody:
+        "كل رأي محفوظ في قاعدة البيانات، وصورته محفوظة في مسار خاص بالتخزين، ولا يظهر للعامة إلا بعد نشره من الإدارة.",
+      footerCta: "تواصل مع المنصة",
     },
     privacy: {
       eyebrow: "سياسة الخصوصية",

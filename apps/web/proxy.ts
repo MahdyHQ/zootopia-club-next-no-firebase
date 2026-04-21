@@ -30,6 +30,7 @@ const USER_AUTH_ENTRY_MATCHERS = [
 
 const PUBLIC_SITE_MATCHERS = [
   APP_ROUTES.journey,
+  APP_ROUTES.reviews,
   APP_ROUTES.about,
   APP_ROUTES.privacy,
   APP_ROUTES.contact,
@@ -175,6 +176,7 @@ export const config = {
     "/admin/login",
     "/maintenance",
     "/journey/:path*",
+    "/reviews/:path*",
     "/about/:path*",
     "/privacy/:path*",
     "/contact/:path*",

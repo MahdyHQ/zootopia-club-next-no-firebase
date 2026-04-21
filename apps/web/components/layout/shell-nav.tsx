@@ -71,6 +71,8 @@ export function ShellNav({
         return Info;
       case APP_ROUTES.contact:
         return MessagesSquare;
+      case APP_ROUTES.reviews:
+        return MessagesSquare;
       case APP_ROUTES.hallOfHonor:
         return Crown;
       case APP_ROUTES.journey:
@@ -81,6 +83,8 @@ export function ShellNav({
         return ShieldCheck;
       case APP_ROUTES.adminUsers:
         return Users;
+      case APP_ROUTES.adminReviews:
+        return MessagesSquare;
       case APP_ROUTES.adminPlatformUsage:
         return BarChart3;
       default:
@@ -118,6 +122,9 @@ export function ShellNav({
      /* Journey is a shared informational product page that should remain reachable
        from inside the workspace without forcing users to leave the protected nav model. */
      { href: APP_ROUTES.journey, label: messages.navJourney || "Platform Journey" },
+    /* Reviews is public, but keeping it in the protected sidebar lets signed-in users
+       reach the community proof surface without creating a second navigation owner. */
+    { href: APP_ROUTES.reviews, label: messages.navReviews || "User Reviews" },
     /* Keep lecture-summary reachable from the protected sidebar so users can revisit
        the teaser destination even after dismissing the Home prompt. */
     { href: APP_ROUTES.lectureSummary, label: "Coming Soon" },
@@ -129,6 +136,7 @@ export function ShellNav({
              desktop/mobile/collapsed sidebar states all inherit one route-owned source of truth. */
           { href: APP_ROUTES.admin, label: messages.navAdmin || "Admin Portal" },
           { href: APP_ROUTES.adminUsers, label: messages.navAdminUsers || "User Directory" },
+          { href: APP_ROUTES.adminReviews, label: messages.navAdminReviews || "Reviews" },
           {
             href: APP_ROUTES.adminPlatformUsage,
             label: messages.navAdminPlatformUsage || "Platform Usage",

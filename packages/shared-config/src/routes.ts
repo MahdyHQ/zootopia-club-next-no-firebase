@@ -7,6 +7,7 @@ export const APP_ROUTES = {
   adminLogin: "/admin/login",
   home: "/",
   journey: "/journey",
+  reviews: "/reviews",
   about: "/about",
   privacy: "/privacy",
   contact: "/contact",
@@ -26,5 +27,6 @@ export const APP_ROUTES = {
   settings: "/settings",
   admin: "/admin",
   adminUsers: "/admin/users",
+  adminReviews: "/admin/reviews",
   adminPlatformUsage: "/admin/platform-usage",
 } as const;
