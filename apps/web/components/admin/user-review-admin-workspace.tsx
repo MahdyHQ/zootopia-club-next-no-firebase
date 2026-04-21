@@ -114,13 +114,13 @@ async function optimizeReviewImage(file: File) {
     file.name.replace(/\.[^.]+$/, "") + ".webp",
     { type: "image/webp" },
   );
+  const shouldUseOptimizedFile =
+    optimizedFile.size < file.size || file.size > 3 * 1024 * 1024;
 
   return {
-    file: optimizedFile.size < file.size || file.size > 3 * 1024 * 1024
-      ? optimizedFile
-      : file,
-    width,
-    height,
+    file: shouldUseOptimizedFile ? optimizedFile : file,
+    width: shouldUseOptimizedFile ? width : decoded.width,
+    height: shouldUseOptimizedFile ? height : decoded.height,
   };
 }
 

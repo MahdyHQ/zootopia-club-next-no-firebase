@@ -91,25 +91,28 @@ export async function uploadZootopiaPrivateObject(input: {
   body: Buffer;
   contentType: string;
 }) {
-  /* SUPABASE STORAGE WRITE (Owner-Scoped):
+  /* SUPABASE STORAGE WRITE (Validated Private Path):
      
-     CRITICAL: The path parameter MUST have already passed assertOwnerScopedStoragePath().
-     This function does NOT re-check ownership; it assumes the caller did.
+     CRITICAL: The path parameter MUST have already passed its domain-specific validator.
+     User-owned files use assertOwnerScopedStoragePath(); public testimonial photos use the
+     reviews-only path assertion before reaching this helper. This function does NOT re-check
+     ownership or publication state; it assumes the caller already proved the storage boundary.
      
      Ownership invariant:
-    - path must be owner-scoped: users/{ownerUid}/{namespace}/... (or allowed legacy path)
-     - ownerUid must match authenticated session.uid
-     - assertOwnerScopedStoragePath(path, session.uid, allowedNamespaces) must have passed
+     - user asset paths must be owner-scoped: users/{ownerUid}/{namespace}/...
+       (or an explicitly allowed legacy path)
+     - review photo paths must stay under reviews/{reviewId}/...
+     - the route/service that calls this helper must bind the path to authenticated authority
      
      Failure modes:
-     - Path doesn't start with ownerUid: caller should have caught this (assertOwnerScopedStoragePath)
-     - ownerUid is different user: metadata validation should have prevented this
-     - Unsupported namespace: assertOwnerScopedStoragePath checks allowedNamespaces
+     - Path doesn't match its domain namespace: caller should have caught this
+     - ownerUid is different user for owner assets: metadata validation should have prevented this
+     - Unsupported namespace: the domain validator checks allowed namespaces
      
      This upsert=true behavior means:
      - If file exists at path, content is replaced
      - If file doesn't exist, it's created
-     - All operations happen within owner's namespace (path-scoped)
+     - All operations happen inside the already-validated domain namespace
      
      Future: Add optional owner metadata tag if Supabase Object Tagging is available.
   */

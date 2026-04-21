@@ -8,11 +8,17 @@ import { Button } from "@/components/ui/button";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { listPublishedUserReviews } from "@/lib/server/user-reviews";
 import { getSiteContent } from "@/lib/site-content";
+import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = {
-  title: "User Reviews | Zootopia Club",
-  description: "Public testimonials and student reviews for Zootopia Club.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const uiContext = await getRequestUiContext();
+  const siteContent = getSiteContent(uiContext.locale);
+
+  return {
+    title: siteContent.reviews.metadataTitle,
+    description: siteContent.reviews.metadataDescription,
+  };
+}
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,6 +26,7 @@ export const revalidate = 0;
 export default async function ReviewsPage() {
   const uiContext = await getRequestUiContext();
   const siteContent = getSiteContent(uiContext.locale);
+  const isArabic = uiContext.locale === "ar";
   let reviews: Awaited<ReturnType<typeof listPublishedUserReviews>> = [];
 
   try {
@@ -38,7 +45,12 @@ export default async function ReviewsPage() {
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(16,185,129,0.13),transparent_35%),linear-gradient(315deg,rgba(242,198,106,0.16),transparent_48%)] dark:bg-[linear-gradient(135deg,rgba(16,185,129,0.18),transparent_35%),linear-gradient(315deg,rgba(34,211,238,0.1),transparent_52%)]" />
         <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.42fr)] lg:items-end">
           <div className="max-w-4xl space-y-5">
-            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-300/35 bg-emerald-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-200">
+            <span
+              className={cn(
+                "inline-flex w-fit items-center gap-2 rounded-full border border-emerald-300/35 bg-emerald-400/10 px-4 py-2 text-xs font-black text-emerald-700 dark:text-emerald-200",
+                isArabic ? "tracking-normal" : "uppercase tracking-[0.18em]",
+              )}
+            >
               <MessagesSquare className="h-4 w-4" />
               {siteContent.reviews.eyebrow}
             </span>
@@ -92,7 +104,7 @@ export default async function ReviewsPage() {
                   priority={index < 3}
                   unoptimized
                 />
-                <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/82 px-3 py-1 text-xs font-black text-emerald-700 shadow-sm backdrop-blur dark:border-white/15 dark:bg-zinc-950/72 dark:text-emerald-200">
+                <span className="absolute start-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/82 px-3 py-1 text-xs font-black text-emerald-700 shadow-sm backdrop-blur dark:border-white/15 dark:bg-zinc-950/72 dark:text-emerald-200">
                   <ShieldCheck className="h-3.5 w-3.5" />
                   {siteContent.reviews.publishedBadge}
                 </span>

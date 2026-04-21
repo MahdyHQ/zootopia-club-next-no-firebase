@@ -12,12 +12,12 @@ import {
 } from "@/lib/server/supabase-blob-storage";
 import {
   getZootopiaDatabase,
+  hasZootopiaPostgresPersistence,
   requiresDurableZootopiaPersistence,
 } from "@/lib/server/zootopia-postgres-adapter";
-import { hasZootopiaPostgresPersistence } from "@/lib/server/zootopia-entity-store";
 
 const USER_REVIEW_STORAGE_ROOT = "reviews";
-const USER_REVIEW_MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+export const USER_REVIEW_MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const USER_REVIEW_MAX_NAME_LENGTH = 160;
 const USER_REVIEW_MAX_TEXT_LENGTH = 4000;
 const USER_REVIEW_DEFAULT_LIMIT = 96;
@@ -176,6 +176,35 @@ function normalizeContentType(value: string) {
   return normalized;
 }
 
+function bufferStartsWith(buffer: Buffer, bytes: readonly number[]) {
+  return bytes.every((byte, index) => buffer[index] === byte);
+}
+
+function isReviewImageMagicValid(body: Buffer, contentType: string) {
+  /* Admin review photos are browser-optimized before upload, but the server still
+     verifies magic bytes so a forged FormData MIME value cannot become public content. */
+  if (contentType === "image/jpeg") {
+    return body.length >= 3 && bufferStartsWith(body, [0xff, 0xd8, 0xff]);
+  }
+
+  if (contentType === "image/png") {
+    return (
+      body.length >= 8
+      && bufferStartsWith(body, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    );
+  }
+
+  if (contentType === "image/webp") {
+    return (
+      body.length >= 12
+      && body.subarray(0, 4).toString("ascii") === "RIFF"
+      && body.subarray(8, 12).toString("ascii") === "WEBP"
+    );
+  }
+
+  return false;
+}
+
 function validateTextFields(input: {
   personName: string;
   reviewText: string;
@@ -244,6 +273,15 @@ function validateImageInput(photo: UserReviewImageInput | null | undefined) {
     );
   }
 
+  if (!isReviewImageMagicValid(photo.body, contentType)) {
+    throw new UserReviewError(
+      "REVIEW_PHOTO_BODY_INVALID",
+      "The uploaded review photo does not match its declared image type.",
+      400,
+      { photo: "Choose a valid JPEG, PNG, or WEBP image." },
+    );
+  }
+
   return {
     body: photo.body,
     contentType,
@@ -265,18 +303,31 @@ function getPhotoExtension(contentType: string) {
   return "jpg";
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function buildUserReviewPhotoStoragePath(input: {
   reviewId: string;
   contentType: string;
+  revision?: string | null;
 }) {
-  return `${USER_REVIEW_STORAGE_ROOT}/${input.reviewId}/photo.${getPhotoExtension(input.contentType)}`;
+  const revision = String(input.revision ?? "")
+    .trim()
+    .replace(/[^0-9a-fA-F-]/g, "")
+    .slice(0, 64);
+  const fileStem = revision ? `photo-${revision}` : "photo";
+
+  return `${USER_REVIEW_STORAGE_ROOT}/${input.reviewId}/${fileStem}.${getPhotoExtension(input.contentType)}`;
 }
 
 function assertUserReviewPhotoStoragePath(path: string, reviewId?: string) {
   const normalized = path.replace(/\\/g, "/");
   const pattern = reviewId
-    ? new RegExp(`^${USER_REVIEW_STORAGE_ROOT}/${reviewId}/photo\\.(jpg|png|webp)$`)
-    : /^reviews\/[0-9a-fA-F-]+\/photo\.(jpg|png|webp)$/;
+    ? new RegExp(
+        `^${USER_REVIEW_STORAGE_ROOT}/${escapeRegExp(reviewId)}/photo(?:-[0-9a-fA-F-]+)?\\.(jpg|png|webp)$`,
+      )
+    : /^reviews\/[0-9a-fA-F-]+\/photo(?:-[0-9a-fA-F-]+)?\.(jpg|png|webp)$/;
 
   if (!pattern.test(normalized)) {
     throw new UserReviewError(
@@ -343,11 +394,13 @@ async function uploadReviewPhoto(input: {
   reviewId: string;
   photo: ReturnType<typeof validateImageInput>;
   updatedAt: string;
+  revision?: string | null;
 }) {
   const photoStoragePath = assertUserReviewPhotoStoragePath(
     buildUserReviewPhotoStoragePath({
       reviewId: input.reviewId,
       contentType: input.photo.contentType,
+      revision: input.revision,
     }),
     input.reviewId,
   );
@@ -575,10 +628,15 @@ export async function updateUserReviewAsAdmin(reviewId: string, input: UserRevie
 
   if (input.photo) {
     const photo = validateImageInput(input.photo);
+    /* Review photo replacements use a fresh object name so a failed database
+       update cannot overwrite the currently published private-bucket object.
+       Keep this scoped to reviews; owner-scoped document uploads keep their
+       own path contract in the document pipeline. */
     nextPhotoStoragePath = await uploadReviewPhoto({
       reviewId,
       photo,
       updatedAt: nowIso,
+      revision: randomUUID(),
     });
     nextPhotoMimeType = photo.contentType;
     nextPhotoSizeBytes = photo.sizeBytes;

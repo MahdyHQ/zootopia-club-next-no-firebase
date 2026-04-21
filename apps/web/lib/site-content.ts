@@ -131,6 +131,8 @@ type SiteContent = {
     contactCta: string;
   };
   reviews: {
+    metadataTitle: string;
+    metadataDescription: string;
     eyebrow: string;
     title: string;
     subtitle: string;
@@ -350,6 +352,9 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
       contactCta: "Chat on WhatsApp",
     },
     reviews: {
+      metadataTitle: "User Reviews | Zootopia Club",
+      metadataDescription:
+        "Public testimonials and student reviews for Zootopia Club.",
       eyebrow: "User Reviews",
       title: "Real voices from the Zootopia Club learning experience.",
       subtitle:
@@ -611,6 +616,9 @@ const SITE_CONTENT: Record<Locale, SiteContent> = {
       contactCta: "التواصل عبر واتساب",
     },
     reviews: {
+      metadataTitle: "آراء المستخدمين | زوتوبيا كلوب",
+      metadataDescription:
+        "آراء وشهادات الطلاب العامة حول تجربة التعلم في زوتوبيا كلوب.",
       eyebrow: "آراء المستخدمين",
       title: "أصوات حقيقية من تجربة التعلم داخل زوتوبيا كلوب.",
       subtitle:

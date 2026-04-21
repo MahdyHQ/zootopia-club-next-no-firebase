@@ -4,7 +4,8 @@ import { getPublishedUserReviewImage, UserReviewError } from "@/lib/server/user-
 
 export const runtime = "nodejs";
 /* This public image route intentionally serves only published review photos from private
-   storage. It does not expose raw bucket paths or allow direct public Supabase storage reads. */
+   storage. It does not expose raw bucket paths, and its short public cache keeps admin
+   unpublish/delete actions from leaving long-lived testimonial photo responses behind. */
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -36,7 +37,7 @@ export async function GET(
     return new Response(body, {
       status: 200,
       headers: {
-        "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": "public, max-age=60, s-maxage=300, must-revalidate",
         "Content-Type": image.contentType,
         "Last-Modified": new Date(image.updatedAt).toUTCString(),
         "X-Content-Type-Options": "nosniff",

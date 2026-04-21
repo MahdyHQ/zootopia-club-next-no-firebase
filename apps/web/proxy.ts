@@ -157,7 +157,12 @@ function proxyHandler(request: NextRequest) {
      stale/suspended cookies must reach the Auth.js-backed page guard instead of bouncing
      users away before the backend can prove current account truth. */
 
-  if (hasActiveSession && matchesRoute(pathname, ADMIN_PROTECTED_MATCHERS) && role !== "admin") {
+  if (
+    hasActiveSession
+    && !isAdminLoginPath
+    && matchesRoute(pathname, ADMIN_PROTECTED_MATCHERS)
+    && role !== "admin"
+  ) {
     return NextResponse.redirect(new URL(redirectDecision.path, request.url));
   }
 

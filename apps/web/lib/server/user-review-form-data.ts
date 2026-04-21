@@ -1,7 +1,10 @@
 import "server-only";
 
 import type { UserReviewMutationInput } from "@/lib/server/user-reviews";
-import { UserReviewError } from "@/lib/server/user-reviews";
+import {
+  USER_REVIEW_MAX_IMAGE_BYTES,
+  UserReviewError,
+} from "@/lib/server/user-reviews";
 
 function readOptionalFormString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -43,6 +46,15 @@ export async function parseUserReviewFormData(
   }
 
   const file = readOptionalReviewPhoto(formData);
+  if (file && file.size > USER_REVIEW_MAX_IMAGE_BYTES) {
+    throw new UserReviewError(
+      "REVIEW_PHOTO_SIZE_INVALID",
+      "Review photos must be 3 MB or smaller after optimization.",
+      400,
+      { photo: "Choose an optimized image up to 3 MB." },
+    );
+  }
+
   const photo = file
     ? {
         body: Buffer.from(await file.arrayBuffer()),

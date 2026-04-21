@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { getRequestUiContext } from "@/lib/server/request-context";
 import { requireAdminUser } from "@/lib/server/session";
 import { listUserReviewsForAdmin } from "@/lib/server/user-reviews";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,6 +18,7 @@ export default async function AdminReviewsPage() {
      review publication controls must always fail closed before any management data is read. */
   await requireAdminUser();
   const uiContext = await getRequestUiContext();
+  const isArabic = uiContext.locale === "ar";
   let reviews: Awaited<ReturnType<typeof listUserReviewsForAdmin>> = [];
   let reviewsDegraded = false;
 
@@ -35,7 +37,12 @@ export default async function AdminReviewsPage() {
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(16,185,129,0.12),transparent_38%),linear-gradient(315deg,rgba(34,211,238,0.1),transparent_54%)]" />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+            <span
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+                isArabic ? "tracking-normal" : "uppercase tracking-[0.18em]",
+              )}
+            >
               <ShieldCheck className="h-3.5 w-3.5" />
               {uiContext.messages.navAdminReviews}
             </span>
@@ -51,7 +58,7 @@ export default async function AdminReviewsPage() {
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" className="rounded-full bg-white/50 dark:bg-zinc-900/50">
               <Link href={APP_ROUTES.admin}>
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className={cn("h-4 w-4", isArabic && "rotate-180")} />
                 {uiContext.messages.adminReviewsBackToAdmin}
               </Link>
             </Button>
