@@ -129,7 +129,7 @@ export default async function HomePage() {
   ];
 
   return (
-    <div className="min-w-0 max-w-full space-y-5 animate-in fade-in duration-700 md:space-y-6">
+    <div className="min-w-0 max-w-full space-y-5 md:space-y-6">
       <section
         dir="rtl"
         aria-label="دعوة للتمرير لأسفل"
@@ -148,8 +148,8 @@ export default async function HomePage() {
           <p className="text-[12px] font-bold leading-6 text-zinc-700 dark:text-zinc-100 sm:text-[13px]">
             لا تفوّت أي تفصيل — مرّر لأسفل واكتشف كل ما يميز المنصة
           </p>
-          {/* Keep motion gentle and hint-like so the strip invites scrolling without creating noisy movement pressure. */}
-          <ChevronDown className="h-4 w-4 text-emerald-600 animate-[bounce_2.3s_ease-in-out_infinite] motion-reduce:animate-none dark:text-emerald-300" />
+          {/* Keep this hint static so Home avoids continuous icon animation work during normal scrolling. */}
+          <ChevronDown className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
         </div>
       </section>
 

@@ -341,7 +341,9 @@ body {
   opacity: 0.11;
   mask-image: radial-gradient(circle at center, black 36%, transparent 86%);
   -webkit-mask-image: radial-gradient(circle at center, black 36%, transparent 86%);
-  animation: protected-workspace-grid-drift 34s linear infinite;
+  /* Keep protected background layers visually premium but fully static across routes so
+     Home/History/navigation interactions are not competing with continuous decorative motion. */
+  animation: none;
 }
 
 .protected-workspace-background__noise {
@@ -361,7 +363,7 @@ body {
 .protected-workspace-background__bubble {
   position: absolute;
   transform: translateZ(0);
-  will-change: transform, opacity;
+  will-change: auto;
 }
 
 .protected-workspace-background__orb,
@@ -380,7 +382,7 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
     0 0 24px rgba(45, 212, 191, 0.08);
   opacity: 0;
-  animation: protected-workspace-bubble-rise 220s linear infinite;
+  animation: none;
 }
 
 .protected-workspace-background__bubble--alpha {
@@ -418,7 +420,7 @@ body {
 .protected-workspace-background__orb {
   border-radius: 999px;
   filter: blur(64px);
-  animation: protected-workspace-orb-drift 18s ease-in-out infinite;
+  animation: none;
 }
 
 .protected-workspace-background__orb--north {
@@ -452,7 +454,7 @@ body {
   width: min(28rem, 48vw);
   background: linear-gradient(90deg, transparent 0%, rgba(148, 245, 227, 0.42) 50%, transparent 100%);
   filter: blur(0.3px);
-  animation: protected-workspace-beam-sweep 26s ease-in-out infinite;
+  animation: none;
 }
 
 .protected-workspace-background__beam--upper {

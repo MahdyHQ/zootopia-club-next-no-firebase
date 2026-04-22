@@ -7568,3 +7568,46 @@ Change Log
   - Files changed in this pass:
     - `apps/web/app/(site)/reviews/page.tsx`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-22 14:38:08 +00:00 | Home/History responsiveness alignment pass (Assessment-baseline tuning + protected background freeze)
+  - Mandatory-first-step + tracing workflow compliance:
+    - read `zootopia-club-next-ledger.txt` first, then treated it as historical context only and revalidated every decision against the live codebase.
+    - executed separate tracing lanes for: ledger/architecture, home render/data flow, history render/data flow, shared protected layout/provider ownership, background/motion/visual effects, client effects/polling/timers, server route/data-fetch ownership, hosting/runtime constraints, and verification command wiring.
+    - reviewed local Next.js docs from `node_modules/next/dist/docs/` (`production-checklist.md`, `preserving-ui-state.md`, `08-caching.md`) before changing performance-sensitive behavior.
+  - Consolidated root-cause findings (code-traced):
+    - Home had continuous decorative animation (`ChevronDown` infinite bounce) plus entry animation on the full page wrapper; this introduced non-essential motion on a frequently visited protected surface.
+    - History fetched and prepared a larger 50/50 documents+assessments dataset per request, unlike the practical Assessment baseline that uses smaller default list windows; this increased server render and preview preparation cost.
+    - Protected workspace background still carried continuously animated grid/orb/beam/bubble layers on desktop, so Home/History were paying persistent compositor work via shared shell background even when users were not interacting with visual effects.
+  - Hosting/runtime bottleneck signal:
+    - `apps/web/apphosting.yaml` remains configured with `runConfig.minInstances: 0`, so cold-start behavior can still contribute to occasional first-hit latency independent of frontend tuning.
+    - this pass did not change deployment capacity settings; code-level responsiveness tuning was prioritized first.
+  - Minimal surgical changes applied:
+    - `apps/web/app/(protected)/(completed)/history/page.tsx`
+      - introduced `HISTORY_SURFACE_FETCH_LIMIT = 24` and moved both owner-scoped history queries to that calibrated recent window.
+      - preserved owner scope, repository authority, and existing history page architecture; only fetch window sizing changed.
+    - `apps/web/app/(protected)/(completed)/page.tsx`
+      - removed top-level `animate-in fade-in duration-700` from Home container.
+      - removed infinite bounce animation from the scroll-hint Chevron so Home no longer performs continuous decorative motion.
+    - `apps/web/app/globals.css`
+      - froze protected background motion globally by setting grid/orb/beam/bubble animations to `none`.
+      - reduced compositor hint pressure by changing protected background layer `will-change` from `transform, opacity` to `auto`.
+      - retained premium static background styling, gradients, and layer composition while removing continuous movement.
+  - What was intentionally preserved:
+    - no auth/session/owner-scope/admin boundary logic changed.
+    - no backend route contracts, repository ownership, or quota authority changed.
+    - no feature was removed from Home or History; this pass tuned motion and fetch-window pressure only.
+    - no dependency/package changes.
+  - Verification results:
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` failed due to environment-level inability to fetch Google Fonts (`Alexandria`, `Amiri`, `Geist`, `JetBrains Mono`, `Plus Jakarta Sans`) from `fonts.googleapis.com`.
+    - `npm run build:vercel` failed for the same external Google Fonts network-fetch issue.
+    - no new compile/type/lint errors were introduced by the modified files.
+  - Bottleneck classification after this pass:
+    - primary remaining code-level bottleneck shifted toward a combination of (a) server-request work on larger history windows and (b) shared visual compositor load, both now reduced.
+    - remaining production variability can still include hosting/runtime cold starts (`minInstances: 0`) and external font-fetch/network availability at build/runtime boundaries.
+  - Files changed in this pass:
+    - `apps/web/app/(protected)/(completed)/history/page.tsx`
+    - `apps/web/app/(protected)/(completed)/page.tsx`
+    - `apps/web/app/globals.css`
+    - `zootopia-club-next-ledger.txt`

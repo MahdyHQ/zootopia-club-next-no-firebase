@@ -38,6 +38,7 @@ function getDocumentStatusLabel(
 }
 
 export default async function HistoryPage() {
+  const HISTORY_SURFACE_FETCH_LIMIT = 24;
   /* History is loaded directly from the owner-scoped repository lists so this page stays
      aligned with the same server-authoritative document/result contracts used elsewhere.
      Future agents should extend these loaders instead of introducing a parallel history store. */
@@ -52,8 +53,11 @@ export default async function HistoryPage() {
 
   try {
     [documents, generations] = await Promise.all([
-      listDocumentsForUser(user.uid, 50),
-      listAssessmentGenerationsForUser(user.uid, 50),
+      /* Keep History fast on first render by loading a calibrated "recent" window that still
+         preserves the owner-scoped history contract while avoiding oversized list hydration
+         compared with the quicker Assessment surface baseline. */
+      listDocumentsForUser(user.uid, HISTORY_SURFACE_FETCH_LIMIT),
+      listAssessmentGenerationsForUser(user.uid, HISTORY_SURFACE_FETCH_LIMIT),
     ]);
   } catch (error) {
     historyDataLoadDegraded = true;
