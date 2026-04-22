@@ -13,6 +13,7 @@ export const APP_ROUTES = {
   contact: "/contact",
   donation: "/donation",
   hallOfHonor: "/hall-of-honor",
+  maghara: "/maghara",
   upload: "/upload",
   history: "/history",
   assessmentCreditDetails: "/credits",
