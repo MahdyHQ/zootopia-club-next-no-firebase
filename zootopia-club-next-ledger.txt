@@ -7534,3 +7534,37 @@ Change Log
     - `apps/web/components/layout/protected-shell.tsx`
     - `apps/web/app/globals.css`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-22 13:25:00 +00:00 | Public Reviews testimonial card polish pass (avatar circle fill + quote overlap fix)
+  - Mandatory-first-step + tracing workflow:
+    - reread `zootopia-club-next-ledger.txt` first, treated as context/history only, then validated against live code.
+    - executed separate exploration lanes before edits: ledger/architecture, reviews-page tracing, avatar/image tracing, RTL/i18n/theme tracing, home CTA/navigation tracing, shared UI system tracing, and verification-command tracing.
+    - consolidated findings before implementation and limited edits to the smallest safe surface (`apps/web/app/(site)/reviews/page.tsx`).
+  - Previous issues confirmed in current code:
+    - avatar used `object-contain` plus internal padding inside a circular shell, which could show visible empty gaps and make photos feel like square images placed inside a circle.
+    - quote icon was positioned inside the review text container (`absolute end-3 top-3`) and forced extra text padding, which could still feel intrusive with dense/long testimonials.
+    - card visuals were already good, but needed a slightly more premium hierarchy/depth treatment while keeping dynamic mapping and architecture unchanged.
+  - What changed (surgical UI-only refinement):
+    - `apps/web/app/(site)/reviews/page.tsx`
+      - increased avatar size from 64px to 72px (`h/w 4.5rem`, `sizes="72px"`) for better visual presence.
+      - switched avatar image fit from `object-contain` to `object-cover object-center` and removed image padding to ensure true circular fill with no internal blank gaps.
+      - kept strict circular clipping (`overflow-hidden` + `rounded-full`) and strengthened ring/border/shadow for a premium identity chip.
+      - moved quote icon out of the review body and into the card header as an RTL-safe decorative badge using logical positioning (`absolute end-0 -top-1`), so review text is never overlapped.
+      - removed body text compensation padding (`pe-9`) because overlap no longer exists.
+      - refined card surface depth and testimonial-body panel styling with subtle gradient + inset highlight + tuned hover shadow while preserving current responsive grid mapping and dynamic review rendering.
+      - added targeted maintainability comments for the non-obvious avatar crop strategy and quote placement rationale.
+  - Architecture and behavior intentionally preserved:
+    - preserved route ownership (`/reviews`) and server-authoritative data flow (`listPublishedUserReviews()` + `/api/reviews/[id]/image`).
+    - preserved Arabic-first route direction contract (`rtl` for Arabic locale) and existing `dir="auto"` behavior for names/review text.
+    - preserved dynamic list mapping for large datasets; no hardcoded testimonial cards introduced.
+    - preserved navigation entry paths (home/public/protected links untouched in this pass).
+    - no auth/admin/storage/backend/schema/migration changes.
+    - no dependency changes.
+  - Verification for this pass:
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` failed due to environment connectivity fetching Google Fonts from `fonts.googleapis.com` (`Alexandria`, `Amiri`, `Geist`, `JetBrains Mono`, `Plus Jakarta Sans`), not due to reviews-page code.
+    - `npm run build:vercel` failed for the same external Google Fonts fetch/connectivity reason.
+  - Files changed in this pass:
+    - `apps/web/app/(site)/reviews/page.tsx`
+    - `zootopia-club-next-ledger.txt`

@@ -95,23 +95,29 @@ export default async function ReviewsPage() {
           {reviews.map((review, index) => (
             <article
               key={review.id}
-              className="group relative flex min-h-[18rem] flex-col rounded-[1.8rem] border border-border/70 bg-background-elevated/78 p-5 shadow-[0_16px_38px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-emerald-400/30 hover:shadow-[0_20px_48px_rgba(16,185,129,0.12)] dark:bg-zinc-950/45"
+              className="group relative flex min-h-[19rem] flex-col overflow-hidden rounded-[1.85rem] border border-border/70 bg-background-elevated/80 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.09)] backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-emerald-400/35 hover:shadow-[0_22px_54px_rgba(16,185,129,0.13)] dark:bg-zinc-950/45"
             >
-              <header className="mb-4 flex items-start gap-3">
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-emerald-300/35 bg-white/80 shadow-[0_8px_20px_rgba(15,23,42,0.08)] dark:border-emerald-200/20 dark:bg-zinc-900/80">
-                  {/* Review avatars use object-contain inside a circular frame to preserve the
-                     full portrait/photo as much as possible and avoid aggressive face cropping. */}
+              <header className="relative mb-4 flex items-start gap-3.5">
+                {/* Keep the quote glyph in the card header as a purely decorative marker so
+                   review text remains fully readable in both RTL/LTR and never gets covered. */}
+                <span className="pointer-events-none absolute end-0 -top-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-300/28 bg-emerald-400/10 text-emerald-700/80 shadow-[0_10px_26px_rgba(16,185,129,0.18)] dark:border-emerald-200/20 dark:text-emerald-200/75">
+                  <Quote className="h-4.5 w-4.5" />
+                </span>
+                <div className="relative h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-full border border-emerald-300/40 bg-white/85 shadow-[0_10px_24px_rgba(15,23,42,0.1)] ring-2 ring-white/70 dark:border-emerald-200/20 dark:bg-zinc-900/80 dark:ring-zinc-900/70">
+                  {/* Public testimonial avatars are intentionally clipped with object-cover so
+                     every source aspect ratio fills the circular frame without blank gaps.
+                     Keep overflow clipping + centered crop to preserve a premium identity look. */}
                   <Image
                     src={review.photoUrl}
                     alt={review.personName}
                     fill
-                    sizes="64px"
-                    className="object-contain p-1.5"
+                    sizes="72px"
+                    className="object-cover object-center"
                     priority={index < 6}
                     unoptimized
                   />
                 </div>
-                <div className="min-w-0 flex-1 space-y-1">
+                <div className="min-w-0 flex-1 space-y-1 pe-10">
                   <div className="flex items-center justify-between gap-2">
                     <h2
                       dir="auto"
@@ -134,13 +140,10 @@ export default async function ReviewsPage() {
                 </div>
               </header>
 
-              <div className="relative flex-1 rounded-[1.25rem] border border-border/70 bg-background-strong/88 p-4 dark:border-white/10 dark:bg-zinc-950/68">
-                <span className="absolute end-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-300/30 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200">
-                  <Quote className="h-4 w-4" />
-                </span>
+              <div className="relative flex-1 rounded-[1.25rem] border border-border/70 bg-[linear-gradient(155deg,rgba(16,185,129,0.08),rgba(255,255,255,0.86)_40%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] dark:border-white/10 dark:bg-[linear-gradient(160deg,rgba(16,185,129,0.08),rgba(10,10,10,0.72)_45%)]">
                 <p
                   dir="auto"
-                  className="whitespace-pre-line break-words pe-9 text-base font-medium leading-8 text-foreground [overflow-wrap:anywhere]"
+                  className="whitespace-pre-line break-words text-base font-medium leading-8 text-foreground [overflow-wrap:anywhere]"
                 >
                   {review.reviewText}
                 </p>
