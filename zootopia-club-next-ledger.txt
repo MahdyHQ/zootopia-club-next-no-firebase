@@ -7453,3 +7453,43 @@ Change Log
     - `packages/shared-utils/src/contact-attachment-policy.ts`
     - `packages/shared-utils/src/index.ts`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-22 09:40:00 +00:00 | Public Reviews premium redesign + Arabic-first RTL hardening + Home CTA refinement
+  - Mandatory-first-step + exploration compliance:
+    - read `zootopia-club-next-ledger.txt` before edits and treated it as context/history only.
+    - executed one primary repo exploration pass, then parallel specialist lanes for: ledger/architecture, reviews-page tracing, home CTA/navigation tracing, shared card/UI tracing, image/avatar tracing, i18n/theme/RTL tracing, and verification command tracing.
+    - compared traced findings directly against live code before implementation.
+    - checked local Next.js docs at `node_modules/next/dist/docs/01-app/03-api-reference/02-components/image.md` before changing image fit behavior.
+  - Previous public reviews-page weaknesses found:
+    - review visuals were image-hero heavy and did not use a circular avatar-first composition.
+    - avatar/photo presentation used `object-cover`, which could crop faces aggressively.
+    - card rhythm was decent but still leaned toward stacked image blocks rather than scalable testimonial identity cards.
+    - RTL behavior depended only on global locale direction and was not explicitly guarded at route-level for Arabic-first testimonial composition.
+  - What changed (minimal/surgical):
+    - `apps/web/app/(site)/reviews/page.tsx`
+      - redesigned the testimonial mapping surface into a stronger repeatable premium card system.
+      - moved to an identity-first card header with circular avatar + reviewer name + publish badge + subtle rating stars.
+      - changed avatar rendering to circular frame + `object-contain` + inner padding so full photo framing is preserved as much as possible.
+      - retained dynamic server data (`listPublishedUserReviews`) and published-only flow; no static/fake review injection.
+      - kept responsive auto-fit grid mapping and tuned card dimensions/spacing for large review sets across viewport sizes.
+      - added explicit route-level direction ownership (`rtl` for Arabic locale, `ltr` for English locale) so Arabic stays first-class instead of relying on text alignment only.
+      - preserved dark/light compatibility with existing design tokens and glass surfaces.
+    - `apps/web/app/(protected)/(completed)/page.tsx`
+      - added/refined a premium home trust-cluster CTA button linking to `/reviews` with exact required Arabic title:
+        - `آراء المستخدمين للمنصة`
+      - kept CTA within existing trust/footer action cluster so it feels native to the current home hierarchy.
+  - What was intentionally preserved:
+    - existing dynamic review data flow and mapping from server DTOs.
+    - existing `/reviews` route ownership and `/api/reviews/[id]/image` delivery path.
+    - admin-only review management boundaries and no auth/admin weakening.
+    - existing route architecture, shared design language, and no new dependencies.
+  - Verification results (single focused pass after implementation):
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` failed in this environment because Next.js could not fetch Google Fonts (`Alexandria`, `Amiri`, `Geist`, `JetBrains Mono`, `Plus Jakarta Sans`) from `fonts.googleapis.com`.
+    - `npm run build:vercel` failed for the same network/font-fetch reason.
+    - failures are environment/network-bound and not tied to the reviews/home CTA code paths.
+  - Files changed in this pass:
+    - `apps/web/app/(site)/reviews/page.tsx`
+    - `apps/web/app/(protected)/(completed)/page.tsx`
+    - `zootopia-club-next-ledger.txt`

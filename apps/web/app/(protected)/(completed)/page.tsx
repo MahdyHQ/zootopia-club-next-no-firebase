@@ -527,19 +527,22 @@ export default async function HomePage() {
         {/* ── Trust & Privacy footer ───────────────────────────────── */}
         <div className="rounded-[1.25rem] border border-emerald-500/20 bg-emerald-500/[0.05] p-4 dark:border-emerald-400/20 dark:bg-emerald-500/7">
           <div className="flex flex-wrap items-center gap-3">
+            {/* Home trust cluster owns the premium public-reviews entry CTA.
+                Keep this exact Arabic label stable so discovery stays consistent with the
+                public testimonials page and does not regress into generic wording. */}
+            <Link
+              href={APP_ROUTES.reviews}
+              className="inline-flex items-center gap-2 rounded-full border border-cyan-500/35 bg-cyan-500/12 px-4 py-2 text-sm font-black text-cyan-700 shadow-sm transition-colors hover:bg-cyan-500/18 dark:border-cyan-300/35 dark:bg-cyan-400/12 dark:text-cyan-100 dark:hover:bg-cyan-400/18"
+            >
+              <MessageCircleMore className="h-4 w-4" />
+              آراء المستخدمين للمنصة
+            </Link>
             <Link
               href={APP_ROUTES.privacy}
               className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-white/54 px-3 py-1.5 text-sm font-semibold text-emerald-700 transition-colors hover:bg-white/82 dark:border-emerald-300/25 dark:bg-zinc-950/44 dark:text-emerald-200 dark:hover:bg-zinc-900"
             >
               <ShieldCheck className="h-4 w-4" />
               {siteContent.navigation.privacy}
-            </Link>
-            <Link
-              href={APP_ROUTES.reviews}
-              className="inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-white/54 px-3 py-1.5 text-sm font-semibold text-cyan-700 transition-colors hover:bg-white/82 dark:border-cyan-300/25 dark:bg-zinc-950/44 dark:text-cyan-200 dark:hover:bg-zinc-900"
-            >
-              <MessageCircleMore className="h-4 w-4" />
-              {siteContent.navigation.reviews}
             </Link>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700/60 dark:text-emerald-300/50">
               {uiContext.locale === "ar"
