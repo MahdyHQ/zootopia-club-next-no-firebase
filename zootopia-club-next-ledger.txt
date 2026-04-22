@@ -7663,3 +7663,40 @@ Change Log
     - `apps/web/messages/ar.json`
     - `apps/web/messages/en.json`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-22 20:32:24 +00:00 | Public /maghara multi-file download extension (Arabic-first, RTL-safe)
+  - Mandatory-first-step + exploration workflow:
+    - read `zootopia-club-next-ledger.txt` first and treated it as context/history only.
+    - executed one initial exploration lane, then parallel specialist tracing lanes for: (1) ledger + architecture, (2) Maghara page tracing, (3) static public-file download tracing, (4) page layout/card/CTA tracing, (5) Arabic RTL/i18n tracing, and (6) verification script tracing.
+    - consolidated findings against real files before editing.
+    - checked local Next.js docs at `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/page.md` before touching the page route file.
+  - Canonical current-code findings before change:
+    - `/maghara` already existed as a public Arabic-first route at `apps/web/app/(site)/maghara/page.tsx` with `dir="rtl"` and `lang="ar"`.
+    - current download architecture already used direct static public-link delivery (`<a href="/treasure-files/..." download>`) with no API indirection.
+    - `apps/web/public/treasure-files/` already contained exactly the three real files:
+      - `dr-waffa-pollution-summary-by-elmahdy-abdallah-2026.pdf`
+      - `para-labs-protozoa-revision-by-elmahdy-abdallah-2026.pdf`
+      - `para-labs-metazoa-revsion-by-elmahdy-abdallah-2026.pdf`
+  - Surgical implementation:
+    - updated `apps/web/app/(site)/maghara/page.tsx` only.
+    - added two new explicit public-file constants for the real requested files.
+    - lightly refactored the download area from a single hardcoded card into a small `MAGHARA_DOWNLOAD_ITEMS` mapped list to keep maintainability and avoid copy-paste drift.
+    - preserved the same direct static download mechanism (`href` + native `download`) for every item.
+    - added two polished Arabic titles derived from filenames:
+      - `مراجعة عملي طفيليات — الأوليات`
+      - `مراجعة عملي طفيليات — الميتازوا`
+    - kept author/year trust cue aligned across all download cards: `إعداد المهدي عبدالله • 2026`.
+    - kept existing public Maghara structure (hero, auth-entry CTAs, promotional line, attribution line, contact line) unchanged outside the download-section extension.
+  - Intentional preservation:
+    - route remains public under `app/(site)`.
+    - no auth/session/backend/storage/schema/routing boundaries changed.
+    - no package or dependency changes.
+    - Arabic-first + RTL ownership preserved at page container level.
+  - Verification (focused final pass):
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` failed due to environment connection failures when fetching Google Fonts (`Alexandria`, `Amiri`, `Geist`, `JetBrains Mono`, `Plus Jakarta Sans`) from `fonts.googleapis.com`.
+    - `npm run build:vercel` failed for the same external Google Fonts fetch/connectivity issue.
+  - Files changed in this pass:
+    - `apps/web/app/(site)/maghara/page.tsx`
+    - `zootopia-club-next-ledger.txt`
