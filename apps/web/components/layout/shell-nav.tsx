@@ -79,6 +79,8 @@ export function ShellNav({
         return RouteIcon;
       case APP_ROUTES.lectureSummary:
         return RouteIcon;
+      case APP_ROUTES.maghara:
+        return RouteIcon;
       case APP_ROUTES.admin:
         return ShieldCheck;
       case APP_ROUTES.adminUsers:
@@ -128,6 +130,10 @@ export function ShellNav({
     /* Keep lecture-summary reachable from the protected sidebar so users can revisit
        the teaser destination even after dismissing the Home prompt. */
     { href: APP_ROUTES.lectureSummary, label: "Coming Soon" },
+    /* Keep "المغارة" discoverable from the protected sidebar even though it is public,
+       so signed-in users can open the public academic-download page without leaving the
+       shared navigation ownership model. */
+    { href: APP_ROUTES.maghara, label: messages.navMaghara || "المغارة" },
     { href: APP_ROUTES.about, label: messages.navAbout || "About" },
     { href: APP_ROUTES.contact, label: messages.navContact || "Contact" },
     ...(user.role === "admin"
