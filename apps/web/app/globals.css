@@ -3290,6 +3290,29 @@ html[dir="rtl"] .toggle-group--compact .toggle-label {
   }
 }
 
+@media (max-width: 1023px) {
+  /* Mobile/tablet devices were paying continuous compositor cost for decorative protected-shell
+     ambience that is not required for task completion. Keep the same visual language while
+     disabling non-critical animated layers on smaller viewports to improve interaction latency. */
+  .protected-workspace-background__grid,
+  .protected-workspace-background__orb,
+  .protected-workspace-background__beam,
+  .protected-workspace-background__bubble {
+    animation: none;
+  }
+
+  .protected-workspace-background__grid,
+  .protected-workspace-background__beam,
+  .protected-workspace-background__bubble {
+    opacity: 0;
+  }
+
+  .protected-workspace-background__overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
 @media (min-width: 1024px) {
   .protected-scroll-top {
     left: var(--protected-scroll-left, 1rem);

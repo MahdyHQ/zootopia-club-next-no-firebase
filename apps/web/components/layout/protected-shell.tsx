@@ -88,11 +88,15 @@ function areCreditSummariesEqual(
   );
 }
 
-const CREDIT_SUMMARY_RECONCILE_INTERVAL_MS = 5_000;
-const CREDIT_SUMMARY_HEALTHY_REVALIDATE_INTERVAL_MS = 60_000;
+/* Fallback polling protects credit freshness when realtime is unavailable, but a 5s cadence was
+   creating unnecessary network/render pressure across every protected page. Keep this interval
+   conservative so live updates still arrive via realtime/focus/path invalidation lanes first. */
+const CREDIT_SUMMARY_RECONCILE_INTERVAL_MS = 30_000;
+const CREDIT_SUMMARY_HEALTHY_REVALIDATE_INTERVAL_MS = 120_000;
 const CREDIT_SUMMARY_RETURN_RESET_THRESHOLD_MS =
   ASSESSMENT_CREDIT_SUMMARY_STALE_TIME_MS;
 const CREDIT_SUMMARY_RESUME_DEDUP_WINDOW_MS = 1_500;
+const CREDIT_SUMMARY_PATH_REVALIDATE_DEDUP_MS = 12_000;
 
 const CREDIT_HELP_DIALOG_TITLE_AR = "طلب رصيد إضافي";
 const CREDIT_HELP_DIALOG_BODY_AR =
@@ -152,6 +156,7 @@ export function ProtectedShell({
     useRef<AssessmentDailyCreditsSummary | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const lastResumeReconcileAtRef = useRef(0);
+  const lastCreditReconcileAtRef = useRef(0);
   const pathname = usePathname();
   const creditSummaryQuery = useAssessmentCreditSummaryQuery({
     source: "protected-shell",
@@ -195,6 +200,7 @@ export function ProtectedShell({
       strategy: "invalidate-active" | "reset-active" = "invalidate-active",
     ) => {
       try {
+        lastCreditReconcileAtRef.current = Date.now();
         await reconcileAssessmentCreditQueries(queryClient, {
           source: "protected-shell",
           reason,
@@ -395,7 +401,7 @@ export function ProtectedShell({
       window.removeEventListener("focus", handleWindowFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [pathname]);
+  }, []);
 
   useEffect(() => {
     if (
@@ -639,7 +645,16 @@ export function ProtectedShell({
     /* Protected pages can be entered from prefetched payloads that were captured before an
        external admin credit mutation. Force a fresh server summary on every protected-route
        transition so header and Assessment Studio reflect current backend credit truth quickly. */
-    void requestCreditSummaryRefetch("pathname-change");
+    const now = Date.now();
+    if (
+      now - lastCreditReconcileAtRef.current
+      >= CREDIT_SUMMARY_PATH_REVALIDATE_DEDUP_MS
+    ) {
+      /* Route transitions can happen in tight bursts while users hop between protected tools.
+         Gate path-change invalidation with a short dedup window so we keep correctness without
+         repeatedly forcing the same active query reconciliation multiple times per few seconds. */
+      void requestCreditSummaryRefetch("pathname-change");
+    }
 
     return () => {
       window.clearTimeout(closeHelpPopoverTimeoutId);
