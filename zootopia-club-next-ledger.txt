@@ -7493,3 +7493,44 @@ Change Log
     - `apps/web/app/(site)/reviews/page.tsx`
     - `apps/web/app/(protected)/(completed)/page.tsx`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-22 12:30:00 +00:00 | Protected workspace responsiveness optimization (credit refresh pressure + background motion cost)
+  - Mandatory-first-step + tracing workflow compliance:
+    - read `zootopia-club-next-ledger.txt` first and treated it as context/history only.
+    - ran one initial repo exploration lane, then parallel specialist tracing lanes for: ledger/architecture, page rendering and component ownership, client state/effects/polling/timers, server route/data-fetch ownership, animation/motion/transitions, caching/memoization/re-render behavior, bundle/heavy dependency surface, and final verification scripts.
+    - compared each tracing finding against the actual live code before editing.
+    - consulted local Next.js docs from `node_modules/next/dist/docs/` (`01-app/02-guides/preserving-ui-state.md`, `package-bundling.md`, `production-checklist.md`) before applying targeted performance edits.
+  - Root causes of slowness found (code-traced):
+    - protected-shell credit fallback polling was configured at 5 seconds whenever realtime was not healthy, creating high-frequency background fetch/invalidation churn across all protected pages.
+    - protected-shell credit refresh lifecycle had duplicate invalidation opportunities during route transitions (`shell-mounted` lane + explicit `pathname-change` lane), which could stack repeated query reconciliations during fast in-app navigation.
+    - protected workspace decorative background kept multiple continuous animation layers active on small screens (grid/orbs/beams/bubbles plus overlay filtering), increasing compositor work on lower-powered devices where interactivity regressions were most likely.
+  - Pages/components most affected:
+    - all protected routes that mount `ProtectedShell` and `ProtectedWorkspaceBackground` through `apps/web/app/(protected)/layout.tsx`.
+    - notably user-facing tool pages under the protected workspace (upload/assessment/history/settings/admin surfaces) because the shared shell/background are always active there.
+  - Surgical changes applied:
+    - `apps/web/components/layout/protected-shell.tsx`
+      - tuned credit fallback polling from `5_000ms` to `30_000ms`.
+      - tuned healthy periodic revalidation from `60_000ms` to `120_000ms` to rely more on realtime/focus/path invalidation and less on continuous interval pressure.
+      - introduced a short pathname-change dedup window (`12_000ms`) using `lastCreditReconcileAtRef` so route hops do not repeatedly force the same query reconciliation in tight bursts.
+      - narrowed the focus/visibility event wiring effect dependency from `[pathname]` to `[]`, preventing unnecessary listener teardown/re-attachment and mount-like refetch behavior on every route change.
+      - preserved all server-authoritative credit ownership and all existing refresh lanes (realtime, focus, visibility, pathname) while reducing unnecessary frequency.
+    - `apps/web/app/globals.css`
+      - added a mobile/tablet (`max-width: 1023px`) performance guard that disables non-critical protected background animations (grid/orb/beam/bubble animations) and hides beam/grid/bubble opacity on smaller viewports.
+      - disabled protected background overlay backdrop-filter on smaller viewports to reduce per-frame composition cost.
+      - preserved desktop visual identity and protected-shell architecture while reducing background work on constrained devices.
+  - What was intentionally preserved:
+    - no auth/session/owner-scope/admin-boundary/server-authority logic was changed.
+    - no assessment credit business rules, quota enforcement, or backend route contracts were removed.
+    - realtime credit lane remains intact; polling still exists as a safety fallback.
+    - protected UI architecture and feature set remained unchanged; optimizations are tuning-only.
+  - Dependency/package changes:
+    - none.
+  - Verification results (single focused pass after implementation):
+    - `npm run lint` passed.
+    - `npm run typecheck` passed.
+    - `npm run build` failed due to environment font-fetch connectivity errors from `fonts.googleapis.com` (Alexandria/Amiri/Geist/JetBrains Mono/Plus Jakarta Sans), not due to the modified files.
+    - `npm run build:vercel` failed for the same external font-fetch connectivity reason.
+  - Files changed in this pass:
+    - `apps/web/components/layout/protected-shell.tsx`
+    - `apps/web/app/globals.css`
+    - `zootopia-club-next-ledger.txt`
