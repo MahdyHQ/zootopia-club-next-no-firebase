@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { APP_ROUTES } from "@zootopia/shared-config";
-import { MessagesSquare, Quote, Sparkles, ArrowUpRight, ShieldCheck } from "lucide-react";
+import { MessagesSquare, Quote, Sparkles, ArrowUpRight, ShieldCheck, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getRequestUiContext } from "@/lib/server/request-context";
@@ -27,6 +27,9 @@ export default async function ReviewsPage() {
   const uiContext = await getRequestUiContext();
   const siteContent = getSiteContent(uiContext.locale);
   const isArabic = uiContext.locale === "ar";
+  /* Reviews are Arabic-first by design, but we still respect explicit English locale selection.
+     Keep this route-level dir guard so card flow/order stays genuinely RTL for Arabic users. */
+  const reviewsDirection = isArabic ? "rtl" : "ltr";
   let reviews: Awaited<ReturnType<typeof listPublishedUserReviews>> = [];
 
   try {
@@ -40,7 +43,7 @@ export default async function ReviewsPage() {
   const numberFormatter = new Intl.NumberFormat(uiContext.locale === "ar" ? "ar-EG" : "en-US");
 
   return (
-    <div className="space-y-6">
+    <div dir={reviewsDirection} className="space-y-6">
       <section className="surface-card relative overflow-hidden px-5 py-8 sm:px-7 sm:py-10 lg:px-10">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(16,185,129,0.13),transparent_35%),linear-gradient(315deg,rgba(242,198,106,0.16),transparent_48%)] dark:bg-[linear-gradient(135deg,rgba(16,185,129,0.18),transparent_35%),linear-gradient(315deg,rgba(34,211,238,0.1),transparent_52%)]" />
         <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.42fr)] lg:items-end">
@@ -86,50 +89,61 @@ export default async function ReviewsPage() {
       </section>
 
       {reviews.length > 0 ? (
-        /* Reviews use a fluid auto-fit grid with a generous min column width so cards
-           stay readable on phones and scale into a calm gallery on large screens. */
-        <section className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr))] xl:gap-6">
+        /* Testimonials are mapped through one repeatable premium card shell so large datasets
+           keep consistent spacing, rhythm, and alignment from mobile to wide desktop. */
+        <section className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))] xl:gap-6">
           {reviews.map((review, index) => (
             <article
               key={review.id}
-              className="group relative flex min-h-[25rem] flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background-elevated/72 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)] backdrop-blur-2xl transition-all hover:-translate-y-1 hover:border-emerald-400/30 hover:shadow-[0_22px_55px_rgba(16,185,129,0.12)] dark:bg-zinc-950/42"
+              className="group relative flex min-h-[18rem] flex-col rounded-[1.8rem] border border-border/70 bg-background-elevated/78 p-5 shadow-[0_16px_38px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-emerald-400/30 hover:shadow-[0_20px_48px_rgba(16,185,129,0.12)] dark:bg-zinc-950/45"
             >
-              <div className="relative min-h-48 overflow-hidden rounded-[1.55rem] border border-white/30 bg-background-strong dark:border-white/10">
-                <Image
-                  src={review.photoUrl}
-                  alt={review.personName}
-                  fill
-                  sizes="(min-width: 1280px) 28vw, (min-width: 768px) 45vw, 92vw"
-                  className="object-cover transition-transform duration-500 group-hover:scale-[1.035]"
-                  priority={index < 3}
-                  unoptimized
-                />
-                <span className="absolute start-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-white/45 bg-white/82 px-3 py-1 text-xs font-black text-emerald-700 shadow-sm backdrop-blur dark:border-white/15 dark:bg-zinc-950/72 dark:text-emerald-200">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  {siteContent.reviews.publishedBadge}
-                </span>
-              </div>
-
-              <div className="relative -mt-8 flex flex-1 flex-col px-1">
-                <div className="relative flex flex-1 flex-col rounded-[1.6rem] border border-border/80 bg-background-strong/92 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.1)] backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/82">
-                  <span className="absolute -top-5 end-6 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-300/35 bg-emerald-400/14 text-emerald-700 shadow-sm dark:text-emerald-200">
-                    <Quote className="h-5 w-5" />
-                  </span>
-                  <p
-                    dir="auto"
-                    className="flex-1 whitespace-pre-line break-words pt-2 text-base font-medium leading-8 text-foreground [overflow-wrap:anywhere]"
-                  >
-                    {review.reviewText}
-                  </p>
-                  <div className="mt-5 border-t border-border/70 pt-4">
+              <header className="mb-4 flex items-start gap-3">
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-emerald-300/35 bg-white/80 shadow-[0_8px_20px_rgba(15,23,42,0.08)] dark:border-emerald-200/20 dark:bg-zinc-900/80">
+                  {/* Review avatars use object-contain inside a circular frame to preserve the
+                     full portrait/photo as much as possible and avoid aggressive face cropping. */}
+                  <Image
+                    src={review.photoUrl}
+                    alt={review.personName}
+                    fill
+                    sizes="64px"
+                    className="object-contain p-1.5"
+                    priority={index < 6}
+                    unoptimized
+                  />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
                     <h2
                       dir="auto"
-                      className="break-words font-[family-name:var(--font-display)] text-xl font-black tracking-tight text-foreground [overflow-wrap:anywhere]"
+                      className="break-words font-[family-name:var(--font-display)] text-lg font-black tracking-tight text-foreground [overflow-wrap:anywhere]"
                     >
                       {review.personName}
                     </h2>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/35 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-black text-emerald-700 dark:text-emerald-200">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      {siteContent.reviews.publishedBadge}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-gold">
+                    <Star className="h-3.5 w-3.5 fill-current" />
+                    <Star className="h-3.5 w-3.5 fill-current" />
+                    <Star className="h-3.5 w-3.5 fill-current" />
+                    <Star className="h-3.5 w-3.5 fill-current" />
+                    <Star className="h-3.5 w-3.5 fill-current" />
                   </div>
                 </div>
+              </header>
+
+              <div className="relative flex-1 rounded-[1.25rem] border border-border/70 bg-background-strong/88 p-4 dark:border-white/10 dark:bg-zinc-950/68">
+                <span className="absolute end-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-300/30 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200">
+                  <Quote className="h-4 w-4" />
+                </span>
+                <p
+                  dir="auto"
+                  className="whitespace-pre-line break-words pe-9 text-base font-medium leading-8 text-foreground [overflow-wrap:anywhere]"
+                >
+                  {review.reviewText}
+                </p>
               </div>
             </article>
           ))}
