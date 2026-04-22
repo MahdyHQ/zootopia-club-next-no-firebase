@@ -7611,3 +7611,55 @@ Change Log
     - `apps/web/app/(protected)/(completed)/page.tsx`
     - `apps/web/app/globals.css`
     - `zootopia-club-next-ledger.txt`
+
+- 2026-04-22 18:00:58 +00:00 | New public "المغارة" page (Arabic-first RTL) + sidebar discoverability
+  - Mandatory-first-step + exploration workflow:
+    - read `zootopia-club-next-ledger.txt` and treated it as historical context only, then validated every decision against live repo files.
+    - executed one exploration pass plus parallel specialist tracing lanes for: (1) ledger + architecture, (2) public routing + sidebar/navigation, (3) page UI/layout + Arabic RTL, (4) static download/file serving, (5) auth entry points, (6) theme/shared design-system, and (7) verification command coverage.
+    - reviewed local Next.js docs (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/page.md`) before adding the new page route file.
+  - New public route and architecture alignment:
+    - added `APP_ROUTES.maghara = "/maghara"` in `packages/shared-config/src/routes.ts`.
+    - created new public page at `apps/web/app/(site)/maghara/page.tsx`.
+    - route is public by architecture (inside `app/(site)`), so it inherits the shared public-site shell and remains accessible without auth.
+  - Arabic-first + RTL ownership:
+    - `MagharaPage` uses page-level `dir="rtl"` and `lang="ar"` on the root page container, so section rhythm/CTA ordering follows real RTL flow (not text-only right alignment).
+    - content copy is Arabic-first throughout hero, download, CTAs, promotional block, attribution, and contact line.
+  - Download section implementation:
+    - added premium download section using static public file path:
+      - `/treasure-files/dr-waffa-pollution-summary-by-elmahdy-abdallah-2026.pdf`
+    - CTA uses direct `<a href="..." download>` so browser downloads the real public asset without introducing any fake API route.
+    - user-facing Arabic title shown in the section:
+      - `ملخص التلوث للدكتورة وفاء — إعداد المهدي عبدالله (2026)`
+  - Required Arabic copy integrated exactly:
+    - attribution line:
+      - `تم إنشاء هذا بواسطة المهدي عبدالله من دفعة 2023 وبالاستعانة بأدوات الذكاء الاصطناعي 2026`
+    - promotional line:
+      - `إذا كنت ترغب في إعداد ملخصات أكاديمية احترافية بهذا المستوى، أو تريد تعلّم كيفية صناعة ملفات دراسية راقية ومنظمة لأي مادة، فتواصل معي، وسأساعدك على تنفيذها بجودة أعلى، وباحترافية أدق، وبتنسيق أجمل بكثير.`
+    - contact line:
+      - `للتواصل: zootopiaclub.studio/contact`
+  - Auth entry CTAs on the page:
+    - new users block includes exact sentence:
+      - `لو لسه مسجلتش في المنصة، سجل من هنا`
+    - returning users block includes exact sentence:
+      - `لو أنت مسجل بالفعل، تقدر تدخل من هنا`
+    - both CTA buttons route to `APP_ROUTES.login` (`/login`), preserving existing auth boundary where signup and login live in the same canonical auth entry page.
+  - Sidebar navigation change:
+    - added protected-sidebar entry for the new public page in `apps/web/components/layout/shell-nav.tsx`:
+      - label: `المغارة`
+      - route: `APP_ROUTES.maghara`
+    - added icon mapping for `APP_ROUTES.maghara` in the same sidebar icon switch.
+    - added message keys for label localization in:
+      - `apps/web/messages/ar.json` (`navMaghara: "المغارة"`)
+      - `apps/web/messages/en.json` (`navMaghara: "Al Maghara"`)
+  - Intentional preservation:
+    - no auth/session logic changed.
+    - no backend/API/data/storage schema changes.
+    - no package/dependency changes.
+    - no redesign of existing public or protected shell systems beyond one additive sidebar item.
+  - Files changed in this pass:
+    - `apps/web/app/(site)/maghara/page.tsx`
+    - `apps/web/components/layout/shell-nav.tsx`
+    - `packages/shared-config/src/routes.ts`
+    - `apps/web/messages/ar.json`
+    - `apps/web/messages/en.json`
+    - `zootopia-club-next-ledger.txt`
